@@ -1,0 +1,142 @@
+/**
+ * 维护页工具栏（Period / Delete / 第二行布局）：打进 JS bundle，
+ * 避免开发环境 Vite 把 /css 代理到 PHP 时加载到过期的 capture_maintenance.css。
+ * 与 public/css/capture_maintenance.css 片段保持一致。
+ */
+body.maintenance-page .maintenance-actions {
+    display: flex;
+    align-items: center;
+    gap: clamp(12px, 1.04vw, 20px);
+    flex-shrink: 0;
+}
+
+/* 与 PHP：筛选第二行左 GroupID/Company、右 Delete（space-between） */
+body.maintenance-page .maintenance-filter-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: clamp(12px, 1.04vw, 20px);
+    flex-wrap: wrap;
+}
+
+/* 第二行左侧：与 payment_maintenance.php 图二 — GroupID / Company / Currency 分行纵向堆叠 */
+body.maintenance-page .maintenance-filter-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(4px, 0.52vw, 8px);
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+body.maintenance-page .maintenance-filter-left .maintenance-company-filter {
+    width: 100%;
+    max-width: 100%;
+}
+
+body.maintenance-page .maintenance-actions {
+    align-self: flex-end;
+}
+
+/* 第一行：与 payment_maintenance.php（Payment）一致 — Process / Date / Quick Select 底对齐 */
+body.maintenance-page .maintenance-filters {
+    display: flex;
+    gap: clamp(12px, 1.25vw, 24px);
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+body.maintenance-page .maintenance-filters .quick-select-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: clamp(150px, 12.5vw, 240px);
+}
+
+body.maintenance-page .maintenance-filters .quick-select-wrap .maintenance-label i.fa-clock {
+    color: #3b82f6;
+    margin-right: 4px;
+}
+
+body.maintenance-page .maintenance-search-section .quick-select-dropdown {
+    width: auto;
+    min-width: clamp(104px, 8.5vw, 148px);
+}
+
+/* Period：全维护页统一蓝胶囊 + 列内满宽（与 Payment 一致） */
+body.maintenance-page .maintenance-search-section .quick-select-dropdown .dropdown-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(4px, 0.5vw, 6px);
+    width: 100%;
+    min-height: clamp(28px, 2.2vw, 34px);
+    padding: clamp(3px, 0.31vw, 6px) clamp(12px, 1vw, 18px);
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: bold;
+    font-family: var(--font-ui);
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: linear-gradient(180deg, #63c4ff 0%, #0d60ff 100%);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(13, 96, 255, 0.35);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+body.maintenance-page .maintenance-search-section .quick-select-dropdown .dropdown-toggle:hover {
+    filter: brightness(1.08);
+    color: #fff;
+}
+
+body.maintenance-page .maintenance-search-section .quick-select-dropdown:has(#quick-select-dropdown.show) .dropdown-toggle,
+body.maintenance-page .maintenance-search-section .quick-select-dropdown:has(.dropdown-menu.show) .dropdown-toggle {
+    background: linear-gradient(180deg, #63c4ff 0%, #0d60ff 100%);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+body.maintenance-page .maintenance-search-section .quick-select-dropdown:has(#quick-select-dropdown.show) .dropdown-toggle:hover,
+body.maintenance-page .maintenance-search-section .quick-select-dropdown:has(.dropdown-menu.show) .dropdown-toggle:hover {
+    filter: brightness(1.05);
+}
+
+body.maintenance-page .maintenance-search-section .quick-select-dropdown .dropdown-menu {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+body.maintenance-page .maintenance-delete-btn {
+    background: linear-gradient(180deg, #f30e12 0%, #a91215 100%);
+    color: white;
+    font-family: var(--font-ui);
+    width: auto;
+    min-width: clamp(72px, 5.5vw, 110px);
+    padding: clamp(3px, 0.31vw, 6px) clamp(14px, 1.04vw, 22px);
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: bold;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+body.maintenance-page .maintenance-delete-btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #a91215 0%, #f30e12 100%);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+    transform: translateY(-1px);
+}
+
+/* 与 public/css/payment_maintenance.php 提取样式：禁用时浅灰底 + 细边框（非红胶囊） */
+body.maintenance-page .maintenance-delete-btn:disabled {
+    background: #f1f5f9;
+    color: #94a3b8;
+    border: 1px solid #d0d7de;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 1;
+}

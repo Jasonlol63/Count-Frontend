@@ -1,0 +1,1193 @@
+﻿/* account-list.php 页面内联样式 - 输入框、Link Account 模态等 */
+/* Input formatting - 统一管理输入框格式 */
+#add_account_id,
+#edit_account_id_field,
+#add_name,
+#edit_name,
+#add_remark,
+#edit_remark,
+#addCurrencyInput,
+#editCurrencyInput,
+#currencyCodeInput {
+    text-transform: uppercase;
+    font-size: clamp(9px, 0.85vw, 14px);
+}
+
+#addCurrencyInput,
+#editCurrencyInput {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* 注意：searchInput 不使用 CSS text-transform，保持实际值的显示 */
+
+/* Account item compact hover styles (for linked accounts modal) */
+#linkAccountList .account-item-compact:hover {
+    background-color: #f0f8ff !important;
+    border-color: #1a237e !important;
+}
+
+#linkAccountList .account-item-compact input[type="checkbox"]:checked+label {
+    color: #1a237e;
+    font-weight: bold;
+}
+
+/* Link Account 模态：底部按钮固定，列表区无独立滚动条 */
+#linkAccountModal .account-modal-content {
+    display: flex;
+    flex-direction: column;
+    width: clamp(860px, 72vw, 1080px);
+    max-height: 82vh;
+    overflow: hidden;
+}
+
+#linkAccountModal .account-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-right: 4rem;
+}
+
+#linkAccountModal .account-modal-header h2 {
+    padding: clamp(10px, 0.78vw, 14px) 0 clamp(10px, 0.78vw, 14px) 4rem;
+    font-size: var(--text-page-title);
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+}
+
+#linkAccountModal .account-close {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    flex-shrink: 0;
+}
+
+#linkAccountModal .link-account-modal-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-left: 4rem;
+    padding-right: 4rem;
+}
+
+/* 红框区域固定：第 1 行药丸 + 搜索对齐；第 2 行整宽说明 */
+#linkAccountModal .link-account-fixed-area {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding-left: 4rem;
+    padding-right: 4rem;
+    padding-bottom: 12px;
+}
+
+#linkAccountModal .link-account-toolbar-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+#linkAccountModal .link-account-toolbar-row .link-type-pills {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+#linkAccountModal .link-account-toolbar-row .link-account-toolbar-search {
+    flex: 0 0 auto;
+}
+
+#linkAccountModal .link-account-form-actions {
+    flex-shrink: 0;
+    border-top: 1px solid #e2e8f0;
+}
+
+/* Link Account footer buttons: match Account List toolbar button values */
+#linkAccountModal .btn.btn-add {
+    background: var(--btn-add-gradient);
+    color: #ffffff;
+    font-family: var(--font-heading-page);
+    min-width: var(--userlist-btn-add-width);
+    width: auto;
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-semibold);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(5px, 0.42vw, 8px);
+    text-align: center;
+}
+
+#linkAccountModal .btn.btn-add:hover {
+    background: var(--btn-add-gradient-hover);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+    transform: translateY(-1px);
+}
+
+#linkAccountModal .btn.btn-currency-setting {
+    background: linear-gradient(180deg, #AAB8C2 0%, #657786 100%);
+    color: #ffffff;
+    font-family: var(--font-heading-page);
+    min-width: var(--userlist-btn-add-width);
+    width: auto;
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-semibold);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(101, 119, 134, 0.2);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(5px, 0.42vw, 8px);
+    text-align: center;
+}
+
+#linkAccountModal .btn.btn-currency-setting:hover {
+    background: linear-gradient(180deg, #9ca9b4 0%, #5a6a78 100%);
+    box-shadow: 0 4px 8px rgba(101, 119, 134, 0.3);
+    transform: translateY(-1px);
+}
+
+#linkAccountModal .link-account-item {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-left: 4rem;
+    padding-right: 4rem;
+}
+
+/* Link Account 列表：白底外框 + 三列紧凑格；hover/选中细蓝边 */
+.link-account-list {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background-color: #ffffff;
+    padding: 10px 12px;
+}
+
+.link-account-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 2.125rem;
+    padding: 6px 4rem;
+    border-radius: 6px;
+    border: 1px solid #eef2f7;
+    background: #ffffff;
+    box-shadow: none;
+    color: #3f3f46;
+    font-family: var(--font-heading-page);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.link-account-item:hover {
+    background: #f8fafc;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+}
+
+.link-account-item:focus-within {
+    background: #f8fafc;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+}
+
+.link-account-item.selected {
+    color: #1e40af;
+    border-color: #3b82f6;
+    background: #eff6ff;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35);
+}
+
+#linkAccountModal .link-account-item span {
+    min-width: 0;
+    line-height: 1.3;
+    word-break: break-word;
+    font-size: var(--text-small);
+    font-weight: var(--font-weight-semibold);
+}
+
+.link-account-checkbox {
+    margin: 0;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+}
+
+/* Link Account: pill buttons（由 toolbar-row 与搜索并排） */
+.link-type-pills {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+}
+
+.link-type-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 14px;
+    border-radius: 9999px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid #d1d5db;
+    background: #f3f4f6;
+    color: #374151;
+}
+
+#linkAccountModal .link-type-pill .link-type-pill-text {
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-semibold);
+}
+
+.link-type-pill .link-type-radio {
+    position: absolute;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.link-type-pill-check {
+    opacity: 0;
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.link-type-pill:has(.link-type-radio:checked) .link-type-pill-check {
+    opacity: 1;
+}
+
+.link-type-pill:hover {
+    background: #e5e7eb;
+    border-color: #9ca3af;
+}
+
+.link-type-pill:has(.link-type-radio:checked) {
+    background: linear-gradient(180deg, #7eb8ff 0%, #2563eb 100%);
+    border-color: #2563eb;
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+.link-type-desc {
+    margin: 0;
+    padding-top: 2px;
+    width: 100%;
+    font-size: 12px;
+    color: #6b7280;
+    line-height: 1.45;
+    text-align: left;
+}
+
+/* Link Account modal search: reuse Account List userlist-search-bar (body.account-page) */
+#linkAccountModal .search-container.userlist-search-bar.link-account-toolbar-search .userlist-search-input {
+    text-transform: none !important;
+}
+
+/* Currency Setting Modal — 字型與 design-tokens.css 對齊 */
+#currencySettingModal {
+    font-family: var(--font-ui);
+    color: var(--color-page-fg);
+}
+
+.currency-setting-pill {
+    width: 100%;
+    padding: 6px 30px;
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--text-medium);
+    color: var(--color-body-strong);
+    transition: all var(--duration-fast) var(--ease-out-soft);
+    font-weight: var(--font-weight-semibold);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.currency-setting-pill.active,
+.currency-setting-pill.selected {
+    background: var(--btn-add-gradient);
+    color: #fff;
+    border-color: transparent;
+}
+
+.currency-setting-pill:hover:not(.selected):not(.active) {
+    background-color: #f3f4f6;
+}
+
+.currency-setting-account-item {
+    padding: 10px 15px;
+    background-color: var(--color-surface);
+    border-radius: 6px;
+    font-size: var(--text-small);
+    font-family: inherit;
+    color: var(--color-body-strong);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    border: 1px solid #777777;
+    transition: all var(--duration-fast) var(--ease-out-soft);
+}
+
+.currency-setting-account-item:hover {
+    background-color: #d1d1d1;
+}
+
+.currency-setting-account-item.selected {
+    background-color: #3B82F6;
+    color: #fff;
+    border-color: #2563eb;
+    font-weight: var(--font-weight-semibold);
+}
+
+.currency-setting-select:focus,
+.currency-setting-search-input:focus,
+.currency-setting-input:focus {
+    outline: none;
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+/* Scrollbars: app-wide — dashboard-scrollbar.css */
+
+/* ==========================================
+   CSS for Currency Setting Modal
+========================================== */
+
+/* Button */
+.account-btn-setting {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 35px;
+    min-width: 120px;
+    padding: 0 15px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--text-small);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out-soft);
+    background: linear-gradient(180deg, #AAB8C2 0%, #657786 100%);
+    color: #fff;
+    border: 1px solid #657786;
+    box-shadow: 0 2px 4px rgba(101, 119, 134, 0.15);
+}
+
+.account-btn-setting:hover {
+    background: linear-gradient(180deg, #9ca9b4 0%, #5a6a78 100%);
+}
+
+/* Modal Fullscreen Content and Header */
+.currency-fullscreen-modal {
+    display: none;
+    position: fixed;
+    /* 高于 .informationmenu (1000)，避免侧栏阴影叠在左缘造成「凹凸不平」 */
+    z-index: 10200;
+    left: var(--layout-main-offset, clamp(160px, 12.98vw, 235px));
+    top: 0;
+    width: calc(100vw - var(--layout-main-offset, clamp(160px, 12.98vw, 235px)));
+    height: 100%;
+    height: 100dvh;
+    background: #ffffff;
+    overflow: hidden;
+    box-sizing: border-box;
+    transition:
+        left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.currency-fullscreen-modal-content {
+    background: #ffffff;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Header Bar */
+.currency-fullscreen-modal-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: clamp(10px, 0.83vw, 16px) clamp(20px, 1.67vw, 32px);
+    background: #ffffff;
+    border-bottom: 2px solid #e2e8f0;
+    flex-shrink: 0;
+}
+
+.currency-fullscreen-modal-header-bar h2 {
+    margin: 0;
+    font-family: var(--font-heading-page);
+    font-size: var(--text-page-title);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-heading);
+}
+
+.currency-btn-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: clamp(6px, 0.42vw, 8px) clamp(14px, 1.04vw, 20px);
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-body-strong);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out-soft);
+}
+
+.currency-btn-back svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.currency-btn-back:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+    border-color: #94a3b8;
+    transform: translateX(-2px);
+}
+
+/* Body & Sections */
+.currency-fullscreen-modal-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+/* Left Panel: Currency Management */
+.currency-left-panel {
+    flex: 0 0 clamp(290px, 22vw, 420px);
+    max-width: clamp(290px, 22vw, 420px);
+    background: transparent;
+    padding: clamp(14px, 1.04vw, 20px);
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    border-right: 1px solid #e2e8f0;
+}
+
+.currency-left-panel h3 {
+    margin: 0 calc(-1 * clamp(14px, 1.04vw, 20px)) clamp(10px, 0.73vw, 14px);
+    padding: 0 clamp(14px, 1.04vw, 20px) clamp(6px, 0.52vw, 10px);
+    font-family: var(--font-heading-page);
+    color: var(--color-heading);
+    border-bottom: 2px solid #1a237e;
+    font-size: var(--text-h3);
+    font-weight: var(--font-weight-bold);
+    flex-shrink: 0;
+}
+
+.currency-setting-add-row-stacked {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+    gap: 8px;
+}
+
+.currency-setting-add-row-stacked > div,
+.currency-setting-add-actions {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    align-items: stretch;
+}
+
+.currency-setting-add-row-stacked label {
+    font-family: inherit;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--text-medium);
+    color: var(--color-body-strong);
+}
+
+.currency-setting-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: var(--text-base);
+    box-sizing: border-box;
+}
+
+.currency-setting-divider {
+    height: 1px;
+    background-color: #ddd;
+    margin: 10px -20px 20px -20px;
+}
+
+.currency-setting-list-row-stacked {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.currency-setting-list-row-stacked label {
+    font-family: inherit;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--text-medium);
+    color: var(--color-body-strong);
+    margin: 0;
+}
+
+.currency-setting-pill-list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+/* Right Panel: Accounts */
+.currency-right-panel {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: clamp(14px, 1.04vw, 20px);
+}
+
+.currency-right-panel h3 {
+    display: block;
+    font-family: var(--font-heading-page);
+    font-size: var(--text-h2);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-heading);
+    margin: 0;
+    padding: 0;
+    border-bottom: none;
+    flex-shrink: 0;
+}
+
+.currency-setting-filter-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 calc(-1 * clamp(14px, 1.04vw, 20px)) 10px;
+    padding: 0 clamp(14px, 1.04vw, 20px) clamp(6px, 0.52vw, 10px);
+    border-bottom: 2px solid #1a237e;
+    flex-shrink: 0;
+}
+
+.currency-setting-filter-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+/* Select All row */
+.currency-setting-selectall-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+/* Select All：寬度；字級與高度由下方 #currencySettingModal … account-btn-add 統一 */
+#currencySettingModal .currency-setting-selectall-btn.account-btn-add {
+    min-width: var(--userlist-btn-add-width);
+}
+
+.currency-setting-selected-count {
+    font-family: inherit;
+    font-size: var(--text-medium);
+    color: var(--color-muted-fg);
+    font-weight: var(--font-weight-semibold);
+}
+
+
+.currency-setting-search-wrap {
+    position: relative;
+    width: clamp(200px, 28vw, 320px);
+    max-width: clamp(200px, 28vw, 320px);
+    flex: 0 1 auto;
+    color: #64748b;
+}
+
+.currency-setting-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(14px, 0.83vw, 16px);
+    color: #64748b;
+    pointer-events: none;
+}
+
+.currency-setting-search-input {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: calc(18px + 12px + 2px);
+    padding: 6px clamp(10px, 0.9vw, 14px) 6px 30px;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: var(--text-small);
+    font-weight: 400;
+    color: #334155;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    outline: none;
+}
+
+.currency-setting-search-input::placeholder {
+    color: #64748b;
+    opacity: 1;
+}
+
+.currency-setting-select {
+    padding: 8px 30px 8px 15px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: var(--text-small);
+    color: var(--color-body-strong);
+    appearance: none;
+    background: var(--color-surface);
+    min-width: 150px;
+    background-image: url('data:image/svg+xml;utf8,<svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="%23ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+.currency-setting-role-filter {
+    position: relative;
+    flex: 0 0 auto;
+    min-width: 150px;
+}
+
+.currency-setting-role-trigger {
+    width: 100%;
+    min-height: calc(18px + 12px + 2px);
+    padding: 6px 12px 6px 14px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #1f2937;
+    font-family: inherit;
+    font-size: var(--text-small);
+    font-weight: 400;
+    line-height: 1.2;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.currency-setting-role-filter.is-open .currency-setting-role-trigger {
+    border-color: #6d8cff;
+    box-shadow: 0 0 0 1px rgba(109, 140, 255, 0.25);
+}
+
+.currency-setting-role-chevron {
+    width: 16px;
+    height: 16px;
+    color: #7c91e8;
+    flex-shrink: 0;
+    transform: rotate(180deg);
+    transition: transform 0.16s ease;
+}
+
+.currency-setting-role-filter.is-open .currency-setting-role-chevron {
+    transform: rotate(0deg);
+}
+
+.currency-setting-role-menu {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 8px);
+    left: 0;
+    width: 100%;
+    max-height: clamp(190px, 32vh, 320px);
+    overflow-y: auto;
+    padding: 8px 0;
+    border-radius: 12px;
+    background: #ffffff;
+    border: 1px solid #eef2f7;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.currency-setting-role-option {
+    width: 100%;
+    min-height: 40px;
+    padding: 0 14px;
+    border: none;
+    background: #ffffff;
+    color: #1f2937;
+    font-family: inherit;
+    font-size: var(--text-small);
+    font-weight: 400;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    text-align: left;
+}
+
+.currency-setting-role-option:hover,
+.currency-setting-role-option.is-selected {
+    background: #f5f7ff;
+}
+
+.currency-setting-role-check {
+    width: 16px;
+    height: 16px;
+    color: #7c91e8;
+    flex-shrink: 0;
+}
+
+/* Currency Setting：右側 Account 五欄 */
+.currency-setting-account-list.account-grid--eight {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: grid !important;
+    grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+    gap: 10px;
+    align-content: start;
+    padding: 10px 0;
+    padding-right: 5px;
+    align-items: stretch;
+    grid-auto-rows: minmax(var(--currency-setting-card-height, 68px), var(--currency-setting-card-height, 68px));
+}
+
+/* ── Currency Setting：Account 卡片 — 與 Add User「Account」欄一致（選中＝白底藍框；未選＝淺灰底）── */
+#currencySettingModal .currency-setting-select-card.account-item-compact.account-item-compact--process {
+    align-items: stretch;
+}
+
+#currencySettingModal .currency-setting-select-card.account-item-compact {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    min-height: var(--currency-setting-card-height, 68px);
+    max-height: var(--currency-setting-card-height, 68px);
+    padding: 8px 10px;
+    border-radius: 10px;
+    /* 未選：同 user modal 預設（圖二） */
+    background: var(--account-select-card-bg);
+    border: 1.5px solid var(--account-select-card-border);
+    box-shadow: none;
+    cursor: pointer;
+    transition:
+        background-color var(--duration-fast) var(--ease-out-soft),
+        border-color var(--duration-fast) var(--ease-out-soft),
+        box-shadow var(--duration-fast) var(--ease-out-soft);
+}
+
+#currencySettingModal .currency-setting-select-card:hover:not(:has(input[type="checkbox"]:checked)):not(:has(input[type="checkbox"]:disabled)) {
+    background: #e8eef5 !important;
+    border-color: #94a3b8 !important;
+}
+
+#currencySettingModal .currency-setting-select-card:has(input[type="checkbox"]:checked) {
+    /* 選中：同 user modal checked（圖一） */
+    background-color: var(--account-select-card-bg-checked);
+    border: 1.5px solid var(--account-select-card-border-checked);
+    box-shadow: none;
+}
+
+#currencySettingModal .currency-setting-select-card:has(input[type="checkbox"]:checked):hover {
+    background-color: #f8fbff !important;
+    border-color: var(--account-select-card-border-checked) !important;
+}
+
+/* 未選：主行副行（深灰主色 + muted） */
+#currencySettingModal .currency-setting-select-card:not(:has(input[type="checkbox"]:checked)) .account-label.account-label--process {
+    color: var(--color-page-fg);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+}
+
+#currencySettingModal .currency-setting-select-card:not(:has(input[type="checkbox"]:checked)) .account-label-desc {
+    color: var(--color-muted-fg);
+}
+
+/* 選中：藍主標 + 灰副標（與 user modal 一致） */
+#currencySettingModal .currency-setting-select-card .account-label.account-label--process {
+    min-width: 0;
+    max-width: 100%;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.25;
+    font-family: inherit;
+    font-size: var(--text-small);
+    letter-spacing: 0.02em;
+}
+
+#currencySettingModal .currency-setting-select-card:has(input[type="checkbox"]:checked) .account-label.account-label--process {
+    color: var(--account-select-label-checked);
+    font-weight: var(--font-weight-bold);
+}
+
+#currencySettingModal .currency-setting-select-card .account-label-desc {
+    display: block;
+    margin-top: 4px;
+    font-family: inherit;
+    font-size: var(--text-tiny);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.2;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 1.2em;
+}
+
+#currencySettingModal .currency-setting-select-card:has(input[type="checkbox"]:checked) .account-label-desc {
+    color: var(--account-select-desc-checked);
+}
+
+#currencySettingModal .currency-setting-select-card input[type="checkbox"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    pointer-events: none;
+}
+
+#currencySettingModal .currency-setting-select-card:has(input[type="checkbox"]:focus-visible) {
+    outline: 2px solid var(--color-primary-strong);
+    outline-offset: 2px;
+}
+
+/* Modal Actions */
+.currency-fullscreen-bottom-bar {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: clamp(12px, 1.04vw, 20px);
+    padding: clamp(12px, 0.83vw, 16px) clamp(24px, 2.08vw, 40px);
+    background: #ffffff;
+    border-top: 2px solid #e2e8f0;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/*
+ * 底部 Save / Cancel：在 html 62.5% + global-13inch 下 .account-btn 易被压成 12px；
+ * 用 design-tokens 固定主操作钮体阶（# 选择器盖过 body.ec-auth-shell .account-btn !important）。
+ */
+#currencySettingModal .currency-fullscreen-bottom-bar .account-btn-save,
+#currencySettingModal .currency-fullscreen-bottom-bar .account-btn-cancel {
+    font-family: var(--font-heading-page) !important;
+    font-size: var(--text-medium) !important;
+    font-weight: var(--font-weight-semibold) !important;
+    min-width: var(--userlist-btn-add-width) !important;
+    width: auto !important;
+    min-height: auto !important;
+    padding: clamp(6px, 0.42vw, 8px) 20px !important;
+    border: none !important;
+    border-radius: 6px !important;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(5px, 0.42vw, 8px);
+    text-align: center;
+}
+
+#currencySettingModal .currency-fullscreen-bottom-bar .account-btn-save:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 0.125rem 0.25rem rgba(0, 0, 0, 0.12);
+}
+
+/* Add / Select All：沿用 User List / Admin 顶栏 Add User 按钮 */
+#currencySettingModal .currency-setting-add-btn.account-btn-add,
+#currencySettingModal .currency-setting-selectall-btn.account-btn-add {
+    background: var(--btn-add-gradient) !important;
+    color: white !important;
+    font-family: var(--font-heading-page) !important;
+    min-width: var(--userlist-btn-add-width) !important;
+    width: auto !important;
+    padding: clamp(6px, 0.42vw, 8px) 20px !important;
+    font-size: var(--text-medium) !important;
+    font-weight: var(--font-weight-semibold) !important;
+    border: none !important;
+    border-radius: 6px !important;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3) !important;
+    --sweep-color: rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(5px, 0.42vw, 8px);
+    text-align: center;
+}
+
+#currencySettingModal .currency-setting-add-btn.account-btn-add:hover,
+#currencySettingModal .currency-setting-selectall-btn.account-btn-add:hover:not(:disabled) {
+    background: var(--btn-add-gradient-hover) !important;
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4) !important;
+    transform: translateY(-1px);
+}
+
+#currencySettingModal .currency-setting-submit-btn.account-btn-save {
+    background: var(--btn-add-gradient);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3) !important;
+}
+
+#currencySettingModal .currency-setting-submit-btn.account-btn-save:hover:not(:disabled) {
+    background: var(--btn-add-gradient-hover);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4) !important;
+}
+
+#currencySettingModal .currency-setting-cancel-btn.account-btn-cancel {
+    box-shadow: 0 2px 4px rgba(101, 119, 134, 0.2) !important;
+}
+
+#currencySettingModal .currency-setting-cancel-btn.account-btn-cancel:hover {
+    box-shadow: 0 4px 8px rgba(101, 119, 134, 0.3) !important;
+}
+
+/* Select All disabled：與底部 Save 禁用視覺一致（未選幣種時）；需蓋過上方 account-btn-add 的 !important */
+#currencySettingModal .currency-setting-selectall-btn.account-btn-add:disabled,
+#currencySettingModal .currency-setting-selectall-btn.account-btn-add:disabled:hover {
+    opacity: 0.45 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 0.125rem 0.25rem rgba(0, 0, 0, 0.12) !important;
+    background: var(--btn-add-gradient) !important;
+    color: white !important;
+}
+
+/* Account List 顶栏药丸搜索：与 User List 共用样式，保留姓名/账号原大小写 */
+body.account-page .search-container.userlist-search-bar .userlist-search-input {
+    text-transform: none !important;
+}
+
+/* ================================================================
+   Account List + Currency Setting — Tablet（≤1200px，含 iPad 横屏）
+   ================================================================ */
+@media (max-width: 1200px) {
+    body.ec-auth-shell.account-page .container {
+        padding-left: var(--layout-main-offset);
+        transition: padding-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* 主列表：窄屏横向滚动，表头/行共用 inner 宽度 */
+    body.account-page .account-table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    body.account-page .account-list-table-inner {
+        min-width: max(100%, 980px);
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    body.account-page:not(.account-page--show-all) .account-cards {
+        overflow-x: visible !important;
+        overflow-y: auto !important;
+    }
+
+    body.account-page .account-toolbar-top-row {
+        flex-wrap: wrap;
+        row-gap: 10px;
+    }
+
+    body.account-page .account-toolbar-primary {
+        flex: 1 1 240px;
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+
+    body.account-page .action-buttons {
+        row-gap: 0;
+    }
+
+    body.account-page .user-toolbar-actions-right {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+    body.account-page .action-buttons-container .user-gc-inline-panel {
+        row-gap: var(--user-gc-inline-row-gap, 4px);
+    }
+
+    /* —— Currency Setting 全屏 —— */
+    .currency-left-panel {
+        flex: 0 0 clamp(200px, 26vw, 260px);
+        max-width: clamp(200px, 26vw, 260px);
+    }
+
+    .currency-setting-pill-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .currency-setting-filter-row {
+        flex-wrap: wrap;
+        align-items: center;
+        row-gap: 10px;
+    }
+
+    .currency-setting-filter-left {
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+        row-gap: 8px;
+        min-width: 0;
+    }
+
+    .currency-setting-filter-left h3 {
+        flex: 0 0 100%;
+        margin-bottom: 2px;
+    }
+
+    .currency-setting-search-wrap {
+        flex: 1 1 140px;
+        min-width: 120px;
+        max-width: none;
+        width: auto;
+    }
+
+    .currency-setting-role-filter {
+        flex: 0 1 130px;
+        min-width: 110px;
+    }
+
+    .currency-setting-selectall-row {
+        flex: 0 0 auto;
+        margin-left: auto;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    #currencySettingModal .currency-setting-account-list.account-grid--eight {
+        grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+        gap: 8px;
+    }
+}
+
+/* 约 1070px 视口：右侧账户区改三列，行高一致、末行更整齐 */
+@media (max-width: 1100px) {
+    #currencySettingModal .currency-setting-account-list.account-grid--eight {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 1024px) {
+    /* Currency：上下分栏，账户区占满剩余高度 */
+    .currency-fullscreen-modal-body {
+        flex-direction: column;
+    }
+
+    .currency-left-panel {
+        flex: 0 0 auto;
+        width: 100%;
+        max-width: none;
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+        max-height: min(36vh, 280px);
+        overflow-y: auto;
+    }
+
+    .currency-right-panel {
+        flex: 1 1 auto;
+        min-height: 0;
+        padding-top: 12px;
+    }
+
+    .currency-setting-divider {
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    .currency-setting-filter-row {
+        margin-left: 0;
+        margin-right: 0;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    .currency-setting-filter-left {
+        width: 100%;
+    }
+
+    .currency-setting-selectall-row {
+        width: 100%;
+        margin-left: 0;
+        justify-content: space-between;
+    }
+
+    #currencySettingModal .currency-setting-account-list.account-grid--eight {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 8px;
+    }
+
+    .currency-setting-pill-list {
+        grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    }
+
+    .currency-fullscreen-modal-header-bar {
+        padding: 10px 16px;
+    }
+
+    .currency-fullscreen-bottom-bar {
+        padding: 10px 16px;
+        flex-wrap: wrap;
+    }
+}
+

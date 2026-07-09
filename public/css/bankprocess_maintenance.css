@@ -1,0 +1,1292 @@
+﻿@import "./maintenance_empty_state.css";
+
+/* bankprocess_maintenance.php - 页面样式 */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    height: auto;
+    background-color: #e9f1ff;
+    background-image:
+        radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 48%),
+        radial-gradient(circle at 70% 15%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 45%),
+        radial-gradient(circle at 40% 70%, rgba(206, 232, 255, 0.55) 0%, rgba(255, 255, 255, 0) 60%),
+        radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%),
+        linear-gradient(145deg, #97BFFC 0%, #AECFFA 40%, #f9fbff 100%);
+    background-blend-mode: screen, screen, multiply, screen, normal;
+    color: #334155;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.container {
+    max-width: none;
+    margin: 0;
+    /* 与 Domain/Customer Report、Transaction 主区一致：左侧 sidebar 留白 + 右侧响应式边距 */
+    padding: var(--layout-page-top-gap) clamp(20px, 2.08vw, 40px) 20px var(--layout-main-offset);
+    width: 100%;
+    min-height: 100vh;
+    height: auto;
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.maintenance-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.maintenance-search-section {
+    padding: 10px 20px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background-color: #fff;
+    box-shadow: 0 2px 8px #0000001a;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 1600px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+}
+
+/* Keep Date Range and Search bar same height */
+.maintenance-search-section {
+    --maintenance-control-height: clamp(36px, 2.8vw, 40px);
+}
+
+/* Bank Process List search bar (1:1 with processlist) */
+.maintenance-search-section .maintenance-search-container {
+    position: relative;
+}
+
+.maintenance-search-section .maintenance-search-container .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 25%;
+    z-index: 2;
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(14px, 0.83vw, 16px);
+    pointer-events: none;
+    object-fit: contain;
+}
+
+.maintenance-search-section .maintenance-search-input {
+    width: clamp(165px, 13vw, 250px);
+    padding: 7px 2px clamp(6px, 0.42vw, 8px) clamp(20px, 2.08vw, 32px) !important;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 6px;
+    font-size: clamp(10px, 0.8vw, 15px);
+    background: rgba(255, 255, 255, 1);
+    color: #000000ff;
+    backdrop-filter: blur(8px) saturate(1.2);
+    -webkit-backdrop-filter: blur(8px) saturate(1.2);
+    box-shadow: none;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.maintenance-search-section .maintenance-search-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    background: rgba(255, 255, 255, 1);
+}
+
+.maintenance-filters {
+    display: flex;
+    gap: clamp(12px, 1.25vw, 24px);
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.maintenance-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(6px, 0.52vw, 10px);
+    min-width: clamp(150px, 12.5vw, 240px);
+}
+
+.maintenance-label {
+    font-size: clamp(11px, 0.85vw, 13px);
+    font-weight: 600;
+    color: #374151;
+    font-family: var(--font-heading-page);
+}
+
+.maintenance-input,
+.maintenance-select {
+    padding: clamp(8px, 0.65vw, 12px) clamp(10px, 1vw, 14px);
+    border: 0.125rem solid #e5e7eb;
+    border-radius: 0.5rem;
+    font-size: clamp(11px, 0.85vw, 14px);
+    background: #ffffff;
+    color: #374151;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    width: 100%;
+}
+
+.maintenance-input:focus,
+.maintenance-select:focus {
+    outline: none;
+    border-color: #007AFF;
+    box-shadow: 0 0 0 0.1875rem rgba(0, 122, 255, 0.1);
+}
+
+.maintenance-date-inputs {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+}
+
+.maintenance-date-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.maintenance-actions {
+    display: flex;
+    align-items: center;
+    gap: clamp(12px, 1.04vw, 20px);
+    flex-shrink: 0;
+    align-self: flex-end;
+}
+
+.maintenance-company-filter {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 0.83vw, 16px);
+    flex-wrap: wrap;
+}
+
+/* Category 权限区域（与 processlist 一致，右上角） */
+.maintenance-permission-filter-header {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 0.83vw, 16px);
+    flex-wrap: wrap;
+    padding: 0;
+    margin-top: clamp(12px, 1.04vw, 20px);
+}
+
+.maintenance-company-label {
+    font-weight: bold;
+    color: #374151;
+    font-size: clamp(10px, 0.73vw, 14px);
+    font-family: var(--font-heading-page);
+    white-space: nowrap;
+}
+
+.maintenance-company-buttons {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.maintenance-filter-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: clamp(12px, 1.04vw, 20px);
+    flex-wrap: wrap;
+}
+
+.maintenance-filter-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(4px, 0.52vw, 8px);
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.maintenance-filter-left .maintenance-company-filter {
+    width: 100%;
+    max-width: 100%;
+}
+
+/* Period：与胶囊筛选一致 */
+.maintenance-search-section .quick-select-dropdown {
+    width: auto;
+    min-width: clamp(104px, 8.5vw, 148px);
+}
+
+.maintenance-search-section .quick-select-dropdown .dropdown-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(4px, 0.5vw, 6px);
+    width: 100%;
+    min-height: clamp(28px, 2.2vw, 34px);
+    padding: clamp(3px, 0.31vw, 6px) clamp(12px, 1vw, 18px);
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: bold;
+    font-family: var(--font-heading-page);
+    border-radius: 999px;
+    border: 1px solid #d0d7de;
+    background: #f1f5f9;
+    color: #1f2937;
+    box-shadow: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.maintenance-search-section .quick-select-dropdown .dropdown-toggle:hover {
+    background: #e2e8f0;
+    border-color: #a5b4fc;
+    color: #1f2937;
+}
+
+.maintenance-search-section .quick-select-dropdown:has(#quick-select-dropdown.show) .dropdown-toggle,
+.maintenance-search-section .quick-select-dropdown:has(.dropdown-menu.show) .dropdown-toggle {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.maintenance-search-section .quick-select-dropdown:has(#quick-select-dropdown.show) .dropdown-toggle:hover,
+.maintenance-search-section .quick-select-dropdown:has(.dropdown-menu.show) .dropdown-toggle:hover {
+    filter: brightness(1.05);
+}
+
+.maintenance-search-section .quick-select-dropdown .dropdown-menu {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.maintenance-from-search-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: clamp(10px, 1vw, 16px);
+    margin-top: clamp(6px, 0.52vw, 10px);
+    width: 100%;
+    max-width: min(100%, 560px);
+}
+
+.maintenance-from-search-row .maintenance-from-search-field {
+    flex: 1 1 200px;
+    min-width: clamp(160px, 28vw, 320px);
+}
+
+/* Search bar inline with Date Range (right side) */
+.maintenance-date-inline,
+.maintenance-search-inline {
+    /* Match Bank Process List search bar sizing (1:1) */
+    min-width: clamp(165px, 13vw, 250px);
+    max-width: clamp(165px, 13vw, 250px);
+}
+
+/* Ensure date-range picker fits the group width */
+.maintenance-date-inline .date-range-picker {
+    width: 100%;
+    min-width: 0;
+}
+
+.maintenance-search-inline-wrap {
+    display: flex;
+    align-items: center;
+    gap: clamp(6px, 0.52vw, 10px);
+}
+
+.maintenance-search-inline-controls {
+    /* Make it look/size like .date-range-picker */
+    display: flex;
+    align-items: center;
+    gap: clamp(4px, 0.42vw, 8px);
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: clamp(4px, 0.42vw, 8px);
+    height: var(--maintenance-control-height);
+    padding: 0 clamp(8px, 0.83vw, 16px);
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.maintenance-search-inline-controls .maintenance-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+/* Search button outside the bar */
+.maintenance-search-inline-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--maintenance-control-height);
+    /* match Date Range */
+    width: clamp(38px, 3vw, 44px);
+    /* slightly smaller */
+    margin: 0;
+    border: 1px solid #d1d5db;
+    border-radius: clamp(4px, 0.42vw, 8px);
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: #fff;
+    cursor: pointer;
+    transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.25);
+}
+
+.maintenance-search-inline-btn:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.35);
+}
+
+.maintenance-search-inline-btn:active {
+    transform: translateY(0);
+}
+
+/* Date Range uses shared styles from css/date-range-picker.css (do not override here). */
+
+.maintenance-from-search-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: clamp(40px, 3.2vw, 44px);
+    height: clamp(36px, 2.8vw, 40px);
+    margin-bottom: 2px;
+    border: 0.125rem solid #e5e7eb;
+    border-radius: 0.5rem;
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: #fff;
+    cursor: pointer;
+    transition: opacity 0.2s ease, transform 0.15s ease;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.25);
+}
+
+.maintenance-from-search-btn:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+}
+
+.maintenance-from-search-btn:active {
+    transform: translateY(0);
+}
+
+.maintenance-company-btn {
+    padding: clamp(3px, 0.31vw, 6px) clamp(10px, 0.83vw, 16px);
+    border: 1px solid #d0d7de;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #1f2937;
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.maintenance-company-btn:hover {
+    background: #e2e8f0;
+    border-color: #a5b4fc;
+}
+
+.maintenance-company-btn.active {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.maintenance-delete-btn {
+    background: linear-gradient(180deg, #F30E12 0%, #A91215 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    width: auto;
+    min-width: clamp(72px, 5.5vw, 110px);
+    padding: clamp(3px, 0.31vw, 6px) clamp(14px, 1.04vw, 22px);
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: bold;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.maintenance-delete-btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #A91215 0%, #F30E12 100%);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+    transform: translateY(-1px);
+}
+
+.maintenance-delete-btn:disabled {
+    background: #f1f5f9;
+    color: #94a3b8;
+    border: 1px solid #d0d7de;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 1;
+}
+
+.maintenance-confirm-delete-label {
+    display: flex;
+    align-items: center;
+    gap: clamp(6px, 0.52vw, 10px);
+    cursor: pointer;
+    font-size: clamp(10px, 0.73vw, 14px);
+    color: #334155;
+    user-select: none;
+    font-family: var(--font-heading-page);
+}
+
+.maintenance-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    margin-right: 8px;
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(10px, 0.83vw, 16px);
+    border: 2px solid #000000ff;
+    border-radius: 3px;
+    background-color: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.maintenance-checkbox:checked {
+    background-color: #1a237e;
+    border-color: #1a237e;
+}
+
+.maintenance-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: clamp(8px, 0.73vw, 14px);
+    font-weight: bold;
+    line-height: 1;
+}
+
+.maintenance-list-container {
+    margin-bottom: clamp(20px, 1.67vw, 32px);
+    margin-top: 10px;
+    max-width: 1600px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+}
+
+.maintenance-table {
+    width: 100%;
+    border-collapse: separate;
+    table-layout: fixed;
+    border-spacing: 0;
+}
+
+.maintenance-table thead tr {
+    background: linear-gradient(180deg, #60C1FE 0%, #0F61FF 100%);
+    color: #ffffff;
+}
+
+.maintenance-table thead th {
+    padding: clamp(4px, 0.6vw, 10px) 12px;
+    text-align: center;
+}
+
+.maintenance-table thead th:first-child {
+    border-top-left-radius: 8px;
+}
+
+.maintenance-table thead th:last-child {
+    border-top-right-radius: 8px;
+}
+
+.maintenance-table tbody tr {
+    background: #ffffff;
+    box-shadow: none;
+    transition: background-color 0.15s ease;
+}
+
+.maintenance-table tbody tr:hover {
+    box-shadow: none;
+    transform: none;
+}
+
+.maintenance-table tbody td,
+.maintenance-table tbody td.maintenance-table-cell {
+    background-color: transparent;
+}
+
+.maintenance-table tbody tr:nth-child(even) {
+    background: #cceeff99;
+}
+
+.maintenance-table tbody tr:nth-child(odd) {
+    background: #ffffff;
+}
+
+.maintenance-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* 已删除记录样式：与 payment_maintenance 一致（红色 + 文字删除线） */
+.maintenance-row-deleted .maintenance-table-cell {
+    color: #b91c1c;
+    text-decoration: line-through;
+}
+
+/* 9 columns：No. … Submitted By | 最右 Checkbox */
+.maintenance-table th:nth-child(1),
+.maintenance-table td:nth-child(1) {
+    width: 3%;
+}
+
+.maintenance-table th:nth-child(2),
+.maintenance-table td:nth-child(2) {
+    width: 9%;
+}
+
+.maintenance-table th:nth-child(3),
+.maintenance-table td:nth-child(3) {
+    width: 7%;
+}
+
+.maintenance-table th:nth-child(4),
+.maintenance-table td:nth-child(4) {
+    width: 11%;
+}
+
+.maintenance-table th:nth-child(5),
+.maintenance-table td:nth-child(5) {
+    width: 13%;
+}
+
+.maintenance-table th:nth-child(6),
+.maintenance-table td:nth-child(6) {
+    width: 22%;
+}
+
+.maintenance-table th:nth-child(7),
+.maintenance-table td:nth-child(7) {
+    width: 8%;
+}
+
+.maintenance-table th:nth-child(8),
+.maintenance-table td:nth-child(8) {
+    width: 11%;
+}
+
+.maintenance-table th:nth-child(9),
+.maintenance-table td:nth-child(9) {
+    width: 4%;
+}
+
+.maintenance-table-cell {
+    color: #374151;
+    padding: 4px 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.maintenance-header-amount {
+    text-align: center !important;
+}
+
+.maintenance-cell-currency-amount {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.maintenance-cell-checkbox {
+    text-align: center;
+}
+
+/* 与 transaction history 一致：description / remark 大写显示 */
+.text-uppercase {
+    text-transform: uppercase;
+}
+
+#select_all_bankprocess {
+    cursor: pointer;
+}
+
+.maintenance-row-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: clamp(10px, 0.73vw, 14px);
+    height: clamp(10px, 0.73vw, 14px);
+    border: 2px solid #000000ff;
+    border-radius: 3px;
+    background-color: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    margin: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.maintenance-row-checkbox:checked {
+    background-color: #1a237e;
+    border-color: #1a237e;
+}
+
+.maintenance-row-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: clamp(10px, 0.83vw, 14px);
+    font-weight: bold;
+    line-height: 1;
+}
+
+.maintenance-row-checkbox:disabled {
+    border-color: #cbd5e1;
+    background-color: #f1f5f9;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.maintenance-select-all-header {
+    text-align: center;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+.maintenance-select-all-checkbox {
+    margin: 0 !important;
+}
+
+.maintenance-notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 400px;
+}
+
+.maintenance-notification {
+    padding: 16px 20px;
+    border-radius: 12px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    transform: translateX(100%);
+    transition: all 0.3s ease-in-out;
+    font-weight: 500;
+    position: relative;
+    word-wrap: break-word;
+    border-left: 4px solid;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.maintenance-notification.show {
+    transform: translateX(0);
+}
+
+.maintenance-notification-success {
+    background-color: #f0fdf4;
+    color: #166534;
+    border-left-color: #22c55e;
+}
+
+.maintenance-notification-error {
+    background-color: #fef2f2;
+    color: #991b1b;
+    border-left-color: #ef4444;
+}
+
+.maintenance-notification-info {
+    background-color: #eff6ff;
+    color: #1e40af;
+    border-left-color: #3b82f6;
+}
+
+/* Confirm Delete Modal Styles - same as account page */
+.maintenance-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(0.25rem);
+}
+
+#confirmDeleteModal.maintenance-modal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    animation: accountConfirmFadeIn 0.2s ease-out;
+}
+
+@keyframes accountConfirmFadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.maintenance-confirm-modal-content {
+    background: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 24px;
+    width: clamp(400px, 35vw, 550px);
+    max-width: 90%;
+    flex: 0 0 auto;
+    align-self: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    animation: accountConfirmSlideDown 0.3s ease-out;
+    overflow: hidden;
+    position: relative;
+}
+
+@keyframes accountConfirmSlideDown {
+    from {
+        transform: translateY(-80px) scale(0.95);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+.maintenance-confirm-icon-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: clamp(30px, 2.6vw, 50px);
+    padding-bottom: clamp(15px, 1.3vw, 25px);
+}
+
+.maintenance-confirm-icon {
+    width: clamp(50px, 4.17vw, 80px);
+    height: clamp(50px, 4.17vw, 80px);
+    color: #dc2626;
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border-radius: 50%;
+    padding: clamp(10px, 0.83vw, 16px);
+    animation: iconPulse 2s ease-in-out infinite;
+}
+
+@keyframes iconPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+    }
+
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+    }
+}
+
+.maintenance-confirm-title {
+    text-align: center;
+    color: #1e293b;
+    font-size: var(--text-h2);
+    font-weight: 700;
+    margin: 0 0 clamp(15px, 1.3vw, 25px) 0;
+    font-family: var(--font-heading-page), -apple-system, sans-serif;
+    letter-spacing: -0.02em;
+}
+
+.maintenance-confirm-message {
+    text-align: center;
+    font-size: var(--text-h3);
+    color: #475569;
+    line-height: 1.7;
+    margin: 0;
+    padding: 0 clamp(25px, 2.08vw, 40px);
+    white-space: pre-line;
+    font-weight: 500;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.maintenance-confirm-actions {
+    display: flex;
+    gap: 12px;
+    padding: clamp(25px, 2.08vw, 40px);
+    justify-content: center;
+    background: rgba(248, 250, 252, 0.8);
+    margin-top: clamp(18px, 1.67vw, 32px);
+}
+
+body.maintenance-page #confirmDeleteModal .confirm-cancel,
+body.maintenance-page #confirmDeleteModal .confirm-delete {
+    flex: 0 0 auto;
+    min-width: clamp(90px, 7vw, 130px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* Scrollbars: app-wide — dashboard-scrollbar.css */
+
+/* Button styles for confirm modal (scoped — avoid overriding sidebar .logout-btn) */
+body.maintenance-page .maintenance-modal .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: var(--font-heading-page);
+    font-weight: 600;
+    padding: clamp(10px, 0.83vw, 16px) clamp(20px, 1.67vw, 32px);
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: var(--text-base);
+    white-space: nowrap;
+}
+
+body.maintenance-page .maintenance-modal .btn-cancel {
+    background: linear-gradient(180deg, #9ca3af 0%, #5a6370 100%);
+    color: white;
+    box-shadow: 0 2px 4px rgba(107, 114, 128, 0.3);
+}
+
+body.maintenance-page .maintenance-modal .btn-cancel:hover {
+    background: linear-gradient(180deg, #5a6370 0%, #9ca3af 100%);
+    box-shadow: 0 4px 8px rgba(107, 114, 128, 0.4);
+    transform: translateY(-1px);
+}
+
+body.maintenance-page .maintenance-modal .btn-delete {
+    background: var(--btn-delete-gradient);
+    color: white;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+}
+
+body.maintenance-page .maintenance-modal .btn-delete:hover {
+    background: var(--btn-delete-gradient-hover);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+    transform: translateY(-1px);
+}
+
+.flatpickr-calendar {
+    font-family: var(--font-heading-page);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.flatpickr-day.selected {
+    background: #4a90e2;
+    border-color: #4a90e2;
+}
+
+.flatpickr-day.today {
+    border-color: #4a90e2;
+}
+
+.flatpickr-day.today:hover,
+.flatpickr-day.today:focus {
+    background: #e6f2ff;
+    border-color: #4a90e2;
+}
+
+/*
+ * Bank Process 维护列表：占满主内容宽度、列间距与日期/账户列可读性。
+ * SPA 下其他页也定义 `.maintenance-table th:nth-child(n)`，列含义不同会互相覆盖；
+ * 用 `body… .bankprocess-maintenance-page-root …` 提高专用性，避免被其他 maintenance 样式盖掉。
+ */
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-search-section {
+    max-width: none;
+    width: 100%;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container {
+    max-width: none;
+    width: 100%;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table th,
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table td {
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table thead th {
+    padding: clamp(8px, 0.7vw, 12px) clamp(10px, 1vw, 16px);
+    text-align: center;
+    white-space: nowrap;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(1),
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(1) {
+    width: 3.7%;
+    min-width: 2.5rem;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(2),
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(2) {
+    width: 9%;
+    min-width: 8.5rem;
+    text-align: left;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(3),
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(3) {
+    width: 7%;
+    min-width: 4.5rem;
+    text-align: left;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(4),
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(4) {
+    width: 15%;
+    min-width: 6rem;
+    text-align: left;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(5),
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(5) {
+    width: 8.5%;
+    min-width: 5.5rem;
+    text-align: center !important;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(6),
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(6) {
+    width: 25%;
+    min-width: 7rem;
+    text-align: left;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(7),
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(7) {
+    width: 9%;
+    min-width: 4rem;
+    text-align: left;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(8),
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(8) {
+    width: 8%;
+    min-width: 5rem;
+    text-align: left;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(9),
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(9) {
+    width: 6%;
+    min-width: 2.25rem;
+}
+
+body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .maintenance-list-container .maintenance-table-cell {
+    padding: clamp(8px, 0.7vw, 12px) clamp(10px, 1vw, 16px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+/* —— Bank Process virtual table（与 payment maintenance 同套 TanStack Virtual + 两行 clamp）—— */
+.bankprocess-maintenance-page-root {
+    --bankprocess-list-cell-padding-y: clamp(7px, 0.65vw, 11px);
+    --bankprocess-list-cell-padding-x: clamp(8px, 0.8vw, 14px);
+    --bankprocess-list-cell-min-height: clamp(36px, 2.6vw, 48px);
+    --bankprocess-list-cell-line-height: 1.35;
+    --bankprocess-list-cell-line-clamp: 2;
+    --bankprocess-col-description-padding-x: clamp(10px, 1vw, 16px);
+}
+
+.bankprocess-maintenance-page-root .bankprocess-cell-clamp-2 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--bankprocess-list-cell-line-clamp);
+    line-clamp: var(--bankprocess-list-cell-line-clamp);
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    text-overflow: ellipsis;
+    line-height: var(--bankprocess-list-cell-line-height);
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-table-inner {
+    min-width: 1280px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-thead {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-head-row,
+.bankprocess-maintenance-page-root .bankprocess-virtual-data-row {
+    display: grid;
+    grid-template-columns:
+        minmax(28px, 3fr) minmax(88px, 8fr) minmax(52px, 6.5fr) minmax(72px, 13.5fr) minmax(72px, 8.5fr) minmax(120px, 26.5fr) minmax(64px, 9fr) minmax(56px, 8fr) minmax(40px, 6fr);
+    align-items: stretch;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Dts Created ↔ Account ↔ From: narrower columns, less gap between them */
+.bankprocess-maintenance-page-root .bankprocess-virtual-head-row .maintenance-virtual-th:nth-child(2),
+.bankprocess-maintenance-page-root .bankprocess-virtual-head-row .maintenance-virtual-th:nth-child(3),
+.bankprocess-maintenance-page-root .bankprocess-virtual-head-row .maintenance-virtual-th:nth-child(4),
+.bankprocess-maintenance-page-root .bankprocess-virtual-data-row .maintenance-virtual-cell:nth-child(2),
+.bankprocess-maintenance-page-root .bankprocess-virtual-data-row .maintenance-virtual-cell:nth-child(3),
+.bankprocess-maintenance-page-root .bankprocess-virtual-data-row .maintenance-virtual-cell:nth-child(4) {
+    padding-left: clamp(6px, 0.45vw, 10px);
+    padding-right: clamp(6px, 0.45vw, 10px);
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-head-row .maintenance-virtual-th:nth-child(2),
+.bankprocess-maintenance-page-root .bankprocess-virtual-data-row .maintenance-virtual-cell:nth-child(2) {
+    padding-right: clamp(2px, 0.2vw, 5px);
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-head-row .maintenance-virtual-th:nth-child(3),
+.bankprocess-maintenance-page-root .bankprocess-virtual-data-row .maintenance-virtual-cell:nth-child(3) {
+    padding-left: clamp(2px, 0.2vw, 5px);
+    padding-right: clamp(2px, 0.2vw, 5px);
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-head-row .maintenance-virtual-th:nth-child(4),
+.bankprocess-maintenance-page-root .bankprocess-virtual-data-row .maintenance-virtual-cell:nth-child(4) {
+    padding-left: clamp(2px, 0.2vw, 5px);
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-th {
+    background: linear-gradient(180deg, #60c1fe 0%, #0f61ff 100%);
+    color: #ffffff;
+    font-weight: bold;
+    font-size: var(--text-base);
+    padding: var(--bankprocess-list-cell-padding-y) var(--bankprocess-list-cell-padding-x);
+    text-align: center;
+    min-height: var(--bankprocess-list-cell-min-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-th--left {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-head-row .maintenance-virtual-th:first-child {
+    border-top-left-radius: 8px;
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-th-checkbox {
+    border-top-right-radius: 8px;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-scroll {
+    border-radius: 0 0 8px 8px;
+    background: #fff;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-row-wrap {
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-row-wrap .bankprocess-virtual-data-row {
+    height: 100%;
+    min-height: 100%;
+    align-items: stretch;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-data-row {
+    background: #ffffff;
+    box-shadow: none;
+    transition: background-color 0.15s ease;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-data-row--stripe {
+    background: #cceeff99;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-data-row:hover {
+    box-shadow: none;
+    transform: none;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-cell {
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-bold);
+    color: #374151;
+    line-height: var(--bankprocess-list-cell-line-height);
+    padding: var(--bankprocess-list-cell-padding-y) var(--bankprocess-list-cell-padding-x);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: none;
+    min-height: var(--bankprocess-list-cell-min-height);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-cell--left {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-cell--mono {
+    font-variant-numeric: tabular-nums;
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-cell--wrap {
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    align-items: center;
+    align-self: stretch;
+    height: auto;
+    min-height: 100%;
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-cell--wrap .bankprocess-cell-clamp-2 {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-cell--description {
+    padding-left: var(--bankprocess-col-description-padding-x);
+    padding-right: var(--bankprocess-col-description-padding-x);
+    text-transform: uppercase;
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-cell-checkbox {
+    padding-left: clamp(8px, 0.85vw, 14px);
+    padding-right: clamp(8px, 0.85vw, 14px);
+}
+
+.bankprocess-maintenance-page-root .bankprocess-virtual-cell--no {
+    overflow: visible;
+    text-overflow: clip;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-data-row .maintenance-cell-currency-amount {
+    text-align: center;
+    justify-content: center;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-head-row .maintenance-header-amount {
+    justify-content: center;
+    text-align: center !important;
+}
+
+.bankprocess-maintenance-page-root .maintenance-row-deleted .maintenance-virtual-cell {
+    color: #b91c1c;
+    text-decoration: line-through;
+}
+
+.bankprocess-maintenance-page-root .maintenance-row-deleted .bankprocess-virtual-cell-checkbox {
+    text-decoration: none;
+}
+
+/* 与 Payment Maintenance 一致：静默刷新顶栏细条 + 表体略灰 */
+.bankprocess-maintenance-table-region {
+    position: relative;
+}
+
+.bankprocess-maintenance-table-region .bankprocess-maintenance-sync-track {
+    height: 2px;
+    overflow: hidden;
+    border-radius: 2px;
+    margin-bottom: 10px;
+    background: rgba(229, 231, 235, 0.9);
+}
+
+.bankprocess-maintenance-table-region .bankprocess-maintenance-sync-bar {
+    height: 100%;
+    width: 38%;
+    max-width: 180px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.95), rgba(59, 130, 246, 0.15));
+    animation: bankprocess-maintenance-sync-slide 0.95s ease-in-out infinite;
+}
+
+@keyframes bankprocess-maintenance-sync-slide {
+    0% {
+        transform: translateX(-120%);
+    }
+
+    100% {
+        transform: translateX(420%);
+    }
+}
+
+.bankprocess-maintenance-table-region .maintenance-list-container--syncing {
+    opacity: 0.94;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+.bankprocess-maintenance-page-root .maintenance-list-container--syncing .maintenance-virtual-scroll {
+    pointer-events: none;
+}
+
+body.maintenance-page .bankprocess-maintenance-filters-shell {
+    width: 100%;
+}

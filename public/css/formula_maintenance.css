@@ -1,0 +1,1544 @@
+﻿@import "./maintenance_empty_state.css";
+
+@import "./maintenance_empty_state.css";
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    height: auto;
+    background-color: #e9f1ff;
+    background-image:
+        radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 48%),
+        radial-gradient(circle at 70% 15%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 45%),
+        radial-gradient(circle at 40% 70%, rgba(206, 232, 255, 0.55) 0%, rgba(255, 255, 255, 0) 60%),
+        radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%),
+        linear-gradient(145deg, #97BFFC 0%, #AECFFA 40%, #f9fbff 100%);
+    background-blend-mode: screen, screen, multiply, screen, normal;
+    color: #334155;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+html,
+body.dashboard-page.maintenance-page {
+    height: auto !important;
+    min-height: 100vh !important;
+    max-height: none !important;
+    overflow-y: hidden !important;
+    overflow-x: hidden !important;
+}
+
+.container {
+    max-width: none;
+    margin: 0;
+    /* 与 Domain/Customer Report、Transaction 主区一致：左侧 sidebar 留白 + 右侧响应式边距 */
+    padding: var(--layout-page-top-gap) clamp(20px, 2.08vw, 40px) 20px var(--layout-main-offset);
+    width: 100%;
+    min-height: 100vh;
+    height: auto;
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.maintenance-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.maintenance-toggle-dropdown {
+    margin-top: 0;
+}
+
+/* 餐厅选择器样式 */
+.restaurant-selector {
+    position: relative;
+}
+
+.selector-button {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+    font-weight: 500;
+    padding: clamp(6px, 0.52vw, 10px) clamp(16px, 1.04vw, 20px);
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: clamp(10px, 0.73vw, 14px);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    width: clamp(100px, 8vw, 150px);
+    justify-content: space-between;
+    position: relative;
+    font-family: var(--font-heading-page);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.selector-button:hover {
+    background: linear-gradient(180deg, #0D60FF 0%, #63C4FF 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+}
+
+.selector-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: white;
+    border: 2px solid #000000ff;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 123, 255, 0.2);
+    min-width: 150px;
+    z-index: 10000;
+    display: none;
+    margin-top: 4px;
+}
+
+.selector-dropdown.show {
+    display: block;
+}
+
+.selector-dropdown .dropdown-item {
+    padding: clamp(6px, 0.42vw, 8px) clamp(10px, 0.83vw, 16px);
+    cursor: pointer;
+    border-bottom: 1px solid #e5e7eb;
+    transition: all 0.2s;
+    color: #000000ff;
+    font-size: clamp(8px, 0.74vw, 14px);
+    font-weight: 500;
+    font-family: var(--font-heading-page);
+}
+
+.selector-dropdown .dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.selector-dropdown .dropdown-item:hover {
+    background-color: #e6f2ff;
+}
+
+.selector-dropdown .dropdown-item.active {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+}
+
+.maintenance-search-section {
+    /* 左右与表头 th 水平 padding 一致；外框与 .maintenance-list-container 同宽（1600 居中） */
+    padding: 10px clamp(10px, 0.9vw, 14px);
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background-color: #fff;
+    box-shadow: 0 2px 8px #0000001a;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 1600px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+}
+
+.maintenance-filters {
+    display: flex;
+    gap: clamp(12px, 1.25vw, 24px);
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.maintenance-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(6px, 0.52vw, 10px);
+    min-width: clamp(150px, 12.5vw, 240px);
+}
+
+.maintenance-label {
+    font-size: clamp(11px, 0.85vw, 13px);
+    font-weight: 600;
+    color: #374151;
+    font-family: var(--font-heading-page);
+}
+
+.maintenance-input,
+.maintenance-select {
+    padding: clamp(4px, 0.36vw, 7px) clamp(10px, 1vw, 14px);
+    border: 0.125rem solid #e5e7eb;
+    border-radius: 0.5rem;
+    font-size: clamp(11px, 0.85vw, 14px);
+    background: #ffffff;
+    color: #374151;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    width: 100%;
+}
+
+.maintenance-input:focus,
+.maintenance-select:focus {
+    outline: none;
+    border-color: #007AFF;
+    box-shadow: 0 0 0 0.1875rem rgba(0, 122, 255, 0.1);
+}
+
+/* Override for custom select button to match datacapture.php style */
+.maintenance-form-group .custom-select-button {
+    padding: 8px 30px clamp(6px, 0.42vw, 8px) 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: clamp(9px, 0.73vw, 14px);
+    font-weight: normal;
+    background: white;
+}
+
+.maintenance-select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%23333' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 35px;
+}
+
+.maintenance-company-filter {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 0.83vw, 16px);
+    flex-wrap: wrap;
+    padding: 0px 20px 10px 0px;
+}
+
+/* Category 权限区域（右上角，与 bankprocess_maintenance 一致） */
+.maintenance-permission-filter-header {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 0.83vw, 16px);
+    flex-wrap: wrap;
+    padding: 0;
+    margin-top: clamp(12px, 1.04vw, 20px);
+}
+
+.maintenance-company-label {
+    font-weight: bold;
+    color: #374151;
+    font-size: clamp(10px, 0.73vw, 14px);
+    font-family: var(--font-heading-page);
+    white-space: nowrap;
+}
+
+.maintenance-company-buttons {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.maintenance-company-btn {
+    padding: clamp(3px, 0.31vw, 6px) clamp(10px, 0.83vw, 16px);
+    border: 1px solid #d0d7de;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #1f2937;
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.maintenance-company-btn:hover {
+    background: #e2e8f0;
+    border-color: #a5b4fc;
+}
+
+.maintenance-company-btn.active {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.maintenance-company-buttons .maintenance-company-btn {
+    font-weight: bold;
+}
+
+.maintenance-actions {
+    display: flex;
+    align-items: center;
+    gap: clamp(12px, 1.04vw, 20px);
+    flex-shrink: 0;
+    align-self: flex-end;
+}
+
+.maintenance-filter-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(4px, 0.52vw, 8px);
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.maintenance-filter-left .maintenance-company-filter {
+    width: 100%;
+    max-width: 100%;
+}
+
+.maintenance-filter-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: clamp(12px, 1.04vw, 20px);
+    flex-wrap: wrap;
+}
+
+.formula-process-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.formula-process-control .custom-select-wrapper {
+    flex: 1;
+}
+
+.formula-clear-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    padding: 0;
+    border-radius: 50%;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.formula-clear-icon-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.formula-clear-icon-btn:active {
+    background: rgba(239, 68, 68, 0.18);
+    transform: scale(0.94);
+}
+
+.formula-search-input-container {
+    position: relative;
+}
+
+.formula-search-input-container .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #aaa;
+    pointer-events: none;
+}
+
+.maintenance-search-btn {
+    background: linear-gradient(180deg, #bcbcbc 0%, #585858 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    width: clamp(80px, 6.25vw, 120px);
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    font-size: clamp(10px, 0.83vw, 16px);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(88, 88, 88, 0.3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.maintenance-search-btn:hover {
+    background: linear-gradient(180deg, #585858 0%, #bcbcbc 100%);
+    box-shadow: 0 4px 8px rgba(84, 84, 84, 0.4);
+    transform: translateY(-1px);
+}
+
+.maintenance-select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%23333' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 35px;
+}
+
+/*
+ * List + table：与 payment_maintenance 同宽（1600 + 居中）。
+ * SPA 将各 maintenance 页的 CSS 打进同一份 bundle，payment/bankprocess 等里也有
+ * `.maintenance-table th:nth-child(2){ width: … }`（列含义不同），会盖掉本页列宽。
+ * 用 `.formula-maintenance-page-root .maintenance-list-container …` 提高专用性。
+ *
+ * 列表间距：数据 ≥60 条走虚拟列表（.maintenance-virtual-cell），<60 条走 table（.maintenance-table-cell）。
+ * 改 padding / min-height 请改下方 --formula-list-cell-* 变量，或同时改两处选择器。
+ */
+.formula-maintenance-page-root {
+    --formula-list-cell-padding-y: clamp(7px, 0.65vw, 11px);
+    --formula-list-cell-padding-x: clamp(8px, 0.8vw, 14px);
+    --formula-list-cell-min-height: clamp(30px, 2vw, 38px);
+    --formula-list-cell-line-height: 1.35;
+    --formula-col-formula-padding-x: clamp(12px, 1.15vw, 20px);
+    --formula-col-product-padding-x: clamp(10px, 1vw, 16px);
+    --formula-list-cell-line-clamp: 2;
+}
+
+/* 长文本最多显示 2 行，超出省略（悬停 title 可看全文） */
+.formula-maintenance-page-root .formula-cell-clamp-2 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--formula-list-cell-line-clamp);
+    line-clamp: var(--formula-list-cell-line-clamp);
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    text-overflow: ellipsis;
+    line-height: var(--formula-list-cell-line-height);
+}
+
+.formula-maintenance-table-region {
+    position: relative;
+}
+
+.formula-maintenance-table-region .formula-maintenance-sync-track {
+    height: 2px;
+    overflow: hidden;
+    border-radius: 2px;
+    margin-bottom: 10px;
+    background: rgba(229, 231, 235, 0.9);
+}
+
+.formula-maintenance-table-region .formula-maintenance-sync-bar {
+    height: 100%;
+    width: 38%;
+    max-width: 180px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.95), rgba(59, 130, 246, 0.15));
+    animation: formula-maintenance-sync-slide 0.95s ease-in-out infinite;
+}
+
+@keyframes formula-maintenance-sync-slide {
+    0% {
+        transform: translateX(-120%);
+    }
+
+    100% {
+        transform: translateX(420%);
+    }
+}
+
+.formula-maintenance-page-root .formula-list-container--syncing .maintenance-virtual-scroll {
+    opacity: 0.94;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+.formula-maintenance-page-root .maintenance-list-container {
+    margin-bottom: clamp(20px, 1.67vw, 32px);
+    margin-top: 10px;
+    max-width: 1600px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+    /* 与 Data Capture 维护列表：整块圆角 + 轻阴影 */
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table {
+    width: 100%;
+    border-collapse: separate;
+    table-layout: fixed;
+    /* 与 capture_maintenance 一致：列无缝，行间极细缝（非大块白条） */
+    border-spacing: 0;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table th,
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td {
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table thead tr {
+    background: linear-gradient(180deg, #60C1FE 0%, #0F61FF 100%);
+    color: #ffffff;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table thead th {
+    padding: clamp(8px, 0.7vw, 12px) clamp(10px, 1vw, 18px);
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+    line-height: 1.25;
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: transparent;
+    min-height: clamp(32px, 2.2vw, 42px);
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table thead th:first-child {
+    border-top-left-radius: 8px;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table thead th:last-child {
+    border-top-right-radius: 8px;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table tbody tr {
+    background: #ffffff;
+    box-shadow: none;
+    transition: background-color 0.15s ease;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table tbody tr:hover {
+    box-shadow: none;
+    transform: none;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table tbody tr:nth-child(even),
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table tbody tr.formula-data-row--stripe {
+    background: #cceeff99;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table tbody tr:nth-child(odd) {
+    background: #ffffff;
+}
+
+/* 与 Transaction 一致：行色在 tr，格底透明，整行斑马纹连续 */
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table tbody td {
+    background-color: transparent;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table tbody tr:last-child td:first-child {
+    border-bottom-left-radius: 8px;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table tbody tr:last-child td:last-child {
+    border-bottom-right-radius: 8px;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(1),
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(1) {
+    width: 4%;
+    text-align: center;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(2),
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(2) {
+    width: 15.5%;
+    text-align: left;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(3),
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(3) {
+    width: 10%;
+    text-align: left;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(4),
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(4) {
+    width: 7.2%;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(5),
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(5) {
+    width: 6%;
+    text-align: left;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(6),
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(6) {
+    width: 12.2%;
+    text-align: left;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(6).maintenance-table-cell {
+    padding-left: var(--formula-col-product-padding-x);
+    padding-right: var(--formula-col-product-padding-x);
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(7),
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(7) {
+    width: 26.9%;
+    text-align: left;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(8),
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(8) {
+    width: 19%;
+    text-align: left;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(9),
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(9) {
+    width: 11.3%;
+    text-align: left;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(10),
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(10) {
+    width: 7%;
+    text-align: center;
+}
+
+/* 普通 table 列表（数据 < 60 条） */
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table-cell {
+    color: #374151;
+    padding: var(--formula-list-cell-padding-y) var(--formula-list-cell-padding-x);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: none;
+    text-align: center;
+    vertical-align: middle;
+    box-sizing: border-box;
+    min-height: var(--formula-list-cell-min-height);
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(2).maintenance-table-cell,
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(3).maintenance-table-cell,
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(6).maintenance-table-cell,
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(7).maintenance-table-cell,
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(8).maintenance-table-cell {
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    line-height: var(--formula-list-cell-line-height);
+    vertical-align: middle;
+}
+
+/* line-clamp 仅作用于 .formula-cell-clamp-2，勿设在 td 上（会破坏列布局） */
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(8).maintenance-table-cell {
+    padding-left: var(--formula-col-formula-padding-x);
+    padding-right: var(--formula-col-formula-padding-x);
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(6).maintenance-table-cell .product-display,
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td.maintenance-table-cell.formula-cell-text .source-display,
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td.maintenance-table-cell.formula-cell-text .input-method-display,
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td.maintenance-table-cell.formula-cell-text .formula-display,
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td.maintenance-table-cell.formula-cell-text .description-display,
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(3).maintenance-table-cell .account-display {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--formula-list-cell-line-clamp);
+    line-clamp: var(--formula-list-cell-line-clamp);
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    text-overflow: ellipsis;
+    line-height: var(--formula-list-cell-line-height);
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(7).maintenance-table-cell .input-method-display {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td.maintenance-table-cell.formula-cell-text {
+    vertical-align: middle;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table td.maintenance-table-cell.formula-cell-text .description-display {
+    word-break: normal;
+    overflow-wrap: break-word;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-table tbody tr.formula-row-editing td.maintenance-table-cell {
+    overflow: visible;
+    white-space: normal;
+    vertical-align: middle;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-select-all-header {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-formula-actions-inner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(12px, 1.1vw, 18px);
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-action-edit-placeholder {
+    display: inline-block;
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(10px, 0.83vw, 16px);
+    flex-shrink: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-cell-currency {
+    text-align: center;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-cell-checkbox {
+    text-align: center;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-row-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: clamp(10px, 0.73vw, 14px);
+    height: clamp(10px, 0.73vw, 14px);
+    border: 2px solid #000000ff;
+    border-radius: 3px;
+    background-color: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    margin: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-row-checkbox:checked {
+    background-color: #1a237e;
+    border-color: #1a237e;
+}
+
+.formula-maintenance-page-root .maintenance-list-container .maintenance-row-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: clamp(10px, 0.83vw, 14px);
+    font-weight: bold;
+    line-height: 1;
+}
+
+/* Notification Styles */
+.maintenance-notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 400px;
+}
+
+.maintenance-notification {
+    padding: 16px 20px;
+    border-radius: 12px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    transform: translateX(100%);
+    transition: all 0.3s ease-in-out;
+    font-weight: 500;
+    position: relative;
+    word-wrap: break-word;
+    border-left: 4px solid;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.maintenance-notification.show {
+    transform: translateX(0);
+}
+
+.maintenance-notification-success {
+    background-color: #f0fdf4;
+    color: #166534;
+    border-left-color: #22c55e;
+}
+
+.maintenance-notification-error {
+    background-color: #fef2f2;
+    color: #991b1b;
+    border-left-color: #ef4444;
+}
+
+.maintenance-notification-info {
+    background-color: #eff6ff;
+    color: #1e40af;
+    border-left-color: #3b82f6;
+}
+
+/* Data Capture List Section */
+.maintenance-section-title {
+    font-size: clamp(16px, 1.5vw, 20px);
+    font-weight: bold;
+    color: #1f2937;
+    margin-bottom: 15px;
+    font-family: var(--font-heading-page);
+}
+
+#select_all_data_capture {
+    cursor: pointer;
+}
+
+.data-capture-row-checkbox {
+    cursor: pointer;
+}
+
+.account-edit-btn {
+    background-color: transparent;
+    color: black;
+    padding: clamp(2px, 0.31vw, 6px) 0;
+    margin: 0px;
+    border: transparent;
+    cursor: pointer;
+}
+
+.account-edit-btn:hover {
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.account-edit-btn img {
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(10px, 0.83vw, 16px);
+}
+
+/* Delete Button Styles */
+.maintenance-delete-btn {
+    background: linear-gradient(180deg, #F30E12 0%, #A91215 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    width: auto;
+    min-width: clamp(72px, 5.5vw, 110px);
+    padding: clamp(3px, 0.31vw, 6px) clamp(14px, 1.04vw, 22px);
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: bold;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.maintenance-delete-btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #A91215 0%, #F30E12 100%);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+    transform: translateY(-1px);
+}
+
+.maintenance-delete-btn:disabled {
+    background: #f1f5f9;
+    color: #94a3b8;
+    border: 1px solid #d0d7de;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 1;
+}
+
+.maintenance-confirm-delete-label {
+    display: flex;
+    align-items: center;
+    gap: clamp(6px, 0.52vw, 10px);
+    cursor: pointer;
+    font-size: clamp(10px, 0.73vw, 14px);
+    color: #334155;
+    user-select: none;
+    font-family: var(--font-heading-page);
+}
+
+.maintenance-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    margin-right: 8px;
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(10px, 0.83vw, 16px);
+    border: 2px solid #000000ff;
+    border-radius: 3px;
+    background-color: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.maintenance-checkbox:checked {
+    background-color: #1a237e;
+    border-color: #1a237e;
+}
+
+.maintenance-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: clamp(8px, 0.73vw, 14px);
+    font-weight: bold;
+    line-height: 1;
+}
+
+/* Confirm Delete Modal Styles - same as account page */
+.maintenance-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(0.25rem);
+}
+
+#confirmDeleteModal.maintenance-modal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    animation: accountConfirmFadeIn 0.2s ease-out;
+}
+
+@keyframes accountConfirmFadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.maintenance-confirm-modal-content {
+    background: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 24px;
+    width: clamp(400px, 35vw, 550px);
+    max-width: 90%;
+    flex: 0 0 auto;
+    align-self: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    animation: accountConfirmSlideDown 0.3s ease-out;
+    overflow: hidden;
+    position: relative;
+}
+
+@keyframes accountConfirmSlideDown {
+    from {
+        transform: translateY(-80px) scale(0.95);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+.maintenance-confirm-icon-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: clamp(30px, 2.6vw, 50px);
+    padding-bottom: clamp(15px, 1.3vw, 25px);
+}
+
+.maintenance-confirm-icon {
+    width: clamp(50px, 4.17vw, 80px);
+    height: clamp(50px, 4.17vw, 80px);
+    color: #dc2626;
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border-radius: 50%;
+    padding: clamp(10px, 0.83vw, 16px);
+    animation: iconPulse 2s ease-in-out infinite;
+}
+
+@keyframes iconPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+    }
+
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+    }
+}
+
+.maintenance-confirm-title {
+    text-align: center;
+    color: #1e293b;
+    font-size: var(--text-h2);
+    font-weight: 700;
+    margin: 0 0 clamp(15px, 1.3vw, 25px) 0;
+    font-family: var(--font-heading-page), -apple-system, sans-serif;
+    letter-spacing: -0.02em;
+}
+
+.maintenance-confirm-message {
+    text-align: center;
+    font-size: var(--text-h3);
+    color: #475569;
+    line-height: 1.7;
+    margin: 0;
+    padding: 0 clamp(25px, 2.08vw, 40px);
+    white-space: pre-line;
+    font-weight: 500;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.maintenance-confirm-actions {
+    display: flex;
+    gap: 12px;
+    padding: clamp(25px, 2.08vw, 40px);
+    justify-content: center;
+    background: rgba(248, 250, 252, 0.8);
+    margin-top: clamp(18px, 1.67vw, 32px);
+}
+
+body.maintenance-page #confirmDeleteModal .confirm-cancel,
+body.maintenance-page #confirmDeleteModal .confirm-delete {
+    flex: 0 0 auto;
+    min-width: clamp(90px, 7vw, 130px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* Scrollbars: app-wide — dashboard-scrollbar.css */
+
+/* Button styles for confirm modal (scoped — avoid overriding sidebar .logout-btn) */
+body.maintenance-page .maintenance-modal .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: var(--font-heading-page);
+    font-weight: 600;
+    padding: clamp(10px, 0.83vw, 16px) clamp(20px, 1.67vw, 32px);
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: var(--text-base);
+    white-space: nowrap;
+}
+
+body.maintenance-page .maintenance-modal .btn-cancel {
+    background: linear-gradient(180deg, #9ca3af 0%, #5a6370 100%);
+    color: white;
+    box-shadow: 0 2px 4px rgba(107, 114, 128, 0.3);
+}
+
+body.maintenance-page .maintenance-modal .btn-cancel:hover {
+    background: linear-gradient(180deg, #5a6370 0%, #9ca3af 100%);
+    box-shadow: 0 4px 8px rgba(107, 114, 128, 0.4);
+    transform: translateY(-1px);
+}
+
+body.maintenance-page .maintenance-modal .btn-delete {
+    background: var(--btn-delete-gradient);
+    color: white;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+}
+
+body.maintenance-page .maintenance-modal .btn-delete:hover {
+    background: var(--btn-delete-gradient-hover);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+    transform: translateY(-1px);
+}
+
+
+.maintenance-edit-btn {
+    background-color: transparent;
+    color: black;
+    padding: clamp(2px, 0.31vw, 6px) 0;
+    margin: 0;
+    border: transparent;
+    cursor: pointer;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.maintenance-edit-btn:hover {
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.maintenance-edit-btn img,
+.maintenance-edit-btn svg {
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(10px, 0.83vw, 16px);
+    display: block;
+    object-fit: contain;
+}
+
+.maintenance-edit-btn img {
+    filter: drop-shadow(clamp(0.02px, 0.01vw, 0.1px) 0 0 currentColor) drop-shadow(clamp(-0.05px, -0.01vw, -0.1px) 0 0 currentColor);
+}
+
+.maintenance-edit-btn .save-icon {
+    color: #10b981;
+}
+
+.maintenance-cancel-btn {
+    background-color: transparent;
+    color: #ef4444;
+    padding: clamp(2px, 0.31vw, 6px) 0;
+    margin: 0;
+    border: transparent;
+    cursor: pointer;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.maintenance-cancel-btn:hover {
+    background-color: transparent;
+    box-shadow: none;
+    opacity: 0.8;
+}
+
+.maintenance-cancel-btn svg {
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(10px, 0.83vw, 16px);
+    display: block;
+    object-fit: contain;
+}
+
+.data-capture-row-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: clamp(10px, 0.73vw, 14px);
+    height: clamp(10px, 0.73vw, 14px);
+    border: 2px solid #000000ff;
+    border-radius: 3px;
+    background-color: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    margin: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.data-capture-row-checkbox:checked {
+    background-color: #1a237e;
+    border-color: #1a237e;
+}
+
+.data-capture-row-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: clamp(10px, 0.83vw, 14px);
+    font-weight: bold;
+    line-height: 1;
+}
+
+/* 自定义下拉选单样式 - match datacapture.php */
+.custom-select-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.custom-select-button {
+    width: 100%;
+    padding: 8px 30px 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    text-align: left;
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    position: relative;
+}
+
+.custom-select-button::after {
+    content: '▼';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: #666;
+    pointer-events: none;
+}
+
+.custom-select-button.open::after {
+    content: '▲';
+}
+
+.custom-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    display: none;
+    max-height: 300px;
+    overflow: hidden;
+    margin-top: 2px;
+}
+
+.custom-select-dropdown.show {
+    display: block;
+}
+
+.custom-select-search {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 1;
+}
+
+.custom-select-search input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: clamp(9px, 0.73vw, 14px);
+    box-sizing: border-box;
+}
+
+.custom-select-options {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.custom-select-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: clamp(9px, 0.73vw, 14px);
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.custom-select-option:hover {
+    background-color: #f0f0f0;
+}
+
+.custom-select-option.selected {
+    background-color: #e3f2fd;
+    font-weight: bold;
+}
+
+.custom-select-option:last-child {
+    border-bottom: none;
+}
+
+.custom-select-no-results {
+    padding: 12px;
+    text-align: center;
+    color: #999;
+    font-size: 14px;
+}
+
+/* Progressive list hydration + virtual scroll (match Transaction Maintenance) */
+.formula-list-hydrate-hint {
+    padding: clamp(6px, 0.55vw, 10px) clamp(12px, 1vw, 18px);
+    font-size: clamp(11px, 0.92vw, 14px);
+    font-weight: 600;
+    color: #1e40af;
+    background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+    border-bottom: 1px solid rgba(59, 130, 246, 0.35);
+    text-align: center;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-stale-hint {
+    padding: clamp(6px, 0.55vw, 10px) clamp(12px, 1vw, 18px);
+    font-size: clamp(11px, 0.92vw, 14px);
+    font-weight: 600;
+    color: #1e40af;
+    background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+    border-bottom: 1px solid rgba(59, 130, 246, 0.35);
+    text-align: center;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-empty-loading {
+    min-height: clamp(120px, 22vh, 280px);
+}
+
+.formula-maintenance-page-root .customer-report-filter-container,
+.formula-maintenance-page-root .formula-maintenance-table-region {
+    width: 100%;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+}
+
+.formula-maintenance-page-root .formula-virtual-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.formula-maintenance-page-root .formula-virtual-table-inner {
+    min-width: 1100px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.formula-maintenance-page-root .formula-list-container--hydrating .maintenance-virtual-scroll {
+    opacity: 0.92;
+    transition: opacity 0.15s ease;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-thead {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+}
+
+.formula-maintenance-page-root .formula-virtual-head-row,
+.formula-maintenance-page-root .formula-virtual-data-row {
+    display: grid;
+    /* 列宽与 table nth-child 比例对齐；第 7 列 Input Method 加宽 */
+    grid-template-columns:
+        minmax(28px, 4fr) minmax(64px, 13fr) minmax(52px, 9fr) minmax(52px, 6.5fr) minmax(36px, 5.5fr) minmax(52px, 8.5fr) minmax(180px, 26fr) minmax(96px, 18fr) minmax(56px, 10fr) minmax(72px, 7fr);
+    align-items: stretch;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-th {
+    background: linear-gradient(180deg, #60c1fe 0%, #0f61ff 100%);
+    color: #ffffff;
+    font-weight: bold;
+    font-size: var(--text-base);
+    padding: var(--formula-list-cell-padding-y) var(--formula-list-cell-padding-x);
+    text-align: center;
+    min-height: var(--formula-list-cell-min-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* Currency 列居中，避免表头文字与 Source 列重叠 */
+.formula-maintenance-page-root .formula-virtual-head-row .maintenance-virtual-th:nth-child(4) {
+    justify-content: center !important;
+    text-align: center !important;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-th:first-child {
+    border-top-left-radius: 8px;
+}
+
+.formula-maintenance-page-root .formula-virtual-th-actions {
+    border-top-right-radius: 8px;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-scroll {
+    border-radius: 0 0 8px 8px;
+    background: #fff;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-row-wrap {
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-row-wrap .formula-virtual-data-row {
+    height: 100%;
+    min-height: 100%;
+    align-items: stretch;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-data-row {
+    background: #ffffff;
+    box-shadow: none;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-data-row--stripe {
+    background: #cceeff99;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-data-row:hover {
+    box-shadow: none;
+    transform: none;
+}
+
+/* 虚拟列表（数据 ≥ 60 条）：不用 table/td，改 .maintenance-table-cell 无效 */
+.formula-maintenance-page-root .maintenance-virtual-cell {
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-bold);
+    color: #374151;
+    line-height: var(--formula-list-cell-line-height);
+    padding: var(--formula-list-cell-padding-y) var(--formula-list-cell-padding-x);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: none;
+    min-height: var(--formula-list-cell-min-height);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    justify-content: center;
+}
+
+.formula-maintenance-page-root .maintenance-virtual-cell--left {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.formula-maintenance-page-root .formula-virtual-cell--wrap {
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    align-items: center;
+    align-self: stretch;
+    height: auto;
+    min-height: 100%;
+}
+
+.formula-maintenance-page-root .formula-virtual-cell--wrap .formula-cell-clamp-2 {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.formula-maintenance-page-root .formula-virtual-cell--input-method .formula-cell-clamp-2 {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+}
+
+.formula-maintenance-page-root .formula-virtual-cell--formula {
+    padding-left: var(--formula-col-formula-padding-x);
+    padding-right: var(--formula-col-formula-padding-x);
+}
+
+.formula-maintenance-page-root .formula-virtual-cell--product {
+    padding-left: var(--formula-col-product-padding-x);
+    padding-right: var(--formula-col-product-padding-x);
+}
+
+.formula-maintenance-page-root .formula-virtual-cell-actions {
+    gap: clamp(8px, 0.8vw, 14px);
+}
+
+.formula-maintenance-page-root .maintenance-virtual-data-row .maintenance-cell-currency {
+    text-align: center;
+    justify-content: center;
+    padding-right: clamp(6px, 0.55vw, 10px);
+}
+
+.formula-maintenance-page-root .formula-virtual-data-row--editing {
+    z-index: 2;
+    position: relative;
+    box-shadow: 0 2px 10px rgba(37, 99, 235, 0.18);
+}
+
+.formula-maintenance-page-root .formula-virtual-data-row--editing .maintenance-virtual-cell {
+    overflow: visible;
+    align-items: center;
+}
+
+.formula-maintenance-page-root .formula-virtual-data-row--editing .formula-cell-clamp-2 {
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+    overflow: visible;
+}
+
+.formula-maintenance-page-root .formula-virtual-data-row--editing .account-select,
+.formula-maintenance-page-root .formula-virtual-data-row--editing .source-input,
+.formula-maintenance-page-root .formula-virtual-data-row--editing .input-method-select,
+.formula-maintenance-page-root .formula-virtual-data-row--editing .formula-input,
+.formula-maintenance-page-root .formula-virtual-data-row--editing .description-input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    font-size: clamp(10px, 0.88vw, 14px);
+    font-weight: bold;
+}
+
+.formula-maintenance-page-root .formula-virtual-th--left {
+    justify-content: flex-start !important;
+    text-align: left !important;
+}
+
+.formula-maintenance-page-root .formula-virtual-th--right {
+    justify-content: flex-end !important;
+    text-align: right !important;
+}
+
+/* Force Process Select Dropdown Button to be Full Width and Align Arrow to the Far Right */
+.formula-process-control .custom-select-wrapper {
+    flex: 1 !important;
+    width: 100% !important;
+}
+
+.formula-process-control .custom-select-button {
+    width: 100% !important;
+    position: relative !important;
+    padding-right: 72px !important; /* room for clear button + chevron */
+}
+
+.formula-process-control .custom-select-button::after {
+    right: 12px !important;
+    z-index: 1 !important;
+}
+
+/* Absolute position the clear icon button to prevent layout shifting/pushing */
+.formula-process-control {
+    position: relative !important;
+}
+
+.formula-process-control .formula-clear-icon-btn {
+    position: absolute !important;
+    right: 30px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    z-index: 30 !important;
+    margin: 0 !important;
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    box-sizing: border-box !important;
+}
+
+.formula-process-control .formula-clear-icon-btn:active {
+    transform: translateY(-50%) scale(0.94) !important;
+}
+

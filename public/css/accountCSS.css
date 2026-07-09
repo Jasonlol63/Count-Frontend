@@ -1,0 +1,3382 @@
+﻿body.account-page {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    height: 100vh;
+    background-color: #e9f1ff;
+    background-image:
+        radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 48%),
+        radial-gradient(circle at 70% 15%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 45%),
+        radial-gradient(circle at 40% 70%, rgba(206, 232, 255, 0.55) 0%, rgba(255, 255, 255, 0) 60%),
+        radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%),
+        linear-gradient(145deg, #97BFFC 0%, #AECFFA 40%, #f9fbff 100%);
+    background-blend-mode: screen, screen, multiply, screen, normal;
+    background-size: 100vw 100vh;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    color: #334155;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    font-size: clamp(0.875rem, 2.5vw, 1rem);
+    position: relative;
+}
+
+.account-page .container {
+    max-width: none;
+    margin: 0;
+    padding: var(--layout-page-top-gap) 40px 20px var(--layout-main-offset);
+    width: 100%;
+    height: 100vh;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* ==========================================================================
+   Account List — layout / spacing / overflow（对齐 process-page Games 列表）
+   ========================================================================== */
+body.account-page {
+    font-family: var(--font-ui) !important;
+    font-size: var(--text-medium) !important;
+}
+
+body.account-page:not(.account-page--show-all) {
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+    height: 100vh !important;
+}
+
+body.account-page:not(.account-page--show-all) .container {
+    height: 100vh !important;
+    overflow: hidden !important;
+}
+
+body.account-page:not(.account-page--show-all) .content {
+    height: calc(100vh - var(--layout-page-top-inset)) !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+body.account-page .action-buttons-container {
+    margin-top: var(--layout-page-first-block-mt);
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    align-self: stretch;
+    min-height: 0;
+}
+
+body.account-page .action-buttons {
+    padding: 10px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    flex: 0 0 auto;
+}
+
+body.account-page .account-toolbar-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(8px, 0.75vw, 12px);
+    flex-wrap: nowrap;
+    width: 100%;
+    min-width: 0;
+}
+
+body.account-page .account-toolbar-title {
+    flex: 0 0 auto;
+    margin: 0 !important;
+    margin-top: 0 !important;
+    white-space: nowrap;
+}
+
+body.account-page .account-toolbar-primary {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+}
+
+body.account-page .account-toolbar-top-row .user-toolbar-actions-right {
+    flex: 0 0 auto;
+    align-self: center;
+}
+
+body.account-page .account-toolbar-primary .search-container.userlist-search-bar {
+    width: clamp(150px, 17vw, 240px);
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+body.account-page .action-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+}
+
+body.account-page .action-buttons-container .user-gc-inline-panel {
+    flex: 0 0 auto;
+    padding: 12px 20px 14px;
+    column-gap: var(--user-gc-inline-column-gap, 4px);
+    row-gap: var(--user-gc-inline-row-gap, 4px);
+}
+
+
+body.account-page .account-table-wrapper {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: 52px;
+    box-sizing: border-box;
+}
+
+.account-page .account-table-header {
+    flex-shrink: 0;
+    margin-top: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+/*
+ * Account List table（与 Games Process / Customer Report 同模式）
+ * 表头与数据行共用 grid 变量；minmax 保证 Role / Last Login 等列在 tablet 不过窄
+ */
+.account-list-table {
+    width: 100%;
+    --account-list-grid-cols:
+        38px
+        minmax(120px, 1.5fr)
+        minmax(120px, 1.5fr)
+        minmax(84px, 0.7fr)
+        minmax(52px, 0.42fr)
+        minmax(72px, 0.55fr)
+        minmax(130px, 1fr)
+        minmax(60px, 1.2fr)
+        minmax(92px, 0.55fr);
+}
+
+.account-list-table-inner {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    min-width: 0;
+}
+
+.account-list-table .account-list-table-header,
+.account-list-table .account-list-row {
+    gap: 8px;
+    grid-template-columns: var(--account-list-grid-cols);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.account-list-table .account-list-table-header {
+    padding: var(--table-header-height);
+}
+
+.account-list-table .account-list-row {
+    padding: 0 22px;
+}
+
+.account-list-table .account-list-table-header .account-header-sortable {
+    overflow: visible;
+}
+
+.account-list-table .account-list-table-header .account-header-sortable > span:first-child {
+    overflow: visible;
+    text-overflow: clip;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.account-list-table .account-list-table-header .account-header-item:first-child,
+.account-list-table .account-list-row .account-card-item:first-child {
+    justify-content: center;
+    text-align: center;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    font-variant-numeric: tabular-nums;
+}
+
+.account-list-table .account-list-table-header .account-header-item:nth-child(4),
+.account-list-table .account-list-table-header .account-header-item:nth-child(5),
+.account-list-table .account-list-table-header .account-header-item:nth-child(6),
+.account-list-table .account-list-row .account-card-item:nth-child(4),
+.account-list-table .account-list-row .account-card-item:nth-child(5),
+.account-list-table .account-list-row .account-card-item:nth-child(6) {
+    justify-content: left;
+}
+
+.account-list-table .account-list-table-header .account-header-item:last-child,
+.account-list-table .account-list-row .account-card-item:last-child {
+    justify-content: center;
+}
+
+body.account-page:not(.account-page--show-all) .account-cards {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    max-height: none;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+body.account-page:not(.account-page--show-all) .account-list-table .account-list-row {
+    flex: 0 1 auto;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    box-sizing: border-box;
+}
+
+body.account-page:not(.account-page--show-all) .account-card {
+    flex: 0 1 auto;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    padding: 0 22px;
+    box-sizing: border-box;
+}
+
+/* 分页：固定右下角（与 User List 一致），避免 25 行时流内分页被挤出视口 */
+body.account-page:not(.account-page--show-all) .account-pagination-container {
+    position: fixed;
+    right: max(40px, env(safe-area-inset-right, 0px));
+    bottom: max(20px, env(safe-area-inset-bottom, 0px));
+    left: auto;
+    top: auto;
+    margin: 0 !important;
+    z-index: 120;
+    width: fit-content;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    font-family: inherit;
+    flex-shrink: 0;
+}
+
+body.account-page .page-header {
+    display: none;
+}
+
+/* Search Section */
+.account-search-container {
+    position: relative;
+}
+
+.account-search-icon {
+    position: absolute;
+    left: 10px;
+    top: 25%;
+    z-index: 2;
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(14px, 0.83vw, 16px);
+    pointer-events: none;
+    object-fit: contain;
+}
+
+.account-search-input {
+    width: clamp(165px, 13vw, 250px);
+    padding: 7px 2px clamp(6px, 0.42vw, 8px) clamp(20px, 2.08vw, 32px) !important;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 6px;
+    font-size: clamp(10px, 0.8vw, 15px);
+    background: rgba(255, 255, 255, 1);
+    color: #000000ff;
+    backdrop-filter: blur(8px) saturate(1.2);
+    -webkit-backdrop-filter: blur(8px) saturate(1.2);
+    box-shadow: 0 3px 4px rgba(15, 23, 42, 0.1);
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.account-search-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 3px 4px rgba(15, 23, 42, 0.1);
+    background: rgba(255, 255, 255, 1);
+}
+
+/* Controls Section - copied from userlist */
+.account-action-buttons-container {
+    margin-top: 20px;
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.account-action-buttons {
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Buttons - mirror user list styles */
+.account-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.account-btn:active {
+    transform: translateY(0);
+}
+
+.account-btn:hover::after {
+    transform: translateX(120%);
+}
+
+.account-btn-add {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    width: clamp(90px, 7vw, 130px);
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    font-size: clamp(10px, 0.83vw, 16px);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    --sweep-color: rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.account-btn-add:hover {
+    background: linear-gradient(180deg, #0D60FF 0%, #63C4FF 100%);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+    transform: translateY(-1px);
+}
+
+.account-btn-delete {
+    background: linear-gradient(180deg, #F30E12 0%, #A91215 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    width: clamp(80px, 6.25vw, 120px);
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    font-size: clamp(10px, 0.83vw, 16px);
+    margin-left: 10px;
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+    --sweep-color: rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+}
+
+.account-btn-delete:hover {
+    background: linear-gradient(180deg, #A91215 0%, #F30E12 100%);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+    transform: translateY(-1px);
+}
+
+.account-checkbox-section {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    background: transparent;
+}
+
+.account-checkbox-section input[type="checkbox"] {
+    width: 0.9375rem;
+    height: 0.9375rem;
+    accent-color: #1a237e;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 2px solid #000000ff;
+    border-radius: 3px;
+    background-color: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.account-checkbox-section input[type="checkbox"]:checked {
+    background-color: #1a237e;
+    border-color: #1a237e;
+}
+
+.account-checkbox-section input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.account-checkbox-section label {
+    font-size: clamp(10px, 0.8vw, 15px);
+    color: #495057;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+/* Separator line - copied from userlist */
+.account-separator-line {
+    width: 100vw;
+    height: 2px;
+    background-color: transparent;
+    margin: 5px 0 -10px 0;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+}
+
+/* Company Buttons Style (from userlist.php) */
+.account-company-filter {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 0.83vw, 16px);
+    flex-wrap: wrap;
+    padding: 0 20px 10px 20px;
+}
+
+.account-company-label {
+    font-weight: bold;
+    color: #374151;
+    font-size: clamp(10px, 0.73vw, 14px);
+    font-family: var(--font-heading-page);
+    white-space: nowrap;
+}
+
+.account-company-buttons {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.account-company-btn {
+    padding: clamp(3px, 0.31vw, 6px) clamp(10px, 0.83vw, 16px);
+    background: #f1f5f9;
+    border: 1px solid #d0d7de;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: clamp(9px, 0.63vw, 12px);
+    transition: all 0.2s ease;
+    color: #1f2937;
+    font-weight: 600;
+}
+
+.account-company-btn:hover {
+    background: #e2e8f0;
+    border-color: #a5b4fc;
+}
+
+.account-company-btn.active {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+/* Table Container - copied from userlist */
+.account-table-container {
+    overflow-x: visible;
+    margin-top: 20px;
+    border: none;
+    border-radius: 0;
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+}
+
+/* Table Header - copied from userlist */
+.account-table-header {
+    display: grid;
+    grid-template-columns: 0.5fr 1.5fr 1.5fr 0.6fr 0.6fr 0.6fr 2fr 1fr 0.6fr;
+    gap: 8px;
+    padding:var(--table-header-height);
+    background: linear-gradient(180deg, #60C1FE 0%, #0F61FF 100%);
+    border-radius: 8px 8px 0 0;
+    margin-top: 0;
+    font-weight: bold;
+    color: white;
+    font-size: var(--text-base);
+    min-width: 0;
+}
+
+.account-table-header .account-header-item {
+    padding: 2px 4px;
+}
+
+/* 可排序的表头项 */
+.account-header-sortable {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 5px;
+    transition: background-color 0.2s ease;
+    padding: 2px 4px;
+    border-radius: 4px;
+    min-width: 0;
+}
+
+.account-header-sortable:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.account-sort-icon {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    width: 8px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
+.account-sort-icon__up,
+.account-sort-icon__down {
+    width: 0;
+    height: 0;
+    opacity: 0.55;
+}
+
+.account-sort-icon__up {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid rgba(255, 255, 255, 0.8);
+}
+
+.account-sort-icon__down {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid rgba(255, 255, 255, 0.8);
+}
+
+.account-sort-icon.is-asc .account-sort-icon__up,
+.account-sort-icon.is-desc .account-sort-icon__down {
+    opacity: 1;
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.45));
+}
+
+/* Show All：table 起点/宽度保持普通模式，资料自然展开由整页滚动 */
+body.account-page--show-all {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    height: auto !important;
+    min-height: 100vh !important;
+}
+
+body.account-page--show-all .container {
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow: visible !important;
+}
+
+body.account-page--show-all .content {
+    height: auto !important;
+    min-height: calc(100vh - var(--layout-page-top-inset)) !important;
+    overflow: visible !important;
+    display: flex;
+    flex-direction: column;
+}
+
+body.account-page--show-all .account-table-wrapper {
+    flex: 0 1 auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 52px;
+    box-sizing: border-box;
+}
+
+body.account-page--show-all .account-table-header {
+    flex-shrink: 0;
+}
+
+/* 覆盖 global-13inch：Show All 不压缩行，资料区自然展开 */
+body.ec-auth-shell.account-page--show-all .account-cards,
+body.account-page--show-all .account-cards {
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    justify-content: flex-start;
+}
+
+body.ec-auth-shell.account-page .account-cards.account-cards--show-all,
+.account-page .account-cards.account-cards--show-all,
+.account-cards.account-cards--show-all {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 0 1 auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    justify-content: flex-start !important;
+    align-content: flex-start !important;
+}
+
+/* Show All：只禁止 row 被压缩；row/cell 尺寸完全沿用普通模式 */
+body.account-page--show-all .account-card,
+body.ec-auth-shell.account-page .account-cards.account-cards--show-all > .account-card,
+.account-page .account-cards.account-cards--show-all > .account-card,
+.account-cards.account-cards--show-all > .account-card {
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+}
+
+/* Account Cards：纵向 flex；行高随内容，空白留在列表底部（与 userlist 一致） */
+.account-cards {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    justify-content: flex-start;
+}
+
+.account-card {
+    display: grid;
+    grid-template-columns: 0.5fr 1.5fr 1.5fr 0.6fr 0.6fr 0.6fr 2fr 1.2fr 0.42fr;
+    gap: 8px;
+    padding: 0 22px;
+    background: #f0e5fb;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+    align-items: center;
+    transition: all 0.2s ease;
+    min-height: 0;
+    box-sizing: border-box;
+}
+
+.account-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+.account-card-item {
+    font-size: var(--text-medium);
+    font-weight: bold;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-height: 0;
+}
+
+.account-edit-btn {
+    background-color: transparent;
+    color: black;
+    padding: clamp(2px, 0.31vw, 6px) 0;
+    margin: 0px;
+    border: transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+}
+
+.account-edit-btn:hover {
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.account-edit-btn img {
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(10px, 0.83vw, 16px);
+    display: block;
+    object-fit: contain;
+    filter: drop-shadow(clamp(0.02px, 0.01vw, 0.1px) 0 0 currentColor) drop-shadow(clamp(-0.05px, -0.01vw, -0.1px) 0 0 currentColor);
+}
+
+.account-edit-btn svg {
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(10px, 0.83vw, 16px);
+    display: block;
+    flex-shrink: 0;
+}
+
+.account-row-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-block;
+    margin-left: clamp(10px, 0.73vw, 14px);
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(10px, 0.83vw, 16px);
+    border: 2px solid #000000ff;
+    border-radius: 3px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.account-row-checkbox:checked {
+    background-color: #6366f1;
+    border-color: #6366f1;
+}
+
+.account-row-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: clamp(8px, 0.6vw, 12px);
+    font-weight: bold;
+    line-height: 1;
+}
+
+.account-row-checkbox:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #f8f9fa;
+}
+
+.account-row-checkbox:disabled:hover {
+    background-color: #f8f9fa;
+}
+
+/* Zebra striping for cards */
+.account-card:nth-child(even) {
+    background: #cceeff99;
+}
+
+.account-card:nth-child(odd) {
+    background: #ffffff;
+}
+
+/* Add Account Form Styles */
+.account-form {
+    max-width: 56.25rem;
+    margin: 0 auto;
+    padding: 0;
+    border-radius: 1rem;
+    /* Removed overflow: hidden to allow sticky actions to work */
+}
+
+/* Form Section Headers */
+.account-form-section {
+    padding: 0 clamp(0.75rem, 1.5vw, 1.25rem);
+}
+
+.account-form-section:first-child {
+    padding-top: clamp(0.5rem, 1vw, 0.75rem);
+}
+
+.account-form-section:last-child {
+    padding-bottom: clamp(0.5rem, 1vw, 0.75rem);
+}
+
+/* 两列布局容器 - 固定 1:1 两列 */
+.account-form-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(0.5rem, 1.5vw, 1.25rem);
+    padding: clamp(0.5rem, 1vw, 0.75rem) clamp(1rem, 2vw, 1.5rem);
+    border-bottom: 1px solid #e2e8f0;
+    align-items: start;
+}
+
+/* 个人信息和支付列 */
+.account-form-column {
+    min-width: 0;
+    align-items: stretch;
+    justify-content: flex-start;
+    align-self: start;
+}
+
+.account-form-column .account-section-header {
+    font-size: clamp(13px, 1vw, 15px);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 0.0625rem solid #e2e8f0;
+    margin-top: 0;
+}
+
+/* 确保两列的第一个元素对齐 */
+.account-form-column>*:first-child {
+    margin-top: 0;
+}
+
+.account-section-header {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 0.125rem solid #e2e8f0;
+    position: relative;
+    font-family: var(--font-heading-page);
+}
+
+.account-section-header::after {
+    content: '';
+    position: absolute;
+    bottom: -0.125rem;
+    left: 0;
+    width: 2.5rem;
+    height: 0.125rem;
+    background: linear-gradient(90deg, #007AFF, #0056b3);
+}
+
+.account-form-row {
+    display: flex;
+    gap: clamp(10px, 1.2vw, 20px);
+    transition: all 0.3s ease;
+    flex-wrap: wrap;
+}
+
+.account-form-group {
+    flex: 1;
+    margin-bottom: 1rem;
+    min-width: clamp(180px, 28vw, 300px);
+}
+
+/* 两列布局中的表单组 */
+.account-form-column .account-form-group {
+    min-width: 100%;
+    margin-bottom: 1.5rem;
+}
+
+/* form-row 中的 form-group 可以并排显示 */
+.account-form-column .account-form-row .account-form-group {
+    min-width: 0;
+    flex: 1;
+}
+
+.account-form-column .account-form-row {
+    gap: 1.125rem;
+    margin-bottom: 0;
+}
+
+/* 隐藏的 alert 字段不占空间 */
+#account-edit_alert_fields[style*="display: none"],
+#account-add_alert_fields[style*="display: none"],
+#account-edit_alert_amount_row[style*="display: none"],
+#account-add_alert_amount_row[style*="display: none"] {
+    display: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 0 !important;
+}
+
+.account-form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.875rem;
+    letter-spacing: 0.025em;
+    font-family: var(--font-heading-page);
+}
+
+/* Payment Alert label 更紧凑 */
+.account-form-column .account-form-group:has(.account-radio-group) label {
+    margin-bottom: 0.5rem;
+}
+
+.account-form-group input,
+.account-form-group select,
+.account-form-group textarea {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 0.125rem solid #e5e7eb;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    background: #ffffff;
+    color: #374151;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.account-form-group input:focus,
+.account-form-group select:focus,
+.account-form-group textarea:focus {
+    outline: none;
+    border-color: #007AFF;
+    box-shadow: 0 0 0 0.1875rem rgba(0, 122, 255, 0.1);
+    transform: translateY(-0.0625rem);
+}
+
+.account-form-group input:disabled {
+    background-color: #f9fafb;
+    color: #6b7280;
+    cursor: not-allowed;
+    border-color: #d1d5db;
+}
+
+.account-radio-group {
+    display: flex;
+    gap: clamp(0.5rem, 1.2vw, 1rem);
+    flex-wrap: wrap;
+}
+
+/* 两列布局中的 radio-group */
+.account-form-column .account-radio-group {
+    flex-direction: row;
+    gap: clamp(0.5rem, 1vw, 0.75rem);
+    justify-content: flex-start;
+    align-items: center;
+}
+
+/* Payment Alert 字段组的特殊样式 */
+.account-form-column .account-form-group:has(.account-radio-group) {
+    margin-bottom: clamp(0.5rem, 1vw, 0.75rem);
+}
+
+.account-radio-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: clamp(0.375rem, 0.75vw, 0.5rem) clamp(0.625rem, 1.2vw, 0.875rem);
+    border-radius: 0.5rem;
+    background: #f8fafc;
+    border: 0.125rem solid #e2e8f0;
+    transition: all 0.2s ease;
+    font-size: clamp(11px, 0.8vw, 13px);
+    color: #374151;
+    font-family: var(--font-heading-page);
+}
+
+.account-radio-label:hover {
+    background: #e2e8f0;
+    border-color: #004ff9;
+    transform: translateY(-0.0625rem);
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+}
+
+.account-radio-label input[type="radio"] {
+    display: none;
+}
+
+.account-radio-label:has(input:checked) {
+    background: #004ff9;
+    color: white;
+    border-color: #004ff9;
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 122, 255, 0.3);
+}
+
+.account-advance-section {
+    margin-top: 0;
+    padding-bottom: clamp(0.25rem, 0.6vw, 0.5rem);
+    border-top: none;
+}
+
+.account-advance-section h3 {
+    font-size: clamp(12px, 0.95vw, 15px);
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: clamp(0.25rem, 0.8vw, 0.5rem);
+    padding-bottom: clamp(0.15rem, 0.4vw, 0.25rem);
+    border-bottom: 0.0625rem solid #e2e8f0;
+    position: relative;
+    text-align: left;
+}
+
+.account-advance-section h3::after {
+    content: '';
+    position: absolute;
+    bottom: -0.125rem;
+    left: 0;
+    width: 2.5rem;
+    height: 0.125rem;
+    background: linear-gradient(90deg, #007AFF, #0056b3);
+}
+
+.account-other-currency {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.5rem, 1vw, 0.75rem);
+    margin-bottom: clamp(0.25rem, 0.6vw, 0.5rem);
+    background: #f8fafc;
+    padding: clamp(0.25rem, 0.8vw, 0.5rem) clamp(0.5rem, 1vw, 0.75rem);
+    border-radius: 0.5rem;
+    border: 0.125rem solid #e2e8f0;
+    transition: all 0.2s ease;
+    flex-wrap: wrap;
+}
+
+.account-other-currency:hover {
+    border-color: #007AFF;
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.05);
+}
+
+.account-other-currency label {
+    font-size: 0.875rem;
+    color: #374151;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    min-width: 7.5rem;
+}
+
+.account-currency-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 12.5rem;
+}
+
+.account-currency-input-group input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 0.125rem solid #e5e7eb;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    background: #ffffff;
+    color: #374151;
+    transition: all 0.2s ease;
+    min-width: 9.375rem;
+}
+
+.account-currency-input-group input:focus {
+    outline: none;
+    border-color: #007AFF;
+    box-shadow: 0 0 0 0.1875rem rgba(0, 122, 255, 0.1);
+}
+
+.account-btn-add-currency {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    font-family: var(--font-heading-page);
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 123, 255, 0.3);
+}
+
+.account-btn-add-currency:hover {
+    background: linear-gradient(180deg, #0D60FF 0%, #63C4FF 100%);
+    transform: translateY(-0.0625rem);
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 123, 255, 0.4);
+}
+
+.account-btn-add-currency:active {
+    transform: translateY(0);
+}
+
+.account-add-link {
+    color: #1a237e;
+    text-decoration: none;
+    font-weight: 600;
+    padding: 0.375rem 0.75rem;
+    background: #ffffff;
+    border-radius: 0.25rem;
+    border: 0.0625rem solid #1a237e;
+    transition: all 0.3s ease;
+    font-size: 0.75rem;
+}
+
+.account-add-link:hover {
+    background: #1a237e;
+    color: white;
+    transform: translateY(-0.0625rem);
+    box-shadow: 0 0.125rem 0.25rem rgba(26, 35, 126, 0.3);
+}
+
+.account-currency-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(0.375rem, 0.7vw, 0.5rem);
+}
+
+.account-currency-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: clamp(0.375rem, 0.75vw, 0.5rem) clamp(0.625rem, 1.2vw, 0.875rem);
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid #d6dce8;
+    transition: all 0.2s ease;
+    font-size: 11px;
+    color: #374151;
+    font-family: var(--font-heading-page);
+    position: relative;
+}
+
+.currency-code-text {
+    flex: 1;
+    cursor: pointer;
+}
+
+.account-currency-item:hover {
+    background: #e2e8f0;
+    border-color: #004ff9;
+    transform: translateY(-0.0625rem);
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+}
+
+.account-currency-item.selected {
+    background: #004ff9;
+    color: white;
+    border-color: #004ff9;
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 122, 255, 0.3);
+}
+
+.account-currency-item.currency-toggle-item {
+    justify-content: space-between;
+    cursor: pointer;
+}
+
+.currency-delete-btn {
+    background: transparent;
+    border: none;
+    color: #dc3545;
+    font-size: clamp(16px, 1.2vw, 20px);
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    width: clamp(16px, 1.2vw, 20px);
+    height: clamp(16px, 1.2vw, 20px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    line-height: 1;
+    opacity: 0.7;
+}
+
+.currency-delete-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.account-currency-item.selected .currency-delete-btn {
+    color: rgba(255, 255, 255, 0.9);
+    opacity: 0.8;
+}
+
+.account-currency-item.selected .currency-delete-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    opacity: 1;
+}
+
+.account-currency-item.currency-toggle-item.currency-toggle-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.currency-toggle-note {
+    font-size: clamp(10px, 0.75vw, 12px);
+    color: #94a3b8;
+}
+
+/* Company buttons inside Add/Edit modals - match header company button style */
+#addCompanyList .account-currency-item,
+#editCompanyList .account-currency-item {
+    padding: clamp(3px, 0.31vw, 6px) clamp(10px, 0.83vw, 16px);
+    background: #f1f5f9;
+    border: 1px solid #d0d7de;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: clamp(9px, 0.63vw, 12px);
+    transition: all 0.2s ease;
+    color: #1f2937;
+    font-weight: 600;
+    min-width: auto;
+}
+
+#addCompanyList .account-currency-item:hover,
+#editCompanyList .account-currency-item:hover {
+    background: #e2e8f0;
+    border-color: #a5b4fc;
+    transform: translateY(-0.0625rem);
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+}
+
+#addCompanyList .account-currency-item.selected,
+#editCompanyList .account-currency-item.selected {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.account-currency-code {
+    flex: 1;
+}
+
+.account-delete-currency-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 1.25rem;
+    height: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.account-delete-currency-btn:hover {
+    background: #c82333;
+    transform: scale(1.1);
+}
+
+/* 默认货币样式 */
+.account-currency-item.default-currency {
+    background: #e8f5e9;
+    border-color: #28a745;
+}
+
+.account-currency-item.default-currency .account-currency-code {
+    color: #155724;
+}
+
+/* 设置默认货币按钮样式 */
+.account-btn-set-default {
+    background: transparent;
+    color: #6c757d;
+    border: 1px solid #6c757d;
+    border-radius: 50%;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    padding: 0;
+    line-height: 1;
+}
+
+.account-btn-set-default:hover {
+    background: #ffc107;
+    color: #000;
+    border-color: #ffc107;
+    transform: scale(1.1);
+}
+
+.account-btn-set-default:active {
+    transform: scale(0.95);
+}
+
+.account-delete-link {
+    color: #dc3545;
+    text-decoration: none;
+    font-weight: 600;
+    padding: 0.375rem 0.75rem;
+    background: #ffffff;
+    border-radius: 0.25rem;
+    border: 0.0625rem solid #dc3545;
+    transition: all 0.3s ease;
+    font-size: 0.75rem;
+}
+
+.account-delete-link:hover {
+    background: #dc3545;
+    color: white;
+    transform: translateY(-0.0625rem);
+    box-shadow: 0 0.125rem 0.25rem rgba(220, 53, 69, 0.3);
+}
+
+.account-form-actions {
+    text-align: right;
+    margin-top: 0;
+    padding: clamp(0.75rem, 1.5vw, 1rem) clamp(1.5rem, 3vw, 2.5rem);
+    border-top: 0.0625rem solid #e2e8f0;
+    display: flex;
+    justify-content: flex-end;
+    gap: clamp(0.625rem, 1.2vw, 0.875rem);
+    flex-wrap: wrap;
+    background-color: #ffffff;
+    border-radius: 0 0 1rem 1rem;
+}
+
+/* Modal Styles (align with userlist) */
+.account-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(0.25rem);
+}
+
+/* Confirm Delete Modal — match userlist #confirmModal (flex center, compact card) */
+#confirmDeleteModal.account-modal,
+#forceDeleteCurrencyModal.account-modal,
+#accountAlertModal.account-modal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    animation: accountConfirmFadeIn 0.2s ease-out;
+}
+
+@keyframes accountConfirmFadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.account-confirm-modal-content {
+    background: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 24px;
+    width: clamp(400px, 35vw, 550px);
+    max-width: 90%;
+    flex: 0 0 auto;
+    align-self: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    animation: accountConfirmSlideDown 0.3s ease-out;
+    overflow: hidden;
+    position: relative;
+}
+
+@keyframes accountConfirmSlideDown {
+    from {
+        transform: translateY(-80px) scale(0.95);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+.account-confirm-icon-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: clamp(30px, 2.6vw, 50px);
+    padding-bottom: clamp(15px, 1.3vw, 25px);
+}
+
+.account-confirm-icon {
+    width: clamp(50px, 4.17vw, 80px);
+    height: clamp(50px, 4.17vw, 80px);
+    color: #dc2626;
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border-radius: 50%;
+    padding: clamp(10px, 0.83vw, 16px);
+    animation: iconPulse 2s ease-in-out infinite;
+}
+
+@keyframes iconPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+    }
+
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+    }
+}
+
+.account-confirm-title {
+    text-align: center;
+    color: #1e293b;
+    font-size: var(--text-h2);
+    font-weight: 700;
+    margin: 0 0 clamp(15px, 1.3vw, 25px) 0;
+    font-family: var(--font-heading-page), -apple-system, sans-serif;
+    letter-spacing: -0.02em;
+}
+
+.account-currency-in-use-list {
+    margin: 0.75rem 0 0;
+    padding: 0.75rem 1rem;
+    max-height: 12rem;
+    overflow-y: auto;
+    text-align: left;
+    list-style: disc;
+    list-style-position: inside;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: var(--text-h3);
+    color: #334155;
+    line-height: 1.6;
+}
+
+.account-currency-in-use-list li + li {
+    margin-top: 0.35rem;
+}
+
+.account-confirm-message {
+    text-align: center;
+    font-size: var(--text-h3);
+    color: #475569;
+    line-height: 1.7;
+    margin: 0;
+    padding: 0 clamp(25px, 2.08vw, 40px);
+    white-space: pre-line;
+    font-weight: 500;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.account-confirm-actions {
+    display: flex;
+    gap: 12px;
+    padding: clamp(25px, 2.08vw, 40px);
+    justify-content: center;
+    background: rgba(248, 250, 252, 0.8);
+    margin-top: clamp(18px, 1.67vw, 32px);
+}
+
+body.account-page #confirmDeleteModal .confirm-cancel,
+body.account-page #confirmDeleteModal .confirm-delete,
+body.account-page #forceDeleteCurrencyModal .confirm-cancel,
+body.account-page #forceDeleteCurrencyModal .confirm-delete {
+    flex: 0 0 auto;
+    min-width: clamp(90px, 7vw, 130px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* Scrollbars: app-wide — dashboard-scrollbar.css */
+
+.account-modal-content {
+    background-color: #ffffff;
+    margin: 0 auto;
+    padding: 0;
+    border: none;
+    border-radius: 1rem;
+    width: clamp(700px, 85vw, 950px);
+    max-width: none;
+    max-height: 90vh;
+    box-shadow: 0 1.25rem 1.5625rem -0.3125rem rgba(0, 0, 0, 0.1), 0 0.625rem 0.625rem -0.3125rem rgba(0, 0, 0, 0.04);
+    overflow-y: auto;
+    position: relative;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+/* Add Account modal: 随内容高度，避免整块白底出现纵向滚动条；Company 摘要单独收紧 */
+#account-addModal .account-modal-content,
+#account-editModal .account-modal-content {
+    width: clamp(860px, 89.65vw, 920px);
+    max-width: calc(100vw - 48px);
+    box-sizing: border-box;
+    padding: 10px 20px;
+    border-radius: 0.9rem;
+    height: auto;
+    max-height: min(92vh, calc(100dvh - 24px));
+    max-height: min(92vh, calc(100vh - 24px));
+    overflow-x: hidden;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    top: auto;
+    transform: none;
+    margin: 0;
+    box-shadow: 0 24px 48px -18px rgba(15, 23, 42, 0.35), 0 8px 18px -10px rgba(15, 23, 42, 0.2);
+}
+
+/* 父级 account-modal 已 flex 居中，勿再用 translateY(-50%) 导致超高内容底部被裁切 */
+#account-addModal.account-modal,
+#account-editModal.account-modal {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 12px;
+    box-sizing: border-box;
+}
+
+/* Remove large side empty space by allowing form to fill container */
+#account-addModal .account-form,
+#account-editModal .account-form {
+    max-width: 100%;
+    width: 100%;
+    margin: 0;
+    min-height: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+#account-addModal .account-form-columns,
+#account-editModal .account-form-columns {
+    gap: clamp(0.95rem, 1.4vw, 1.25rem);
+    padding: clamp(0.85rem, 1.2vw, 1.1rem) clamp(1.2rem, 2vw, 1.65rem);
+    border-bottom: 1px solid #e5e7eb;
+}
+
+#account-addModal .account-form-section,
+#account-editModal .account-form-section {
+    padding: 0 clamp(1.15rem, 1.9vw, 1.55rem);
+    margin-bottom: 0;
+    padding-bottom: clamp(0.45rem, 0.75vw, 0.65rem);
+}
+
+/* Make fields/readability closer to reference */
+#account-addModal .account-form-group label,
+#account-editModal .account-form-group label {
+    font-size: var(--text-medium);
+    font-weight: 600;
+    letter-spacing: 0.015em;
+}
+
+#account-addModal .account-form-group input,
+#account-addModal .account-form-group select,
+#account-addModal .account-form-group textarea,
+#account-editModal .account-form-group input,
+#account-editModal .account-form-group select,
+#account-editModal .account-form-group textarea {
+    font-size: var(--text-small);
+    min-height: 2.55rem;
+    border: 1px solid #dbe3ee;
+    border-radius: 0.52rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+/* Start Date：整框可点展开（WebKit 扩大日历触发区；配合 JS showPicker） */
+#account-addModal .account-form-group input[type="date"],
+#account-editModal .account-form-group input[type="date"] {
+    position: relative;
+    cursor: pointer;
+}
+
+#account-addModal .account-form-group input[type="date"]::-webkit-calendar-picker-indicator,
+#account-editModal .account-form-group input[type="date"]::-webkit-calendar-picker-indicator {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+    opacity: 0;
+}
+
+/* Advanced Account · devtools reference: 15px · #1E293B · margin 15px 0 8px · pad bottom 4px */
+#account-addModal .account-advance-section h3,
+#account-editModal .account-advance-section h3 {
+    font-size: var(--text-h2);
+    font-weight: 700;
+    color: #1e293b;
+    margin: 10px 0 8px;
+    padding: 0 0 4px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+#account-addModal .account-advance-section,
+#account-editModal .account-advance-section {
+    padding-top: clamp(0.4rem, 0.75vw, 0.65rem);
+}
+
+/* Strip · #F8FAFC bg · text #334155 16px · pad 8px 12px · margin bottom 8px */
+#account-addModal .account-other-currency,
+#account-editModal .account-other-currency {
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    margin: 0 0 8px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Other Currency: row 1 = label + input; row 2 = currency tags (always below) */
+#account-addModal .account-other-currency:not(.account-other-currency--company),
+#account-editModal .account-other-currency:not(.account-other-currency--company) {
+    display: grid;
+    grid-template-columns: minmax(7.5rem, auto) minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+#account-addModal .account-other-currency:not(.account-other-currency--company) > label,
+#account-editModal .account-other-currency:not(.account-other-currency--company) > label {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+}
+
+#account-addModal .account-other-currency:not(.account-other-currency--company) .account-currency-input-group,
+#account-editModal .account-other-currency:not(.account-other-currency--company) .account-currency-input-group {
+    grid-column: 2;
+    grid-row: 1;
+    width: 100%;
+    min-width: 0;
+}
+
+#account-addModal .account-other-currency:not(.account-other-currency--company) .account-currency-list,
+#account-editModal .account-other-currency:not(.account-other-currency--company) .account-currency-list {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    margin-top: 4px;
+}
+
+#account-addModal .account-other-currency--company,
+#account-editModal .account-other-currency--company {
+    margin: 20px 0 8px;
+    align-items: stretch;
+    flex-direction: column;
+}
+
+/* Add Account modal — Company：与 User 弹窗一致（标签 + Choose companies + 摘要） */
+#account-addModal .account-modal-company-field,
+#account-editModal .account-modal-company-field {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+}
+
+#account-addModal .account-modal-company-field .user-modal-company-heading-row,
+#account-editModal .account-modal-company-field .user-modal-company-heading-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+}
+
+#account-addModal .account-modal-company-field .user-modal-company-heading-row label,
+#account-editModal .account-modal-company-field .user-modal-company-heading-row label {
+    display: block;
+    margin-bottom: 0;
+    flex: 1;
+    min-width: 0;
+    padding: 0 4px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+}
+
+#account-addModal .user-modal-company-open-btn,
+#account-editModal .user-modal-company-open-btn {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid #1a237e;
+    background: #ffffff;
+    color: #1a237e;
+    font-weight: 600;
+    font-size: clamp(11px, 0.75vw, 13px);
+    cursor: pointer;
+}
+
+#account-addModal .user-modal-company-open-btn:hover:not(:disabled),
+#account-editModal .user-modal-company-open-btn:hover:not(:disabled) {
+    background: #eef2ff;
+}
+
+#account-addModal .user-modal-company-open-btn:disabled,
+#account-editModal .user-modal-company-open-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 覆盖「Other Currency」行的通用规则：Company 块内摘要须在标签+按钮下方，不得横向并排 */
+#account-addModal .account-other-currency--company > .account-modal-company-field,
+#account-editModal .account-other-currency--company > .account-modal-company-field {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 100%;
+    gap: 0;
+}
+
+#account-addModal .account-other-currency--company > .account-modal-company-field .user-modal-company-summary,
+#account-editModal .account-other-currency--company > .account-modal-company-field .user-modal-company-summary {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 6px;
+    padding: 6px 10px;
+    min-height: 0;
+}
+
+#account-addModal .account-other-currency label,
+#account-editModal .account-other-currency label {
+    flex-shrink: 0;
+    font-size: 14px;
+    min-width: 7.5rem;
+    margin: 0;
+    font-weight: 600;
+    color: #374151;
+}
+
+#account-addModal .account-other-currency input,
+#account-editModal .account-other-currency input {
+    flex: 0 1 auto;
+    box-sizing: border-box;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 34px;
+    padding: 8px;
+    font-size: 14px;
+    background: #ffffff;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    color: #334155;
+}
+
+/* 与图二/三 Payment 选中、底部 Add 同系蓝渐变 */
+#account-addModal .account-btn-add-currency,
+#account-editModal .account-btn-add-currency {
+    min-width: var(--userlist-btn-add-width);
+    width: auto;
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-semibold);
+    font-family: var(--font-heading-page);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    background: var(--btn-add-gradient);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+#account-addModal .account-btn-add-currency:hover,
+#account-editModal .account-btn-add-currency:hover {
+    background: var(--btn-add-gradient-hover);
+    color: #ffffff;
+}
+
+#account-addModal .account-btn-add-currency:active,
+#account-editModal .account-btn-add-currency:active {
+    transform: translateY(0);
+}
+
+#account-addModal .account-other-currency .account-currency-input-group,
+#account-editModal .account-other-currency .account-currency-input-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+}
+
+#account-addModal .account-currency-list,
+#account-editModal .account-currency-list {
+    gap: clamp(0.35rem, 0.7vw, 0.5rem);
+}
+
+#account-addModal .account-company-btn,
+#account-editModal .account-company-btn {
+    font-family: var(--font-heading-page);
+    font-size: 12px;
+    padding: 6px 16px;
+    min-height: auto;
+    border-radius: 999px;
+    border: 1px solid #d6deea;
+    box-shadow: none;
+}
+
+#account-addModal .account-company-list,
+#account-editModal .account-company-list {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    gap: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 10px;
+    background: var(--color-surface, #ffffff);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+#account-addModal .account-company-list .account-company-btn,
+#account-editModal .account-company-list .account-company-btn {
+    margin: 0;
+    padding: 8px clamp(10px, 1.2vw, 18px);
+    border: none;
+    border-right: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 0;
+    background: var(--color-surface, #ffffff);
+    color: #1f2937;
+    font-size: clamp(11px, 0.82vw, 14px);
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+#account-addModal .account-company-list .account-company-btn:last-child,
+#account-editModal .account-company-list .account-company-btn:last-child {
+    border-right: none;
+}
+
+#account-addModal .account-company-list .account-company-btn:hover:not(.active),
+#account-editModal .account-company-list .account-company-btn:hover:not(.active) {
+    background: #f8fafc;
+}
+
+#account-addModal .account-company-list .account-company-btn.active,
+#account-editModal .account-company-list .account-company-btn.active {
+    background: var(--btn-add-gradient);
+    color: #ffffff;
+    border-right-color: rgba(255, 255, 255, 0.28);
+    box-shadow: none;
+}
+
+/* 无 × 的货币 pill（仅选择模式） */
+#account-addModal .account-currency-item:not(.currency-toggle-item),
+#account-editModal .account-currency-item:not(.currency-toggle-item) {
+    font-family: var(--font-heading-page);
+    font-size: 12px;
+    padding: 6px 16px;
+    min-height: auto;
+    border-radius: 999px;
+    border: 1px solid #d6deea;
+    box-shadow: none;
+}
+
+/* Add/Edit Account · Other Currency chip（适中尺寸，避免占满半屏） */
+#account-addModal .account-currency-item.currency-toggle-item,
+#account-editModal .account-currency-item.currency-toggle-item {
+    border-radius: 8px;
+    font-family: var(--font-heading-page);
+    font-weight: 600;
+    padding: 0.5rem 1rem;
+    min-height: 2.35rem;
+    align-items: center;
+    gap: 0.5rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+    user-select: none;
+}
+
+#account-addModal .account-currency-item.currency-toggle-item.selected,
+#account-editModal .account-currency-item.currency-toggle-item.selected {
+    background: var(--btn-add-gradient);
+    border: 1px solid transparent;
+    color: #ffffff;
+    box-shadow: 0 3px 8px rgba(13, 96, 255, 0.25);
+}
+
+#account-addModal .account-currency-item.currency-toggle-item.selected .currency-code-text,
+#account-editModal .account-currency-item.currency-toggle-item.selected .currency-code-text {
+    font-size: var(--text-medium);
+    font-weight: 600;
+    line-height: 1.2;
+    color: #ffffff;
+}
+
+#account-addModal .account-currency-item.currency-toggle-item:not(.selected),
+#account-editModal .account-currency-item.currency-toggle-item:not(.selected) {
+    background: #ffffff;
+    border: 1px solid #dbe4f0;
+    color: #334155;
+}
+
+#account-addModal .account-currency-item.currency-toggle-item:not(.selected) .currency-code-text,
+#account-editModal .account-currency-item.currency-toggle-item:not(.selected) .currency-code-text {
+    font-size: var(--text-medium);
+    font-weight: 600;
+    line-height: 1.2;
+    color: #334155;
+}
+
+#account-addModal .account-currency-item.currency-toggle-item:not(.selected) .currency-delete-btn,
+#account-editModal .account-currency-item.currency-toggle-item:not(.selected) .currency-delete-btn {
+    color: #dc2626;
+    opacity: 1;
+}
+
+#account-addModal .account-currency-item.currency-toggle-item:not(.selected) .currency-delete-btn:hover,
+#account-editModal .account-currency-item.currency-toggle-item:not(.selected) .currency-delete-btn:hover {
+    background: #dc2626;
+    color: #ffffff;
+}
+
+#account-addModal .account-currency-item.currency-toggle-item:not(.selected):hover,
+#account-editModal .account-currency-item.currency-toggle-item:not(.selected):hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #334155;
+    transform: none;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+}
+
+#account-addModal .account-currency-item.currency-toggle-item.selected:hover,
+#account-editModal .account-currency-item.currency-toggle-item.selected:hover {
+    transform: none;
+    box-shadow: 0 3px 8px rgba(13, 96, 255, 0.28);
+}
+
+/* × 可点：避免 flex:1 的代码区盖住删除键 */
+#account-addModal .account-currency-item.currency-toggle-item .currency-code-text,
+#account-editModal .account-currency-item.currency-toggle-item .currency-code-text {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+#account-addModal .account-currency-item.currency-toggle-item .currency-delete-btn,
+#account-editModal .account-currency-item.currency-toggle-item .currency-delete-btn {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+    width: 18px;
+    height: 18px;
+    font-size: 16px;
+    opacity: 1;
+    background: transparent;
+}
+
+#account-addModal .account-currency-item.currency-toggle-item.selected .currency-delete-btn,
+#account-editModal .account-currency-item.currency-toggle-item.selected .currency-delete-btn {
+    color: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.18);
+}
+
+#account-addModal .account-currency-item.currency-toggle-item.selected .currency-delete-btn:hover,
+#account-editModal .account-currency-item.currency-toggle-item.selected .currency-delete-btn:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.28);
+}
+
+/* Form footer · tooltip: padding 16px 40px */
+#account-addModal .account-form-actions,
+#account-editModal .account-form-actions,
+#addModal .account-form-actions,
+#editModal .account-form-actions {
+    margin-top: auto;
+    padding: 16px 40px;
+    border-radius: 0 0 0.875rem 0.875rem;
+    gap: 12px;
+    background: #ffffff;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* Footer primary/secondary · ~130×36 · pad 8px 20px · 16px Amaranth */
+
+#account-addModal .account-modal-body,
+#account-editModal .account-modal-body {
+    display: flex;
+    flex-direction: column;
+    padding-left: clamp(0.56rem, 0.9vw, 0.78rem);
+    padding-right: clamp(0.56rem, 0.9vw, 0.78rem);
+    padding-bottom: 0 !important;
+    background: #ffffff;
+}
+
+/* Footer Add/Save · Cancel：与 Create Currency / User List 弹窗同款（无扫光、无金属 inset） */
+#account-addModal .account-btn-save,
+#account-editModal .account-btn-save,
+#account-addModal .account-btn-cancel,
+#account-editModal .account-btn-cancel,
+#addModal .account-btn-save,
+#editModal .account-btn-save,
+#addModal .account-btn-cancel,
+#editModal .account-btn-cancel {
+    min-width: var(--userlist-btn-add-width);
+    width: auto;
+    min-height: auto;
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-semibold);
+    font-family: var(--font-heading-page);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(5px, 0.42vw, 8px);
+    text-align: center;
+    position: static;
+    overflow: visible;
+}
+
+#account-addModal .account-btn-save::after,
+#account-editModal .account-btn-save::after,
+#account-addModal .account-btn-cancel::after,
+#account-editModal .account-btn-cancel::after,
+#addModal .account-btn-save::after,
+#editModal .account-btn-save::after,
+#addModal .account-btn-cancel::after,
+#editModal .account-btn-cancel::after {
+    display: none;
+    content: none;
+}
+
+#account-addModal .account-btn-save,
+#account-editModal .account-btn-save,
+#addModal .account-btn-save,
+#editModal .account-btn-save {
+    background: var(--btn-add-gradient);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+#account-addModal .account-btn-save:hover,
+#account-editModal .account-btn-save:hover,
+#addModal .account-btn-save:hover,
+#editModal .account-btn-save:hover {
+    background: var(--btn-add-gradient-hover);
+    color: #ffffff;
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+    transform: translateY(-1px);
+}
+
+#account-addModal .account-btn-save:active,
+#account-editModal .account-btn-save:active,
+#addModal .account-btn-save:active,
+#editModal .account-btn-save:active,
+#account-addModal .account-btn-cancel:active,
+#account-editModal .account-btn-cancel:active,
+#addModal .account-btn-cancel:active,
+#editModal .account-btn-cancel:active {
+    transform: translateY(0);
+}
+
+#account-addModal .account-btn-cancel,
+#account-editModal .account-btn-cancel,
+#addModal .account-btn-cancel,
+#editModal .account-btn-cancel {
+    background: var(--gradient-domain-muted-action);
+    box-shadow: 0 2px 4px rgba(88, 88, 88, 0.3);
+}
+
+#account-addModal .account-btn-cancel:hover,
+#account-editModal .account-btn-cancel:hover,
+#addModal .account-btn-cancel:hover,
+#editModal .account-btn-cancel:hover {
+    background: var(--gradient-domain-muted-action-hover);
+    color: #ffffff;
+    box-shadow: 0 4px 8px rgba(84, 84, 84, 0.4);
+    transform: translateY(-1px);
+}
+
+/* Add/Edit Account title — match Add/Edit Process modal (process-form-modal-header h2) */
+#account-addModal .account-form-modal-header h2,
+#account-editModal .account-form-modal-header h2,
+#account-addModal .account-modal-header h2,
+#account-editModal .account-modal-header h2 {
+    margin: 0;
+    padding: 0;
+    font-size: var(--process-form-modal-title-size, var(--text-page-title));
+    font-family: var(--font-heading-page);
+    font-weight: var(--font-weight-page-title);
+    letter-spacing: var(--letter-spacing-page-title);
+    color: var(--color-body-strong, #1f2937);
+    line-height: 1.2;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+#account-addModal .account-close,
+#account-editModal .account-close {
+    position: static;
+    right: auto;
+    top: auto;
+    flex-shrink: 0;
+    margin: 0;
+}
+
+#account-addModal .account-form-column .account-section-header,
+#account-editModal .account-form-column .account-section-header {
+    font-size: var(--text-h2);
+    color: #111827;
+    border-bottom-color: #e5e7eb;
+}
+
+#account-addModal .account-radio-label,
+#account-editModal .account-radio-label {
+    border-radius: 0.44rem;
+    font-size: clamp(11px, 0.8vw, 12px);
+    border-color: #dbe4f0;
+    background: #f8fafc;
+}
+
+#account-addModal .account-radio-label:has(input:checked),
+#account-editModal .account-radio-label:has(input:checked) {
+    background: var(--btn-add-gradient);
+    border-color: transparent;
+    box-shadow: 0 3px 8px rgba(13, 96, 255, 0.3);
+}
+
+#account-addModal .account-other-currency>div:not(.account-currency-list),
+#account-editModal .account-other-currency>div:not(.account-currency-list) {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.account-modal-header {
+    background-color: #ffffff;
+    padding-bottom: 0.5rem;
+    border-radius: 1rem 1rem 0 0;
+}
+
+#account-addModal .account-modal-header,
+#account-editModal .account-modal-header {
+    margin: -10px -20px 0;
+    padding: 3px 3rem 3px 20px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    border-radius: 0.9rem 0.9rem 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.account-modal-header h2 {
+    margin: 0;
+    padding: 1.25rem 0 0 2.1875rem;
+    font-size: 32px;
+    line-height: 1;
+    font-family: var(--font-heading-page);
+}
+
+.account-close {
+    position: absolute;
+    right: 1.25rem;
+    top: 1.25rem;
+    color: #64748b;
+    font-size: 1.5rem;
+    font-weight: 300;
+    cursor: pointer;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s;
+}
+
+.account-close:hover,
+.account-close:focus {
+    background-color: #f1f5f9;
+    color: #334155;
+}
+
+/* Notification styles - 与userlist保持一致但使用account前缀 */
+.account-notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 400px;
+}
+
+.account-notification {
+    padding: 16px 20px;
+    border-radius: 12px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    transform: translateX(100%);
+    transition: all 0.3s ease-in-out;
+    font-weight: 500;
+    position: relative;
+    word-wrap: break-word;
+    border-left: 4px solid;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.account-notification.show {
+    transform: translateX(0);
+}
+
+.account-notification-success {
+    background-color: #f0fdf4;
+    color: #166534;
+    border-left-color: #22c55e;
+}
+
+.account-notification-danger {
+    background-color: #fef2f2;
+    color: #991b1b;
+    border-left-color: #ef4444;
+}
+
+.account-notification-info {
+    background-color: #eff6ff;
+    color: #1e40af;
+    border-left-color: #3b82f6;
+}
+
+.account-notification-warning {
+    background-color: #fffbeb;
+    color: #92400e;
+    border-left-color: #f59e0b;
+}
+
+.account-btn {
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: clamp(10px, 0.83vw, 16px);
+    text-decoration: none;
+    display: inline-block;
+    transition: all 0.3s;
+}
+
+.account-btn-save {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    font-weight: var(--font-weight-semibold);
+    min-width: clamp(90px, 7vw, 130px);
+    min-height: 2.25rem;
+    padding: clamp(0.375rem, 0.42vw, 0.5rem) 1.25rem;
+    font-size: var(--text-medium);
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    --sweep-color: rgba(255, 255, 255, 0.2);
+    position: relative;
+    overflow: hidden;
+    border: none;
+    border-radius: 0.375rem;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.35),
+        0 0.125rem 0.25rem rgba(0, 123, 255, 0.3);
+}
+
+.account-btn-save::after {
+    content: "";
+    position: absolute;
+    top: -20%;
+    bottom: -20%;
+    left: -30%;
+    right: -30%;
+    background: linear-gradient(120deg,
+            rgba(255, 255, 255, 0) 0%,
+            var(--sweep-color) 20%,
+            rgba(255, 255, 255, 0.35) 50%,
+            var(--sweep-color) 80%,
+            rgba(255, 255, 255, 0) 100%);
+    transform: translateX(-120%);
+    transition: transform 600ms ease;
+    pointer-events: none;
+}
+
+.account-btn-save:hover::after {
+    transform: translateX(120%);
+}
+
+.account-btn-save:hover {
+    background: linear-gradient(180deg, #0D60FF 0%, #63C4FF 100%);
+    transform: translateY(-0.0625rem);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+        0 0.25rem 0.5rem rgba(0, 123, 255, 0.4);
+}
+
+.account-btn-save:active {
+    transform: translateY(0);
+}
+
+.account-btn-cancel {
+    background: linear-gradient(180deg, #d0d0d0 0%, #9a9a9a 42%, #4a4a4a 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    font-weight: var(--font-weight-semibold);
+    min-width: clamp(90px, 7vw, 130px);
+    min-height: 2.25rem;
+    padding: clamp(0.375rem, 0.42vw, 0.5rem) 1.25rem;
+    font-size: var(--text-medium);
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 0.375rem;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.32),
+        0 0.125rem 0.25rem rgba(56, 56, 56, 0.35);
+    --sweep-color: rgba(255, 255, 255, 0.22);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.account-btn-cancel::after {
+    content: "";
+    position: absolute;
+    top: -20%;
+    bottom: -20%;
+    left: -30%;
+    right: -30%;
+    background: linear-gradient(120deg,
+            rgba(255, 255, 255, 0) 0%,
+            var(--sweep-color) 20%,
+            rgba(255, 255, 255, 0.35) 50%,
+            var(--sweep-color) 80%,
+            rgba(255, 255, 255, 0) 100%);
+    transform: translateX(-120%);
+    transition: transform 600ms ease;
+    pointer-events: none;
+}
+
+.account-btn-cancel:hover::after {
+    transform: translateX(120%);
+}
+
+.account-btn-cancel:hover {
+    background: linear-gradient(180deg, #4a4a4a 0%, #909090 55%, #d2d2d2 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        0 0.25rem 0.5rem rgba(60, 60, 60, 0.42);
+    transform: translateY(-0.0625rem);
+}
+
+.account-btn-cancel:active {
+    transform: translateY(0);
+}
+
+/* Alert Icon Styles - 和 edit icon 一样 */
+.account-card-item img[src="images/alert.svg"] {
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(10px, 0.83vw, 16px);
+    display: block;
+    object-fit: contain;
+    cursor: pointer;
+    filter: drop-shadow(clamp(0.02px, 0.01vw, 0.1px) 0 0 currentColor) drop-shadow(clamp(-0.05px, -0.01vw, -0.1px) 0 0 currentColor);
+}
+
+/* Alert 触发 - 红色 */
+.account-alert-icon-triggered {
+    filter: brightness(0) saturate(100%) invert(27%) sepia(95%) saturate(7472%) hue-rotate(349deg) brightness(91%) contrast(96%) !important;
+}
+
+/* Alert 已开启但未触发 - 绿色 */
+.account-alert-icon-enabled {
+    filter: brightness(0) saturate(100%) invert(64%) sepia(95%) saturate(1234%) hue-rotate(90deg) brightness(98%) contrast(85%) !important;
+}
+
+/* Alert 未开启 - 灰色半透明 */
+.account-alert-icon-disabled {
+    opacity: 0.3;
+    filter: grayscale(100%) !important;
+}
+
+.account-alert {
+    padding: 0.9375rem;
+    margin-bottom: 1.25rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: none;
+}
+
+.account-alert-success {
+    background-color: #d4edda;
+    color: #155724;
+    border-left: 0.25rem solid #28a745;
+}
+
+.account-alert-error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-left: 0.25rem solid #dc3545;
+}
+
+/* Status Badges */
+/* Badges - match userlist style */
+.account-role-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: clamp(0px, 0vw, 2px) clamp(4px, 0.42vw, 8px);
+    border-radius: 20px;
+    font-size: var(--text-tiny);
+    font-weight: bold;
+    text-transform: capitalize;
+}
+
+.account-status-active {
+    background-color: #beffd4;
+    color: #000000ff;
+    border: 1px solid #beffd4;
+}
+
+.account-status-inactive {
+    background-color: #ffc3c3;
+    color: #000000ff;
+    border: 1px solid #ffc3c3;
+}
+
+.account-status-clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.account-status-clickable:hover {
+    opacity: 0.8;
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.account-status-clickable:active {
+    transform: scale(0.95);
+}
+
+/* Role Badges - merged with above definition */
+
+.account-role-capital {
+    background-color: #ffe0e0;
+    color: #a30b0b;
+    border: 1px solid #ffa8a8;
+}
+
+.account-role-bank {
+    background-color: #dfe3ff;
+    color: #14228a;
+    border: 1px solid #bfc7ff;
+}
+
+.account-role-cash {
+    background-color: #dff4e7;
+    color: #0f6d38;
+    border: 1px solid #bbe9cf;
+}
+
+.account-role-profit {
+    background-color: #fff2c7;
+    color: #7a5b00;
+    border: 1px solid #ffe28a;
+}
+
+.account-role-expenses {
+    background-color: #f0e1ff;
+    color: #4f148f;
+    border: 1px solid #ddbdfd;
+}
+
+.account-role-company {
+    background-color: #ecfccb;
+    color: #3f6212;
+    border: 1px solid #bef264;
+}
+
+.account-role-partner {
+    background-color: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+}
+
+.account-role-staff {
+    background-color: #ffe5cc;
+    color: #a24700;
+    border: 1px solid #ffc58c;
+}
+
+.account-role-upline,
+.account-role-supplier {
+    background-color: #d6f9ff;
+    color: #0a6b78;
+    border: 1px solid #aef2ff;
+}
+
+.account-role-agent {
+    background-color: #ffe0f3;
+    color: #a02578;
+    border: 1px solid #ffc1e7;
+}
+
+.account-role-member {
+    background-color: #f2dfd2;
+    color: #5f2e0f;
+    border: 1px solid #dbb99a;
+}
+
+.account-role-debtor {
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
+
+.account-role-none {
+    background-color: #eceef2;
+    color: #3e434f;
+    border: 1px solid #d6d9e1;
+}
+
+/* Responsive Design - Fluid Units - merged with above definition */
+
+/* Loading states */
+.account-loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Pagination 默认（Show All 等）：固定右下角；分页模式由上方 body.account-page 规则覆盖为 flex 流内 */
+.account-pagination-container {
+    position: fixed;
+    right: max(40px, env(safe-area-inset-right, 0px));
+    bottom: max(20px, env(safe-area-inset-bottom, 0px));
+    margin: 0;
+    width: fit-content;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 0;
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    z-index: 120;
+    font-family: inherit;
+    flex-shrink: 0;
+}
+
+/* 分页按钮：与 process-page .pagination-btn / .pagination-info 一致 */
+body.account-page .account-pagination-btn {
+    background: transparent;
+    border: none;
+    color: #007aff;
+    font-size: clamp(12px, 0.83vw, 16px);
+    font-weight: 500;
+    width: clamp(24px, 1.46vw, 28px);
+    height: clamp(24px, 1.46vw, 28px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 14px;
+    transition: all 0.2s ease;
+    margin: 0;
+}
+
+body.account-page .account-pagination-btn:hover:not(:disabled) {
+    background-color: rgba(0, 122, 255, 0.1);
+    color: #0056b3;
+}
+
+body.account-page .account-pagination-btn:disabled {
+    color: #c7c7cc;
+    cursor: not-allowed;
+}
+
+body.account-page .account-pagination-info {
+    font-size: clamp(10px, 0.78vw, 15px);
+    font-weight: 500;
+    color: #000000;
+    margin: 0 clamp(0px, 0.63vw, 12px);
+    white-space: nowrap;
+    width: clamp(30px, 3.13vw, 60px);
+    text-align: center;
+}
+
+.account-pagination-btn {
+    background: transparent;
+    border: none;
+    color: #007AFF;
+    font-size: clamp(8px, 0.83vw, 16px);
+    font-weight: 500;
+    width: clamp(20px, 1.46vw, 28px);
+    height: clamp(20px, 1.46vw, 28px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 14px;
+    transition: all 0.2s ease;
+    margin: 0;
+}
+
+.account-pagination-btn:hover:not(:disabled) {
+    background-color: rgba(0, 122, 255, 0.1);
+    color: #0056b3;
+}
+
+.account-pagination-btn:disabled {
+    color: #C7C7CC;
+    cursor: not-allowed;
+}
+
+.account-pagination-info {
+    font-size: clamp(10px, 0.78vw, 15px);
+    font-weight: 500;
+    color: #000000;
+    margin: 0 clamp(0px, 0.63vw, 12px);
+    white-space: nowrap;
+    width: clamp(30px, 3.13vw, 60px);
+    text-align: center;
+}
+
+/* Animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 1024px) {
+    .account-card-item {
+        font-size: var(--text-medium);
+        font-weight: bold;
+    }
+
+    .account-form-group label {
+        font-size: clamp(10px, 0.85vw, 15px);
+    }
+
+    .account-form-group input,
+    .account-form-group select,
+    .account-form-group textarea {
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+
+    .account-other-currency label {
+        font-size: clamp(9px, 0.85vw, 14px);
+        min-width: 1.5rem;
+    }
+
+    .account-currency-item {
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+
+    #addCompanyList .account-currency-item,
+    #editCompanyList .account-currency-item {
+        font-size: clamp(10px, 0.85vw, 14px);
+    }
+
+    .account-cards {
+        min-height: calc(100vh - 250px);
+    }
+}
+
+/* ========================================================
+   Compact Mode for Small Screens (Laptops, Tablets, etc.)
+   ======================================================== */
+@media (max-height: 800px),
+(max-width: 1200px) {
+
+    .account-form-group input,
+    .account-form-group select,
+    .account-form-group textarea {
+        padding: 0.4rem 0.75rem !important;
+        font-size: 0.8125rem !important;
+    }
+
+    .account-form-group label {
+        font-size: 0.8125rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+
+    #account-addModal .account-form-group label,
+    #account-editModal .account-form-group label {
+        font-size: var(--text-medium) !important;
+    }
+
+    .account-form-column .account-form-group:has(.account-radio-group) label {
+        margin-bottom: 0.25rem !important;
+    }
+
+    .account-form-column .account-form-row {
+        margin-bottom: 0.75rem !important;
+        gap: 0.875rem !important;
+    }
+
+    .account-form-column .account-form-group {
+        margin-bottom: 0.75rem !important;
+    }
+
+    .account-form-row .account-form-group {
+        margin-bottom: 0 !important;
+    }
+}
+
+/* ========================================================
+   (intentionally left blank)
+   ======================================================== */
+
+/* --- Global Date Range & Quick Select Restoration --- */
+.report-date-range-picker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    width: clamp(150px, 11.2vw, 190px);
+    padding: 0 clamp(8px, 0.62vw, 12px);
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background-color: white;
+    cursor: pointer;
+    font-size: var(--drp-trigger-text, var(--text-medium));
+    color: #374151;
+    transition: all 0.2s ease;
+    min-height: 32px;
+    box-sizing: border-box;
+    line-height: 1.2;
+    font-family: var(--font-heading-page);
+}
+
+.report-date-range-picker:hover {
+    border-color: #007AFF;
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.report-date-range-picker i {
+    color: #007AFF;
+    font-size: var(--drp-trigger-icon, var(--text-medium));
+}
+
+.report-date-range-input {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1;
+}
+
+.quick-select-wrap {
+    gap: 6px;
+}
+
+.quick-select-wrap .maintenance-label,
+.quick-select-wrap .form-label {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    line-height: 1.1;
+}
+
+/* 维护页 body 带 maintenance-page：Period 由 *_maintenance.css 统一为胶囊，此处不套渐变 */
+body:not(.maintenance-page) .quick-select-dropdown-toggle .dropdown-toggle {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+    font-weight: 500;
+    padding: clamp(6px, 0.42vw, 8px) clamp(12px, 0.94vw, 18px);
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: clamp(10px, 0.73vw, 14px);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    width: clamp(104px, 8.8vw, 140px);
+    justify-content: space-between;
+    position: relative;
+    font-family: var(--font-heading-page);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    min-height: 32px;
+    line-height: 1.2;
+}
+
+body:not(.maintenance-page) .quick-select-dropdown-toggle .dropdown-toggle:hover {
+    background: linear-gradient(180deg, #0D60FF 0%, #63C4FF 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+}
+
+body:not(.maintenance-page) .quick-select-dropdown-toggle .dropdown-toggle i {
+    color: white;
+}
+
+body:not(.maintenance-page) .quick-select-dropdown-toggle .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    margin-top: 4px;
+    min-width: 100%;
+    padding: 4px 0;
+}
+
+body:not(.maintenance-page) .quick-select-dropdown-toggle .dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    font-size: 13px;
+    color: #374151;
+    font-family: var(--font-heading-page);
+    transition: all 0.2s;
+}
+
+body:not(.maintenance-page) .quick-select-dropdown-toggle .dropdown-item:hover {
+    background-color: #f0f7ff;
+    color: #007AFF;
+}
+
+/* --- Global Custom Select Restoration --- */
+.custom-select-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.custom-select-button {
+    width: 100%;
+    padding: 8px 30px 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    text-align: left;
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    position: relative;
+    min-height: 38px;
+    box-sizing: border-box;
+}
+
+.custom-select-button::after {
+    content: '▼';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: #666;
+    pointer-events: none;
+}
+
+.custom-select-button.open::after {
+    content: '▲';
+}
+
+.custom-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 1000;
+    display: none;
+    max-height: 300px;
+    overflow: hidden;
+    margin-top: 2px;
+}
+
+.custom-select-dropdown.show {
+    display: block;
+}
+
+.custom-select-search {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 1;
+}
+
+.custom-select-search input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: clamp(9px, 0.73vw, 14px);
+    box-sizing: border-box;
+}
+
+.custom-select-options {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.custom-select-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: clamp(9px, 0.73vw, 14px);
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.custom-select-option:hover {
+    background-color: #f0f0f0;
+}
+
+.custom-select-option.selected {
+    background-color: #e3f2fd;
+    font-weight: bold;
+}
+
+.custom-select-option:last-child {
+    border-bottom: none;
+}
+
+.custom-select-no-results {
+    padding: 12px;
+    text-align: center;
+    color: #999;
+    font-size: 14px;
+}
+
+/* 矮屏：仅压缩工具栏（与 process-page @media max-height 820px 一致，不缩小表格字号） */
+@media (max-height: 820px) {
+    :root {
+        --text-page-title-mt: clamp(0.4rem, 0.6vh, 0.85rem);
+    }
+
+    body.account-page .action-buttons-container {
+        margin-top: var(--layout-page-first-block-mt);
+    }
+
+    body.account-page .action-buttons-container > .action-buttons {
+        padding: 6px 14px;
+    }
+
+    body.account-page .action-buttons-container .user-gc-inline-panel {
+        padding: 8px 20px 12px;
+        column-gap: var(--user-gc-inline-column-gap, 4px);
+        row-gap: var(--user-gc-inline-row-gap, 4px);
+    }
+}
+
+/* ==========================================================================
+   Add/Edit Account modal — laptop (≤820px): readable + polished, footer pinned
+   ========================================================================== */
+@media (max-height: 820px) {
+
+    #account-addModal.account-modal,
+    #account-editModal.account-modal {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        padding: 10px;
+        box-sizing: border-box;
+    }
+
+    #account-addModal .account-modal-content,
+    #account-editModal .account-modal-content {
+        top: auto;
+        transform: none;
+        margin: 0;
+        width: min(920px, calc(100vw - 20px));
+        max-width: calc(100vw - 20px);
+        max-height: calc(100dvh - 20px);
+        max-height: calc(100vh - 20px);
+        padding: 8px 18px 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+    }
+
+    #account-addModal .account-modal-header,
+    #account-editModal .account-modal-header {
+        margin: -8px -18px 0;
+        padding: 6px 1.1rem 6px 18px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    #account-addModal .account-form-modal-header h2,
+    #account-editModal .account-form-modal-header h2,
+    #account-addModal .account-modal-header h2,
+    #account-editModal .account-modal-header h2 {
+        margin: 0;
+        padding: 0 !important;
+        font-size: clamp(1.35rem, 2.6vh, 1.85rem) !important;
+        font-family: var(--font-heading-page);
+        font-weight: var(--font-weight-page-title);
+        letter-spacing: var(--letter-spacing-page-title);
+        color: var(--color-body-strong, #1f2937);
+        line-height: 1.2;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    #account-addModal .account-close,
+    #account-editModal .account-close {
+        position: static;
+        width: 22px;
+        height: 22px;
+        flex-shrink: 0;
+    }
+
+    #account-addModal .account-modal-body,
+    #account-editModal .account-modal-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-left: 0.15rem;
+        padding-right: 0.15rem;
+    }
+
+    #account-addModal .account-form,
+    #account-editModal .account-form {
+        min-height: min(100%, 100%);
+        display: flex;
+        flex-direction: column;
+    }
+
+    #account-addModal .account-form-columns,
+    #account-editModal .account-form-columns {
+        gap: 0.65rem;
+        padding: 0.7rem 1.15rem;
+    }
+
+    #account-addModal .account-form-column .account-section-header,
+    #account-editModal .account-form-column .account-section-header {
+        font-size: var(--text-h3, 15px) !important;
+        margin-bottom: 0.4rem !important;
+        padding-bottom: 0.25rem !important;
+    }
+
+    #account-addModal .account-form-column .account-form-group,
+    #account-editModal .account-form-column .account-form-group {
+        margin-bottom: 0.6rem !important;
+    }
+
+    #account-addModal .account-form-group label,
+    #account-editModal .account-form-group label {
+        font-size: 13px !important;
+        margin-bottom: 0.25rem !important;
+    }
+
+    #account-addModal .account-form-group input,
+    #account-addModal .account-form-group select,
+    #account-addModal .account-form-group textarea,
+    #account-editModal .account-form-group input,
+    #account-editModal .account-form-group select,
+    #account-editModal .account-form-group textarea {
+        min-height: 2.15rem !important;
+        padding: 0.4rem 0.65rem !important;
+        font-size: 13px !important;
+        border-radius: 0.5rem;
+    }
+
+    #account-addModal .account-form-group textarea,
+    #account-editModal .account-form-group textarea {
+        min-height: 2.15rem !important;
+        max-height: 3.5rem;
+        line-height: 1.35 !important;
+    }
+
+    #account-addModal .account-radio-label,
+    #account-editModal .account-radio-label {
+        padding: 0.35rem 0.75rem !important;
+        font-size: 12px !important;
+    }
+
+    #account-addModal .account-form-section,
+    #account-editModal .account-form-section {
+        padding: 0 1.1rem !important;
+        padding-bottom: 0.35rem !important;
+    }
+
+    #account-addModal .account-advance-section,
+    #account-editModal .account-advance-section {
+        padding-top: 0.35rem !important;
+    }
+
+    #account-addModal .account-advance-section h3,
+    #account-editModal .account-advance-section h3 {
+        font-size: var(--text-h3, 15px) !important;
+        margin: 6px 0 8px !important;
+        padding-bottom: 4px !important;
+    }
+
+    #account-addModal .account-other-currency,
+    #account-editModal .account-other-currency {
+        padding: 8px 12px !important;
+        margin: 0 0 8px !important;
+        font-size: 14px !important;
+        gap: 10px !important;
+    }
+
+    #account-addModal .account-other-currency--company,
+    #account-editModal .account-other-currency--company {
+        margin: 10px 0 8px !important;
+    }
+
+    #account-addModal .account-other-currency label,
+    #account-editModal .account-other-currency label {
+        font-size: 13px !important;
+        min-width: 7.5rem;
+    }
+
+    #account-addModal .account-other-currency input,
+    #account-editModal .account-other-currency input {
+        min-height: 34px !important;
+        padding: 6px 8px !important;
+        font-size: 13px !important;
+    }
+
+    #account-addModal .account-btn-add-currency,
+    #account-editModal .account-btn-add-currency {
+        padding: 6px 16px !important;
+        font-size: 13px !important;
+        min-height: 34px;
+    }
+
+    #account-addModal .account-currency-list,
+    #account-editModal .account-currency-list {
+        gap: 0.4rem !important;
+    }
+
+    #account-addModal .account-other-currency:not(.account-other-currency--company),
+    #account-editModal .account-other-currency:not(.account-other-currency--company) {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+    }
+
+    #account-addModal .account-other-currency:not(.account-other-currency--company) > label,
+    #account-editModal .account-other-currency:not(.account-other-currency--company) > label {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    #account-addModal .account-other-currency:not(.account-other-currency--company) .account-currency-input-group,
+    #account-editModal .account-other-currency:not(.account-other-currency--company) .account-currency-input-group {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    #account-addModal .account-other-currency:not(.account-other-currency--company) .account-currency-list,
+    #account-editModal .account-other-currency:not(.account-other-currency--company) .account-currency-list {
+        grid-column: 1;
+        grid-row: 3;
+        margin-top: 6px;
+    }
+
+    /* 矮屏：货币 chip 略缩小，但保持可点、可辨认 */
+    #account-addModal .account-currency-item.currency-toggle-item,
+    #account-editModal .account-currency-item.currency-toggle-item {
+        padding: 8px 14px !important;
+        min-height: 2.1rem !important;
+        gap: 0.45rem !important;
+        border-radius: 8px;
+    }
+
+    #account-addModal .account-currency-item.currency-toggle-item .currency-code-text,
+    #account-editModal .account-currency-item.currency-toggle-item .currency-code-text,
+    #account-addModal .account-currency-item.currency-toggle-item.selected .currency-code-text,
+    #account-editModal .account-currency-item.currency-toggle-item.selected .currency-code-text {
+        font-size: 13px !important;
+        line-height: 1.2 !important;
+    }
+
+    #account-addModal .account-currency-item.currency-toggle-item .currency-delete-btn,
+    #account-editModal .account-currency-item.currency-toggle-item .currency-delete-btn {
+        width: 16px;
+        height: 16px;
+        font-size: 14px;
+    }
+
+    #account-addModal .user-modal-company-open-btn,
+    #account-editModal .user-modal-company-open-btn {
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+    }
+
+    #account-addModal .account-other-currency--company > .account-modal-company-field .user-modal-company-summary,
+    #account-editModal .account-other-currency--company > .account-modal-company-field .user-modal-company-summary {
+        margin-top: 6px !important;
+        padding: 6px 10px !important;
+        font-size: 13px;
+    }
+
+    #account-addModal .account-form-actions,
+    #account-editModal .account-form-actions {
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
+        flex-shrink: 0;
+        margin-top: auto;
+        padding: 12px 18px !important;
+        gap: 10px;
+        background: #ffffff;
+        border-top: 1px solid #e5e7eb;
+        box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.06);
+    }
+
+    #account-addModal .account-btn-save,
+    #account-addModal .account-btn-cancel,
+    #account-editModal .account-btn-save,
+    #account-editModal .account-btn-cancel {
+        padding: 8px 20px !important;
+        font-size: 14px !important;
+        min-height: 36px;
+    }
+}
+
+/* Portaled modals on body — escape #root .container stacking (sidebar ~10000) */
+body > .account-modal,
+body > #linkAccountModal,
+body > #confirmDeleteModal,
+body > #currencySettingModal,
+body > #userModal.modal {
+    z-index: 20050;
+}
+
+body > #confirmModal.modal,
+body > #confirmDeleteModal.account-modal,
+body > #forceDeleteCurrencyModal.account-modal,
+body > #confirmDeleteModal.confirm-delete-modal-overlay,
+body > #forceDeleteCurrencyModal.confirm-delete-modal-overlay,
+body > #accountAlertModal.account-modal {
+    z-index: 20100;
+}
+
+body > .account-notification-container {
+    z-index: 10100;
+}
+
+body > .user-modal-company-picker-root--above-modals,
+body > .user-modal-permission-picker-root--above-modals {
+    z-index: 25500;
+}
+
+/* Add/Edit Account — Companies picker: compact width, 4-col grid, smaller chips */
+.user-modal-company-picker--account {
+    width: min(400px, calc(100vw - 32px));
+    max-height: min(68vh, 460px);
+}
+
+.user-modal-company-picker--account .user-modal-company-picker-header {
+    padding: 12px 14px;
+    font-size: 14px;
+}
+
+.user-modal-company-picker--account .user-modal-company-picker-filter-row {
+    padding: 10px 14px 0;
+    gap: 6px;
+}
+
+.user-modal-company-picker--account .user-modal-company-picker-search {
+    padding: 7px 10px 7px 32px;
+    font-size: 12px;
+    border-radius: 8px;
+    background-position: 9px center;
+}
+
+.user-modal-company-picker--account .user-modal-company-picker-select-all {
+    padding: 6px 10px;
+    font-size: 11px;
+    border-radius: 8px;
+}
+
+.user-modal-company-picker--account .user-modal-company-picker-body {
+    flex: 0 1 auto;
+    max-height: min(36vh, 280px);
+    padding: 6px 6px 2px;
+}
+
+.user-modal-company-picker--account .user-modal-company-picker-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+    padding: 0 4px 8px;
+}
+
+.user-modal-company-picker--account .user-modal-company-picker-label {
+    padding: 5px 6px;
+    gap: 5px;
+    font-size: 11px;
+    border-radius: 7px;
+}
+
+.user-modal-company-picker--account .user-modal-company-picker-label input[type="checkbox"],
+.user-modal-company-picker--account .user-modal-company-picker-label input[type="radio"] {
+    width: 13px;
+    height: 13px;
+}
+
+.user-modal-company-picker--account .user-modal-company-picker-footer {
+    padding: 10px 14px 12px;
+}
+
+.user-modal-company-picker--account .user-modal-company-picker-done {
+    padding: 9px 12px;
+    font-size: 13px;
+    border-radius: 8px;
+}
+

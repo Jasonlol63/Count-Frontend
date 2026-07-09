@@ -1,0 +1,1214 @@
+﻿/* ==========================================================================
+   Global 13-Inch Laptop Optimization (1280px - 1440px)
+   Smart Density & Readability Enhancements for the Entire System
+   ========================================================================== */
+
+@media screen and (max-width: 1440px) {
+
+    /* ----------------------------------------------------
+       1. Base Typography & Hierarchy
+       ---------------------------------------------------- */
+    /* Container / Margins - 保留左侧 sidebar 的空间 */
+    body.ec-auth-shell .container,
+    body.ec-auth-shell .transaction-container {
+        padding-right: clamp(16px, 2.5vw, 40px) !important;
+    }
+
+    /* ----------------------------------------------------
+       2. Controls & Interactions (Buttons, Inputs, Checkboxes)
+       ---------------------------------------------------- */
+    /* Make them easy to click and identify */
+    body.ec-auth-shell .btn,
+    body.ec-auth-shell .btn-add,
+    body.ec-auth-shell .btn-delete,
+    body.ec-auth-shell .btn-save,
+    body.ec-auth-shell .btn-cancel,
+    body.ec-auth-shell .btn-secondary,
+    body.ec-auth-shell .btn-account-control,
+    body.ec-auth-shell .btn-clearall,
+    body.ec-auth-shell .account-btn,
+    body.ec-auth-shell .transaction-submit-btn,
+    body.ec-auth-shell .transaction-search-btn {
+        font-size: 12px !important;
+        padding: 8px 12px !important;
+        height: auto !important;
+    }
+
+    /* User List「Add User」「Delete」：不受上条 12px 压扁 */
+    body.ec-auth-shell.user-page .btn-add,
+    body.ec-auth-shell.user-page .btn-delete,
+    body.ec-auth-shell.account-page .btn-add,
+    body.ec-auth-shell.account-page .btn-delete,
+    body.ec-auth-shell.process-page .action-buttons .btn-add,
+    body.ec-auth-shell.process-page .action-buttons .btn-delete,
+    body.ec-auth-shell.process-page #addBankModal .bank-actions .btn-save,
+    body.ec-auth-shell.process-page #addBankModal .bank-actions .btn-cancel,
+    body.ec-auth-shell.process-page #addBankModal .bank-remark-actions .bank-note-open-btn,
+    body.ec-auth-shell.process-page #addModal .add-actions .btn-save,
+    body.ec-auth-shell.process-page #addModal .add-actions .btn-cancel,
+    body.ec-auth-shell.process-page #editModal .add-actions .btn-save,
+    body.ec-auth-shell.process-page #editModal .add-actions .btn-cancel,
+    body.ec-auth-shell.process-page #addModal .account-btn-save,
+    body.ec-auth-shell.process-page #addModal .account-btn-cancel,
+    body.ec-auth-shell.process-page #editModal .account-btn-save,
+    body.ec-auth-shell.process-page #editModal .account-btn-cancel,
+    body.ec-auth-shell.account-page .btn-currency-setting,
+    body.ec-auth-shell.user-page #userModal .btn-save,
+    body.ec-auth-shell.user-page #userModal .btn-cancel,
+    body.ec-auth-shell.user-page #userModal .btn-secondary,
+    body.ec-auth-shell.user-page #userModal .btn-account-control,
+    body.ec-auth-shell.user-page #userModal .btn-clearall,
+    body.ec-auth-shell.account-page #account-addModal .account-btn-save,
+    body.ec-auth-shell.account-page #account-addModal .account-btn-cancel,
+    body.ec-auth-shell.account-page #account-editModal .account-btn-save,
+    body.ec-auth-shell.account-page #account-editModal .account-btn-cancel,
+    body.ec-auth-shell.datacapture-page .btn-add,
+    body.ec-auth-shell.datacapture-page .btn-save,
+    body.ec-auth-shell.datacapture-page .btn-cancel,
+    body.ec-auth-shell.datacapture-page .btn-delete,
+    body.ec-auth-shell.datacapture-summary-page .btn-add,
+    body.ec-auth-shell.datacapture-summary-page .btn-save,
+    body.ec-auth-shell.datacapture-summary-page .btn-cancel,
+    body.ec-auth-shell.datacapture-summary-page .btn-delete {
+        font-size: var(--text-medium) !important;
+        font-weight: var(--font-weight-semibold) !important;
+        padding: clamp(6px, 0.42vw, 8px) 20px !important;
+    }
+
+    .account-company-btn,
+    .transaction-company-btn,
+    .process-company-btn,
+    .maintenance-company-btn,
+    .datacapture-company-btn,
+    .member-company-btn,
+    .contract-company-btn,
+    .ownership-company-btn {
+        font-size: 13px !important;
+        padding: 6px 14px !important;
+    }
+
+    .user-gc-segment {
+        font-size: var(--text-medium) !important;
+        font-weight: var(--font-weight-semibold) !important;
+        padding: var(--user-gc-segment-padding, 4px clamp(10px, 1.2vw, 18px)) !important;
+    }
+
+    body.ec-auth-shell.user-page #userModal .user-modal-company-open-btn {
+        font-size: clamp(10px, 0.65vw, 12px) !important;
+        padding: clamp(6px, 0.45vw, 9px) clamp(10px, 0.55vw, 14px) !important;
+    }
+
+    body.ec-auth-shell.user-page .user-modal-company-picker-search {
+        font-size: 11px !important;
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+        padding-left: 32px !important;
+        background-position: 9px center !important;
+    }
+
+    body.ec-auth-shell.user-page .user-modal-company-picker-select-all {
+        font-size: 11px !important;
+        padding: clamp(6px, 0.45vw, 8px) clamp(8px, 0.5vw, 12px) !important;
+    }
+
+    body.ec-auth-shell input:not([type="checkbox"]):not([type="radio"]),
+    body.ec-auth-shell select,
+    body.ec-auth-shell textarea,
+    body.ec-auth-shell .search-input,
+    body.ec-auth-shell .account-search-input,
+    body.ec-auth-shell .transaction-input,
+    body.ec-auth-shell .transaction-select,
+    body.ec-auth-shell .custom-select-button {
+        font-size: 11px !important;
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+    }
+
+    body.ec-auth-shell .search-input,
+    body.ec-auth-shell .account-search-input,
+    body.ec-auth-shell #searchInput {
+        padding-left: 32px !important;
+        /* Prevent text from overlapping the magnifying glass icon */
+        width: 100% !important;
+        /* Ensure enough width for "Search by Account or Name" */
+        max-width: 250px !important;
+    }
+
+    body.ec-auth-shell input[type="checkbox"] {
+        width: 16px !important;
+        height: 16px !important;
+    }
+
+    /* ----------------------------------------------------
+       3. Table Headers (Div-based & native tables)
+       ---------------------------------------------------- */
+    body.ec-auth-shell .table-header:not(.user-list-table-header),
+    body.ec-auth-shell .account-table-header,
+    body.ec-auth-shell .transaction-table-header,
+    body.ec-auth-shell .contract-table-header,
+    body.ec-auth-shell .datacapture-table-header,
+    body.ec-auth-shell .member-table-header {
+        font-size: var(--text-medium) !important;
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
+    }
+
+    /* User List 表头蓝条：单独用 --text-base */
+    body.ec-auth-shell.user-page .table-header:not(.user-list-table-header) {
+        font-size: var(--text-base) !important;
+    }
+
+    body.ec-auth-shell.user-page .user-list-table .user-list-table-header {
+        font-size: var(--text-base) !important;
+        padding: var(--table-header-height) !important;
+    }
+
+    body.ec-auth-shell.account-page .account-table-header {
+        font-size: var(--text-base) !important;
+    }
+
+    /* Process List（Games 等）：与 User / Account 表头一致 — 字号 + padding token */
+    body.ec-auth-shell.process-page .table-header:not(.bank-virtual-head-row) {
+        font-size: var(--text-base) !important;
+        padding: var(--table-header-height) !important;
+    }
+
+    body.ec-auth-shell .table-header:not(.bank-virtual-head-row):not(.user-list-table-header) .header-item,
+    body.ec-auth-shell .account-table-header .header-item,
+    body.ec-auth-shell .card-item:not(.user-list-row .card-item),
+    body.ec-auth-shell .account-card-item,
+    body.ec-auth-shell .contract-card-item,
+    body.ec-auth-shell .member-card-item {
+        padding: 0 10px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* For native tables th */
+    body.ec-auth-shell table th,
+    body.ec-auth-shell .transaction-table th,
+    body.ec-auth-shell .datacapture-table th {
+        font-size: var(--text-medium) !important;
+        padding: 10px 14px !important;
+    }
+
+    /* ----------------------------------------------------
+       4. Table Rows & Data (Smart Density)
+       ---------------------------------------------------- */
+    /* Div-based Rows (Cards) */
+    body.ec-auth-shell .user-card,
+    body.ec-auth-shell .account-card,
+    body.ec-auth-shell .contract-card,
+    body.ec-auth-shell .member-card {
+        padding: 10px 22px !important;
+        min-height: 20px !important;
+    }
+
+    /* Account List：行高/宽度与 process-card 一致 */
+    body.ec-auth-shell.account-page:not(.account-page--show-all) .account-card {
+        padding: 0 22px !important;
+        min-height: 0 !important;
+        flex: 0 1 auto !important;
+    }
+
+    body.ec-auth-shell .card-item,
+    body.ec-auth-shell .account-card-item,
+    body.ec-auth-shell .contract-card-item,
+    body.ec-auth-shell .member-card-item {
+        font-size: var(--text-medium) !important;
+        line-height: 1.5 !important;
+        letter-spacing: 0.015em !important;
+    }
+
+
+
+    /* SPECIFIC FIX: Bank Process List (14 columns) MUST be ultra-dense */
+    .process-page.process-page--bank .bank-data-table th {
+        font-size: 11px !important;
+        padding: 4px 4px !important;
+    }
+
+    .process-page.process-page--bank .bank-data-table td {
+        font-size: 11px !important;
+        padding: 2px 4px !important;
+        line-height: 1.15 !important;
+    }
+
+    /* Bank Process virtual table：14 列 grid，勿套用上方 User List 的 9 列 table-header */
+    body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .bank-virtual-head-row.table-header,
+    body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .bank-virtual-data-row {
+        display: grid !important;
+        grid-column: 1 / -1 !important;
+        grid-template-columns: subgrid !important;
+        column-gap: 0 !important;
+        gap: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Stop Bank badges from overflowing horizontally due to global constraints */
+    .process-page.process-page--bank .bank-data-table .contract-badge,
+    .process-page.process-page--bank .bank-data-table .status-badge {
+        font-size: 9px !important;
+        padding: 2px 4px !important;
+        min-width: 0 !important;
+        white-space: normal !important;
+        text-align: center;
+        line-height: 1.1 !important;
+    }
+
+    .transaction-table-row {
+        min-height: 52px !important;
+    }
+
+    /* ----------------------------------------------------
+       5. Status & Role Badges (Visual Cues)
+       ---------------------------------------------------- */
+    .role-badge,
+    .account-role-badge,
+    .contract-badge,
+    .status-badge,
+    .member-badge,
+    span.account-role-badge {
+        font-size: 10px !important;
+        /* Set slightly smaller but perfectly legible, overriding the user's 9px edit */
+        padding: 4px 10px !important;
+        width: auto !important;
+        min-width: max-content !important;
+        white-space: nowrap !important;
+        display: inline-flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        box-sizing: border-box !important;
+        line-height: 1 !important;
+    }
+
+    /* Account List：Role / Alert / Status 药丸与 design token 对齐 */
+    .account-role-badge,
+    span.account-role-badge {
+        font-size: var(--text-tiny) !important;
+    }
+
+    /* User List：Role / Status 药丸（.role-badge） */
+    body.ec-auth-shell.user-page .role-badge {
+        font-size: var(--text-tiny) !important;
+    }
+
+    /* ----------------------------------------------------
+       6. Edit Action Buttons Sizing
+       ---------------------------------------------------- */
+    body.ec-auth-shell .btn-edit svg,
+    body.ec-auth-shell .btn-edit img,
+    body.ec-auth-shell .account-edit-btn svg,
+    body.ec-auth-shell .account-edit-btn img,
+    body.ec-auth-shell .contract-edit-btn svg,
+    body.ec-auth-shell .contract-edit-btn img,
+    body.ec-auth-shell .member-edit-btn svg,
+    body.ec-auth-shell .member-edit-btn img {
+        width: 18px !important;
+        height: 18px !important;
+    }
+
+    /* ----------------------------------------------------
+       7. Account List grid（专用变量，表头/行一致）
+       ---------------------------------------------------- */
+    body.ec-auth-shell.account-page .account-list-table {
+        --account-list-grid-cols:
+            38px
+            minmax(120px, 1.5fr)
+            minmax(120px, 1.5fr)
+            minmax(84px, 0.7fr)
+            minmax(52px, 0.42fr)
+            minmax(72px, 0.55fr)
+            minmax(130px, 1fr)
+            minmax(60px, 1.2fr)
+            minmax(92px, 0.55fr);
+    }
+
+    body.ec-auth-shell.account-page .account-list-table-header .account-header-item,
+    body.ec-auth-shell.account-page .account-list-row .account-card-item {
+        padding: 0 !important;
+    }
+
+    /* User List grid（专用变量，表头/行一致） */
+    body.ec-auth-shell.user-page .user-list-table {
+        --user-list-grid-cols:
+            38px
+            minmax(92px, 1fr)
+            minmax(80px, 1fr)
+            minmax(140px, 1.5fr)
+            minmax(88px, 0.9fr)
+            minmax(72px, 0.68fr)
+            minmax(128px, 1.3fr)
+            minmax(96px, 1fr)
+            minmax(72px, 0.5fr);
+        --user-list-grid-cols-bulk:
+            38px
+            minmax(92px, 1fr)
+            minmax(80px, 1fr)
+            minmax(140px, 1.5fr)
+            minmax(88px, 0.9fr)
+            minmax(72px, 0.68fr)
+            minmax(128px, 1.3fr)
+            minmax(96px, 1fr)
+            minmax(68px, 0.48fr)
+            48px;
+    }
+
+    body.lang-zh.user-page .user-list-table {
+        --user-list-grid-cols:
+            54px
+            minmax(100px, 1.05fr)
+            minmax(80px, 1fr)
+            minmax(140px, 1.5fr)
+            minmax(72px, 0.85fr)
+            minmax(64px, 0.65fr)
+            minmax(108px, 1.25fr)
+            minmax(88px, 0.95fr)
+            minmax(64px, 0.48fr);
+        --user-list-grid-cols-bulk:
+            54px
+            minmax(100px, 1.05fr)
+            minmax(80px, 1fr)
+            minmax(140px, 1.5fr)
+            minmax(72px, 0.85fr)
+            minmax(64px, 0.65fr)
+            minmax(108px, 1.25fr)
+            minmax(88px, 0.95fr)
+            minmax(60px, 0.46fr)
+            48px;
+    }
+
+    body.ec-auth-shell.user-page .user-list-table-header .header-item,
+    body.ec-auth-shell.user-page .user-list-row .card-item {
+        padding: 0 !important;
+    }
+
+    body.ec-auth-shell.user-page .user-list-table .table-header.user-list-table-header,
+    body.ec-auth-shell.user-page .user-list-table .user-card.user-list-row {
+        gap: 8px !important;
+        grid-template-columns: var(--user-list-grid-cols) !important;
+    }
+
+    /* Games Process List：列宽 CSS 变量与 processCSS 一致，避免 laptop/tablet 错位或表头截断 */
+    body.ec-auth-shell.process-page:not(.process-page--bank) .games-process-table {
+        --games-process-grid-cols:
+            38px
+            minmax(92px, 0.75fr)
+            minmax(0, 1fr)
+            minmax(72px, 0.24fr)
+            minmax(84px, 0.22fr)
+            minmax(96px, 0.88fr)
+            minmax(52px, 0.22fr);
+        --games-process-grid-cols-select:
+            38px
+            minmax(92px, 0.75fr)
+            minmax(0, 1fr)
+            minmax(72px, 0.24fr)
+            minmax(84px, 0.22fr)
+            minmax(96px, 0.82fr)
+            minmax(48px, 0.2fr)
+            48px;
+    }
+
+    body.ec-auth-shell.process-page:not(.process-page--bank) .games-process-table-header .header-item,
+    body.ec-auth-shell.process-page:not(.process-page--bank) .games-process-row .card-item {
+        padding: 0 !important;
+    }
+
+    /* ----------------------------------------------------
+       8. Bank Process List Action Bar: Force single-row (override global label/checkbox/search sizes)
+       Bank 有 5 个 checkbox，label 14px + checkbox 16px + search 250px 导致换行
+       必须用 !important 覆盖上方的全局 !important 规则（高特异性选择器取胜）
+       ---------------------------------------------------- */
+
+    .process-page.process-page--bank .bank-process-toolbar-primary {
+        flex-wrap: nowrap !important;
+        gap: clamp(4px, 0.45vw, 8px) !important;
+    }
+
+    .process-page.process-page--bank .action-controls-row .checkbox-section {
+        gap: 3px !important;
+        flex-shrink: 0 !important;
+    }
+
+    .process-page.process-page--bank .action-controls-row .checkbox-section label {
+        font-size: clamp(9px, 0.58vw, 11px) !important;
+        white-space: nowrap !important;
+    }
+
+    .process-page.process-page--bank .action-controls-row .checkbox-section input[type="checkbox"] {
+        width: clamp(11px, 0.73vw, 13px) !important;
+        height: clamp(11px, 0.73vw, 13px) !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* Search 框：旧 checkbox 行；勿缩小 bank-process-toolbar-primary 内 userlist 药丸搜索 */
+    .process-page.process-page--bank #searchInput,
+    .process-page.process-page--bank .action-controls-row:not(.bank-process-toolbar-primary) .search-input {
+        width: clamp(100px, 7.5vw, 150px) !important;
+        max-width: clamp(100px, 7.5vw, 150px) !important;
+    }
+
+    /* <1700px bank 顶栏 Search：图标收起 / 点击展开，宽度由 processCSS .bank-process-search-bar 控制 */
+    body.process-page.process-page--bank .bank-process-toolbar-primary .search-container.userlist-search-bar.bank-process-search-bar .userlist-search-input,
+    body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary .search-container.userlist-search-bar.bank-process-search-bar .userlist-search-input.search-input {
+        width: 100% !important;
+        max-width: none !important;
+        flex: 1 1 auto !important;
+    }
+
+    /* Games / Bank 顶栏 Add、Delete 与 processCSS 一致，不在此单独缩小 Bank */
+}
+
+/* ==========================================================================
+   Global Hover UI Polish (Applies to all screens for better UX)
+   - Improves eye-tracking and highlights the specific row clearly.
+   ========================================================================== */
+body.ec-auth-shell .user-card:hover,
+body.ec-auth-shell .account-card:hover,
+body.ec-auth-shell .contract-card:hover,
+body.ec-auth-shell .member-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-1px) !important;
+    background-color: #ebf5ff !important;
+    border-radius: 4px;
+    z-index: 5;
+    position: relative;
+}
+
+/* For native table rows */
+body.ec-auth-shell .transaction-table tbody tr:hover td,
+body.ec-auth-shell .datacapture-table tbody tr:hover td {
+    background-color: #ebf5ff !important;
+    transition: background-color 0.15s ease;
+}
+
+/* ==========================================================================
+   Global SaaS "Premium Feel" Upgrades
+   ========================================================================== */
+
+/* 1. Scrollbars: app-wide — see dashboard-scrollbar.css (app-shell) */
+
+/* 2. Modal/Dialog Smart Overflow for 13-inch Screens */
+@media screen and (max-height: 800px) {
+
+    .modal-content,
+    .transaction-modal-content:not(.transaction-history-modal),
+    .notification-popup {
+        max-height: 100% !important;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* .modal-body,
+    .transaction-modal-body,
+    .form-container {
+        padding-bottom: 90px !important;
+    } */
+}
+
+/* 3. Interactive Polish (Micro-animations) */
+    /* Checkbox snap animation */
+    body.ec-auth-shell input[type="checkbox"] {
+        cursor: pointer;
+        transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body.ec-auth-shell input[type="checkbox"]:active {
+        transform: scale(0.85);
+    }
+
+    /* Buttons click effect */
+    body.ec-auth-shell .btn:active,
+    body.ec-auth-shell .transaction-search-btn:active,
+    body.ec-auth-shell .transaction-submit-btn:active,
+    body.ec-auth-shell button:not(.fc-button):active {
+        transform: translateY(1px) scale(0.98) !important;
+        transition: all 0.1s;
+    }
+
+    /* Better glowing focus ring for inputs */
+    body.ec-auth-shell input:focus,
+    body.ec-auth-shell select:focus,
+    body.ec-auth-shell textarea:focus,
+    body.ec-auth-shell .search-input:focus {
+        box-shadow: 0 0 0 3px rgba(15, 97, 255, 0.15) !important;
+        border-color: #0F61FF !important;
+        transition: all 0.2s ease-in-out;
+    }
+
+    /* Smooth HTML scroll */
+    html {
+        scroll-behavior: smooth;
+    }
+
+    /* ==========================================================================
+   Global "WOW Factor" Final Polish
+   ========================================================================== */
+
+    /* 4. SPA-like Entrance Animation (Makes PHP page loads feel modern) */
+    @keyframes premiumEntrance {
+        from {
+            opacity: 0;
+            transform: translateY(12px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    body.ec-auth-shell .container,
+    body.ec-auth-shell .transaction-container,
+    body.ec-auth-shell .modal-content,
+    body.ec-auth-shell .datacapture-container {
+        animation: premiumEntrance 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* 5. Custom Brand Text Selection */
+    ::selection {
+        background-color: rgba(15, 97, 255, 0.25) !important;
+        color: #001f3f !important;
+        text-shadow: none !important;
+    }
+
+    /* 6. Glowing Action Buttons on Hover */
+    body.ec-auth-shell .btn-save:hover,
+    body.ec-auth-shell .btn-add:hover,
+    body.ec-auth-shell .transaction-submit-btn:hover {
+        box-shadow: 0 0 15px rgba(15, 97, 255, 0.4) !important;
+        -webkit-filter: brightness(1.05);
+        filter: brightness(1.05);
+    }
+
+    body.ec-auth-shell .btn-delete:hover {
+        box-shadow: 0 0 15px rgba(220, 53, 69, 0.3) !important;
+        -webkit-filter: brightness(1.05);
+        filter: brightness(1.05);
+    }
+
+    /* 7. Chrome Autofill Premium Override (Removes the ugly yellow background) */
+    body.ec-auth-shell input:-webkit-autofill,
+    body.ec-auth-shell input:-webkit-autofill:hover,
+    body.ec-auth-shell input:-webkit-autofill:focus,
+    body.ec-auth-shell input:-webkit-autofill:active {
+        -webkit-box-shadow: 0 0 0 30px white inset !important;
+        -webkit-text-fill-color: #333 !important;
+        transition: background-color 5000s ease-in-out 0s;
+    }
+
+    /* 8. Table Headers Sticky Drop-Shadow for 13-inch scrolling */
+    body.ec-auth-shell .table-header:not(.user-list-table-header):not(.bank-virtual-head-row),
+    body.ec-auth-shell .account-table-header,
+    body.ec-auth-shell .datacapture-table-header {
+        position: sticky !important;
+        top: 0;
+        z-index: 10;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+    }
+
+    body.ec-auth-shell.user-page .user-list-table .user-list-table-header {
+        position: sticky !important;
+        top: 0;
+        z-index: 10;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+    }
+
+    /* 9. Smart Text Truncation for Responsive Data Rows */
+    /* Prevents long unspaced text (like emails or hashes) from blowing out the table width */
+    body.ec-auth-shell td,
+    body.ec-auth-shell .card-item,
+    body.ec-auth-shell .account-card-item,
+    body.ec-auth-shell .contract-card-item,
+    body.ec-auth-shell .member-card-item {
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    /* 10. Forms / Textareas Max-Height Constraints */
+    body.ec-auth-shell textarea {
+        max-height: 120px !important;
+    }
+
+    /* ==========================================================================
+   Global Layout Unlock (Destroy nested scrolls, use Native Window Scroll)
+   ========================================================================== */
+    /* 1. Unlock the main bounding containers so they stretch infinitely downwards */
+    html:not(:has(body.datacapture-page)):not(:has(body.datacapture-summary-page)),
+    body.user-page,
+    body.transaction-page,
+    body.dashboard-page:not(.datacapture-page):not(.datacapture-summary-page),
+    body.ec-auth-shell:not(.datacapture-page):not(.datacapture-summary-page) {
+        height: auto !important;
+        min-height: 100vh !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+        overflow-x: hidden !important;
+    }
+
+    body.ec-auth-shell:not(.datacapture-page) .container,
+    body.ec-auth-shell:not(.datacapture-page) .content,
+    body.ec-auth-shell:not(.datacapture-page) .transaction-container,
+    body.ec-auth-shell:not(.datacapture-page) .datacapture-container,
+    body.ec-auth-shell:not(.datacapture-page) .dashboard-container,
+    body.ec-auth-shell:not(.datacapture-page) .own-container {
+        height: auto !important;
+        min-height: 100vh !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding-bottom: 20px !important;
+        /* Absolute guarantee we never cut off the bottom element */
+    }
+
+    /* User / Account List（非 Show All）：与 Process List 一屏 flex 布局 */
+    body.user-page:not(.user-page--show-all),
+    body.account-page:not(.account-page--show-all) {
+        overflow-y: hidden !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .container,
+    body.account-page:not(.account-page--show-all) .container {
+        height: 100vh !important;
+        overflow: hidden !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .content,
+    body.account-page:not(.account-page--show-all) .content {
+        height: calc(100vh - var(--layout-page-top-inset)) !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+    }
+
+    /* Bank Process（非 Show All）：覆盖下方 Global Unlock，桌面一屏无整页滚动 */
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) {
+        height: 100vh !important;
+        min-height: 100vh !important;
+        max-height: 100vh !important;
+        overflow-x: hidden !important;
+        overflow-y: hidden !important;
+    }
+
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .container,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) #root > .container {
+        height: 100vh !important;
+        min-height: 0 !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+        padding-bottom: 0 !important;
+    }
+
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .content {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .process-table-wrapper.bank-process-table-region {
+        overflow: hidden !important;
+        max-height: none !important;
+    }
+
+    /* 2. Remove all internal scrolling constraints on table wrappers (No vertical nested scrollbars) */
+    body.ec-auth-shell .table-container,
+    body.ec-auth-shell .account-cards,
+    body.ec-auth-shell .process-cards:not(.bank-virtual-scroll),
+    body.ec-auth-shell .process-table-wrapper,
+    body.ec-auth-shell .bank-virtual-scroll-clip,
+    body.ec-auth-shell .bank-virtual-table,
+    body.ec-auth-shell .bank-process-list-body,
+    body.ec-auth-shell .bank-process-list-scroll-region,
+    body.ec-auth-shell .dashboard-content,
+    body.ec-auth-shell .transaction-main-content,
+    body.ec-auth-shell .transaction-table-wrapper,
+    body.ec-auth-shell .datacapture-table-wrapper,
+    body.ec-auth-shell .summary-table-x-scroll,
+    body.ec-auth-shell.datacapture-summary-page .summary-table-container,
+    body.ec-auth-shell .own-container,
+    body.ec-auth-shell #companyCardsContainer,
+    body.ec-auth-shell #groupEarningsContainer {
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+        /* This forces the data to completely render out, triggering the global browser scrollbar */
+    }
+
+    /* Bank Process（非 Show All）：覆盖上方 Unlock 对列表容器的 overflow:visible */
+    html:has(body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all)) {
+        height: 100% !important;
+        overflow: hidden !important;
+    }
+
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .process-table-wrapper.bank-process-table-region {
+        overflow: hidden !important;
+    }
+
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .pagination-container {
+        position: fixed !important;
+        right: max(40px, env(safe-area-inset-right, 0px)) !important;
+        bottom: max(20px, env(safe-area-inset-bottom, 0px)) !important;
+        left: auto !important;
+        top: auto !important;
+        margin: 0 !important;
+        z-index: 120 !important;
+        width: fit-content !important;
+        flex-shrink: 0 !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .user-cards {
+        overflow: hidden !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .user-cards {
+        min-height: var(--list-table-body-min-height) !important;
+    }
+
+    body.account-page:not(.account-page--show-all) .account-cards {
+        overflow: hidden !important;
+        min-height: 0 !important;
+    }
+
+    body.account-page:not(.account-page--show-all) .account-table-wrapper {
+        padding-bottom: 52px !important;
+    }
+
+    /* Games Process List（非 Bank / 非 Show All）：与 User List 一屏 flex 布局，禁止整页纵向滚动 */
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) {
+        overflow-y: hidden !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+    }
+
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) .container {
+        height: 100vh !important;
+        min-height: 0 !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding-bottom: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) .content {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding-bottom: 0 !important;
+    }
+
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) .action-buttons-container {
+        flex-shrink: 0 !important;
+    }
+
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-table-wrapper {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding-bottom: 52px !important;
+        box-sizing: border-box !important;
+    }
+
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards:not(.bank-virtual-scroll) {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* Games Process List Show All：小屏下覆盖 global unlock，整页可滚 */
+    body.process-page.process-page--show-all:not(.process-page--bank) {
+        overflow-y: auto !important;
+        height: auto !important;
+        min-height: 100vh !important;
+        max-height: none !important;
+    }
+
+    body.process-page.process-page--show-all:not(.process-page--bank) .container {
+        height: auto !important;
+        min-height: 100vh !important;
+        max-height: none !important;
+        overflow: visible !important;
+        display: block !important;
+        padding-bottom: 20px !important;
+    }
+
+    body.process-page.process-page--show-all:not(.process-page--bank) .content {
+        height: auto !important;
+        min-height: calc(100vh - var(--layout-page-top-inset)) !important;
+        max-height: none !important;
+        overflow: visible !important;
+        display: flex !important;
+        flex-direction: column !important;
+        flex: none !important;
+        padding-bottom: 0 !important;
+    }
+
+    body.process-page.process-page--show-all:not(.process-page--bank) .process-table-wrapper {
+        flex: 0 1 auto !important;
+        min-height: 0 !important;
+        padding-bottom: 0 !important;
+        overflow: visible !important;
+    }
+
+    body.process-page.process-page--show-all:not(.process-page--bank) .process-cards:not(.bank-virtual-scroll) {
+        display: block !important;
+        flex: none !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        scrollbar-gutter: auto;
+    }
+
+    body.process-page.process-page--show-all:not(.process-page--bank) .process-card.games-process-row {
+        flex: none !important;
+        flex-shrink: 0 !important;
+        min-height: 26px !important;
+        align-items: center !important;
+    }
+
+    body.process-page.process-page--show-all:not(.process-page--bank) .pagination-container {
+        position: relative !important;
+        right: auto !important;
+        bottom: auto !important;
+        margin-top: 8px !important;
+        margin-left: auto !important;
+        z-index: 1 !important;
+        width: fit-content !important;
+    }
+
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) .games-process-table-header,
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-table-wrapper > .table-header {
+        flex-shrink: 0 !important;
+    }
+
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) .pagination-container {
+        position: fixed !important;
+        right: max(40px, env(safe-area-inset-right, 0px)) !important;
+        bottom: max(20px, env(safe-area-inset-bottom, 0px)) !important;
+        left: auto !important;
+        top: auto !important;
+        margin: 0 !important;
+        z-index: 120 !important;
+        width: fit-content !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* 3. Ensure the aesthetic background doesn't tear or tile awkwardly when scrolling a long page natively */
+    body.ec-auth-shell:not(.transaction-page) {
+        background-attachment: fixed !important;
+        background-size: cover !important;
+    }
+
+    /* Data Capture: one-page layout on laptop widths (internal scroll in submitted list + table) */
+    html:has(body.datacapture-page) {
+        height: 100% !important;
+        overflow: hidden !important;
+    }
+
+    body.dashboard-page.datacapture-page {
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        overflow: hidden !important;
+    }
+
+    body.datacapture-page #root {
+        height: 100% !important;
+        max-height: 100dvh !important;
+        overflow: hidden !important;
+    }
+
+    body.datacapture-page .container {
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: 0 !important;
+    }
+
+    /* Dashboard home: one viewport — override global unlock scroll */
+    html:has(body.dashboard-home-page) {
+        height: 100% !important;
+        overflow: hidden !important;
+    }
+
+    body.dashboard-home-page {
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+    }
+
+    body.dashboard-home-page #root {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    body.dashboard-home-page .dashboard-container {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100dvh !important;
+        overflow: hidden !important;
+        flex: 1 1 0 !important;
+        padding-bottom: clamp(4px, 0.5vh, 8px) !important;
+    }
+
+    body.dashboard-home-page .dashboard-content {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        height: auto !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        --dashboard-section-gap: clamp(6px, 0.85vh, 14px);
+        gap: var(--dashboard-section-gap) !important;
+    }
+
+    body.dashboard-home-page .dashboard-filter-panel {
+        flex-shrink: 0 !important;
+    }
+
+    body.dashboard-home-page .dashboard-kpi-grid {
+        flex-shrink: 0 !important;
+        gap: clamp(8px, 1vh, 14px) !important;
+    }
+
+    body.dashboard-home-page .dashboard-kpi-card {
+        padding: clamp(10px, 1.1vh, 18px) clamp(12px, 1.2vh, 20px) !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+    }
+
+    body.dashboard-home-page .dashboard-panel-card {
+        min-height: 0 !important;
+        overflow: hidden !important;
+        padding: clamp(10px, 1vh, 16px) !important;
+    }
+
+    body.dashboard-home-page .dashboard-panel-chart-body {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+    }
+
+    body.dashboard-home-page .dashboard-panel-card--summary {
+        --summary-pie-size: clamp(195px, 22vh, 240px) !important;
+        --summary-currency-max: clamp(120px, 20vh, 175px) !important;
+        padding: clamp(10px, 1vh, 16px) !important;
+    }
+
+    body.dashboard-home-page .dashboard-summary-pie-wrap {
+        flex: none !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+    }
+
+    body.dashboard-home-page .dashboard-summary-pie-chart-shell {
+        width: 100% !important;
+        height: 100% !important;
+        max-height: 100% !important;
+    }
+
+    body.dashboard-home-page .dashboard-summary-currency-list-body {
+        overflow-y: auto !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs {
+        --dashboard-section-gap: clamp(4px, 0.55vh, 10px);
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-panel-card {
+        padding: clamp(8px, 0.8vh, 13px) !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-panel-head {
+        margin-bottom: clamp(5px, 0.45vh, 8px) !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-summary-layout {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-summary-top-row {
+        min-height: 0 !important;
+        overflow: hidden !important;
+        flex-shrink: 0 !important;
+    }
+
+    body.dashboard-home-page .dashboard-summary-top-row .dashboard-summary-pie-wrap {
+        height: var(--summary-pie-size) !important;
+        min-height: var(--summary-pie-size) !important;
+        max-height: var(--summary-pie-size) !important;
+    }
+
+    body.dashboard-home-page .dashboard-summary-top-row .dashboard-summary-pie-chart-shell {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-summary-top-row .dashboard-summary-pie-wrap {
+        flex: none !important;
+        height: var(--summary-pie-size) !important;
+        min-height: var(--summary-pie-size) !important;
+        max-height: var(--summary-pie-size) !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-summary-top-row .dashboard-summary-pie-chart-shell {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-summary-pie-chart-shell {
+        flex-shrink: 1 !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-summary-currency-row {
+        padding: 3px 6px 3px 0 !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-summary-rate-footnote {
+        padding: 3px 6px !important;
+        min-height: 0 !important;
+        font-size: clamp(9px, 0.65vw, 10px) !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-panel-card--chart .dashboard-panel-head {
+        margin-bottom: clamp(4px, 0.35vh, 6px) !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-panel-chart-body {
+        flex: 1 1 0 !important;
+        min-height: clamp(100px, 14vh, 180px) !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-summary-view-tabs {
+        margin-bottom: 0 !important;
+        padding: 2px !important;
+    }
+
+    body.dashboard-home-page .dashboard-panels-row--with-summary-tabs .dashboard-summary-view-tab {
+        padding: 4px 10px !important;
+        font-size: clamp(10px, 0.72vw, 11px) !important;
+    }
+
+/* ==========================================================================
+   Chips with Overflow Component Styles
+   Global — applies to ALL screen sizes (no media query)
+   ========================================================================== */
+.chip-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+
+.chip,
+.chip-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    border-radius: 4px;
+    line-height: 1.4;
+    white-space: nowrap;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.chip {
+    background-color: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+}
+
+.chip-more {
+    background-color: #e0f2fe;
+    border: 1px solid transparent;
+    color: #0284c7;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.chip-more:hover {
+    background-color: #bae6fd;
+    color: #0369a1;
+}
+
+/* Data Capture Summary — body scroll only (all viewport widths) */
+html:has(body.datacapture-summary-page) {
+    height: auto !important;
+    overflow: visible !important;
+}
+
+body.dashboard-page.datacapture-summary-page,
+body.ec-auth-shell.dashboard-page.datacapture-summary-page {
+    height: auto !important;
+    min-height: 100vh !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
+body.dashboard-page.datacapture-summary-page #root,
+body.dashboard-page.datacapture-summary-page .ec-page-shell,
+body.dashboard-page.datacapture-summary-page .ec-page-shell__content,
+body.dashboard-page.datacapture-summary-page .container,
+body.dashboard-page.datacapture-summary-page #summaryTableContainer,
+body.dashboard-page.datacapture-summary-page .summary-table-container {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    max-height: none !important;
+    height: auto !important;
+}

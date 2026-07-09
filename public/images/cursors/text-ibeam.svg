@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- Compact Windows I-beam (8px tall, 5px serifs); hotspot 8 8 -->
+  <rect x="7" y="4" width="1" height="8" fill="#000000"/>
+  <rect x="5" y="4" width="5" height="1" fill="#000000"/>
+  <rect x="5" y="11" width="5" height="1" fill="#000000"/>
+</svg>

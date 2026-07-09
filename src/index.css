@@ -1,0 +1,4 @@
+/* Tailwind only. Next import in main.jsx: app-shell.css (tokens, dashboard, 13″, sidebar). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

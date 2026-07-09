@@ -1,0 +1,419 @@
+﻿body {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 100vh;
+}
+
+html,
+body.dashboard-page.report-page {
+    height: auto !important;
+    min-height: 100vh !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+}
+
+.container {
+    overflow-y: visible !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 100vh;
+}
+
+/* Report 路由使用 .container；与 Transaction 主区域一致：左侧留 sidebar、右侧与左侧视觉留白协调 */
+body.dashboard-page.report-page .container {
+    max-width: none;
+    margin: 0;
+    padding: var(--layout-page-top-gap) clamp(20px, 2.08vw, 40px) 20px var(--layout-main-offset);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.domain-report-filter-container {
+    background: white;
+    border-radius: 12px;
+    padding: clamp(12px, 1.25vw, 20px);
+    margin-top: var(--layout-page-first-block-mt, 10px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+body.dashboard-page.report-page .domain-report-filter-container .report-gc-inline-panel {
+    margin-top: 4px;
+    margin-left: -4px;
+    margin-right: -4px;
+}
+
+/* 与 Customer Report 一致：outlined 控件统一高度，flex 居中避免顶/底错位 */
+.domain-report-filters {
+    display: flex;
+    gap: clamp(12px, 1.25vw, 24px);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.domain-report-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(6px, 0.52vw, 10px);
+    min-width: clamp(150px, 12.5vw, 240px);
+}
+
+.domain-report-filter-group label {
+    font-size: clamp(11px, 0.85vw, 13px);
+    font-weight: 600;
+    color: #374151;
+    font-family: var(--font-heading-page);
+}
+
+/* Date range — same bar + label offset as Transaction search / customer report */
+body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .transaction-date-range-group {
+    min-width: 0 !important;
+    width: 100%;
+}
+
+/* Process 下拉与 Date Range：与 customer_report 同行规则一致 */
+body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .custom-select-button {
+    min-height: clamp(32px, 2.25vw, 36px);
+}
+
+body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker {
+    min-width: 0 !important;
+    width: 100%;
+    max-width: 100%;
+    min-height: clamp(32px, 2.25vw, 36px) !important;
+    padding: 0 clamp(8px, 0.75vw, 12px) 0 0 !important;
+    border-radius: 0 !important;
+    gap: clamp(8px, 0.7vw, 12px);
+    background: #ffffff !important;
+    box-shadow: none !important;
+    overflow: hidden;
+}
+
+body.dashboard-page.report-page .domain-report-filters .report-outlined-inner:has(.transaction-date-range-group) {
+    overflow: hidden;
+    border-radius: inherit;
+}
+
+body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker:hover {
+    background: #ffffff !important;
+    box-shadow: none !important;
+}
+
+body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker:focus-visible {
+    box-shadow: none !important;
+}
+
+body.dashboard-page.report-page .domain-report-filters .report-outlined-label--txn-capture-date {
+    left: clamp(46px, 3.35vw, 58px);
+}
+
+/* Calendar icon pill — shared with dashboard via transaction.css; outlined shell clips left corner */
+body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
+    border-radius: clamp(6px, 0.52vw, 8px) 0 0 clamp(6px, 0.52vw, 8px);
+    z-index: 5;
+}
+
+/* Match Transaction Capture Date: `date-range-picker.css` `.calendar-month-year select` */
+.domain-report-filter-group select,
+.domain-report-filter-group input:not([type="checkbox"]):not(.report-date-range-input) {
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    padding: clamp(4px, 0.3vw, 6px) clamp(6px, 0.4vw, 8px);
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: 600;
+    color: #000;
+    background: #fff;
+    box-sizing: border-box;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: var(--font-heading-page);
+}
+
+.domain-report-filter-group input:not([type="checkbox"]):not(.report-date-range-input) {
+    cursor: text;
+}
+
+.domain-report-filter-group select:hover,
+.domain-report-filter-group input:not([type="checkbox"]):not(.report-date-range-input):hover {
+    border-color: #3b82f6;
+}
+
+.domain-report-filter-group select:focus,
+.domain-report-filter-group input:not([type="checkbox"]):not(.report-date-range-input):focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.domain-report-filter-group .custom-select-button {
+    width: 100%;
+    padding: clamp(4px, 0.3vw, 6px) clamp(26px, 2vw, 30px) clamp(4px, 0.3vw, 6px) clamp(6px, 0.4vw, 8px);
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background: #fff;
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: 600;
+    color: #000;
+    font-family: var(--font-heading-page);
+    transition: all 0.2s;
+    min-height: clamp(32px, 2.25vw, 36px);
+    box-sizing: border-box;
+}
+
+.domain-report-filter-group .custom-select-button:hover {
+    border-color: #3b82f6;
+}
+
+.domain-report-filter-group .custom-select-button:focus,
+.domain-report-filter-group .custom-select-button.open {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+
+
+.domain-report-table-header,
+.domain-report-card,
+.domain-report-total {
+    display: grid;
+    grid-template-columns: 1.55fr 1fr 1fr 1fr 1fr;
+    gap: 15px;
+    min-width: 0;
+}
+
+.domain-report-table-header {
+    padding: clamp(0px, 0.78vw, 15px) 20px 12px;
+    background: linear-gradient(180deg, #60C1FE 0%, #0F61FF 100%);
+    border-radius: 8px 8px 0 0;
+    margin-top: 20px;
+    font-weight: bold;
+    color: white;
+    font-size: clamp(10px, 0.89vw, 17px);
+}
+
+.domain-report-table-header > div:nth-child(2),
+.domain-report-table-header > div:nth-child(3),
+.domain-report-table-header > div:nth-child(4),
+.domain-report-table-header > div:nth-child(5) {
+    text-align: right;
+}
+
+.domain-report-cards {
+    display: flex;
+    flex-direction: column;
+}
+
+.domain-report-card {
+    padding: 1px 22px;
+    background: #f0e5fb;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.domain-report-card:nth-child(even) {
+    background: #cceeff99;
+}
+
+.domain-report-card:nth-child(odd) {
+    background: #ffffff;
+}
+
+.domain-report-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+.domain-report-card-item {
+    font-size: var(--text-medium);
+    font-weight: bold;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.domain-report-amount {
+    /* font-family: 'Courier New', monospace; */
+    text-align: right;
+    justify-content: flex-end;
+    font-weight: 500;
+}
+
+.domain-report-card-item.domain-report-amount.win,
+.domain-report-total .domain-report-amount.win {
+    color: #172a9f;
+}
+
+.domain-report-card-item.domain-report-amount.lose,
+.domain-report-total .domain-report-amount.lose {
+    color: #b91c1c;
+}
+
+.domain-report-win-lose-positive {
+    color: #172a9f;
+    /* font-weight: bold; */
+}
+
+.domain-report-win-lose-negative {
+    color: #b91c1c;
+    /* font-weight: bold; */
+}
+
+.domain-report-total {
+    padding: 1px 22px;
+    background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+    border-top: 2px solid #0F61FF;
+    border-radius: 0 0 8px 8px;
+    /* font-weight: bold; */
+    font-size: clamp(12px, 0.82vw, 15px);
+    color: #1e293b;
+    align-items: center;
+}
+
+.domain-report-total-label {
+    grid-column: 1 / 2;
+    font-weight: bold;
+}
+
+.domain-report-empty {
+    padding: 20px;
+    text-align: center;
+    /* font-weight: bold; */
+    color: #64748b;
+}
+
+.report-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: clamp(10px, 0.83vw, 16px);
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    min-height: 0;
+}
+
+/* 与 customer_report 一致：空占位 header 不占顶距 */
+body.dashboard-page.report-page .content > .report-header:empty {
+    display: none;
+}
+
+
+
+
+
+
+/* Report 页 Flatpickr 日历：与第二张图一致（展开大小、白底、圆角、日期不裁切） */
+.flatpickr-calendar {
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    overflow: visible;
+    min-width: 307px;
+    padding-bottom: 12px;
+    box-sizing: border-box;
+}
+/* Report 页：日历一出现就隐藏，定位完成后再显示，直接展开即第二张图 */
+.report-page .flatpickr-calendar {
+    visibility: hidden;
+}
+.report-page .flatpickr-calendar.report-calendar-ready {
+    visibility: visible !important;
+}
+.flatpickr-calendar .flatpickr-days {
+    border: none;
+}
+.flatpickr-calendar .dayContainer {
+    min-width: 100%;
+}
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+    background: #3b82f6 !important;
+    border-color: #3b82f6 !important;
+    color: #fff !important;
+    border-radius: 6px;
+}
+.flatpickr-day.inRange {
+    background: rgba(59, 130, 246, 0.25) !important;
+    border-color: transparent !important;
+    box-shadow: -5px 0 0 rgba(59, 130, 246, 0.25), 5px 0 0 rgba(59, 130, 246, 0.25);
+    border-radius: 0;
+}
+.flatpickr-day.today {
+    border-color: #3b82f6;
+}
+.flatpickr-day.today:hover,
+.flatpickr-day.today:focus {
+    background: #dbeafe;
+    border-color: #3b82f6;
+}
+.flatpickr-months .flatpickr-month {
+    background: #fff;
+}
+
+@media (max-width: 1400px) {
+
+    .domain-select-option{
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+
+    .custom-select-option{
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+
+    .domain-report-card-item{
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+}
+
+@media (max-width: 1200px) {
+
+    .domain-select-option{
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+
+    .custom-select-option{
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+
+    .domain-report-card-item{
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+}
+
+/* 与 Customer Report 一致：静默刷新顶栏细条，无整表 Loading 闪动 */
+.domain-report-table-region {
+    position: relative;
+}
+
+.domain-report-sync-track {
+    height: 2px;
+    overflow: hidden;
+    border-radius: 2px;
+    margin-bottom: 10px;
+    background: rgba(229, 231, 235, 0.9);
+}
+
+.domain-report-sync-bar {
+    height: 100%;
+    width: 38%;
+    max-width: 180px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.95), rgba(59, 130, 246, 0.15));
+    animation: domain-report-sync-slide 0.95s ease-in-out infinite;
+}
+
+@keyframes domain-report-sync-slide {
+    0% {
+        transform: translateX(-120%);
+    }
+    100% {
+        transform: translateX(420%);
+    }
+}

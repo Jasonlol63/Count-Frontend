@@ -1,0 +1,110 @@
+/* src/styles/globals.css — base layer (import after Tailwind in main.jsx); tokens 见 design-tokens.css */
+@import './design-tokens.css';
+
+@layer base {
+  html {
+    /* 10px / 16px = 62.5% */
+    font-size: 62.5%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: var(--font-ui);
+    font-size: var(--text-base);
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * Login shell: body.bg uses display:flex + centered #root (see public/css/style.css).
+   * If dashboard-page is ever combined with bg for a frame, or flex wins in cascade,
+   * #root stays narrow and clicks miss the main content. Force block + full-width root for SPA.
+   */
+  body.dashboard-page {
+    display: block !important;
+  }
+
+  body.dashboard-page #root {
+    width: 100%;
+    max-width: none;
+    min-height: 100vh;
+    pointer-events: auto;
+  }
+}
+
+/* 认证区各页主容器顶边距（与 --layout-page-top-gap 一致） */
+body.ec-auth-shell .dashboard-container,
+body.ec-auth-shell.user-page .container,
+body.ec-auth-shell.account-page .container,
+body.ec-auth-shell.transaction-page .transaction-container,
+body.ec-auth-shell.maintenance-page .container,
+body.ec-auth-shell.process-page .container,
+body.ec-auth-shell.report-page .container,
+body.dashboard-page.report-page .container,
+body.datacapture-summary-page .container,
+body.ec-auth-shell.domain-page .container,
+body.ec-auth-shell.ownership-page .own-container,
+body.announcement-page .container.announcement-page-container,
+body.member-winloss-page .transaction-container,
+body.ec-auth-shell.datacapture-page .container {
+  padding-top: var(--layout-page-top-gap);
+}
+
+/*
+ * 全站首块主内容顶距 — 与 Dashboard 筛选卡一致（container 已有 --layout-page-top-gap）。
+ * 各页原先 12–26px 不等的 margin-top / --text-page-title-mt 在此统一。
+ */
+body.ec-auth-shell .content > .action-buttons-container:first-child,
+body.ec-auth-shell .container > .content > .action-buttons-container:first-child,
+body.ec-auth-shell .container > .action-buttons-container:first-child,
+body.ec-auth-shell .dashboard-content > :is(.action-buttons-container, .dashboard-card):first-child,
+body.ec-auth-shell.report-page .customer-report-filter-container,
+body.ec-auth-shell.report-page .domain-report-filter-container,
+body.dashboard-page.report-page .content > .customer-report-filter-container,
+body.dashboard-page.report-page .content > .domain-report-filter-container,
+body.dashboard-page.report-page .content > .report-header + .customer-report-filter-container,
+body.dashboard-page.report-page .content > .report-header + .domain-report-filter-container,
+body.ec-auth-shell.maintenance-page .container > .maintenance-header:first-child,
+body.ec-auth-shell.maintenance-page
+  .container
+  > [class*='-maintenance-page-root']:first-child
+  > .customer-report-filter-container:first-child,
+body.ec-auth-shell .transaction-container > .transaction-header-bar:first-child,
+body.ec-auth-shell .bank-process-header-left,
+body.ec-auth-shell.announcement-page .announcement-page-container > .page-header:first-child,
+body.ec-auth-shell.auto-renew-page-body .container > .content > .auto-renew-page-header:first-child,
+body.ec-auth-shell.ownership-page .own-container > .own-group-filter-bar:first-child,
+body.ec-auth-shell.domain-page .domain-react-page > .action-buttons:first-child,
+body.ec-auth-shell.member-winloss-page
+  .transaction-container
+  > .transaction-main-content.member-winloss-dash:first-child {
+  margin-top: var(--layout-page-first-block-mt) !important;
+}
+
+/* Maintenance：permission 行随 header 顶对齐，不再叠加 margin */
+body.ec-auth-shell.maintenance-page
+  .container
+  > .maintenance-header:first-child
+  .maintenance-permission-filter-header {
+  margin-top: 0 !important;
+}
+
+/* Maintenance：筛选卡跟在 header 后时用区块间距，而非页顶间距 */
+body.ec-auth-shell.maintenance-page
+  .container
+  > .maintenance-header:first-child
+  ~ [class*='-maintenance-page-root']
+  > .customer-report-filter-container:first-child {
+  margin-top: clamp(12px, 1.04vw, 20px) !important;
+}
+
+/* 一屏 flex 布局：content 高度扣除页顶总留白（Show All 时由页内规则覆盖） */
+body.ec-auth-shell.user-page:not(.user-page--show-all) .content,
+body.ec-auth-shell.account-page:not(.account-page--show-all) .content {
+  height: calc(100vh - var(--layout-page-top-inset)) !important;
+  min-height: calc(100vh - var(--layout-page-top-inset)) !important;
+}
+
+body.ec-auth-shell.process-page:not(.process-page--bank):not(.process-page--show-all) .content {
+  min-height: 0 !important;
+}

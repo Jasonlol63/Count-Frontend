@@ -1,0 +1,276 @@
+﻿/* ==========================================================================
+   Admin (User List) responsive pilot — import from UserListPage.jsx only.
+   Desktop / laptop: design-tokens + global-13inch. Tablet: ≤1024. No phone UX.
+   ========================================================================== */
+
+/* --- Tablet (768–1024)：对齐宽屏布局（图二）— 顶栏右置按钮 + 表格可横滑且表头完整 --- */
+@media (max-width: 1024px) {
+  body.user-page .container {
+    padding-right: clamp(12px, 1.5vw, 24px);
+  }
+
+  /* 顶栏单行：左搜索/筛选，右 Add / Delete（禁止 wrap 把按钮挤到左侧第二行） */
+  body.user-page .action-buttons {
+    flex-wrap: nowrap !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 10px;
+    padding: 10px clamp(12px, 1.2vw, 18px);
+  }
+
+  body.user-page .action-buttons > div:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  body.user-page .user-toolbar-actions-right {
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  body.user-page .search-container.userlist-search-bar {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: min(100%, clamp(160px, 22vw, 240px));
+  }
+
+  body.user-page .userlist-filter-chips {
+    flex-shrink: 0;
+  }
+
+  /* 表格：横向滚动在 inner 上，表头与数据行同宽同步 */
+  body.user-page .user-table-wrapper {
+    overflow-x: hidden;
+    overflow-y: hidden;
+  }
+
+  body.user-page .user-list-table-inner {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+  }
+
+  body.user-page .user-list-table .user-cards {
+    overflow-x: visible;
+    overflow-y: visible;
+  }
+
+  body.user-page .user-list-table-inner {
+    min-width: max(100%, 980px);
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+
+  body.user-page .informationmenu .informationmenu-section-title {
+    font-size: 1.15rem !important;
+    padding: 0.55rem 0.85rem !important;
+    line-height: 1.25;
+  }
+
+  body.user-page .informationmenu .informationmenu-section-title .section-icon {
+    width: 1.2rem !important;
+    height: 1.2rem !important;
+    margin-right: 0.45rem !important;
+  }
+
+  body.user-page .search-container.userlist-search-bar .userlist-search-input,
+  body.ec-auth-shell.user-page .search-container.userlist-search-bar .userlist-search-input {
+    font-size: 10px !important;
+  }
+
+  body.user-page .user-filter-chip__label {
+    font-size: 10px !important;
+  }
+
+  body.user-page .action-buttons .btn-add,
+  body.user-page .action-buttons .btn-delete,
+  body.ec-auth-shell.user-page .btn-add,
+  body.ec-auth-shell.user-page .btn-delete {
+    font-size: 10px !important;
+    padding: 6px 10px !important;
+  }
+
+  body.user-page .user-gc-inline-label,
+  body.user-page .user-gc-segment {
+    font-size: 10px !important;
+  }
+
+  body.user-page .user-list-table .user-list-table-header {
+    font-size: 11px !important;
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+  }
+
+  body.user-page .user-list-table .user-list-table-header .header-item,
+  body.user-page .user-list-table .user-list-row .card-item {
+    font-size: 10px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    line-height: 1.35;
+  }
+
+  body.user-page .user-card .role-badge,
+  body.user-page .role-badge {
+    font-size: 9px !important;
+    padding: 2px 6px !important;
+    line-height: 1.2;
+  }
+}
+
+/* --- Laptop density (align with global-13inch, no grid override) --- */
+@media (max-width: 1280px) {
+  body.user-page .user-list-table .user-list-table-header,
+  body.user-page .user-list-table .user-list-row {
+    gap: 8px;
+  }
+}
+
+/* --- Below pilot minimum width: hint only, non-blocking --- */
+@media (max-width: 767.98px) {
+  body.user-page::before {
+    content: "建议屏幕宽度 ≥768px";
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px 12px;
+    background: rgba(0, 45, 73, 0.92);
+    color: #fff;
+    text-align: center;
+    font-size: 1.2rem;
+    z-index: 9998;
+    pointer-events: none;
+  }
+}
+
+/* ==========================================================================
+   Add / Edit User modal (#userModal) — three columns always (match design)
+   ========================================================================== */
+
+body.user-page #userModal .user-modal-card {
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+}
+
+/* 左栏：User Information + Select All/Clear All 固定，仅 Permissions 列表滚动 */
+body.user-page #userModal .user-modal-content .user-info-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.user-page #userModal .user-modal-content .user-info-panel > .user-modal-col-title {
+  flex-shrink: 0;
+}
+
+body.user-page #userModal .user-modal-content .user-info-panel form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.user-page #userModal .user-modal-content .user-info-grid {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+body.user-page #userModal .user-modal-col--info.user-info-panel {
+  min-height: 0 !important;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+body.user-page #userModal .user-modal-content .sidebar-permissions-section {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body.user-page #userModal .user-modal-content .sidebar-permissions-title,
+body.user-page #userModal .user-modal-content .user-modal-permissions-title {
+  flex-shrink: 0;
+}
+
+/* 红色框区域：仅勾选列表滚动（flex 子项 height:0 才能出现滚动条） */
+body.user-page #userModal .user-modal-content .sidebar-permissions-section .permissions-container {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 0;
+  max-height: 100%;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+body.user-page #userModal .user-modal-content .sidebar-permissions-section .permissions-actions {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+/* 矮屏（如 1536×750）：给 Permissions 列表明确上限，保证可滚 */
+@media (max-height: 850px) {
+  body.user-page #userModal .user-modal-content .sidebar-permissions-section .permissions-container {
+    max-height: min(280px, 36vh);
+  }
+}
+
+@media (max-width: 1280px) {
+  body.user-page #userModal .user-modal-col--info {
+    flex: 0 0 clamp(280px, 28vw, 460px) !important;
+  }
+
+  body.user-page #userModal .account-grid.account-grid--four {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  body.user-page #userModal .user-modal-col {
+    padding: clamp(10px, 0.8vw, 16px);
+  }
+}
+
+@media (max-width: 1024px) {
+  body.user-page #userModal .user-modal-col--info {
+    flex: 0 0 clamp(220px, 24vw, 320px) !important;
+  }
+
+  body.user-page #userModal .account-grid.account-grid--four {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  body.user-page #userModal .modal-body {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.user-page #userModal .user-modal-card {
+    min-width: 920px;
+  }
+
+  body.user-page #userModal .user-modal-content .user-info-panel {
+    overflow: hidden;
+  }
+
+  body.user-page #userModal .user-modal-content .sidebar-permissions-section .permissions-container {
+    min-height: 0;
+    height: 0;
+    padding-bottom: 8px;
+  }
+
+  body.user-page #userModal .user-modal-content .sidebar-permissions-section .permissions-actions {
+    margin-top: auto;
+    background-color: #fff;
+  }
+}

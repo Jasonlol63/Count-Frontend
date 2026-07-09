@@ -1,0 +1,125 @@
+/* ==========================================================================
+   App-wide scrollbars — match /transaction (12px track + gray thumb).
+   Loaded via app-shell.css for every route (login + authenticated shell).
+   ========================================================================== */
+
+:root {
+    --dash-scrollbar-size: 12px;
+    --dash-scrollbar-track: #ececec;
+    --dash-scrollbar-thumb: #4b5563;
+    --dash-scrollbar-thumb-hover: #374151;
+    --dash-scrollbar-thumb-active: #1f2937;
+    --dash-scrollbar-thumb-border: 1px solid #ececec;
+    --dash-scrollbar-radius: 10px;
+    --dash-scrollbar-track-margin: 6px 0;
+}
+
+/* Firefox */
+html,
+body,
+body #root,
+body * {
+    scrollbar-width: auto;
+    scrollbar-color: var(--dash-scrollbar-thumb) var(--dash-scrollbar-track);
+}
+
+/* WebKit — page + all nested scroll containers */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+body #root::-webkit-scrollbar,
+body *::-webkit-scrollbar {
+    width: var(--dash-scrollbar-size) !important;
+    height: var(--dash-scrollbar-size) !important;
+}
+
+html::-webkit-scrollbar-button,
+body::-webkit-scrollbar-button,
+body #root::-webkit-scrollbar-button,
+body *::-webkit-scrollbar-button,
+html::-webkit-scrollbar-button:single-button,
+body::-webkit-scrollbar-button:single-button,
+body *::-webkit-scrollbar-button:single-button,
+html::-webkit-scrollbar-button:vertical:decrement,
+html::-webkit-scrollbar-button:vertical:increment,
+body::-webkit-scrollbar-button:vertical:decrement,
+body::-webkit-scrollbar-button:vertical:increment,
+body *::-webkit-scrollbar-button:vertical:decrement,
+body *::-webkit-scrollbar-button:vertical:increment {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+body #root::-webkit-scrollbar-track,
+body *::-webkit-scrollbar-track {
+    background: var(--dash-scrollbar-track) !important;
+    border-radius: var(--dash-scrollbar-radius) !important;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+body #root::-webkit-scrollbar-thumb,
+body *::-webkit-scrollbar-thumb {
+    background: var(--dash-scrollbar-thumb) !important;
+    border-radius: var(--dash-scrollbar-radius) !important;
+    border: var(--dash-scrollbar-thumb-border) !important;
+    min-height: 48px;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+body #root::-webkit-scrollbar-thumb:hover,
+body *::-webkit-scrollbar-thumb:hover {
+    background: var(--dash-scrollbar-thumb-hover) !important;
+}
+
+html::-webkit-scrollbar-thumb:active,
+body::-webkit-scrollbar-thumb:active,
+body #root::-webkit-scrollbar-thumb:active,
+body *::-webkit-scrollbar-thumb:active {
+    background: var(--dash-scrollbar-thumb-active) !important;
+}
+
+html::-webkit-scrollbar-corner,
+body::-webkit-scrollbar-corner,
+body #root::-webkit-scrollbar-corner,
+body *::-webkit-scrollbar-corner {
+    background: var(--dash-scrollbar-track);
+}
+
+/* Virtual / table list areas — stable gutter like transaction maintenance */
+.maintenance-virtual-scroll,
+.maintenance-virtual-scroll--body,
+.dashboard-scroll {
+    scrollbar-gutter: stable;
+}
+
+.maintenance-virtual-scroll::-webkit-scrollbar-track,
+.maintenance-virtual-scroll--body::-webkit-scrollbar-track,
+.dashboard-scroll::-webkit-scrollbar-track {
+    margin: var(--dash-scrollbar-track-margin);
+}
+
+/* Process bank virtual list — restore visible scrollbar (legacy CSS hid it) */
+.bank-virtual-scroll,
+.bank-virtual-scroll-clip {
+    scrollbar-width: auto !important;
+    -ms-overflow-style: auto !important;
+}
+
+/* Member Win/Loss (/member) — matrix rail, total column, tables, modals */
+body.member-winloss-page .member-dash-total-matrix-body,
+body.member-winloss-page .transaction-modal-body,
+body.member-winloss-page .transaction-table-wrapper,
+body.member-winloss-page .transaction-modal,
+body.member-winloss-page .informationmenu-content,
+body.member-winloss-page .avatar-options {
+    scrollbar-gutter: stable;
+}
+
+body.member-winloss-page .member-dash-matrix-scroll::-webkit-scrollbar-track,
+body.member-winloss-page .member-dash-total-matrix-body::-webkit-scrollbar-track {
+    margin: var(--dash-scrollbar-track-margin);
+}

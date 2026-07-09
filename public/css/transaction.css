@@ -1,0 +1,3764 @@
+body.transaction-page {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    background-color: var(--color-page-bg, #e9f1ff);
+    background-image: var(--app-shell-bg-image,
+        radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 48%),
+        radial-gradient(circle at 70% 15%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 45%),
+        radial-gradient(circle at 40% 70%, rgba(206, 232, 255, 0.55) 0%, rgba(255, 255, 255, 0) 60%),
+        radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%),
+        linear-gradient(145deg, #97BFFC 0%, #AECFFA 40%, #f9fbff 100%));
+    background-blend-mode: screen, screen, multiply, screen, normal;
+    color: #334155;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+/* Short result sets leave a tall empty canvas — paint the workspace shell too (not only body). */
+body.transaction-page .transaction-container {
+    background-color: var(--color-page-bg, #e9f1ff);
+    background-image: var(--app-shell-bg-image,
+        radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 48%),
+        radial-gradient(circle at 70% 15%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 45%),
+        radial-gradient(circle at 40% 70%, rgba(206, 232, 255, 0.55) 0%, rgba(255, 255, 255, 0) 60%),
+        radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%),
+        linear-gradient(145deg, #97BFFC 0%, #AECFFA 40%, #f9fbff 100%));
+    background-blend-mode: screen, screen, multiply, screen, normal;
+}
+
+/* global-13inch.css uses cover+fixed on ec-auth-shell; that washes the lower viewport to near-white on sparse pages. */
+@media screen and (max-width: 1440px) {
+    body.transaction-page.ec-auth-shell {
+        background-attachment: scroll !important;
+        background-size: auto !important;
+    }
+}
+
+.transaction-page .transaction-container {
+    max-width: none;
+    margin: 0;
+    padding: var(--layout-page-top-gap) clamp(20px, 2.08vw, 40px) 20px var(--layout-main-offset);
+    width: 100%;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+.transaction-page .transaction-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+    min-height: 0;
+}
+
+.transaction-page .date-range-picker {
+    cursor: pointer;
+}
+
+.transaction-page .transaction-main-content {
+    display: flex;
+    gap: 24px;
+    align-items: stretch;
+}
+
+.transaction-page .transaction-search-section,
+.transaction-page .transaction-add-section {
+    flex: 1;
+    min-width: 0;
+    padding: clamp(12px, 1.04vw, 20px);
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.transaction-page .transaction-search-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* 让右侧表单内部按列布局，底部按钮区域贴着卡片底边 */
+.transaction-page .transaction-add-section {
+    display: flex;
+    flex-direction: column;
+    --tx-add-row-gap: clamp(4px, 0.42vw, 6px);
+    gap: var(--tx-add-row-gap);
+    --tx-add-reverse-col: clamp(54px, 4.2vw, 72px);
+}
+
+/* 与卡片顶 Type|Date 行用同一套垂直间距，避免内联 gap 与父级不一致 */
+body.transaction-page .transaction-add-section .tx-add-standard-fields-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--tx-add-row-gap);
+}
+
+/* Outlined two-column rows (Type|Date, Currency|Amount) + accounts + remark.
+   Equal-width columns for standard (non-RATE) rows; RATE block uses .rate-section (unchanged). */
+body.transaction-page .transaction-add-section .tx-add-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: clamp(10px, 1vw, 14px);
+    width: 100%;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--pair {
+    flex-wrap: nowrap;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--pair .tx-add-field-col {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--type-only .tx-add-field-col {
+    flex: 1 1 100%;
+    max-width: 100%;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--accounts {
+    align-items: flex-start;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--accounts .tx-add-field-col {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* Keep the right column aligned by reserving the same Reverse column on matching rows. */
+body.transaction-page .transaction-add-section .tx-add-form-row--reserve-reverse,
+body.transaction-page .transaction-add-section .tx-add-form-row--accounts.tx-add-form-row--with-reverse {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--tx-add-reverse-col);
+    align-items: center;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--reserve-reverse .tx-add-field-col,
+body.transaction-page .transaction-add-section .tx-add-form-row--accounts.tx-add-form-row--with-reverse .tx-add-field-col {
+    min-width: 0;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--reserve-reverse.tx-add-form-row--pair > .tx-add-field-col:nth-child(2) {
+    grid-column: 2 / 4;
+}
+
+@media (max-width: 520px) {
+    body.transaction-page .transaction-add-section .tx-add-form-row--reserve-reverse,
+    body.transaction-page .transaction-add-section .tx-add-form-row--accounts.tx-add-form-row--with-reverse {
+        display: flex;
+        flex-wrap: wrap;
+    }
+
+    body.transaction-page .transaction-add-section .tx-add-form-row--pair {
+        flex-wrap: wrap;
+    }
+
+    body.transaction-page .transaction-add-section .tx-add-form-row--pair .tx-add-field-col {
+        flex: 1 1 100%;
+    }
+
+    body.transaction-page .transaction-add-section .tx-add-form-row--accounts.tx-add-form-row--with-reverse {
+        flex-wrap: wrap;
+    }
+
+    body.transaction-page .transaction-add-section .tx-add-form-row--accounts.tx-add-form-row--with-reverse .tx-add-field-col {
+        flex: 1 1 calc(50% - 7px);
+    }
+}
+
+body.transaction-page .transaction-add-section .tx-add-field-col--full {
+    flex: 1 1 100%;
+    min-width: 0;
+}
+
+body.transaction-page .transaction-add-section .tx-add-account-reverse {
+    flex: 0 0 auto;
+    align-self: center;
+    margin-top: 0;
+    width: var(--tx-add-reverse-col);
+    min-height: clamp(26px, 2.25vw, 34px);
+}
+
+body.transaction-page .transaction-add-section .tx-add-icon-field {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    min-width: 0;
+    min-height: clamp(26px, 2.25vw, 34px);
+    background: #ffffff;
+    border-radius: clamp(4px, 0.42vw, 6px);
+}
+
+body.transaction-page .transaction-add-section .tx-add-input-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    width: clamp(34px, 2.45vw, 42px);
+    height: auto;
+    margin: 0;
+    border-radius: clamp(4px, 0.42vw, 6px) 0 0 clamp(4px, 0.42vw, 6px);
+    color: #ffffff;
+    background: var(--btn-add-gradient);
+    box-shadow: none;
+    font-size: var(--text-small);
+    flex: 0 0 auto;
+}
+
+body.transaction-page .transaction-add-section .tx-add-icon-field .custom-select-wrapper {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+}
+
+body.transaction-page .transaction-add-section .report-outlined-inner .transaction-select,
+body.transaction-page .transaction-add-section .report-outlined-inner .transaction-input {
+    width: 100%;
+    margin: 0;
+    border: none !important;
+    box-shadow: none !important;
+    background-color: #f2f2f2ad;
+    min-height: clamp(26px, 2.25vw, 34px);
+    padding: clamp(6px, 0.5vw, 9px) clamp(9px, 0.7vw, 12px);
+    border-radius: clamp(4px, 0.42vw, 6px);
+    font-size: var(--text-small);
+    box-sizing: border-box;
+    outline: none;
+    color: #111827;
+    font-family: var(--font-heading-page);
+}
+
+body.transaction-page .transaction-add-section .report-outlined-inner .transaction-select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%2364748b' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+}
+
+body.transaction-page .transaction-add-section .report-outlined-inner .transaction-input:focus,
+body.transaction-page .transaction-add-section .report-outlined-inner .transaction-select:focus {
+    background-color: #f2f2f2ad;
+}
+
+body.transaction-page .transaction-add-section .tx-add-winlose-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 20px;
+    padding: 4px 2px 2px;
+}
+
+body.transaction-page .transaction-add-section .tx-add-winlose-heading {
+    font-size: clamp(11px, 0.85vw, 13px);
+    font-weight: 700;
+    color: #374151;
+    font-family: var(--font-heading-page);
+    min-width: 5.25rem;
+}
+
+/* Group / Company / Currency：与上方 chip 行用分隔线区分；线与上下内容留间距 */
+.transaction-page .transaction-bottom-filters {
+    margin-top: clamp(10px, 0.9vw, 16px);
+    padding-top: clamp(12px, 1vw, 18px);
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+}
+
+.transaction-page .transaction-bottom-filters .transaction-company-filter {
+    display: flex;
+}
+
+/* Process List 同款 user-gc：与 userlist.css 中 user/account/process 一致，交易页此前未挂 body 类名故整块栅格与 pill 外观缺失 */
+body.transaction-page .transaction-bottom-filters .user-gc-inline-panel {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: var(--user-gc-inline-column-gap, 4px);
+    align-items: center;
+    border-top: none;
+    padding: 0 0 4px;
+    background: transparent;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-inline-row {
+    display: contents;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-inline-label {
+    justify-self: start;
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-bold);
+    color: #1f2937;
+    white-space: nowrap;
+    min-width: 6.75rem;
+    box-sizing: border-box;
+}
+
+body.lang-zh.transaction-page .transaction-bottom-filters .user-gc-inline-label {
+    min-width: 4.75rem;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-inline-pills {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--user-gc-inline-pills-gap, 4px);
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-inline-pills--segment-scroll {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: var(--user-gc-inline-pills-gap, 4px);
+    padding-top: 2px;
+    padding-bottom: 2px;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-segment-group {
+    display: inline-flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    flex-shrink: 0;
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--color-surface, #ffffff);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-segment {
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    margin: 0;
+    padding: var(--user-gc-segment-padding, 4px clamp(10px, 1.2vw, 18px));
+    border: none;
+    border-right: 1px solid var(--color-border, #e5e7eb);
+    background: var(--color-surface, #ffffff);
+    color: #1f2937;
+    font-size: var(--text-medium) !important;
+    font-weight: var(--font-weight-semibold) !important;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    line-height: 1.25;
+    transition:
+        background 0.15s ease,
+        color 0.15s ease;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-segment:last-child {
+    border-right: none;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-segment:hover:not(:disabled):not(.is-on) {
+    background: #f8fafc;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-segment:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px #6366f1;
+    position: relative;
+    z-index: 1;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-segment.is-on {
+    background: linear-gradient(180deg, #63c4ff 0%, #0d60ff 100%);
+    color: #ffffff;
+    border-right-color: rgba(255, 255, 255, 0.28);
+}
+
+/* Company row: instant highlight move when switching companies in the same group */
+body.transaction-page .transaction-bottom-filters .user-gc-inline-row--company .user-gc-segment {
+    transition: none;
+    opacity: 1;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-inline-row--company .user-gc-segment.is-on {
+    transition: none;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-inline-row--company .user-gc-segment-label {
+    display: inline-block;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-inline-row--company .user-gc-segment-group {
+    contain: layout style;
+}
+
+body.transaction-page .transaction-bottom-filters .user-gc-segment:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.transaction-page .transaction-form-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+    margin-bottom: 5px;
+}
+
+.transaction-page .transaction-inline-row {
+    flex-wrap: nowrap;
+}
+
+.transaction-page .transaction-inline-row .transaction-label {
+    white-space: nowrap;
+}
+
+.transaction-page .transaction-two-col {
+    display: flex;
+    gap: 12px;
+}
+
+.transaction-page .transaction-two-col .transaction-form-group {
+    flex: 1;
+}
+
+.transaction-page .transaction-label {
+    display: block;
+    margin-bottom: 0;
+    font-weight: bold;
+    color: #374151;
+    font-size: var(--text-small);
+    font-family: var(--font-heading-page);
+    width: clamp(60px, 5.5vw, 105px);
+    flex-shrink: 0;
+}
+
+.transaction-page .transaction-input,
+.transaction-page .transaction-select {
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
+    padding: clamp(3px, 0.31vw, 6px) clamp(6px, 0.52vw, 10px);
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: var(--text-small);
+    box-sizing: border-box;
+    transition: all 0.2s;
+    background-color: #f3f3f3;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    display: block;
+}
+
+.transaction-page .transaction-input:focus,
+.transaction-page .transaction-select:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.transaction-page .transaction-input:disabled,
+.transaction-page .transaction-select:disabled {
+    background-color: #e8e8e8;
+    color: #999;
+    cursor: not-allowed;
+    opacity: 0.85;
+}
+
+.transaction-page .transaction-select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%23333' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 35px;
+}
+
+.transaction-page .transaction-date-inputs {
+    display: flex;
+    flex: 1;
+}
+
+.transaction-page .transaction-date-input {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Category + Capture Date: one row with outlined floating labels (see report-outlined-fields.css) */
+.transaction-page .transaction-category-date-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: clamp(12px, 1.25vw, 20px);
+    width: 100%;
+    margin-bottom: clamp(6px, 0.52vw, 12px);
+}
+
+body.transaction-page .transaction-search-section .transaction-category-date-row .transaction-outlined-field-col {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+body.transaction-page .transaction-search-section .transaction-category-date-row .transaction-outlined-field-col--date {
+    flex: 0 1 var(--drp-popup-width);
+    min-width: var(--drp-popup-width);
+}
+
+body.transaction-page .transaction-search-section .transaction-category-date-row .report-outlined-shell {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+}
+
+body.transaction-page .transaction-search-section .transaction-category-date-row .report-outlined-inner {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 0;
+}
+
+body.transaction-page .transaction-search-section .transaction-category-date-row .transaction-outlined-field-col--category .report-outlined-inner {
+    justify-content: center;
+    align-items: stretch;
+}
+
+body.transaction-page .transaction-search-section .transaction-category-date-row .transaction-outlined-field-col--category .transaction-category-multiselect,
+body.transaction-page .transaction-search-section .transaction-category-date-row .transaction-outlined-field-col--category .category-dropdown {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 0;
+    width: 100%;
+}
+
+body.transaction-page .transaction-search-section .report-outlined-inner .category-dropdown-button {
+    flex: 1 1 auto;
+    min-height: clamp(38px, 2.45vw, 40px);
+    height: 100%;
+    max-height: none;
+    overflow: hidden;
+    padding: 4px 10px;
+    box-sizing: border-box;
+    align-items: center;
+}
+
+body.transaction-page .transaction-search-section .report-outlined-inner .category-dropdown-button > .fas.fa-chevron-down {
+    align-self: center;
+    flex-shrink: 0;
+    margin-left: 6px;
+}
+
+body.transaction-page .transaction-search-section .report-outlined-inner .category-selected-tags {
+    display: flex;
+    flex: 1 1 auto;
+    align-self: stretch;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+    align-items: center;
+    align-content: center;
+    justify-content: flex-start;
+}
+
+body.transaction-page .transaction-search-section .report-outlined-inner .category-placeholder {
+    text-align: left;
+}
+
+body.transaction-page .transaction-category-date-row .transaction-category-multiselect {
+    min-width: 0;
+    width: 100%;
+}
+
+.transaction-page .transaction-date-range-group {
+    min-width: var(--drp-popup-width);
+    flex: 0 0 auto;
+}
+
+body.transaction-page .transaction-date-range-group .date-range-picker {
+    min-width: var(--drp-popup-width);
+    min-height: clamp(32px, 2.45vw, 38px);
+    gap: clamp(8px, 0.7vw, 12px);
+    padding: 0 clamp(9px, 0.85vw, 14px) 0 0;
+    border: 1px solid rgba(148, 163, 184, 0.62);
+    border-radius: 12px;
+    background: #ffffff;
+    /* 不要用 inset 高光，否则会在左侧日历色块上缘出现一条发白边 */
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+body.transaction-page .transaction-date-range-group .date-range-picker:hover {
+    border-color: rgba(59, 130, 246, 0.74);
+    background: #ffffff;
+    box-shadow: 0 7px 18px rgba(37, 99, 235, 0.13);
+}
+
+body.transaction-page .transaction-date-range-group .date-range-picker:focus-visible {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+}
+
+body.transaction-page .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
+body.maintenance-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
+body.dashboard-page.report-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
+body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    width: clamp(34px, 2.45vw, 42px);
+    height: auto;
+    margin: 0;
+    border-radius: 11px 0 0 11px;
+    color: #ffffff;
+    background: #3b82f6;
+    background-clip: padding-box;
+    box-shadow: none;
+    font-size: var(--drp-trigger-icon, var(--text-medium));
+    flex: 0 0 auto;
+    position: relative;
+    z-index: 1;
+}
+
+body.transaction-page .transaction-date-range-group #date-range-display,
+body.transaction-page .transaction-date-range-group #add-tx-date-range-display,
+body.transaction-page .transaction-date-range-group #rate-tx-date-range-display {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: #1f2937;
+    font-size: var(--drp-trigger-text, var(--text-medium));
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.transaction-page .transaction-date-range-chevron,
+body.dashboard-page.report-page .transaction-date-range-chevron {
+    margin: 0 !important;
+    color: #64748b !important;
+    font-size: var(--drp-trigger-chevron, var(--text-medium)) !important;
+    transition:
+        color 0.16s ease,
+        transform 0.16s ease;
+}
+
+body.transaction-page .transaction-date-range-group .date-range-picker:hover .transaction-date-range-chevron,
+body.dashboard-page.report-page .transaction-date-range-group .date-range-picker:hover .transaction-date-range-chevron {
+    color: #2563eb !important;
+    transform: translateY(1px);
+}
+
+/* 日历弹层内部样式统一由 date-range-picker.css 维护，避免与 transaction.css 重复覆盖字体/间距 */
+
+.transaction-page .transaction-account-inputs {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
+}
+
+.transaction-page .transaction-account-select {
+    /* 默认在大屏上尽量占满可用空间 */
+    flex: 1 1 0;
+    min-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 自定义下拉选单样式 */
+.transaction-page .custom-select-wrapper {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 140px;
+}
+
+/* 在较窄屏幕下限制 Account 两个下拉的最大宽度，避免与 Reverse 按钮冲突 */
+@media (max-width: 1280px) {
+
+    .transaction-page .transaction-account-select,
+    .transaction-page .custom-select-wrapper {
+        flex: 1 1 calc(50% - 8px);
+        min-width: 120px;
+        max-width: 230px;
+    }
+}
+
+.transaction-page .custom-select-button {
+    width: 100%;
+    padding: 6px 30px 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #f3f3f3;
+    cursor: pointer;
+    text-align: left;
+    font-size: var(--text-small);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    position: relative;
+}
+
+/* Account 这两个下拉（To / From）允许文字换行，避免 PROFIT 之类账号名称被截断 */
+.transaction-page .transaction-account-inputs .custom-select-button {
+    white-space: normal;
+    text-overflow: clip;
+    line-height: 1.2;
+}
+
+.transaction-page .custom-select-button::after {
+    content: '▼';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: #666;
+    pointer-events: none;
+}
+
+.transaction-page .custom-select-button.open::after {
+    content: '▲';
+}
+
+.transaction-page .custom-select-button:disabled {
+    background: #e8e8e8;
+    color: #999;
+    cursor: not-allowed;
+    opacity: 0.85;
+}
+
+.transaction-page .custom-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #f3f3f3;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    display: none;
+    max-height: 300px;
+    overflow: hidden;
+    margin-top: 2px;
+}
+
+.transaction-page .custom-select-dropdown.show {
+    display: block;
+}
+
+.transaction-page .custom-select-search {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    position: sticky;
+    top: 0;
+    background: #f3f3f3;
+    z-index: 1;
+}
+
+.transaction-page .custom-select-search input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: clamp(9px, 0.73vw, 14px);
+    box-sizing: border-box;
+}
+
+.transaction-page .custom-select-options {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.transaction-page .custom-select-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: clamp(9px, 0.73vw, 14px);
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.transaction-page .custom-select-option:hover {
+    background-color: #f0f0f0;
+}
+
+.transaction-page .custom-select-option.selected {
+    background-color: #e3f2fd;
+    font-weight: bold;
+}
+
+.transaction-page .custom-select-option.keyboard-focus {
+    background-color: #e3f2fd;
+}
+
+.transaction-page .custom-select-option:last-child {
+    border-bottom: none;
+}
+
+.transaction-page .custom-select-no-results {
+    padding: 12px;
+    text-align: center;
+    color: #999;
+    font-size: clamp(9px, 0.73vw, 14px);
+}
+
+
+.transaction-page .transaction-account-reverse-btn {
+    background: linear-gradient(180deg, #bcbcbc 0%, #585858 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    flex: 0 0 auto;
+    align-self: stretch;
+    min-width: fit-content;
+    padding: 2px clamp(6px, 0.62vw, 10px);
+    font-size: clamp(9px, 0.73vw, 14px);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(88, 88, 88, 0.3);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.transaction-page .transaction-account-reverse-btn:hover {
+    background: linear-gradient(180deg, #585858 0%, #bcbcbc 100%);
+    box-shadow: 0 4px 8px rgba(84, 84, 84, 0.4);
+    transform: translateY(-1px);
+}
+
+.transaction-page .transaction-account-reverse-btn:disabled,
+.transaction-page .transaction-account-reverse-btn:disabled:hover {
+    background: linear-gradient(180deg, #d8d8d8 0%, #a8a8a8 100%);
+    color: #f0f0f0;
+    box-shadow: none;
+    transform: none;
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+.transaction-page .transaction-add-datepicker-hitbox--read-only {
+    pointer-events: none;
+    opacity: 0.55;
+    cursor: not-allowed;
+    filter: grayscale(0.25);
+}
+
+/* 与 member.css 等分叉样式区分：chip 行与上方控件留出间距；与下方 Group 区仍由 .transaction-bottom-filters 分隔 */
+body.transaction-page .transaction-search-section .transaction-checkboxes,
+.transaction-page .transaction-search-section .transaction-checkboxes {
+    margin-top: 15px;
+}
+
+.transaction-page .transaction-checkboxes {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 单行 chip：窄屏或文案较长时横向滚动，不折行撑高区块 */
+body.transaction-page .transaction-search-section .transaction-checkboxes.userlist-filter-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+    min-width: 0;
+    width: 100%;
+    align-items: center;
+    padding-bottom: 0px;
+}
+
+body.transaction-page .transaction-search-section .transaction-checkboxes.userlist-filter-chips .user-filter-chip {
+    flex-shrink: 0;
+}
+
+body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px 6px 10px;
+    margin: 0;
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 999px;
+    background: #f8fafc;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--text-small);
+    font-weight: var(--font-weight-semibold);
+    color: #475569;
+    line-height: 1.2;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease,
+        color 0.15s ease,
+        background-color 0.15s ease;
+}
+
+body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08);
+}
+
+body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+}
+
+body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip.is-selected {
+    border-color: rgba(13, 96, 255, 0.45);
+    color: #0d60ff;
+    box-shadow: 0 2px 6px rgba(13, 96, 255, 0.12);
+}
+
+body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip__dot {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+}
+
+body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip.is-selected .user-filter-chip__dot {
+    background: linear-gradient(180deg, #63c4ff 0%, #0d60ff 100%);
+    color: #ffffff;
+}
+
+body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip__check {
+    width: 11px;
+    height: 11px;
+    display: block;
+}
+
+body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip__label {
+    white-space: nowrap;
+}
+
+body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip:nth-child(1) {
+    min-width: 8.25rem;
+    justify-content: flex-start;
+}
+
+body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip:nth-child(2) {
+    min-width: 6.75rem;
+    justify-content: flex-start;
+}
+
+.transaction-page .transaction-checkbox-label {
+    display: flex;
+    align-items: center;
+    font-size: clamp(9px, 0.73vw, 14px);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.transaction-page .transaction-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    margin-right: 8px;
+    width: clamp(10px, 0.83vw, 16px);
+    height: clamp(10px, 0.83vw, 16px);
+    border: 2px solid #000000ff;
+    border-radius: 3px;
+    background-color: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.transaction-page .transaction-checkbox:checked {
+    background-color: #1a237e;
+    border-color: #1a237e;
+}
+
+.transaction-page .transaction-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: clamp(9px, 0.73vw, 14px);
+    font-weight: bold;
+    line-height: 1;
+}
+
+.transaction-page .transaction-checkbox:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.transaction-page .transaction-confirm-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: auto;
+    /* 将整个确认区域推到底部 */
+}
+
+.transaction-page .transaction-confirm-label {
+    margin: 0;
+}
+
+.transaction-page .transaction-search-btn {
+    background: linear-gradient(180deg, #bcbcbc 0%, #585858 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    width: clamp(80px, 6.25vw, 120px);
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    font-size: clamp(9px, 0.73vw, 14px);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(88, 88, 88, 0.3);
+    cursor: pointer;
+}
+
+.transaction-page .transaction-search-btn:hover {
+    background: linear-gradient(180deg, #585858 0%, #bcbcbc 100%);
+    box-shadow: 0 4px 8px rgba(84, 84, 84, 0.4);
+    transform: translateY(-1px);
+}
+
+.transaction-page .transaction-submit-btn {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    width: clamp(80px, 6.25vw, 120px);
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    font-size: clamp(9px, 0.73vw, 14px);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    cursor: pointer;
+}
+
+.transaction-page .transaction-submit-btn:hover {
+    background: linear-gradient(180deg, #0D60FF 0%, #63C4FF 100%);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+    transform: translateY(-1px);
+}
+
+.transaction-page .transaction-submit-btn:disabled {
+    background: linear-gradient(180deg, #cccccc 0%, #e0e0e0 100%);
+    color: #999999;
+    cursor: not-allowed;
+    box-shadow: none;
+    opacity: 0.6;
+}
+
+.transaction-page .transaction-submit-btn:disabled:hover {
+    background: linear-gradient(180deg, #cccccc 0%, #e0e0e0 100%);
+    box-shadow: none;
+    transform: none;
+}
+
+.transaction-page .transaction-action-btns {
+    display: flex;
+    gap: 10px;
+    margin: 0;
+}
+
+.transaction-page .transaction-filter-row {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 15px;
+}
+
+.transaction-page .transaction-filter-left,
+.transaction-page .transaction-filter-right {
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+
+.transaction-page .transaction-filter-left .transaction-label,
+.transaction-page .transaction-filter-right .transaction-label {
+    margin-bottom: 0;
+    width: clamp(70px, 5.5vw, 105px);
+    flex-shrink: 0;
+}
+
+.transaction-page .transaction-company-select,
+.transaction-page .transaction-currency-select {
+    flex: 1;
+}
+
+.transaction-page .transaction-main-content {
+    transition: opacity 0.2s ease;
+}
+
+.transaction-page .transaction-main--booting .transaction-main-content {
+    opacity: 0.72;
+    pointer-events: none;
+    user-select: none;
+}
+
+.transaction-page .transaction-tables-section {
+    transition: opacity 0.2s ease;
+}
+
+.transaction-page .transaction-boot-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    margin: 0 0 12px 0;
+    color: #6b7280;
+    font-size: clamp(9px, 0.73vw, 14px);
+}
+
+.transaction-page .transaction-boot-loading::before {
+    content: '';
+    width: 20px;
+    height: 20px;
+    margin-right: 10px;
+    border: 2px solid #e5e7eb;
+    border-top-color: #002C49;
+    border-radius: 50%;
+    animation: transaction-loading-spin 0.7s linear infinite;
+}
+
+.transaction-page .transaction-tables-section {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 0;
+}
+
+.transaction-page .transaction-tables-loading,
+.transaction-page .transaction-tables-refreshing {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    width: 100%;
+    color: #6b7280;
+    font-size: clamp(9px, 0.73vw, 14px);
+}
+
+.transaction-page .transaction-tables-refreshing {
+    min-height: 36px;
+    margin-bottom: 8px;
+}
+
+.transaction-page .transaction-tables-loading::before {
+    content: '';
+    width: 24px;
+    height: 24px;
+    margin-right: 10px;
+    border: 2px solid #e5e7eb;
+    border-top-color: #002C49;
+    border-radius: 50%;
+    animation: transaction-loading-spin 0.7s linear infinite;
+}
+
+@keyframes transaction-loading-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.transaction-page .transaction-table-wrapper {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow-x: auto;
+}
+
+.transaction-page .transaction-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 2px solid #d0d7de;
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.transaction-page .transaction-table-header th {
+    background-color: #002C49;
+    color: white;
+    padding: clamp(4px, 0.42vw, 5px) clamp(6px, 0.52vw, 10px);
+    text-align: left;
+    border: 1px solid #d0d7de;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--text-medium);
+}
+
+.transaction-page .transaction-table-row td {
+    border: 1px solid #d0d7de;
+    min-height: 28px;
+    background-color: transparent;
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-bold);
+}
+
+.transaction-page .transaction-amount {
+    font-variant-numeric: tabular-nums;
+}
+
+.transaction-page .transaction-amount--pos {
+    color: #172a9f;
+}
+
+.transaction-page .transaction-amount--neg {
+    color: #b91c1c;
+}
+
+/* Payment History modal (portaled to body): same signed amount colors as main grid */
+body.transaction-page #historyModal .transaction-amount--pos,
+.transaction-page #historyModal .transaction-amount--pos {
+    color: #172a9f;
+}
+
+body.transaction-page #historyModal .transaction-amount--neg,
+.transaction-page #historyModal .transaction-amount--neg {
+    color: #b91c1c;
+}
+
+.transaction-page .transaction-table tbody .transaction-table-row.transaction-alert-row .transaction-amount {
+    color: white !important;
+}
+
+.transaction-page .transaction-table-row:hover td {
+    background-color: #bfc9ff;
+}
+
+
+.transaction-page .transaction-table-footer td {
+    background-color: #f6f8fa;
+    padding: clamp(4px, 0.42vw, 5px) clamp(6px, 0.52vw, 10px);
+    border: 1px solid #d0d7de;
+    font-weight: var(--font-weight-bold);
+    font-size: var(--text-medium);
+}
+
+/* B/F, Win/Loss, Cr/Dr, Balance 列右对齐（主表头 + 主表行 + 主表合计行） */
+.transaction-page .transaction-table thead th:nth-child(3),
+.transaction-page .transaction-table thead th:nth-child(4),
+.transaction-page .transaction-table thead th:nth-child(5),
+.transaction-page .transaction-table thead th:nth-child(6),
+.transaction-page .transaction-table tbody td:nth-child(3),
+.transaction-page .transaction-table tbody td:nth-child(4),
+.transaction-page .transaction-table tbody td:nth-child(5),
+.transaction-page .transaction-table tbody td:nth-child(6),
+.transaction-page .transaction-table tfoot td:nth-child(3),
+.transaction-page .transaction-table tfoot td:nth-child(4),
+.transaction-page .transaction-table tfoot td:nth-child(5),
+.transaction-page .transaction-table tfoot td:nth-child(6) {
+    text-align: right;
+}
+
+.transaction-page .transaction-summary-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 20px;
+    width: 100%;
+}
+
+.transaction-page .transaction-summary-table {
+    width: clamp(300px, 25vw, 400px);
+    border-collapse: collapse;
+    border: 2px solid #d0d7de;
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.transaction-page .transaction-summary-table .transaction-table-header th {
+    background-color: #002C49;
+    color: white;
+    padding: clamp(4px, 0.42vw, 5px) clamp(6px, 0.52vw, 10px);
+    text-align: center;
+    border: 1px solid #d0d7de;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--text-base);
+}
+
+.transaction-page .transaction-summary-table .transaction-table-row td {
+    padding: clamp(3px, 0.31vw, 6px) clamp(6px, 0.52vw, 10px);
+    border: 1px solid #d0d7de;
+    background-color: transparent;
+    font-size: var(--text-medium);
+}
+
+/* Summary 表中数值列右对齐 */
+.transaction-page .transaction-summary-table .transaction-table-row td:nth-child(2) {
+    text-align: right;
+}
+
+.transaction-page .transaction-summary-label {
+    font-weight: bold;
+    background-color: #f6f8fa;
+}
+
+/* Notification styles - matching other pages */
+.transaction-page .transaction-notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 400px;
+}
+
+.transaction-page .transaction-notification {
+    padding: 16px 20px;
+    border-radius: 12px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    transform: translateX(100%);
+    transition: all 0.3s ease-in-out;
+    font-weight: 500;
+    position: relative;
+    word-wrap: break-word;
+    border-left: 4px solid;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(9px, 0.73vw, 14px);
+    line-height: 1.5;
+}
+
+.transaction-page .transaction-notification.show {
+    transform: translateX(0);
+}
+
+.transaction-page .transaction-notification-success {
+    background-color: #f0fdf4;
+    color: #166534;
+    border-left-color: #22c55e;
+}
+
+.transaction-page .transaction-notification-error {
+    background-color: #fef2f2;
+    color: #991b1b;
+    border-left-color: #ef4444;
+}
+
+.transaction-page .transaction-notification-warning {
+    background-color: #fffbeb;
+    color: #92400e;
+    border-left-color: #f59e0b;
+}
+
+.transaction-page .transaction-notification-info {
+    background-color: #eff6ff;
+    color: #1e40af;
+    border-left-color: #3b82f6;
+}
+
+/* Separator line - matching other pages */
+.transaction-page .transaction-separator-line {
+    width: 100vw;
+    height: 2px;
+    background-color: #939393;
+    margin: 5px 0 20px 0;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+}
+
+/* Modal 弹窗样式（与 userlist/account-list 一致）*/
+.transaction-modal {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    overflow: auto;
+    /* React 打开时为 display:flex；默认 stretch 会把弹窗内容拉到整屏高，表体下方大量留白 */
+    align-items: center;
+    justify-content: center;
+    padding: clamp(12px, 2vh, 24px) clamp(12px, 2vw, 20px);
+    box-sizing: border-box;
+}
+
+.transaction-modal-content {
+    background-color: #ffffff;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 16px;
+    /* 调整最小宽度，让小一点的屏幕也不会被撑满 */
+    width: clamp(860px, 80vw, 1400px);
+    max-height: 92vh;
+    max-width: 100%;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+    animation: slideDown 0.3s ease-out;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex-shrink: 0;
+    align-self: center;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-80px) scale(0.95);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+.transaction-modal-header {
+    background-color: #f8fafc;
+    margin: 0;
+    padding: clamp(10px, 1.04vw, 20px) 32px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.transaction-modal-header h3 {
+    margin: 0;
+    font-size: clamp(14px, 1.25vw, 24px);
+    font-weight: bold;
+    color: #1e293b;
+}
+
+.transaction-modal-close {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    font-size: 2rem;
+    font-weight: 300;
+    cursor: pointer;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s;
+    line-height: 1;
+    padding: 0;
+}
+
+.transaction-modal-close:hover {
+    background-color: #f1f5f9;
+    color: #334155;
+}
+
+.transaction-modal-body {
+    padding: clamp(10px, 1.04vw, 20px) 32px;
+    /* 随表格内容收缩，勿 flex:1 撑满视口导致矮数据底部留白 */
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Scroll + border frame：高度跟内容走；仅当行数多时再在框内滚动 */
+.transaction-history-table-frame {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: min(76vh, calc(92vh - 140px));
+    overflow: auto;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.transaction-modal-body .transaction-table {
+    margin-top: 0;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.transaction-modal-body .transaction-table th {
+    position: sticky;
+    top: 0;
+    background-color: #002C49;
+    color: white;
+    padding: clamp(4px, 0.42vw, 8px) clamp(6px, 0.52vw, 10px);
+    text-align: left;
+    border: 1px solid #d0d7de;
+    font-weight: 600;
+    z-index: 1;
+    font-size: clamp(9px, 0.73vw, 14px);
+}
+
+.transaction-modal-body .transaction-table td {
+    padding: clamp(4px, 0.42vw, 8px) clamp(6px, 0.52vw, 10px);
+    border: 1px solid #e2e8f0;
+    font-size: clamp(9px, 0.73vw, 14px);
+}
+
+.transaction-modal-body .transaction-table .transaction-history-col-date {
+    width: 4%;
+    min-width: 120px;
+    white-space: nowrap;
+}
+
+.transaction-modal-body .transaction-table .transaction-history-col-product {
+    width: 15%;
+    min-width: 150px;
+}
+
+.transaction-modal-body .transaction-table .transaction-history-col-currency {
+    width: 3%;
+    min-width: 70px;
+    text-align: center !important;
+}
+
+.transaction-modal-body .transaction-table .transaction-history-col-rate {
+    width: 2%;
+    min-width: 60px;
+    text-align: center;
+}
+
+.transaction-modal-body .transaction-table .transaction-history-col-percent {
+    width: 2%;
+    min-width: 60px;
+    text-align: center;
+}
+
+.transaction-modal-body .transaction-table .transaction-history-col-winloss {
+    width: 4%;
+    min-width: 140px;
+    text-align: right;
+}
+
+.transaction-modal-body .transaction-table .transaction-history-col-crdr {
+    width: 4%;
+    min-width: 140px;
+    text-align: right;
+}
+
+.transaction-modal-body .transaction-table .transaction-history-col-balance {
+    width: 4%;
+    min-width: 140px;
+    text-align: right;
+}
+
+.transaction-modal-body .transaction-table .transaction-history-col-description {
+    width: 20%;
+    min-width: 180px;
+}
+
+.transaction-modal-body .transaction-table .transaction-history-col-remark {
+    width: 5%;
+    min-width: 120px;
+}
+
+.transaction-modal-body .transaction-table .transaction-history-col-created {
+    width: 3%;
+    min-width: 120px;
+}
+
+.transaction-modal-body .transaction-table tbody tr:hover {
+    background-color: #f8fafc;
+}
+
+/* Payment History：对齐 legacy transaction.php — 约 88% 宽 × 80% 高，表体区域填满剩余空间 */
+#historyModal.transaction-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: flex;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(8px, 2vh, 24px) clamp(8px, 1.5vw, 20px);
+    box-sizing: border-box;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+body.transaction-page #historyModal .transaction-modal-content.transaction-history-modal,
+body.transaction-page .transaction-modal-content.transaction-history-modal,
+.transaction-page #historyModal .transaction-modal-content.transaction-history-modal,
+.transaction-page .transaction-modal-content.transaction-history-modal {
+    width: min(1600px, max(88vw, min(1050px, 100%)));
+    max-width: calc(100% - 24px);
+    height: min(80vh, calc(100dvh - 40px));
+    min-height: min(480px, calc(100dvh - 40px));
+    max-height: min(80vh, calc(100dvh - 40px));
+    margin: auto;
+    align-self: center;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    animation: none;
+    border-radius: 16px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+}
+
+body.transaction-page #historyModal .transaction-history-modal .transaction-modal-body,
+#historyModal .transaction-history-modal .transaction-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: clamp(10px, 1.04vw, 20px) clamp(16px, 2vw, 32px);
+}
+
+.transaction-history-modal .transaction-modal-header {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: clamp(10px, 0.95vw, 16px) clamp(12px, 1.35vw, 18px);
+    flex-shrink: 0;
+}
+
+.transaction-history-modal .transaction-modal-header h3 {
+    color: #0f172a;
+    font-weight: 700;
+    font-size: clamp(14px, 1.05vw, 19px);
+}
+
+#historyModal .transaction-history-modal .transaction-history-table-frame {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+/* 平板：宽高跟随视口 */
+@media (max-width: 1280px) {
+    body.transaction-page #historyModal .transaction-modal-content.transaction-history-modal,
+    .transaction-page #historyModal .transaction-modal-content.transaction-history-modal {
+        width: calc(100% - 20px);
+        max-width: calc(100% - 20px);
+        height: min(82vh, calc(100dvh - 24px));
+        min-height: min(400px, calc(100dvh - 24px));
+        max-height: min(82vh, calc(100dvh - 24px));
+    }
+
+    #historyModal .transaction-history-modal .transaction-modal-body {
+        padding: clamp(8px, 1.2vw, 14px) clamp(10px, 1.5vw, 16px);
+    }
+
+    #historyModal .transaction-history-modal .transaction-modal-body .transaction-table {
+        min-width: 960px;
+    }
+}
+
+@media (max-height: 800px) {
+    body.transaction-page #historyModal .transaction-modal-content.transaction-history-modal,
+    .transaction-page #historyModal .transaction-modal-content.transaction-history-modal {
+        height: calc(100dvh - 16px);
+        min-height: 0;
+        max-height: calc(100dvh - 16px);
+    }
+}
+
+@media (max-width: 768px) {
+    #historyModal.transaction-modal {
+        padding: 8px;
+        align-items: stretch;
+    }
+
+    body.transaction-page #historyModal .transaction-modal-content.transaction-history-modal,
+    .transaction-page #historyModal .transaction-modal-content.transaction-history-modal {
+        width: 100%;
+        max-width: 100%;
+        height: calc(100dvh - 16px);
+        min-height: 0;
+        max-height: calc(100dvh - 16px);
+        border-radius: 10px;
+    }
+
+    #historyModal .transaction-history-modal .transaction-modal-header {
+        padding: 10px 12px;
+    }
+
+    #historyModal .transaction-history-modal .transaction-modal-body {
+        padding: 8px 10px 10px;
+    }
+
+    #historyModal .transaction-history-modal .transaction-modal-body .transaction-table {
+        min-width: 860px;
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1180px) {
+    body.transaction-page #historyModal .transaction-modal-content.transaction-history-modal,
+    .transaction-page #historyModal .transaction-modal-content.transaction-history-modal {
+        width: calc(100% - 16px);
+        max-width: calc(100% - 16px);
+    }
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table th.transaction-history-col-product,
+.transaction-history-modal .transaction-modal-body .transaction-table th.transaction-history-col-currency,
+.transaction-history-modal .transaction-modal-body .transaction-table th.transaction-history-col-remark {
+    white-space: nowrap;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-date,
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-product,
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-description {
+    text-align: left;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-currency,
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-rate,
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-remark {
+    text-align: center !important;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-winloss,
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-crdr,
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-balance {
+    text-align: right !important;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table th.transaction-history-col-created,
+.transaction-history-modal .transaction-modal-body .transaction-table td.transaction-history-col-created {
+    text-align: center !important;
+    font-size: var(--text-medium);
+    vertical-align: middle;
+}
+
+/* 列宽在 table-layout:fixed 下按百分比分配，避免撑出横向滚动. */
+/* Date 约 9%；Id Product 略宽；Description 仍最宽但略收；其余列压缩 */
+.transaction-history-modal .transaction-history-table--with-desc .transaction-history-col-date {
+    width: 8.5%;
+}
+
+.transaction-history-modal .transaction-history-table--with-desc .transaction-history-col-product {
+    width: 16.7%;
+}
+
+.transaction-history-modal .transaction-history-table--with-desc .transaction-history-col-currency {
+    width: 7%;
+}
+
+.transaction-history-modal .transaction-history-table--with-desc .transaction-history-col-rate {
+    width: 7.6%;
+}
+
+.transaction-history-modal .transaction-history-table--with-desc .transaction-history-col-winloss {
+    width: 9.3%;
+}
+
+.transaction-history-modal .transaction-history-table--with-desc .transaction-history-col-crdr {
+    width: 9.3%;
+}
+
+.transaction-history-modal .transaction-history-table--with-desc .transaction-history-col-balance {
+    width: 9.3%;
+}
+
+.transaction-history-modal .transaction-history-table--with-desc .transaction-history-col-description {
+    width: 36.5%;
+}
+
+.transaction-history-modal .transaction-history-table--with-desc .transaction-history-col-remark {
+    width: 14.7%;
+}
+
+.transaction-history-modal .transaction-history-table--with-desc .transaction-history-col-created {
+    width: 7%;
+}
+
+.transaction-history-modal .transaction-history-table--no-desc .transaction-history-col-date {
+    width: 10%;
+}
+
+.transaction-history-modal .transaction-history-table--no-desc .transaction-history-col-product {
+    width: 12%;
+}
+
+.transaction-history-modal .transaction-history-table--no-desc .transaction-history-col-currency {
+    width: 7%;
+}
+
+.transaction-history-modal .transaction-history-table--no-desc .transaction-history-col-rate {
+    width: 5%;
+}
+
+.transaction-history-modal .transaction-history-table--no-desc .transaction-history-col-winloss {
+    width: 8%;
+}
+
+.transaction-history-modal .transaction-history-table--no-desc .transaction-history-col-crdr {
+    width: 9%;
+}
+
+.transaction-history-modal .transaction-history-table--no-desc .transaction-history-col-balance {
+    width: 10%;
+}
+
+.transaction-history-modal .transaction-history-table--no-desc .transaction-history-col-remark {
+    width: 31%;
+}
+
+.transaction-history-modal .transaction-history-table--no-desc .transaction-history-col-created {
+    width: 8%;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table th,
+.transaction-history-modal .transaction-modal-body .transaction-table td {
+    min-width: 0;
+    padding: clamp(2px, 0.28vw, 5px) clamp(2px, 0.24vw, 5px);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table td {
+    border: 1px solid #d1d5db;
+    color: #333333;
+    font-size: var(--text-small);
+    vertical-align: top;
+}
+
+/* 表体字重与主表 transaction-table-row 一致：B/F 行无 .transaction-table-row，原先 600 与数据行 bold 不一致 */
+.transaction-page .transaction-modal-content.transaction-history-modal .transaction-modal-body .transaction-table tbody td {
+    font-weight: var(--font-weight-bold);
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table td.transaction-history-col-created {
+    vertical-align: middle;
+}
+
+/* Transaction 页 Payment History：与上图一致的数据格字号 */
+.transaction-page .transaction-modal-body .transaction-table td {
+    font-size: var(--text-small);
+}
+
+.transaction-page .transaction-modal-body .transaction-table th.transaction-history-col-created,
+.transaction-page .transaction-modal-body .transaction-table td.transaction-history-col-created {
+    font-size: var(--text-medium);
+    text-align: center !important;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-winloss,
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-crdr,
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-balance,
+.transaction-history-modal .transaction-modal-body .transaction-table .transaction-history-col-rate {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table tbody tr:nth-child(even) td {
+    background-color: #eef2ff;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table tbody tr:nth-child(odd) td {
+    background-color: #ffffff;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table tbody tr:hover td {
+    filter: brightness(0.97);
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table tbody .transaction-history-bf-row td,
+.transaction-history-modal .transaction-modal-body .transaction-table tbody .transaction-bf-row td {
+    background-color: #f0f0f0 !important;
+    font-weight: 700 !important;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table tbody .transaction-history-bf-row:hover td,
+.transaction-history-modal .transaction-modal-body .transaction-table tbody .transaction-bf-row:hover td {
+    filter: none;
+    background-color: #f0f0f0 !important;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table tbody .transaction-history-bf-row:hover {
+    background-color: transparent;
+}
+
+.transaction-history-modal .transaction-modal-body .transaction-table tbody tr:hover {
+    background-color: transparent !important;
+}
+
+/* Alert 账号标记（整行红色，白色文字）- 必须比普通行样式更具体 */
+.transaction-page .transaction-table tbody .transaction-table-row.transaction-alert-row {
+    background-color: #dc2626 !important;
+}
+
+.transaction-page .transaction-table tbody .transaction-table-row.transaction-alert-row:hover {
+    background-color: #b91c1c !important;
+}
+
+.transaction-page .transaction-table tbody .transaction-table-row.transaction-alert-row td {
+    background-color: #dc2626 !important;
+    color: white !important;
+    font-weight: bold !important;
+    border-color: #b91c1c !important;
+}
+
+.transaction-page .transaction-table tbody .transaction-table-row.transaction-alert-row:hover td {
+    background-color: #b91c1c !important;
+}
+
+/* Account Role Colors - matching account list styles */
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-capital {
+    background-color: #ffe0e0 !important;
+    color: #a30b0b !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-bank {
+    background-color: #dfe3ff !important;
+    color: #14228a !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-cash {
+    background-color: #dff4e7 !important;
+    color: #0f6d38 !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-profit {
+    background-color: #fff2c7 !important;
+    color: #7a5b00 !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-expenses {
+    background-color: #f0e1ff !important;
+    color: #4f148f !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-company {
+    background-color: #ecfccb !important;
+    color: #3f6212 !important;
+    border: 1px solid #bef264 !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-partner {
+    background-color: #e0f2fe !important;
+    color: #0369a1 !important;
+    border: 1px solid #bae6fd !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-staff {
+    background-color: #ffe5cc !important;
+    color: #a24700 !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-upline {
+    background-color: #d6f9ff !important;
+    color: #0a6b78 !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-agent {
+    background-color: #ffe0f3 !important;
+    color: #a02578 !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-member {
+    background-color: #f2dfd2 !important;
+    color: #5f2e0f !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-debtor {
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+    border: 1px solid #cbd5e1 !important;
+    /* font-weight: 600 !important; */
+}
+
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-none {
+    background-color: #eceef2 !important;
+    color: #3e434f !important;
+    /* font-weight: 600 !important; */
+}
+
+/* Account 列在 hover 时也要改变颜色 - 放在 role 规则之后以覆盖它们 */
+/* 使用更高的特异性确保覆盖所有 role 颜色 */
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-capital,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-bank,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-cash,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-profit,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-expenses,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-company,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-partner,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-staff,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-upline,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-agent,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-member,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-debtor,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-none {
+    background-color: #bfc9ff !important;
+    color: #000000 !important;
+}
+
+/* ========== transaction.php 椤甸潰涓撶敤 ========== */
+
+/**
+ * transaction.css - 原根目录 transaction.css 已移入此文件夹，并包含 transaction.php 页面专用样式
+ */
+
+/* ==================== Contra Approval Inbox ==================== */
+.transaction-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+}
+
+/* Title + Contra Inbox share one row; top spacing on .transaction-header-bar (see globals.css). */
+body.ec-auth-shell.transaction-page .transaction-header-left,
+body.transaction-page .transaction-header-left {
+    display: flex;
+    align-items: center;
+    gap: clamp(12px, 1.04vw, 20px);
+    min-width: 0;
+    flex-wrap: nowrap;
+    margin-top: 0 !important;
+}
+
+.contra-inbox-wrap {
+    position: relative;
+    flex-shrink: 0;
+    align-self: center;
+}
+
+.contra-inbox-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #ff3b30;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.contra-inbox-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s ease;
+}
+
+.contra-inbox-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.contra-inbox-btn.contra-inbox-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    background: #ffffff;
+    font-size: clamp(11px, 0.83vw, 15px);
+    font-weight: 800;
+    color: #000033;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.contra-inbox-btn.contra-inbox-main:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.contra-inbox-wrap--open .contra-inbox-btn.contra-inbox-main {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.contra-inbox-main-label {
+    white-space: nowrap;
+}
+
+.contra-inbox-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: #000033;
+}
+
+.contra-inbox-chevron {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: #64748b;
+    transition: transform 0.2s ease;
+}
+
+.contra-inbox-wrap--open .contra-inbox-chevron {
+    transform: rotate(180deg);
+}
+
+.contra-inbox-popover {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 12px);
+    width: min(920px, calc(100vw - 48px));
+    max-height: min(520px, calc(100vh - 120px));
+    overflow: hidden;
+    border: 1px solid #e8edf5;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 4px 24px rgba(15, 23, 42, 0.12), 0 12px 40px rgba(15, 23, 42, 0.08);
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+}
+
+.contra-inbox-popover.contra-inbox-popover--fixed {
+    position: fixed;
+    top: auto;
+    left: auto;
+    z-index: 10050;
+}
+
+.contra-inbox-popover::before {
+    content: "";
+    position: absolute;
+    top: -7px;
+    left: var(--contra-inbox-caret-left, 28px);
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    border-left: 1px solid #e8edf5;
+    border-top: 1px solid #e8edf5;
+    transform: rotate(45deg);
+}
+
+.contra-inbox-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #eef2f7;
+    background: #fff;
+}
+
+.contra-inbox-popover-title {
+    font-weight: 800;
+    color: #000033;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: clamp(14px, 1.04vw, 18px);
+}
+
+.contra-inbox-popover-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.contra-inbox-btn.contra-inbox-refresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: clamp(11px, 0.78vw, 14px);
+    font-weight: 700;
+    color: #2563eb;
+}
+
+.contra-inbox-btn.contra-inbox-refresh svg {
+    width: 16px;
+    height: 16px;
+}
+
+.contra-inbox-btn.contra-inbox-refresh:hover:not(:disabled) {
+    background: #eff6ff;
+}
+
+.contra-inbox-btn.contra-inbox-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    color: #64748b;
+}
+
+.contra-inbox-btn.contra-inbox-close svg {
+    width: 18px;
+    height: 18px;
+}
+
+.contra-inbox-btn.contra-inbox-close:hover {
+    background: #f1f5f9;
+    color: #334155;
+}
+
+.contra-inbox-popover-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.contra-inbox-loading,
+.contra-inbox-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--color-muted-fg);
+    font-size: var(--text-small);
+    font-weight: var(--font-weight-semibold);
+}
+
+.contra-inbox-empty-hint {
+    margin-top: 8px;
+    font-size: var(--text-tiny);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-muted-fg);
+    line-height: 1.45;
+    max-width: 36rem;
+    margin-inline: auto;
+}
+
+.contra-inbox-grid {
+    display: grid;
+    grid-template-columns: var(--contra-inbox-grid-cols);
+    column-gap: var(--contra-inbox-grid-gap);
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+}
+
+/* Flat grid: row wrappers use display:contents so all cells share one column template (no subgrid). */
+.contra-inbox-grid-row {
+    display: contents;
+}
+
+.contra-inbox-grid-row--head .contra-inbox-grid-cell--head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: var(--contra-inbox-head-pad-y) var(--contra-inbox-head-pad-x);
+    background: var(--contra-inbox-header-bg);
+    border-bottom: 1px solid var(--contra-inbox-header-border);
+    box-shadow: inset -1px 0 0 var(--contra-inbox-header-divider);
+}
+
+.contra-inbox-grid-row--head .contra-inbox-grid-cell--head:last-child {
+    box-shadow: none;
+}
+
+.contra-inbox-grid-row:not(.contra-inbox-grid-row--head) .contra-inbox-grid-cell {
+    padding: var(--contra-inbox-cell-pad-y) var(--contra-inbox-cell-pad-x);
+    border-bottom: 1px solid var(--contra-inbox-row-border);
+}
+
+.contra-inbox-grid-row:not(.contra-inbox-grid-row--head):last-of-type .contra-inbox-grid-cell {
+    border-bottom: none;
+}
+
+.contra-inbox-grid-row:not(.contra-inbox-grid-row--head):hover .contra-inbox-grid-cell {
+    background: #fafbfd;
+}
+
+.contra-inbox-grid-cell {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    font-size: var(--contra-inbox-text-cell);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-body-strong);
+    line-height: 1.35;
+}
+
+.contra-inbox-grid-cell--head {
+    font-size: var(--contra-inbox-text-head);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--contra-inbox-header-fg);
+    white-space: nowrap;
+    background: var(--contra-inbox-header-bg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+}
+
+.contra-inbox-grid-cell--date {
+    white-space: nowrap;
+}
+
+.contra-inbox-grid-cell--from,
+.contra-inbox-grid-cell--to,
+.contra-inbox-grid-cell--currency,
+.contra-inbox-grid-cell--amount,
+.contra-inbox-grid-cell--submitter,
+.contra-inbox-grid-cell--action {
+    justify-content: center;
+    text-align: center;
+}
+
+.contra-inbox-grid-cell--from {
+    position: relative;
+}
+
+.contra-inbox-grid-cell--to {
+    position: relative;
+    gap: 0.2em;
+}
+
+.contra-inbox-grid-cell--head.contra-inbox-grid-cell--date {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.contra-inbox-grid-cell--head.contra-inbox-grid-cell--from,
+.contra-inbox-grid-cell--head.contra-inbox-grid-cell--to,
+.contra-inbox-grid-cell--head.contra-inbox-grid-cell--currency,
+.contra-inbox-grid-cell--head.contra-inbox-grid-cell--amount,
+.contra-inbox-grid-cell--head.contra-inbox-grid-cell--submitter,
+.contra-inbox-grid-cell--head.contra-inbox-grid-cell--action {
+    justify-content: center;
+    text-align: center;
+}
+
+.contra-inbox-transfer-arrow {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: #94a3b8;
+    font-weight: var(--font-weight-bold);
+    line-height: 1;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.contra-inbox-grid-cell--amount {
+    font-weight: var(--font-weight-bold);
+    color: var(--color-heading);
+    white-space: nowrap;
+}
+
+.contra-inbox-grid-cell--submitter,
+.contra-inbox-grid-cell--desc {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.contra-inbox-grid-cell--desc {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.contra-inbox-account-code {
+    font-size: var(--contra-inbox-text-cell);
+    font-weight: var(--font-weight-bold);
+    white-space: nowrap;
+}
+
+.contra-inbox-account-code--from {
+    color: #0369a1;
+}
+
+.contra-inbox-account-code--to {
+    color: #6d28d9;
+}
+
+.contra-inbox-grid-cell--action .contra-inbox-action-group {
+    justify-content: center;
+}
+
+.contra-inbox-date {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    color: #334155;
+}
+
+.contra-inbox-date svg {
+    width: 14px;
+    height: 14px;
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.contra-inbox-account-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: var(--contra-inbox-text-cell);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.02em;
+}
+
+.contra-inbox-account-badge--from {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.contra-inbox-account-badge--to {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.contra-inbox-account-flow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.contra-inbox-account-arrow {
+    color: #94a3b8;
+    font-size: var(--contra-inbox-text-cell);
+    line-height: 1;
+}
+
+.contra-inbox-submitter {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.contra-inbox-submitter-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #0284c7;
+    flex-shrink: 0;
+}
+
+.contra-inbox-submitter-avatar svg {
+    width: 14px;
+    height: 14px;
+}
+
+.contra-inbox-action-group {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex-wrap: nowrap;
+    width: 100%;
+    min-width: 0;
+}
+
+.contra-inbox-btn.contra-inbox-approve,
+.contra-inbox-btn.contra-inbox-reject {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: var(--contra-inbox-text-action);
+    font-weight: var(--font-weight-bold);
+    white-space: nowrap;
+    background: #fff;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.contra-inbox-btn.contra-inbox-approve svg,
+.contra-inbox-btn.contra-inbox-reject svg {
+    display: none;
+}
+
+.contra-inbox-approve {
+    border: 1.5px solid #4cd964;
+    color: #16a34a;
+}
+
+.contra-inbox-approve:hover {
+    background: #f0fdf4;
+    border-color: #22c55e;
+}
+
+.contra-inbox-reject {
+    border: 1.5px solid #ff3b30;
+    color: #dc2626;
+}
+
+.contra-inbox-reject:hover {
+    background: #fef2f2;
+    border-color: #ef4444;
+}
+
+.contra-inbox-popover-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid #eef2f7;
+    background: #fafbfd;
+    color: var(--color-muted-fg);
+    font-size: var(--text-tiny);
+    font-weight: var(--font-weight-semibold);
+}
+
+.contra-inbox-popover-footer svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: #94a3b8;
+}
+
+@media (max-width: 900px) {
+    .contra-inbox-popover:not(.contra-inbox-popover--fixed) {
+        left: auto;
+        right: 0;
+        width: min(920px, calc(100vw - 24px));
+    }
+
+    .contra-inbox-popover:not(.contra-inbox-popover--fixed)::before {
+        left: auto;
+        right: 28px;
+    }
+}
+
+/* 表格自然展开，页面整体滚动 */
+.transaction-table-wrapper {
+    position: relative !important;
+    overflow-x: auto !important;
+}
+
+.transaction-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.transaction-table thead th {
+    position: relative !important;
+    z-index: 10 !important;
+}
+
+.transaction-table tfoot tr {
+    position: relative !important;
+    z-index: 10 !important;
+}
+
+.transaction-table tfoot td {
+    background-color: #f6f8fa !important;
+}
+
+.transaction-table th,
+.transaction-table td {
+    padding: 2px 8px;
+    line-height: 1.1;
+    font-weight: 600;
+    font-size: clamp(9px, 0.73vw, 14px);
+}
+
+.transaction-table td {
+    font-weight: 800;
+}
+
+/* Account 列宽度 - 更宽 */
+.transaction-table th:first-child,
+.transaction-table td:first-child {
+    width: 20%;
+    min-width: 150px;
+}
+
+/* Name 列宽度 - 与 Account 列一样宽 */
+.transaction-table th.transaction-name-column,
+.transaction-table td.transaction-name-column {
+    width: 18%;
+    min-width: 150px;
+}
+
+/* 其他列（B/F, Win/Loss, Cr/Dr, Balance）保持较小宽度，平均分配剩余空间 */
+.transaction-table th:nth-child(3),
+.transaction-table td:nth-child(3),
+.transaction-table th:nth-child(4),
+.transaction-table td:nth-child(4),
+.transaction-table th:nth-child(5),
+.transaction-table td:nth-child(5),
+.transaction-table th:nth-child(6),
+.transaction-table td:nth-child(6),
+.transaction-table th:nth-child(7),
+.transaction-table td:nth-child(7) {
+    width: auto;
+}
+
+.transaction-table tbody tr {
+    height: auto;
+}
+
+.transaction-table tbody tr:nth-child(odd),
+.transaction-table tbody tr:nth-child(odd) td {
+    background-color: #f9fbff;
+}
+
+.transaction-table tbody tr:nth-child(even),
+.transaction-table tbody tr:nth-child(even) td {
+    background-color: rgb(228, 235, 255);
+}
+
+.transaction-summary-table tbody tr:nth-child(odd),
+.transaction-summary-table tbody tr:nth-child(odd) td {
+    background-color: #f9fbff;
+    font-weight: 800;
+}
+
+.transaction-summary-table tbody tr:nth-child(even),
+.transaction-summary-table tbody tr:nth-child(even) td {
+    background-color: rgb(228, 235, 255);
+    font-weight: 800;
+}
+
+/* 日期范围选择器样式 */
+.transaction-date-inputs {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: 1;
+}
+
+.transaction-date-inputs input {
+    flex: 1;
+    min-width: 0;
+}
+
+.transaction-date-inputs span {
+    color: #666;
+    font-size: clamp(9px, 0.73vw, 14px);
+    flex-shrink: 0;
+}
+
+/* Flatpickr 自定义样式 */
+.flatpickr-calendar {
+    font-family: var(--font-heading-page);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.flatpickr-day.selected {
+    background: #4a90e2;
+    border-color: #4a90e2;
+}
+
+.flatpickr-day.today {
+    border-color: #4a90e2;
+}
+
+.flatpickr-day.today:hover,
+.flatpickr-day.today:focus {
+    background: #e6f2ff;
+    border-color: #4a90e2;
+}
+
+/* User Avatar Button */
+#user-avatar {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
+    cursor: pointer;
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 20px;
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+}
+
+#user-avatar:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Company & Currency Buttons */
+.transaction-company-filter {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 0.83vw, 16px);
+    flex-wrap: wrap;
+    margin-top: clamp(0px, 0.52vw, 10px);
+    padding: 0 20px 10px 0px;
+}
+
+.transaction-company-label {
+    font-weight: bold;
+    color: #374151;
+    font-size: clamp(9px, 0.73vw, 14px);
+    font-family: var(--font-heading-page);
+    white-space: nowrap;
+    min-width: 0px;
+    display: inline-block;
+    text-align: right;
+}
+
+.transaction-company-buttons {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--user-gc-inline-pills-gap, 4px);
+    align-items: center;
+}
+
+.transaction-company-btn {
+    padding: clamp(3px, 0.31vw, 6px) clamp(10px, 0.83vw, 16px);
+    background: #f1f5f9;
+    border: 1px solid #d0d7de;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: clamp(9px, 0.73vw, 14px);
+    transition: all 0.2s ease;
+    color: #1f2937;
+    font-weight: 600;
+}
+
+.transaction-company-btn:hover {
+    background: #e2e8f0;
+    border-color: #a5b4fc;
+}
+
+.transaction-company-btn.active {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+/* Currency 拖动（与 Member Win/Loss 一致） */
+#currency-buttons-container .user-gc-segment.transaction-currency-dragging,
+#currency-buttons-container .transaction-company-btn.transaction-currency-dragging {
+    opacity: 0.6;
+}
+
+#currency-buttons-container .user-gc-segment.transaction-currency-drag-over,
+#currency-buttons-container .transaction-company-btn.transaction-currency-drag-over {
+    outline: 2px dashed #3b82f6;
+    outline-offset: 2px;
+}
+
+.text-uppercase {
+    text-transform: uppercase;
+}
+
+/* Balance Cell Clickable Style */
+.transaction-balance-cell {
+    position: relative;
+}
+
+.transaction-add-section .transaction-form-group {
+    flex-wrap: nowrap;
+}
+
+/* Legacy label+row layout — still used by rate workflow & hidden rows */
+.transaction-add-section .transaction-form-group .transaction-label {
+    width: clamp(80px, 6vw, 110px);
+    flex: 0 0 clamp(60px, 6vw, 105px);
+}
+
+.transaction-add-section .transaction-form-group>*:not(.transaction-label) {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 5px;
+}
+
+/* 新增表單區：所有原生輸入/select、Account 自訂下拉與下拉內搜尋 — 底色統一 #f2f2f2ad */
+body.transaction-page .transaction-add-section .transaction-input,
+body.transaction-page .transaction-add-section .transaction-select {
+    background-color: #f2f2f2ad !important;
+}
+
+body.transaction-page .transaction-add-section .transaction-input:focus,
+body.transaction-page .transaction-add-section .transaction-select:focus,
+body.transaction-page .transaction-add-section .transaction-input:focus-visible,
+body.transaction-page .transaction-add-section .transaction-select:focus-visible {
+    background-color: #f2f2f2ad !important;
+    border-color: #bbb;
+    box-shadow: none;
+}
+
+body.transaction-page .transaction-add-section .custom-select-button,
+body.transaction-page .transaction-add-section .custom-select-button.open {
+    background-color: #f2f2f2ad !important;
+}
+
+body.transaction-page .transaction-add-section .custom-select-button:focus-visible {
+    outline: none;
+    border-color: #bbb;
+    box-shadow: none;
+}
+
+body.transaction-page .transaction-add-section .custom-select-dropdown,
+body.transaction-page .transaction-add-section .custom-select-search {
+    background: #f6f6f6;
+}
+
+body.transaction-page .transaction-add-section .custom-select-search input {
+    background-color: #f2f2f2ad !important;
+}
+
+.transaction-account-inputs {
+    width: 100%;
+}
+
+.transaction-select {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.transaction-win-lose-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.transaction-radio-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+/* Rate workflow layout */
+.rate-fields {
+    display: flex;
+    flex-direction: column;
+}
+
+.rate-section {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    margin-bottom: 5px;
+}
+
+/* RATE：Account 双下拉与标准表单同款 outlined floating label + 三列栅格对齐 Reverse */
+body.transaction-page .transaction-add-section .rate-section.rate-section--accounts-outlined {
+    flex-direction: column;
+    align-items: stretch;
+    align-self: stretch;
+    width: 100%;
+}
+
+body.transaction-page .transaction-add-section .rate-section.rate-section--accounts-outlined > .tx-add-form-row--accounts {
+    width: 100%;
+}
+
+body.transaction-page .transaction-add-section .rate-section.rate-section--currency-outlined {
+    flex-direction: column;
+    align-items: stretch;
+    align-self: stretch;
+    width: 100%;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-five-cols {
+    display: grid;
+    grid-template-columns: minmax(70px, 0.9fr) minmax(70px, 1fr) minmax(60px, 0.8fr) minmax(70px, 0.9fr) minmax(70px, 1fr);
+    width: 100%;
+    gap: clamp(10px, 1vw, 14px);
+    align-items: stretch;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-five-cols > .report-outlined-anchor {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-five-cols .report-outlined-shell.report-outlined-shell--no-label {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-five-cols .report-outlined-inner {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-five-cols .tx-add-icon-field {
+    flex: 1 1 auto;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-five-cols .tx-add-input-icon {
+    display: none;
+}
+
+body.transaction-page .transaction-add-section #rate-line1-to-acc-label,
+body.transaction-page .transaction-add-section #rate-line1-from-acc-label,
+body.transaction-page .transaction-add-section #rate-line2-to-acc-label,
+body.transaction-page .transaction-add-section #rate-line2-from-acc-label {
+    display: none;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-five-cols .tx-add-icon-field .custom-select-wrapper {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-three-cols .tx-add-icon-field .custom-select-wrapper {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+@media (max-width: 900px) {
+    body.transaction-page .transaction-add-section .tx-add-form-row--rate-five-cols {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.transaction-page .transaction-add-section .tx-add-form-row--rate-five-cols .report-outlined-anchor:nth-child(5) {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 480px) {
+    body.transaction-page .transaction-add-section .tx-add-form-row--rate-five-cols {
+        grid-template-columns: 1fr;
+    }
+
+    body.transaction-page .transaction-add-section .tx-add-form-row--rate-five-cols .report-outlined-anchor:nth-child(5) {
+        grid-column: auto;
+    }
+}
+
+body.transaction-page .transaction-add-section .rate-section.rate-section--middleman-outlined {
+    flex-direction: column;
+    align-items: stretch;
+    align-self: stretch;
+    width: 100%;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-three-cols {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    gap: clamp(10px, 1vw, 14px);
+    align-items: stretch;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-three-cols > .report-outlined-anchor {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-three-cols .report-outlined-shell.report-outlined-shell--no-label {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-three-cols .report-outlined-inner {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+body.transaction-page .transaction-add-section .tx-add-form-row--rate-three-cols .tx-add-icon-field {
+    flex: 1 1 auto;
+}
+
+@media (max-width: 720px) {
+    body.transaction-page .transaction-add-section .tx-add-form-row--rate-three-cols {
+        grid-template-columns: 1fr;
+    }
+}
+
+.rate-section>.transaction-label {
+    white-space: nowrap;
+}
+
+.rate-section>.transaction-input,
+.rate-section>.transaction-select {
+    flex: 1;
+    min-width: 0;
+}
+
+.rate-row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    width: 100%;
+    gap: 5px;
+}
+
+.rate-row-two-cols>.transaction-select,
+.rate-row-two-cols>.transaction-input {
+    flex: 1 1 calc(50% - 10px);
+    min-width: 140px;
+}
+
+body.transaction-page .transaction-add-section .rate-row-two-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--tx-add-reverse-col);
+    align-items: center;
+}
+
+body.transaction-page .transaction-add-section .rate-row-two-cols > .custom-select-wrapper {
+    min-width: 0;
+    max-width: none;
+}
+
+.rate-row-five-cols {
+    display: grid;
+    grid-template-columns: minmax(70px, 0.9fr) minmax(70px, 1fr) minmax(60px, 0.8fr) minmax(70px, 0.9fr) minmax(70px, 1fr);
+    width: 100%;
+}
+
+.rate-row-three-cols {
+    display: grid;
+    grid-template-columns: minmax(90px, 1fr) minmax(80px, 0.8fr) minmax(90px, 1fr);
+    width: 100%;
+}
+
+.rate-row-three-cols {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(70px, 1fr));
+    width: 100%;
+}
+
+.rate-row-five-cols select,
+.rate-row-five-cols input {
+    width: 100%;
+    min-width: 0;
+}
+
+.rate-reverse-btn {
+    flex: 0 0 auto;
+    align-self: stretch;
+    width: var(--tx-add-reverse-col);
+}
+
+/*
+ * RATE 區控件：複用與其他 Type 相同的 .transaction-form-group；Currency 用五欄格；Middle-Man 三欄均分（對齊舊版 rate-row-three-cols）
+ */
+body.transaction-page .transaction-add-section .rate-fields .rate-row.rate-row-five-cols {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 5px;
+    align-items: stretch;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+}
+
+/*
+ * Middle-Man：三欄同等寬（舊版 rate-row-three-cols / PHP 版面）
+ */
+body.transaction-page .transaction-add-section .rate-fields .rate-row.rate-row-mm {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+    align-items: stretch;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+}
+
+body.transaction-page .transaction-add-section .rate-fields .rate-mm-to-wrap {
+    display: flex;
+    min-width: 0;
+    align-self: stretch;
+}
+
+body.transaction-page .transaction-add-section .rate-fields .rate-mm-to-wrap > .custom-select-wrapper {
+    flex: 1 1 auto;
+    display: flex;
+    min-width: 0;
+    align-self: stretch;
+}
+
+body.transaction-page .transaction-add-section .rate-fields .rate-mm-to-wrap .custom-select-button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+
+body.transaction-page .transaction-add-section .rate-fields .rate-row.rate-row-mm .transaction-input {
+    box-sizing: border-box;
+    align-self: stretch;
+}
+
+body.transaction-page .transaction-add-section .rate-fields .rate-row-five-cols .transaction-select,
+body.transaction-page .transaction-add-section .rate-fields .rate-row-five-cols .transaction-input {
+    box-sizing: border-box;
+    align-self: stretch;
+}
+
+body.transaction-page .transaction-add-section .rate-fields #rate_exchange_rate.transaction-input {
+    background-color: #f2f2f2ad !important;
+    opacity: 1 !important;
+    color: #1f2937 !important;
+    -webkit-text-fill-color: #1f2937 !important;
+    caret-color: #1f2937 !important;
+}
+
+body.transaction-page .transaction-add-section .rate-fields input.transaction-input[readonly]#rate_currency_to_amount,
+body.transaction-page .transaction-add-section .rate-fields input.transaction-input[readonly]#rate_middleman_amount {
+    background-color: #f2f2f2ad !important;
+    opacity: 1 !important;
+    color: #1f2937 !important;
+    -webkit-text-fill-color: #1f2937 !important;
+}
+
+body.transaction-page .transaction-add-section .rate-fields .transaction-account-inputs .custom-select-wrapper {
+    align-self: stretch;
+    display: flex;
+    min-width: 0;
+}
+
+body.transaction-page .transaction-add-section .rate-fields .transaction-account-inputs .custom-select-wrapper .custom-select-button {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    min-height: 0;
+}
+
+/* Category Multi-Select Dropdown Styles */
+.transaction-category-multiselect {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 250px;
+    max-width: 100%;
+}
+
+.transaction-two-col .transaction-category-multiselect {
+    flex: 1 1 auto;
+    min-width: 250px;
+}
+
+.category-dropdown-button {
+    min-width: 200px;
+    max-width: 100%;
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: white;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    color: #374151;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.category-selected-tags {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    min-height: 20px;
+}
+
+.category-placeholder {
+    color: #9ca3af;
+    font-size: 14px;
+}
+
+.category-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #e5e7eb;
+    color: #374151;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* Category Tag Colors - matching Role colors */
+.category-tag[data-category-value="CAPITAL"] {
+    background-color: #ffe0e0 !important;
+    color: #a30b0b !important;
+}
+
+.category-tag[data-category-value="BANK"] {
+    background-color: #dfe3ff !important;
+    color: #14228a !important;
+}
+
+.category-tag[data-category-value="CASH"] {
+    background-color: #dff4e7 !important;
+    color: #0f6d38 !important;
+}
+
+.category-tag[data-category-value="PROFIT"] {
+    background-color: #fff2c7 !important;
+    color: #7a5b00 !important;
+}
+
+.category-tag[data-category-value="EXPENSES"] {
+    background-color: #f0e1ff !important;
+    color: #4f148f !important;
+}
+
+.category-tag[data-category-value="COMPANY"] {
+    background-color: #ecfccb !important;
+    color: #3f6212 !important;
+    border: 1px solid #bef264 !important;
+}
+
+.category-tag[data-category-value="PARTNER"] {
+    background-color: #e0f2fe !important;
+    color: #0369a1 !important;
+    border: 1px solid #bae6fd !important;
+}
+
+.category-tag[data-category-value="STAFF"] {
+    background-color: #ffe5cc !important;
+    color: #a24700 !important;
+}
+
+.category-tag[data-category-value="UPLINE"] {
+    background-color: #d6f9ff !important;
+    color: #0a6b78 !important;
+}
+
+.category-tag[data-category-value="SUPPLIER"] {
+    background-color: #d6f9ff !important;
+    color: #0a6b78 !important;
+}
+
+.category-tag[data-category-value="AGENT"] {
+    background-color: #ffe0f3 !important;
+    color: #a02578 !important;
+}
+
+.category-tag[data-category-value="MEMBER"] {
+    background-color: #f2dfd2 !important;
+    color: #5f2e0f !important;
+}
+
+.category-tag[data-category-value="NONE"] {
+    background-color: #eceef2 !important;
+    color: #3e434f !important;
+}
+
+.category-tag-remove {
+    cursor: pointer;
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1;
+    padding: 1px;
+    border-radius: 2px;
+    transition: color 0.2s, background-color 0.2s;
+}
+
+.category-tag-remove:hover {
+    color: #ef4444;
+    background-color: #fca5a5;
+}
+
+.category-dropdown-button:hover {
+    border-color: #9ca3af;
+}
+
+.category-dropdown-button:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.category-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 100%;
+    width: auto;
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    z-index: 1000;
+    max-height: 200px;
+    overflow-y: auto;
+    display: none;
+}
+
+.category-dropdown-menu.show {
+    display: block;
+}
+
+.category-option {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.category-option:last-child {
+    border-bottom: none;
+}
+
+.category-checkbox-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 14px;
+    color: #374151;
+    margin: 0;
+    white-space: nowrap;
+    width: 100%;
+}
+
+.category-checkbox {
+    margin-right: 8px;
+    cursor: pointer;
+}
+
+.category-checkbox-label:hover {
+    background-color: #f9fafb;
+}
+
+.category-option:hover .category-checkbox-label {
+    background-color: #f9fafb;
+}
+
+/* Protect Transaction route layout from Member page CSS collisions in SPA bundles. */
+body.transaction-page:not(.member-winloss-page) .transaction-main-content {
+    display: flex;
+    flex-direction: row;
+    gap: 24px;
+    align-items: stretch;
+    margin-top: 20px;
+    margin-bottom: 0;
+    overflow: visible;
+}
+
+body.transaction-page:not(.member-winloss-page) .transaction-search-section,
+body.transaction-page:not(.member-winloss-page) .transaction-add-section {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Capture Date bar inside outlined shell — single outer border; inner keeps calendar pill */
+body.transaction-page .transaction-search-section .report-outlined-inner .transaction-date-range-group {
+    min-width: 0 !important;
+    width: 100%;
+}
+
+body.transaction-page .transaction-search-section .report-outlined-inner .transaction-date-range-group .date-range-picker {
+    min-width: 0 !important;
+    width: 100%;
+    max-width: 100%;
+    min-height: clamp(38px, 2.45vw, 40px) !important;
+    padding: 0 clamp(8px, 0.75vw, 12px) 0 0 !important;
+    border-radius: 0 !important;
+    gap: clamp(8px, 0.7vw, 12px);
+    background: #ffffff !important;
+    box-shadow: none !important;
+    overflow: hidden;
+}
+
+body.transaction-page .transaction-search-section .report-outlined-inner:has(.transaction-date-range-group) {
+    overflow: hidden;
+    border-radius: inherit;
+}
+
+body.transaction-page .transaction-search-section .report-outlined-inner .transaction-date-range-group .date-range-picker:hover {
+    background: #ffffff !important;
+    box-shadow: none !important;
+}
+
+body.transaction-page .transaction-search-section .report-outlined-inner .transaction-date-range-group .date-range-picker:focus-visible {
+    box-shadow: none !important;
+}
+
+/* Capture Date: label sits above date text (after calendar tile), not over the blue icon */
+body.transaction-page .transaction-search-section .transaction-category-date-row .report-outlined-label--txn-capture-date {
+    left: clamp(46px, 3.35vw, 58px);
+}
+
+/* Outlined shell: icon pill clips to shell left corner (same as dashboard / maintenance) */
+body.transaction-page .transaction-search-section .transaction-outlined-field-col--date .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
+    border-radius: clamp(6px, 0.52vw, 8px) 0 0 clamp(6px, 0.52vw, 8px);
+    z-index: 5;
+}
+
+/* Add form (right card): same date-range bar as Capture Date; period presets hidden when opening from this trigger. */
+body.transaction-page .transaction-add-section .report-outlined-inner .transaction-date-range-group {
+    min-width: 0 !important;
+    width: 100%;
+}
+
+body.transaction-page .transaction-add-section .report-outlined-inner .transaction-date-range-group .date-range-picker {
+    min-width: 0 !important;
+    width: 100%;
+    max-width: 100%;
+    min-height: clamp(26px, 2.25vw, 34px) !important;
+    padding: 0 clamp(8px, 0.75vw, 12px) 0 0 !important;
+    border-radius: 0 !important;
+    gap: clamp(8px, 0.7vw, 12px);
+    background: #f2f2f2ad !important;
+    box-shadow: none !important;
+    overflow: hidden;
+}
+
+body.transaction-page .transaction-add-section .report-outlined-inner:has(.transaction-date-range-group) {
+    overflow: hidden;
+    border-radius: inherit;
+}
+
+body.transaction-page .transaction-add-section .report-outlined-inner .transaction-date-range-group .date-range-picker:hover,
+body.transaction-page .transaction-add-section .report-outlined-inner .transaction-date-range-group .date-range-picker:focus-visible {
+    background: #f2f2f2ad !important;
+    box-shadow: none !important;
+}
+
+body.transaction-page .transaction-add-section .report-outlined-label--txn-add-date {
+    left: clamp(46px, 3.35vw, 58px);
+}
+
+body.transaction-page .transaction-add-section .report-outlined-label--tx-add-icon {
+    left: clamp(46px, 3.35vw, 58px);
+}
+
+body.transaction-page .transaction-add-section .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
+    position: relative;
+    z-index: 5;
+    border-radius: clamp(6px, 0.52vw, 8px) 0 0 clamp(6px, 0.52vw, 8px);
+    box-shadow: none !important;
+}
+
+/* Legacy add form date: PHP-style plain #transaction_date / #rate_transaction_date inputs + invisible MaintenanceDateRangePicker hitbox overlay */
+body.transaction-page .transaction-add-section .transaction-add-datepicker-wrap,
+body.transaction-page .transaction-add-section .rate-fields .transaction-date-rate-wrap-inner {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    align-self: stretch;
+}
+
+body.transaction-page .transaction-add-section .transaction-add-datepicker-wrap .transaction-input,
+body.transaction-page .transaction-add-section .rate-fields #rate_transaction_date {
+    width: 100%;
+    cursor: pointer;
+}
+
+body.transaction-page .transaction-add-section .transaction-add-datepicker-hitbox {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    opacity: 0;
+    cursor: pointer;
+    min-width: 0 !important;
+    width: 100% !important;
+    min-height: 100%;
+    display: flex;
+    align-items: stretch;
+}
+
+body.transaction-page .transaction-add-section .transaction-add-datepicker-hitbox:focus {
+    outline: none;
+}
+
+body.transaction-page .transaction-add-section .transaction-add-datepicker-hitbox:focus-visible {
+    outline: none;
+}
+
+body.transaction-page .transaction-add-section .transaction-add-datepicker-wrap:focus-within .transaction-input#transaction_date,
+body.transaction-page .transaction-add-section .rate-fields .transaction-date-rate-wrap-inner:focus-within #rate_transaction_date {
+    border-color: #bbb;
+    box-shadow: none;
+}
+
+body.transaction-page .transaction-add-section .transaction-add-datepicker-sr-span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+body.transaction-page .transaction-add-section .transaction-account-inputs--to-only {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+}
+
+body.transaction-page .transaction-add-section .transaction-account-inputs--to-only > .custom-select-wrapper {
+    flex: 1 1 auto;
+    max-width: none;
+}
+
+/* Unlock native page scroll — dashboard-page sets body overflow:hidden + height:100vh */
+html:has(body.dashboard-page.transaction-page:not(.member-winloss-page)) {
+    height: auto;
+    overflow-y: auto;
+}
+
+body.dashboard-page.transaction-page:not(.member-winloss-page),
+body.ec-auth-shell.dashboard-page.transaction-page:not(.member-winloss-page) {
+    height: auto !important;
+    min-height: 100vh !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
+body.dashboard-page.transaction-page:not(.member-winloss-page) #root {
+    height: auto !important;
+    min-height: 100vh !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+body.dashboard-page.transaction-page:not(.member-winloss-page) .ec-page-shell,
+body.dashboard-page.transaction-page:not(.member-winloss-page) .ec-page-shell__content {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+body.dashboard-page.transaction-page:not(.member-winloss-page) .transaction-container {
+    height: auto !important;
+    min-height: 100vh !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding-bottom: clamp(24px, 3vh, 48px) !important;
+}
+
+body.dashboard-page.transaction-page:not(.member-winloss-page) .transaction-main,
+body.dashboard-page.transaction-page:not(.member-winloss-page) .transaction-tables-section {
+    overflow: visible !important;
+    max-height: none !important;
+}
+
+body.transaction-payment-history-page,
+body.ec-payment-history-chromeless {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+body.ec-payment-history-chromeless {
+    --layout-main-offset: 0px;
+}
+
+body.ec-payment-history-chromeless #root {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 100dvh !important;
+    height: 100dvh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: auto !important;
+}
+
+body.ec-payment-history-chromeless.transaction-payment-history-page--popup #root {
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
+}
+
+body.ec-payment-history-chromeless .ec-page-shell,
+body.ec-payment-history-chromeless .ec-page-shell__content {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: auto !important;
+}
+
+body.ec-payment-history-chromeless #root > .transaction-payment-history-page-root {
+    position: relative;
+    inset: auto;
+    z-index: 1;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow: visible;
+}
+
+body.ec-payment-history-chromeless.transaction-payment-history-page--popup #root > .transaction-payment-history-page-root {
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
+}
+
+body.ec-payment-history-chromeless.transaction-payment-history-page--popup .ec-page-shell,
+body.ec-payment-history-chromeless.transaction-payment-history-page--popup .ec-page-shell__content {
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+body.ec-payment-history-chromeless.transaction-payment-history-page--popup .transaction-payment-history-panel.transaction-history-modal.transaction-modal-content,
+body.transaction-payment-history-page--popup .transaction-payment-history-panel.transaction-history-modal.transaction-modal-content {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    max-width: none !important;
+    width: 100% !important;
+    overflow: hidden;
+}
+
+body.ec-payment-history-chromeless.transaction-payment-history-page--popup .transaction-payment-history-panel .transaction-modal-body,
+body.transaction-payment-history-page--popup .transaction-payment-history-panel .transaction-modal-body {
+    overflow: hidden !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+}
+
+.transaction-payment-history-page-root {
+    width: 100%;
+    min-height: 100dvh;
+}
+
+.transaction-payment-history-main {
+    box-sizing: border-box;
+    padding: 0;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 1320px;
+}
+
+/* Beat legacy modal card rules (body.transaction-page .transaction-modal-content.transaction-history-modal) */
+body.ec-payment-history-chromeless.transaction-page .transaction-modal-content.transaction-history-modal.transaction-payment-history-panel,
+body.ec-payment-history-chromeless .transaction-payment-history-panel.transaction-history-modal.transaction-modal-content,
+body.transaction-payment-history-page .transaction-payment-history-panel.transaction-history-modal.transaction-modal-content {
+    width: 100% !important;
+    max-width: 1320px !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    align-self: stretch !important;
+    display: flex;
+    flex-direction: column;
+    border-radius: 14px !important;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+body.ec-payment-history-chromeless .transaction-payment-history-panel .transaction-modal-header,
+body.transaction-payment-history-page .transaction-payment-history-panel .transaction-modal-header {
+    flex-shrink: 0;
+}
+
+body.ec-payment-history-chromeless .transaction-payment-history-panel .transaction-modal-body,
+body.transaction-payment-history-page .transaction-payment-history-panel .transaction-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+body.ec-payment-history-chromeless.transaction-payment-history-page--popup .transaction-payment-history-panel.transaction-history-modal.transaction-modal-content,
+body.transaction-payment-history-page--popup .transaction-payment-history-panel.transaction-history-modal.transaction-modal-content {
+    max-width: none !important;
+}
+
+body.transaction-payment-history-page--popup .transaction-history-modal .transaction-modal-body .transaction-table [class*="transaction-history-col-"],
+body.ec-payment-history-chromeless.transaction-payment-history-page--popup .transaction-history-modal .transaction-modal-body .transaction-table [class*="transaction-history-col-"] {
+    min-width: 0 !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    font-size: var(--txn-history-text-table) !important;
+}
+
+body.transaction-payment-history-page--popup .transaction-history-modal .transaction-modal-body .transaction-table thead th[class*="transaction-history-col-"],
+body.ec-payment-history-chromeless.transaction-payment-history-page--popup .transaction-history-modal .transaction-modal-body .transaction-table thead th[class*="transaction-history-col-"] {
+    font-size: var(--txn-history-text-table-head-compact) !important;
+    white-space: nowrap !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+}
+
+.transaction-payment-history-error {
+    margin: 0;
+    padding: 24px;
+    color: #b91c1c;
+    text-align: center;
+    font-size: var(--txn-history-text-error);
+}
+

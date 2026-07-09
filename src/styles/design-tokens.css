@@ -1,0 +1,547 @@
+/*
+ * design-tokens.css — SPA 全局 :root 设计令牌（由 globals.css 首行 @import）。
+ * 与 public/css/dashboard.css 的 --scd-* 区分命名；可按需在 dashboard 内做 var() 别名。
+   * 登录页 public/css/login-shadcn.css 与 public/css/style.css（二次验证、reset 等）共用下方 --login-*、--text-*、--color-*（由打包 CSS 注入 :root）。
+   * 输入框 2px 描边：style.css（首屏）+ src/styles/login-auth-fields.css（bundle 末尾，覆盖 Tailwind）。
+ */
+:root {
+  /* --- 字体响应式变量 (1280px -> 1920px) --- */
+  --text-display: clamp(4.8rem, 2.5vw + 1.6rem, 6.4rem);
+  --text-h1: clamp(2.4rem, 1.25vw + 0.8rem, 3.2rem);
+  --text-h2: clamp(2rem, 0.625vw + 1.2rem, 2.4rem);
+  --text-h3: clamp(1.6rem, 0.3125vw + 1.2rem, 1.8rem);
+  --text-base: clamp(1.4rem, 0.3125vw + 1rem, 1.6rem);
+  --text-medium: clamp(1.32rem, 0.22vw + 1rem, 1.4rem);
+  --text-small: clamp(1.2rem, 0.15vw + 1rem, 1.3rem);
+  --text-tiny: clamp(1rem, 0.15vw + 0.8rem, 1.1rem);
+
+  /* --- 间距响应式变量 --- */
+  --space-page: clamp(1.6rem, 2vw, 4rem);
+  --space-card: clamp(1.6rem, 1.5vw + 0.5rem, 2.4rem);
+  --space-gap: clamp(1.2rem, 1vw + 0.2rem, 2rem);
+
+  /* --- Sidebar (AuthenticatedLayout .informationmenu) — route-independent --- */
+  --sidebar-shell-bg: #002d49;
+  --sidebar-shell-border: rgba(255, 255, 255, 0.2);
+  --sidebar-active-bg: #0e93f3;
+  --sidebar-menu-text: #ffffff;
+
+  /* 基础侧边栏布局 */
+  --sidebar-icon-gap: clamp(0.55rem, 0.5rem + 0.08vw, 0.75rem);
+  /* 菜单文字区：以 “Transaction Payment” 两行显示为基准 */
+  --sidebar-menu-text-track: clamp(8.25rem, 7.85rem + 0.55vw, 9.75rem);
+  --sidebar-menu-trailing-gap: clamp(0.35rem, 0.32rem + 0.06vw, 0.48rem);
+  --sidebar-menu-arrow-gap: 0.15rem;
+  --sidebar-menu-arrow-size: 0.65rem;
+  --sidebar-lock-width: clamp(194px, calc((var(--sidebar-menu-pad-x) * 2) + var(--sidebar-icon-size) + var(--sidebar-icon-gap) + var(--sidebar-menu-text-track) + var(--sidebar-menu-arrow-gap) + var(--sidebar-menu-arrow-size) + var(--sidebar-menu-trailing-gap)), 218px);
+  --sidebar-logo-height: clamp(2.8rem, 2.67rem + 0.2vw, 3.6rem);
+  --sidebar-avatar-lock: clamp(3.2rem, 4.09rem + 0.18vw, 4rem);
+
+  /* 用户信息字体 */
+  --sidebar-user-name-size: clamp(1.3rem, 1.25rem + 0.08vw, 1.6rem);
+  --sidebar-user-role-size: clamp(0.95rem, 0.92rem + 0.05vw, 1.1rem);
+
+  /* 语言切换栏 */
+  --sidebar-lang-width: clamp(8.5rem, 10.19rem + .49vw, 10.8rem);
+  --sidebar-lang-height: clamp(2.5rem, 2.4rem + 0.16vw, 3.2rem);
+  --sidebar-lang-font: clamp(0.95rem, 0.92rem + 0.05vw, 1.1rem);
+
+  /* 图标与菜单字体 */
+  --sidebar-icon-size: clamp(1.4rem, 1.35rem + 0.09vw, 1.8rem);
+  --sidebar-menu-font: clamp(1.3rem, 1.35rem + .08vw, 1.6rem);
+
+  /* 菜单内边距 (Padding) */  
+  --sidebar-menu-pad-y: clamp(1.15rem, 1.1rem + 0.08vw, 1.5rem);
+  --sidebar-menu-pad-x: clamp(0.7rem, 0.68rem + 0.06vw, 0.95rem);
+  --sidebar-submenu-pad-y: clamp(0.75rem, 0.72rem + 0.05vw, 0.95rem);
+
+  /* 头部内边距 (Header Padding) */
+  --sidebar-header-pad-t: clamp(0.8rem, 0.77rem + 0.05vw, 1rem);
+  --sidebar-header-pad-x: clamp(0.8rem, 0.77rem + 0.05vw, 1rem);
+  --sidebar-header-pad-b: clamp(0.6rem, 0.57rem + 0.05vw, 0.8rem);
+
+  /* 主内容区水平偏移（侧栏宽 + 间距；User List 等试点页 padding-left） */
+  --layout-sidebar-width: var(--sidebar-lock-width);
+  --layout-main-gap: var(--space-gap);
+  --layout-main-offset: calc(var(--layout-sidebar-width) + var(--layout-main-gap));
+  /* 各业务页主容器顶边距（去掉页面 h1 标题后的统一留白） */
+  --layout-page-top-gap: 10px;
+  /* 首块工具栏/筛选卡与容器顶 padding 之间的间距（与 Dashboard .dashboard-filter-panel 一致） */
+  --layout-page-first-block-mt: 10px;
+  /* 视口顶 → 首块白卡总留白（container padding-top + 首块 margin-top） */
+  --layout-page-top-inset: calc(var(--layout-page-top-gap) + var(--layout-page-first-block-mt));
+
+  /* --- 品牌 / 文本色（列表页与 dashboard 壳层对齐，供 var 消重）--- */
+  --color-page-bg: #e9f1ff;
+  --color-page-fg: #334155;
+  --color-heading: #002c49;
+  --color-body-strong: #1f2937;
+  --color-surface: #ffffff;
+  --color-border: #e5e7eb;
+  --color-border-muted: #d0d7de;
+  --color-muted-fg: #6b7280;
+
+  /* Group / Company / Currency 药丸按钮内边距（全站统一） */
+  --user-gc-segment-padding: 4px clamp(10px, 1.2vw, 18px);
+  /* Group / Company / Currency 展示间距：标签列↔胶囊、行间距、胶囊组间距（全站 4px） */
+  --user-gc-inline-column-gap: 4px;
+  --user-gc-inline-row-gap: 8px;
+  --user-gc-inline-pills-gap: 4px;
+
+  /* --- 语义色 --- */
+  --color-primary: #3b82f6;
+  --color-primary-strong: #2563eb;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+
+  /* --- 按钮渐变色（Add / Delete 共用，含 hover）--- */
+  --btn-add-gradient: linear-gradient(180deg, #63c4ff 0%, #0d60ff 100%);
+  --btn-add-gradient-hover: linear-gradient(180deg, #0d60ff 0%, #63c4ff 100%);
+  --btn-delete-gradient: linear-gradient(180deg, #f30e12 0%, #a91215 100%);
+  --btn-delete-gradient-hover: linear-gradient(180deg, #a91215 0%, #f30e12 100%);
+
+  /* Add User「Account」/ 幣別設定帳號格 — 與 userlist #userModal .user-modal-select-card 一致 */
+  --account-select-card-bg: #f1f5f9;
+  --account-select-card-border: #cbd5e1;
+  --account-select-card-bg-checked: #ffffff;
+  --account-select-card-border-checked: #0d60ff;
+  --account-select-label-checked: #0d60ff;
+  --account-select-desc-checked: #797979;
+
+  /* --- 圆角 / 阴影 --- */
+  --radius-panel: 1rem;
+  --radius-card: 1.2rem;
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+  /* --- 字体栈：Inter（拉丁/数字）+ Noto Sans SC（中文）；登录壳 public/css/style.css :root 需与此同步 --- */
+  --font-heading-page: 'Inter', 'Noto Sans SC', ui-sans-serif, system-ui, sans-serif;
+  --font-ui: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+
+  /* --- 字重：供主按钮、强调标签等 --- */
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* --- User List 工具栏按钮宽度（改此处即可；Delete 略宽于 Add）--- */
+  --userlist-btn-add-width: clamp(80px, 7.25vw, 120px);
+  --userlist-btn-delete-width: clamp(90px, 7.25vw, 120px);
+
+  /* --- 列表页主标题（对应 clamp(26px, 2.08vw, 40px)）--- */
+  --text-page-title: clamp(2.6rem, 2.08vw, 4rem);
+  --text-page-title-mt: var(--layout-page-first-block-mt);
+  --text-page-title-mb: clamp(1.6rem, 1.35vw, 2.6rem);
+  --font-weight-page-title: 600;
+  --letter-spacing-page-title: -0.025em;
+
+  /*
+   * Add/Edit Process modal（Process List）— 外壳宽高为 Description picker 共用基准
+   */
+  --process-form-modal-width: min(1040px, calc(100vw - 48px));
+  --process-form-modal-max-height: 92vh;
+  --process-form-modal-radius: 0.75rem;
+  --process-form-modal-pad: var(--space-card);
+  --process-form-modal-title-size: var(--text-page-title);
+  --process-form-modal-section-size: var(--text-h3);
+  --process-form-modal-label-size: var(--text-medium);
+  --process-form-modal-control-size: var(--text-small);
+  --process-form-modal-hint-size: var(--text-small);
+  --process-form-modal-control-min-h: clamp(2.75rem, 2.25vw, 3.25rem);
+
+  /*
+   * Add Process — Multi-Process 三列勾选列表（.process-checkboxes）
+   * 字号走 --text-small（与表单控件一致）；间距仍用 --desc-modal-list-*。
+   */
+  --process-form-modal-multi-list-text: var(--text-small);
+  /* 嵌入 Add Process 左栏：固定上限，仅列表内滚动，不撑高 modal（勿用 --desc-modal-list-min-h） */
+  --process-form-modal-multi-list-max-h: clamp(6.5rem, 14vh, 9.5rem);
+  --process-form-modal-multi-list-pad: var(--desc-modal-list-pad);
+  --process-form-modal-multi-list-row-gap: var(--desc-modal-list-item-gap);
+  --process-form-modal-multi-grid-col-gap: calc(var(--desc-modal-list-item-gap) * 1.65);
+  --process-form-modal-multi-checkbox-size: var(--desc-modal-checkbox-size);
+  --process-form-modal-multi-item-gap: var(--desc-modal-list-item-gap);
+  --process-form-modal-multi-item-pad-block: var(--desc-modal-list-item-pad-block);
+  --process-form-modal-multi-item-line-height: 1.35;
+  --process-form-modal-multi-confirm-font: var(--text-small);
+  --process-form-modal-multi-confirm-min-h: clamp(2rem, 1.6vw, 2.35rem);
+  --process-form-modal-multi-confirm-pad-x: clamp(0.75rem, 0.9vw, 1rem);
+
+  /*
+   * Description picker modal（Process List / Data Capture）
+   * 外壳宽/高与 Add Process 一致；字号走 --text-* 阶梯。
+   */
+  --desc-modal-width: var(--process-form-modal-width);
+  --desc-modal-max-height: var(--process-form-modal-max-height);
+  --desc-modal-radius: var(--process-form-modal-radius);
+  --desc-modal-pad-block: var(--process-form-modal-pad);
+  --desc-modal-pad-inline: var(--process-form-modal-pad);
+  --desc-modal-title-size: var(--process-form-modal-title-size);
+  --desc-modal-section-size: var(--process-form-modal-section-size);
+  --desc-modal-list-text: var(--text-small);
+  --desc-modal-body-size: var(--text-tiny);
+  --desc-modal-empty-size: var(--text-tiny);
+  --desc-modal-control-text: var(--text-tiny);
+  --desc-modal-control-min-h: clamp(2.5rem, 2vw, 3rem);
+  /* 列表滚动区高度（手机/平板）；大屏见 @media min-width 62rem */
+  --desc-modal-list-min-h: clamp(11rem, 28vh, 16rem);
+  --desc-modal-col-gap: clamp(1rem, 1.75vw, 1.75rem);
+  --desc-modal-add-btn-width: clamp(4.5rem, 5.5vw, 6.25rem);
+  --desc-modal-checkbox-size: clamp(1.125rem, 1vw, 1.25rem);
+  /* 列表区内边距/行距（仅 .description-list / .selected-descriptions-list，不碰全局 --space-gap） */
+  --desc-modal-list-pad: clamp(0.4rem, 0.2vw + 0.28rem, 0.5rem);
+  --desc-modal-list-item-gap: clamp(0.35rem, 0.15vw + 0.25rem, 0.45rem);
+  --desc-modal-list-item-pad-block: clamp(0.35rem, 0.15vw + 0.28rem, 0.45rem);
+  --desc-modal-list-item-pad-inline: clamp(0.25rem, 0.1vw + 0.2rem, 0.35rem);
+  --desc-modal-selected-bg: var(--color-surface-info-tint);
+  --desc-modal-selected-fg: var(--color-primary-strong);
+  --desc-modal-delete-fg: var(--color-danger-text-strong);
+
+  /* --- 主区水平留白（userlist / ownership 容器）--- */
+  --page-pad-inline-end: 4rem;
+  --page-pad-inline-start: clamp(18rem, 14.06vw, 27rem);
+
+  /*
+   * Ownership（/ownership）— 字号映射全局 --text-* 阶梯；改 --text-* 即可连带本页缩放
+   */
+  --own-text-stat: var(--text-h2);
+  --own-text-card-title: var(--text-h3);
+  --own-text-control: var(--text-base);
+  --own-text-body: var(--text-medium);
+  --own-text-label: var(--text-small);
+  --own-text-caption: var(--text-tiny);
+  /* 行内下拉、账户选择（原 13–15px，避免用 --text-base 过大） */
+  --own-text-select: var(--own-text-label);
+
+  /*
+   * 列表表格体（User / Account 分页模式，非 Show All）：
+   * 中间用 2vh 压低「最小高度」框，避免 52vh 过大；min 1rem 保底。
+   * max 48rem：在 2vh 下常见分辨率几乎不会触发（2vh 远小于 48rem），仅作 clamp 上界与极端超高 vh 的保险。
+   */
+  --list-table-body-min-height: clamp(1rem, 2vh, 48rem);
+
+  /* Account 表头蓝条 padding（accountCSS .account-table-header） */
+  --table-header-height: 6px 22px;
+
+  /*
+   * Customer / Domain Report 列表行高（Maintenance 虚拟表与之对齐）
+   */
+  --report-list-row-padding-block: 1px;
+  --report-list-row-padding-inline: 22px;
+  --report-list-cell-min-height: clamp(20px, 2.1vw, 20px);
+  --report-list-header-padding-block-start: clamp(0px, 0.78vw, 15px);
+  --report-list-header-padding-block-end: 12px;
+  --report-list-header-padding-inline: 20px;
+  --report-list-header-min-height: clamp(30px, 2.4vw, 42px);
+  --report-list-grid-gap: 15px;
+
+  /*
+   * Contra Inbox popover grid（Transaction Payment）
+   * Header / cell 共用 --contra-inbox-text-cell，表头仅 uppercase + 字重区分
+   */
+  --contra-inbox-grid-cols: minmax(0, 0.58fr) minmax(0, 0.32fr) minmax(0, 0.32fr) minmax(0, 0.56fr) minmax(0, 0.76fr) minmax(0, 0.7fr) minmax(0, 0.88fr) minmax(0, 0.82fr);
+  --contra-inbox-grid-gap: 0;
+  --contra-inbox-cell-pad-y: clamp(0.45rem, 0.38vw, 0.6rem);
+  --contra-inbox-cell-pad-x: clamp(0.35rem, 0.32vw, 0.5rem);
+  --contra-inbox-head-pad-y: clamp(0.5rem, 0.42vw, 0.65rem);
+  --contra-inbox-head-pad-x: clamp(0.4rem, 0.36vw, 0.55rem);
+  --contra-inbox-text-cell: var(--text-tiny);
+  --contra-inbox-text-head: var(--text-tiny);
+  --contra-inbox-text-action: var(--text-tiny);
+  --contra-inbox-header-bg: #f4f7fc;
+  --contra-inbox-header-fg: var(--color-heading);
+  --contra-inbox-header-divider: rgba(30, 58, 95, 0.14);
+  --contra-inbox-row-border: #f1f5f9;
+  --contra-inbox-header-border: #e8edf5;
+
+  /*
+   * Payment History（Transaction 账目历史表 — 全页 / popup 分屏共用；改 --text-* 阶梯即连带缩放）
+   */
+  --txn-history-text-title: var(--text-h2);
+  --txn-history-text-close: var(--text-h2);
+  --txn-history-text-loading: var(--text-medium);
+  --txn-history-text-table: var(--text-medium);
+  --txn-history-text-table-head: var(--text-base);
+  --txn-history-text-table-head-compact: var(--text-small);
+  --txn-history-split-max-width: 960px;
+  --txn-history-text-error: var(--text-medium);
+  --txn-history-line-height: 1.35;
+  --txn-history-head-line-height: 1.3;
+  --txn-history-cell-pad-block: clamp(0.35rem, 0.32vw, 0.5rem);
+  --txn-history-cell-pad-inline: clamp(0.45rem, 0.4vw, 0.55rem);
+  --txn-history-cell-pad-inline-full: clamp(0.55rem, 0.52vw, 0.65rem);
+  --txn-history-cell-min-height: clamp(2.4rem, 2.2vw, 2.75rem);
+  --txn-history-row-height-full: clamp(2.6rem, 2.4vw, 2.75rem);
+
+  /*
+   * Accounting Due inbox (Bank Process List) — grid + spacing aligned with Contra Inbox
+   */
+  --accounting-due-grid-cols: 60px 56px minmax(0, 0.7fr) minmax(0, 1fr) minmax(0, 1.08fr) minmax(0, 0.56fr) minmax(0, 0.8fr) 60px;
+  --accounting-due-grid-gap: 0;
+  --accounting-due-cell-pad-y: clamp(0.58rem, 0.5vw, 0.75rem);
+  --accounting-due-cell-pad-x: clamp(0.5rem, 0.42vw, 0.65rem);
+  --accounting-due-head-pad-y: clamp(0.5rem, 0.42vw, 0.65rem);
+  --accounting-due-head-pad-x: clamp(0.5rem, 0.42vw, 0.65rem);
+  --accounting-due-head-min-height: clamp(3.1rem, 2.6vw, 3.6rem);
+  --accounting-due-row-min-height: clamp(2.65rem, 2.2vw, 3rem);
+  --accounting-due-text-cell: var(--text-small);
+  --accounting-due-text-head: var(--text-small);
+  --accounting-due-text-action-label: clamp(10px, 0.68vw, 12px);
+  --accounting-due-checkbox-size: clamp(16px, 1.05vw, 18px);
+  --accounting-due-header-bg: #f4f7fc;
+  --accounting-due-header-fg: var(--color-heading);
+  --accounting-due-header-divider: rgba(30, 58, 95, 0.14);
+  --accounting-due-row-border: #f1f5f9;
+  --accounting-due-header-border: #e8edf5;
+
+  /* --- 壳层背景图（background-color 仍用 --color-page-bg）--- */
+  --app-shell-bg-image: radial-gradient(
+      circle at 15% 20%,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 255, 255, 0) 48%
+    ),
+    radial-gradient(circle at 70% 15%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 45%),
+    radial-gradient(
+      circle at 40% 70%,
+      rgba(206, 232, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0) 60%
+    ),
+    radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%),
+    linear-gradient(145deg, #97bffc 0%, #aecffa 40%, #f9fbff 100%);
+
+  /*
+   * Domain 列表页 + DomainFormModal（domain.css 内避免散落 hex；优先复用上方 --color-* / --btn-*）
+   */
+  --color-surface-muted: #fafafa;
+  --color-surface-subtle: #f8fafc;
+  --color-surface-slate-100: #f1f5f9;
+  --color-border-slate: #e2e8f0;
+  --color-border-strong: #d1d5db;
+  --color-text-placeholder: #94a3b8;
+  --color-text-caption: #64748b;
+  --color-text-label: #374151;
+  --color-ink: #0f172a;
+  --color-ink-muted: #1e293b;
+  --color-domain-section-rule: #1e3a8a;
+  --color-domain-separator-line: #939393;
+  --color-danger-hover: #dc2626;
+  --color-danger-soft-fg: #fca5a5;
+  --color-focus-ring: #6366f1;
+  --color-focus-ring-soft: #a5b4fc;
+  --color-focus-ring-checkbox: #818cf8;
+  --color-control-accent: #7e3aec;
+  --color-control-accent-border: #5b21b6;
+  --color-text-inverse: #ffffff;
+  --color-text-inverse-soft: rgba(255, 255, 255, 0.85);
+  --shadow-btn-primary: 0 2px 8px rgba(13, 96, 255, 0.28);
+  --shadow-btn-primary-soft: 0 2px 8px rgba(13, 96, 255, 0.26);
+  --shadow-group-pill-active: 0 2px 6px rgba(0, 123, 255, 0.3);
+  --shadow-row-surface: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-footer-muted: 0 2px 8px rgba(71, 85, 105, 0.22);
+  --shadow-input-focus: 0 0 0 2px rgba(99, 102, 241, 0.12);
+  --shadow-adjoin-btn: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --gradient-btn-secondary-footer: linear-gradient(180deg, #94a3b8 0%, #575c66 100%);
+  --gradient-btn-fee-toolbar: linear-gradient(180deg, #aab8c2 0%, #657786 100%);
+  --gradient-btn-fee-toolbar-hover: linear-gradient(180deg, #9ca9b4 0%, #5a6a78 100%);
+  --shadow-btn-add-page: 0 2px 4px rgba(0, 123, 255, 0.3);
+  --shadow-btn-add-page-hover: 0 4px 8px rgba(0, 123, 255, 0.4);
+  --shadow-btn-fee: 0 2px 4px rgba(101, 119, 134, 0.2);
+  --shadow-btn-fee-hover: 0 4px 8px rgba(101, 119, 134, 0.3);
+  --color-surface-warn-tint: #fffbeb;
+  --gradient-domain-muted-action: linear-gradient(180deg, #bcbcbc 0%, #585858 100%);
+  --gradient-domain-muted-action-hover: linear-gradient(180deg, #585858 0%, #bcbcbc 100%);
+  --color-domain-accent-sky: #6fb1f3;
+  --color-domain-surface-tint: #eef6ff;
+  --color-domain-blue-deep: #0f61ff;
+  --color-border-blue-light: #93c5fd;
+  --color-surface-info-soft: #eff6ff;
+  --color-primary-border: #3b82f6;
+  --color-primary-deep-text: #1d4ed8;
+  --color-danger-text-dark: #991b1b;
+  --color-warning-text: #92400e;
+  --color-warning-border-soft: #fde68a;
+  --color-warning-text-amber: #b45309;
+  --color-text-charcoal: #333333;
+  --color-indigo-deep: #1a237e;
+  --color-surface-gray-soft: #f3f4f6;
+  --color-text-gray-muted: #9ca3af;
+  --color-accent-indigo: #4f46e5;
+  --color-border-gray-mid: #9ca3af;
+  --gradient-domain-toolbar-blue: linear-gradient(180deg, #7eb8ff 0%, #2563eb 100%);
+  --gradient-domain-toolbar-blue-strong: linear-gradient(180deg, #60a5fa 0%, #1d4ed8 100%);
+  --color-surface-indigo-tint: #eef2ff;
+  --color-surface-gray-50: #f9fafb;
+  --color-surface-rose-tint: #fee2e2;
+  --color-surface-amber-tint: #fef3c7;
+  --color-surface-emerald-tint: #d1fae5;
+  --color-emerald-text-dark: #065f46;
+  --color-ios-link: #007aff;
+  --color-ios-link-hover: #0056b3;
+  --color-ios-separator: #c7c7cc;
+  --color-surface-modal-header: #f4f5f7;
+  --color-surface-rose-weak: #fef2f2;
+  --color-border-rose-soft: #fecaca;
+  --color-danger-text-strong: #b91c1c;
+  --color-surface-success-weak: #f0fdf4;
+  --color-success-text-dark: #166534;
+  --color-warning-border-strong: #f59e0b;
+  --gradient-domain-success: linear-gradient(180deg, #34d399 0%, #059669 100%);
+  --color-success-border-dark: #047857;
+  --gradient-domain-danger-soft: linear-gradient(180deg, #f87171 0%, #dc2626 100%);
+  --color-danger-border-dark: #7f1d1d;
+  --gradient-domain-warning: linear-gradient(180deg, #fbbf24 0%, #d97706 100%);
+  --gradient-domain-special-green: linear-gradient(180deg, #49a70b 0%, #15581a 100%);
+  --gradient-domain-header-blue: linear-gradient(180deg, #64bbff 0%, #2a84ef 100%);
+  --color-border-sky-accent: #67b4ff;
+  --color-surface-slate-200: #eef2f7;
+  --color-surface-delete-tint: #fee2e2;
+  --color-surface-info-tint: #e6f0fd;
+  --color-domain-info-text: #3b8ef6;
+  --color-border-dashed-info: #bfdbfe;
+  --color-surface-info-tile: #dbeafe;
+  --gradient-domain-share-confirm: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);
+  --gradient-domain-teal: linear-gradient(180deg, #6fd4c6 0%, #2ea89b 100%);
+  --gradient-domain-teal-hover: linear-gradient(180deg, #2ea89b 0%, #6fd4c6 100%);
+  --gradient-domain-banner-info: linear-gradient(135deg, #dbeafe 0%, #e0f2fe 100%);
+  --gradient-domain-banner-lime: linear-gradient(135deg, #ecfccb 0%, #d9f99d 100%);
+  --color-lime-text: #3f6212;
+  --color-lime-border: #bef264;
+  --gradient-domain-banner-violet: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+  --color-violet-border-soft: #c4b5fd;
+  --gradient-domain-banner-danger: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  --gradient-domain-progress-blue: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  --color-surface-sky-50: #f0f9ff;
+  --color-text-gray-500: #6b7280;
+  --gradient-domain-blue-mid: linear-gradient(180deg, #60a5fa 0%, #3b82f6 100%);
+  --gradient-domain-blue-mid-hover: linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%);
+  --gradient-domain-gray-pill: linear-gradient(180deg, #9ca3af 0%, #6b7280 100%);
+  --gradient-domain-gray-pill-hover: linear-gradient(180deg, #6b7280 0%, #9ca3af 100%);
+  --gradient-domain-warning-mix: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+  --gradient-domain-danger-90: linear-gradient(90deg, #f87171 0%, #dc2626 100%);
+  --color-text-ink-strong: #111827;
+  --color-dfm-assign-ref-surface: #f3f3f3;
+  --color-dfm-assign-ref-border: #c4c4c4;
+  --color-text-pure: #000000;
+  --color-dfm-assign-ref-grid: var(--color-text-pure);
+  --color-dfm-assign-ref-label: #111111;
+
+  /* Domain 页 typography（font-size 仅在此处落盘；fluid 与历史 px 并存） */
+  --domain-text-9: 9px;
+  --domain-text-10: 10px;
+  --domain-text-11: 11px;
+  --domain-text-20: 20px;
+  --domain-text-26: 26px;
+  --domain-text-13: 13px;
+  --domain-text-14: 14px;
+  --domain-text-15: 15px;
+  --domain-text-18: 18px;
+  --domain-text-24: 24px;
+  --domain-text-40: 40px;
+  --domain-text-legacy-15936: 15.936px;
+  --domain-text-legacy-1196: 11.96px;
+  --domain-text-em-092: 0.92em;
+  --domain-text-rem-135: 1.35rem;
+  --domain-text-rem-150: 1.5rem;
+  --domain-fluid-20-146-28: clamp(20px, 1.46vw, 28px);
+  --domain-fluid-20-208-28: clamp(20px, 2.08vw, 28px);
+  --domain-fluid-20-167-32: clamp(20px, 1.67vw, 32px);
+  --domain-fluid-10-083-16: clamp(10px, 0.83vw, 16px);
+  --domain-fluid-10-083-14: clamp(10px, 0.83vw, 14px);
+  --domain-fluid-11-083-15: clamp(11px, 0.83vw, 15px);
+  --domain-fluid-9-073-13: clamp(9px, 0.73vw, 13px);
+  --domain-fluid-13-1-16: clamp(13px, 1vw, 16px);
+  --domain-fluid-11-085-13: clamp(11px, 0.85vw, 13px);
+  --domain-fluid-10-078-14: clamp(10px, 0.78vw, 14px);
+  --domain-fluid-10-072-12: clamp(10px, 0.72vw, 12px);
+  --domain-fluid-9-065-11: clamp(9px, 0.65vw, 11px);
+  --domain-fluid-18-15-26: clamp(18px, 1.5vw, 26px);
+  --domain-fluid-11-078-13: clamp(11px, 0.78vw, 13px);
+  --domain-fluid-11-083-14: clamp(11px, 0.83vw, 14px);
+  --domain-fluid-12-094-16: clamp(12px, 0.94vw, 16px);
+  --domain-fluid-10-073-12: clamp(10px, 0.73vw, 12px);
+  --domain-fluid-10-078-13: clamp(10px, 0.78vw, 13px);
+  --domain-fluid-12-09-15: clamp(12px, 0.9vw, 15px);
+  --domain-fluid-13-095-15: clamp(13px, 0.95vw, 15px);
+  --domain-fluid-15-11-18: clamp(15px, 1.1vw, 18px);
+  --domain-fluid-11-08-13: clamp(11px, 0.8vw, 13px);
+  --domain-fluid-11-082-14: clamp(11px, 0.82vw, 14px);
+  --domain-fluid-14-105-18: clamp(14px, 1.05vw, 18px);
+  --domain-fluid-14-125-24: clamp(14px, 1.25vw, 24px);
+  --domain-fluid-10-073-13: clamp(10px, 0.73vw, 13px);
+  --domain-fluid-9-073-14: clamp(9px, 0.73vw, 14px);
+  --domain-fluid-8-073-14: clamp(8px, 0.73vw, 14px);
+  --domain-fluid-12-094-18: clamp(12px, 0.94vw, 18px);
+  --domain-fluid-8-057-11: clamp(8px, 0.57vw, 11px);
+  --domain-fluid-7-052-10: clamp(7px, 0.52vw, 10px);
+  --domain-fluid-10-073-14: clamp(10px, 0.73vw, 14px);
+  --domain-fluid-13-094-18: clamp(13px, 0.94vw, 18px);
+  --domain-fluid-8-0625-12: clamp(8px, 0.625vw, 12px);
+  --domain-fluid-9-078-15: clamp(9px, 0.78vw, 15px);
+  --domain-fluid-8-083-16: clamp(8px, 0.83vw, 16px);
+  --domain-fluid-10-078-15: clamp(10px, 0.78vw, 15px);
+
+  /* --- 叠层 --- */
+  --z-modal: 12000;
+
+  /* --- 动效 --- */
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 0.2s;
+
+  /*
+   * Login（public/css/login-shadcn.css）— 仅在此处定义字面量，登录样式一律 var(--login-*)。
+   * 依赖 main.jsx 引入的打包 CSS 与本页 link 的 login-shadcn 共同作用在 document 上。
+   */
+  --login-bg-start: #004ff9;
+  --login-bg-end: #56ccf2;
+  --login-surface: rgba(255, 255, 255, 0.95);
+  --login-text: #333333;
+  --login-muted: #666666;
+  --login-danger: #dc3545;
+  --login-radius-xl: 28px;
+  --login-radius-pill: 999px;
+  /* 主提交钮：固定为英文 Login 规格，中英 / 登录中 只换字、高度不变 */
+  --login-submit-height: 51px;
+  --login-submit-pad-x: 15px;
+  /* 登录白卡最小高度：按中文版 Tab（--text-h2）+ 表单 + 语系条撑满；切 EN 时只换字、外框不降 */
+  --login-card-min-height: 414px;
+  --login-card-min-height-narrow: 528px;
+}
+
+/* Description picker / Process form：≥992px — 与 DevTools 调校一致（1120px / 95vh / 列表区更高） */
+@media (min-width: 62rem) {
+  :root {
+    --process-form-modal-width: min(1120px, calc(100vw - 40px));
+    --process-form-modal-max-height: 95vh;
+    --process-form-modal-multi-list-max-h: clamp(7rem, 15vh, 10.5rem);
+    --desc-modal-list-min-h: clamp(24rem, 40vh, 34.5rem);
+    --desc-modal-col-gap: clamp(1.2rem, 1vw + 0.2rem, 1.75rem);
+  }
+}
+
+/* 手机竖屏单栏：列表略矮，避免弹窗过高 */
+@media (max-width: 40rem) {
+  :root {
+    --process-form-modal-multi-list-max-h: clamp(5.5rem, 12vh, 8rem);
+    --desc-modal-list-min-h: clamp(10rem, 22vh, 13.5rem);
+  }
+}
+
+/* 平板：含 iPad Air 11" 横屏 (~1180px)、Galaxy Tab S7 横屏 (1280px) */
+@media (max-width: 1280px) {
+  :root {
+    --layout-sidebar-width-icon: 4.5rem;
+    --sidebar-menu-pad-y: clamp(1.05rem, 1rem + 0.06vw, 1.3rem);
+    --sidebar-submenu-pad-y: clamp(0.7rem, 0.67rem + 0.05vw, 0.9rem);
+  }
+
+  body.ec-auth-shell {
+    --layout-sidebar-width: var(--sidebar-lock-width);
+    --layout-main-gap: 1.2rem;
+    --layout-main-offset: calc(var(--layout-sidebar-width) + var(--layout-main-gap));
+  }
+
+  body.ec-auth-shell.sidebar-collapsed {
+    --layout-sidebar-width: var(--layout-sidebar-width-icon);
+    --layout-main-offset: calc(var(--layout-sidebar-width) + var(--layout-main-gap));
+  }
+}

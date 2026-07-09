@@ -1,0 +1,557 @@
+/* customer_report.css - 从 customer_report.php 提取 */
+/* Override container styles for scrolling */
+body {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 100vh;
+}
+
+html,
+body.dashboard-page.report-page {
+    height: auto !important;
+    min-height: 100vh !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+}
+
+.container {
+    overflow-y: visible !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 100vh;
+}
+
+/* Report 路由使用 .container；与 Transaction 主区域一致：左侧留 sidebar、右侧与左侧视觉留白协调 */
+body.dashboard-page.report-page .container {
+    max-width: none;
+    margin: 0;
+    padding: var(--layout-page-top-gap) clamp(20px, 2.08vw, 40px) 20px var(--layout-main-offset);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Customer Report Specific Styles */
+.customer-report-filter-container {
+    background: white;
+    border-radius: 12px;
+    padding: clamp(12px, 1.25vw, 20px);
+    margin-top: var(--layout-page-first-block-mt, 10px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Process List 同款 user-gc 面板：贴在白卡内，与 process 页顶栏分割一致 */
+body.dashboard-page.report-page .customer-report-filter-container .report-gc-inline-panel {
+    margin-top: 4px;
+    margin-left: -4px;
+    margin-right: -4px;
+}
+
+
+/*
+ * Outlined 的 .report-outlined-shell 有 margin-top:10px，若整行 align-items:center，
+ * 会把这段空白算进「栏高」，几何中心高于白框，Show All 会显得偏下。
+ * 改为顶对齐，并让 Quick/Show All 槽位与 shell 同 margin-top + 同可视高度，chip 在槽内垂直居中。
+ */
+.customer-report-filters {
+    display: flex;
+    gap: clamp(12px, 1.25vw, 24px);
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+/* Quick Select 与 Show All 成组，间距缩小 */
+body.dashboard-page.report-page .customer-report-quick-and-showall {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 0.8vw, 16px);
+    flex: 0 0 auto;
+    margin-top: 10px;
+    min-height: calc(2px + clamp(32px, 2.25vw, 36px));
+}
+
+.customer-report-quick-and-showall .customer-report-filter-group {
+    min-width: 0;
+    width: auto;
+}
+
+.customer-report-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(6px, 0.52vw, 10px);
+    min-width: clamp(150px, 12.5vw, 240px);
+}
+
+body.dashboard-page.report-page .customer-report-filters .customer-report-filter-group.report-date-range-picker-container,
+body.dashboard-page.report-page .domain-report-filters .customer-report-filter-group.report-date-range-picker-container,
+body.maintenance-page .customer-report-filters .customer-report-filter-group.report-date-range-picker-container {
+    min-width: var(--drp-popup-width, clamp(316px, 22vw, 336px));
+}
+
+.customer-report-filter-group label {
+    font-size: clamp(11px, 0.85vw, 13px);
+    font-weight: 600;
+    color: #374151;
+    font-family: var(--font-heading-page);
+}
+
+/* Date range — same bar + label offset as Transaction search */
+body.dashboard-page.report-page .customer-report-filters .report-outlined-inner .transaction-date-range-group,
+body.maintenance-page .customer-report-filters .report-outlined-inner .transaction-date-range-group {
+    min-width: 0 !important;
+    width: 100%;
+}
+
+/* Account 下拉与 Date Range 同一行：统一 outlined 内控件高度，避免 flex-end 造成顶边错位 */
+body.dashboard-page.report-page .customer-report-filters .report-outlined-inner .custom-select-button {
+    min-height: clamp(32px, 2.25vw, 36px);
+}
+
+body.dashboard-page.report-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker,
+body.maintenance-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker {
+    min-width: 0 !important;
+    width: 100%;
+    max-width: 100%;
+    min-height: clamp(32px, 2.25vw, 36px) !important;
+    padding: 0 clamp(8px, 0.75vw, 12px) 0 0 !important;
+    border-radius: 0 !important;
+    gap: clamp(8px, 0.7vw, 12px);
+    background: #ffffff !important;
+    box-shadow: none !important;
+    overflow: hidden;
+}
+
+body.dashboard-page.report-page .customer-report-filters .report-outlined-inner:has(.transaction-date-range-group),
+body.maintenance-page .customer-report-filters .report-outlined-inner:has(.transaction-date-range-group) {
+    overflow: hidden;
+    border-radius: inherit;
+}
+
+body.dashboard-page.report-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker:hover,
+body.maintenance-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker:hover {
+    background: #ffffff !important;
+    box-shadow: none !important;
+}
+
+body.dashboard-page.report-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker:focus-visible,
+body.maintenance-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker:focus-visible {
+    box-shadow: none !important;
+}
+
+body.dashboard-page.report-page .customer-report-filters .report-outlined-label--txn-capture-date,
+body.maintenance-page .customer-report-filters .report-outlined-label--txn-capture-date {
+    left: clamp(46px, 3.35vw, 58px);
+}
+
+/* Calendar icon pill — shared with dashboard via transaction.css; outlined shell clips left corner */
+body.dashboard-page.report-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
+body.maintenance-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
+    border-radius: clamp(6px, 0.52vw, 8px) 0 0 clamp(6px, 0.52vw, 8px);
+    z-index: 5;
+}
+
+/* Match Transaction Capture Date: `date-range-picker.css` `.calendar-month-year select` */
+.customer-report-filter-group select,
+.customer-report-filter-group input:not([type="checkbox"]):not(.report-date-range-input) {
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    padding: clamp(4px, 0.3vw, 6px) clamp(6px, 0.4vw, 8px);
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: 600;
+    color: #000;
+    background: #fff;
+    box-sizing: border-box;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: var(--font-heading-page);
+}
+
+.customer-report-filter-group input:not([type="checkbox"]):not(.report-date-range-input) {
+    cursor: text;
+}
+
+.customer-report-filter-group select:hover,
+.customer-report-filter-group input:not([type="checkbox"]):not(.report-date-range-input):hover {
+    border-color: #3b82f6;
+}
+
+.customer-report-filter-group select:focus,
+.customer-report-filter-group input:not([type="checkbox"]):not(.report-date-range-input):focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* Custom dropdown in filter row — match `date-range-picker.css` `.calendar-month-year select` */
+.customer-report-filter-group .custom-select-button {
+    width: 100%;
+    padding: clamp(4px, 0.3vw, 6px) clamp(26px, 2vw, 30px) clamp(4px, 0.3vw, 6px) clamp(6px, 0.4vw, 8px);
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background: #fff;
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: 600;
+    color: #000;
+    font-family: var(--font-heading-page);
+    transition: all 0.2s;
+    min-height: clamp(32px, 2.25vw, 36px);
+    box-sizing: border-box;
+}
+
+.customer-report-filter-group .custom-select-button:hover {
+    border-color: #3b82f6;
+}
+
+.customer-report-filter-group .custom-select-button:focus,
+.customer-report-filter-group .custom-select-button.open {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* Show All — Process List 同款 pill chip（body 为 dashboard-page + report-page，见 CustomerReportPage） */
+body.dashboard-page.report-page .customer-report-showall-group .userlist-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+body.dashboard-page.report-page .customer-report-showall-group .user-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px 6px 10px;
+    margin: 0;
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 999px;
+    background: #f8fafc;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: clamp(12px, 0.85vw, 15px);
+    font-weight: 500;
+    color: #475569;
+    line-height: 1.2;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease,
+        color 0.15s ease,
+        background-color 0.15s ease;
+    min-width: 6.75rem;
+    justify-content: flex-start;
+}
+
+body.dashboard-page.report-page .customer-report-showall-group .user-filter-chip:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08);
+}
+
+body.dashboard-page.report-page .customer-report-showall-group .user-filter-chip:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+}
+
+body.dashboard-page.report-page .customer-report-showall-group .user-filter-chip.is-selected {
+    border-color: rgba(13, 96, 255, 0.45);
+    color: #0d60ff;
+    box-shadow: 0 2px 6px rgba(13, 96, 255, 0.12);
+}
+
+body.dashboard-page.report-page .customer-report-showall-group .user-filter-chip__dot {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+}
+
+body.dashboard-page.report-page .customer-report-showall-group .user-filter-chip.is-selected .user-filter-chip__dot {
+    background: linear-gradient(180deg, #63c4ff 0%, #0d60ff 100%);
+    color: #ffffff;
+}
+
+body.dashboard-page.report-page .customer-report-showall-group .user-filter-chip__check {
+    width: 11px;
+    height: 11px;
+    display: block;
+}
+
+body.dashboard-page.report-page .customer-report-showall-group .user-filter-chip__label {
+    white-space: nowrap;
+}
+
+.customer-report-table-header {
+    display: grid;
+    grid-template-columns: 1.35fr 1.45fr 0.72fr 0.82fr 0.72fr 1.05fr 1.05fr;
+    gap: 15px;
+    padding: var(--report-list-header-padding-block-start) var(--report-list-header-padding-inline) var(--report-list-header-padding-block-end);
+    background: linear-gradient(180deg, #60C1FE 0%, #0F61FF 100%);
+    border-radius: 8px 8px 0 0;
+    margin-top: 20px;
+    font-weight: bold;
+    color: white;
+    font-size: var(--text-base);
+    min-width: 0;
+}
+
+.customer-report-table-header > div:nth-child(6),
+.customer-report-table-header > div:nth-child(7) {
+    text-align: right;
+}
+
+/* Group scope: Group ID | Company | Currency | Win | Lose */
+.customer-report-list-container--group .customer-report-table-header,
+.customer-report-list-container--group .customer-report-card,
+.customer-report-list-container--group .customer-report-total {
+    grid-template-columns: 0.72fr 0.82fr 0.72fr 1.05fr 1.05fr;
+}
+
+.customer-report-list-container--group .customer-report-table-header > div:nth-child(4),
+.customer-report-list-container--group .customer-report-table-header > div:nth-child(5),
+.customer-report-list-container--group .customer-report-card-item:nth-child(4),
+.customer-report-list-container--group .customer-report-card-item:nth-child(5) {
+    text-align: right;
+    justify-content: flex-end;
+}
+
+.customer-report-list-container--group .customer-report-total-label {
+    grid-column: 1 / 4;
+}
+
+/* Company scope: Account | Name | Currency | Win | Lose */
+.customer-report-list-container--company .customer-report-table-header,
+.customer-report-list-container--company .customer-report-card,
+.customer-report-list-container--company .customer-report-total {
+    grid-template-columns: 1.35fr 1.45fr 0.72fr 1.05fr 1.05fr;
+}
+
+.customer-report-list-container--company .customer-report-table-header > div:nth-child(4),
+.customer-report-list-container--company .customer-report-table-header > div:nth-child(5),
+.customer-report-list-container--company .customer-report-card-item:nth-child(4),
+.customer-report-list-container--company .customer-report-card-item:nth-child(5) {
+    text-align: right;
+    justify-content: flex-end;
+}
+
+.customer-report-list-container--company .customer-report-total-label {
+    grid-column: 1 / 4;
+}
+
+.customer-report-cards {
+    display: flex;
+    flex-direction: column;
+}
+
+.customer-report-card {
+    display: grid;
+    grid-template-columns: 1.35fr 1.45fr 0.72fr 0.82fr 0.72fr 1.05fr 1.05fr;
+    gap: var(--report-list-grid-gap);
+    padding: var(--report-list-row-padding-block) var(--report-list-row-padding-inline);
+    min-height: var(--report-list-cell-min-height);
+    box-sizing: content-box;
+    background: #f0e5fb;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.customer-report-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+.customer-report-card:nth-child(even) {
+    background: #cceeff99;
+}
+
+.customer-report-card:nth-child(odd) {
+    background: #ffffff;
+}
+
+.customer-report-card-item {
+    font-size: var(--text-medium);
+    font-weight: bold;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.customer-report-total {
+    display: grid;
+    grid-template-columns: 1.35fr 1.45fr 0.72fr 0.82fr 0.72fr 1.05fr 1.05fr;
+    gap: var(--report-list-grid-gap);
+    padding: var(--report-list-row-padding-block) var(--report-list-row-padding-inline);
+    background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+    border-top: 2px solid #0F61FF;
+    border-radius: 0 0 8px 8px;
+    font-weight: bold;
+    font-size: clamp(12px, 0.82vw, 15px);
+    color: #1e293b;
+}
+
+.customer-report-total-label {
+    grid-column: 1 / 6;
+    text-align: right;
+    padding-right: 0;
+    align-self: center;
+}
+
+.customer-report-total .customer-report-amount {
+    align-self: center;
+    text-align: right;
+}
+
+.customer-report-total-win {
+    color: #172a9f;
+}
+
+.customer-report-total-lose {
+    color: #b91c1c;
+}
+
+.customer-report-amount {
+    text-align: right;
+    justify-content: flex-end;
+}
+
+.customer-report-card-item.customer-report-amount.win,
+.customer-report-amount.win {
+    color: #172a9f;
+}
+
+.customer-report-card-item.customer-report-amount.lose,
+.customer-report-amount.lose {
+    color: #b91c1c;
+}
+
+.report-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: clamp(10px, 0.83vw, 16px);
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    min-height: 0;
+}
+
+/* 标题已移除：占位 header 不参与顶距计算 */
+body.dashboard-page.report-page .content > .report-header:empty {
+    display: none;
+}
+
+/* Report Date Range：字号、颜色、框的 border 与 Account 一致 */
+
+
+/* Report 页 Flatpickr 日历：与第二张图一致（展开大小、白底、圆角、日期不裁切） */
+.flatpickr-calendar {
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    overflow: visible;
+    min-width: 307px;
+    padding-bottom: 12px;
+    box-sizing: border-box;
+}
+/* Report 页：日历一出现就隐藏，定位完成后再显示，直接展开即第二张图 */
+.report-page .flatpickr-calendar {
+    visibility: hidden;
+}
+.report-page .flatpickr-calendar.report-calendar-ready {
+    visibility: visible !important;
+}
+.flatpickr-calendar .flatpickr-days {
+    border: none;
+}
+.flatpickr-calendar .dayContainer {
+    min-width: 100%;
+}
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+    background: #3b82f6 !important;
+    border-color: #3b82f6 !important;
+    color: #fff !important;
+    border-radius: 6px;
+}
+.flatpickr-day.inRange {
+    background: rgba(59, 130, 246, 0.25) !important;
+    border-color: transparent !important;
+    box-shadow: -5px 0 0 rgba(59, 130, 246, 0.25), 5px 0 0 rgba(59, 130, 246, 0.25);
+    border-radius: 0;
+}
+.flatpickr-day.today {
+    border-color: #3b82f6;
+}
+.flatpickr-day.today:hover,
+.flatpickr-day.today:focus {
+    background: #dbeafe;
+    border-color: #3b82f6;
+}
+.flatpickr-months .flatpickr-month {
+    background: #fff;
+}
+
+@media (max-width: 1400px) {
+
+    .customer-report-card-item{
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+
+    .custom-select-option{
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+
+}
+
+@media (max-width: 1200px) {
+
+    .customer-report-card-item{
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+
+    .custom-select-option{
+        font-size: clamp(9px, 0.85vw, 14px);
+    }
+
+}
+
+/* 报表区域：静默刷新时顶栏细条，无白屏叠层 */
+.customer-report-table-region {
+    position: relative;
+}
+
+.customer-report-sync-track {
+    height: 2px;
+    overflow: hidden;
+    border-radius: 2px;
+    margin-bottom: 10px;
+    background: rgba(229, 231, 235, 0.9);
+}
+
+.customer-report-sync-bar {
+    height: 100%;
+    width: 38%;
+    max-width: 180px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.95), rgba(59, 130, 246, 0.15));
+    animation: customer-report-sync-slide 0.95s ease-in-out infinite;
+}
+
+@keyframes customer-report-sync-slide {
+    0% {
+        transform: translateX(-120%);
+    }
+    100% {
+        transform: translateX(420%);
+    }
+}

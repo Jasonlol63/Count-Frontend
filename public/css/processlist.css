@@ -1,0 +1,3733 @@
+﻿/* Input formatting - 统一管理输入框格式 */
+#add_process_id,
+#new_description_name,
+#add_remove_words,
+#add_replace_word_from,
+#add_replace_word_to,
+#add_remarks,
+#edit_remove_words,
+#edit_replace_word_from,
+#edit_replace_word_to,
+#edit_remarks {
+    text-transform: uppercase;
+}
+
+.copy-from-search {
+    display: block;
+    width: 100%;
+    margin-bottom: 6px;
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.copy-from-search:focus {
+    outline: none;
+    border-color: #80bdff;
+}
+
+/* 注意：searchInput 和 descriptionSearch 不使用 CSS text-transform，保持实际值的显示 */
+/* 描述列表删除按钮样式 */
+.description-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.description-item-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.description-delete-btn {
+    border: none;
+    background: transparent;
+    color: #c00;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+}
+
+.description-delete-btn:hover {
+    color: #900;
+}
+
+/* Country Selection Modal — dual column + footer (matches Bank Selection picker layout) */
+.process-page .modal-content.country-selection-modal,
+.modal-content.country-selection-modal {
+    width: min(85rem, 96vw);
+    max-width: 85rem;
+    max-height: min(92vh, 720px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden !important;
+    border-radius: 12px;
+}
+
+.country-selection-modal-header.modal-header {
+    flex: 0 0 auto;
+    position: relative;
+    padding: 18px 48px 16px 24px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #fff;
+}
+
+.country-selection-modal-header h2 {
+    margin: 0;
+    padding: 0;
+    font-size: var(--text-page-title, 1.25rem);
+    font-family: var(--font-heading-page);
+    font-weight: var(--font-weight-page-title, 700);
+    color: #0f172a;
+    letter-spacing: 0.02em;
+}
+
+.country-selection-modal-header .close {
+    top: 10px;
+    right: 12px;
+}
+
+#countrySelectionModal .country-selection-modal-body.modal-body {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 20px 28px 24px;
+    overflow: hidden;
+}
+
+.country-selection-container {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 2rem;
+    align-items: stretch;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: min(58vh, 480px);
+    max-height: min(58vh, 480px);
+}
+
+#countrySelectionModal .available-countries-section {
+    display: grid;
+    grid-template-rows: auto auto auto minmax(160px, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-right: 1px solid #e8ecf1;
+    padding-right: 1rem;
+}
+
+#countrySelectionModal .selected-countries-section {
+    display: grid;
+    grid-template-rows: auto minmax(160px, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    padding-left: 0.25rem;
+}
+
+.available-countries-section {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid #e8ecf1;
+    padding-right: 1rem;
+}
+
+.selected-countries-section {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding-left: 0.25rem;
+}
+
+.available-countries-section h3,
+.selected-countries-section h3 {
+    margin: 0 0 8px 0;
+    color: #0f172a;
+    font-size: var(--text-small, 13px);
+    font-family: var(--font-heading-page);
+    font-weight: 600;
+}
+
+.add-country-bar {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e8ecf1;
+}
+
+.add-country-bar h3 {
+    margin: 0 0 8px 0;
+    color: #0f172a;
+    font-size: var(--text-small, 13px);
+    font-family: var(--font-heading-page);
+    font-weight: 600;
+}
+
+.add-country-form {
+    margin: 0;
+}
+
+.add-country-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.add-country-input-group input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 12px;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    font-size: var(--text-small, 13px);
+    font-family: var(--font-ui);
+    min-height: 40px;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.country-selection-add-btn.btn {
+    flex-shrink: 0;
+    min-height: 40px;
+    height: 40px;
+    padding: 0 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: var(--text-small, 13px);
+}
+
+.country-search {
+    margin-bottom: 10px;
+}
+
+.country-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    font-size: var(--text-small, 13px);
+    font-family: var(--font-ui);
+    min-height: 40px;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+#countrySelectionModal #existingCountries.country-list,
+#countrySelectionModal .country-list {
+    grid-row: 4;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    padding: 10px;
+    background: #f1f5f9;
+}
+
+#countrySelectionModal .selected-countries-list {
+    grid-row: 2;
+    align-self: stretch;
+    min-height: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 10px;
+    background: #f0f9ff;
+}
+
+/* Country modal scrollbars: app-wide — dashboard-scrollbar.css */
+
+.country-list {
+    flex: 1 1 auto;
+    min-height: 140px;
+    overflow-y: auto;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    padding: 6px 4px;
+    background: #fff;
+}
+
+.selected-countries-list {
+    flex: 1 1 auto;
+    min-height: 140px;
+    overflow-y: auto;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    padding: 10px;
+    background: #fff;
+}
+
+.modal-content.country-selection-modal .country-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    margin: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.modal-content.country-selection-modal .selected-countries-list .selected-country-modal-item {
+    margin: 0 0 8px;
+    background: #dbeafe;
+    border: 1px solid #3b82f6;
+}
+
+.modal-content.country-selection-modal .selected-countries-list .selected-country-modal-item:last-child {
+    margin-bottom: 0;
+}
+
+.modal-content.country-selection-modal .country-item:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.modal-content.country-selection-modal .country-item.is-picked {
+    background: #e2e8f0;
+    border-color: #64748b;
+}
+
+.modal-content.country-selection-modal .country-item-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.modal-content.country-selection-modal .country-item-code {
+    font-size: var(--text-small, 13px);
+    font-family: var(--font-ui);
+    font-weight: 600;
+    color: #334155;
+}
+
+.modal-content.country-selection-modal .country-list-delete {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.modal-content.country-selection-modal .country-list-delete:hover {
+    color: #dc2626;
+}
+
+.modal-content.country-selection-modal .country-list-delete-icon {
+    display: block;
+}
+
+/* Bank picker row pattern — scoped away from #bankSelectionModal (modal uses rules above) */
+.bank-list:not(#existingBanks) .country-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: space-between;
+    padding: clamp(4px, 0.21vw, 8px) 0;
+    border-bottom: 0.0625rem solid #e9ecef;
+    margin: 0;
+    border-radius: 0;
+    cursor: pointer;
+    border: none;
+}
+
+.modal-content.country-selection-modal .country-item input[type="checkbox"] {
+    margin: 0;
+    width: clamp(10px, 0.73vw, 14px);
+}
+
+.modal-content.country-selection-modal .country-item label {
+    margin: 0;
+    font-size: clamp(10px, 0.73vw, 14px);
+    cursor: pointer;
+    flex: 1;
+    color: #333;
+}
+
+.country-delete-btn {
+    border: none;
+    background: transparent;
+    color: #c00;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+}
+
+.country-delete-btn:hover {
+    color: #900;
+}
+
+.selected-country-modal-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: #e8f4fd;
+    border: 1px solid #64b5f6;
+    border-radius: 8px;
+}
+
+.selected-country-modal-item:last-child {
+    margin-bottom: 0;
+}
+
+.selected-country-modal-item span {
+    flex: 1;
+    font-size: var(--text-small, 13px);
+    color: #1565c0;
+    font-weight: 600;
+}
+
+.modal-content.country-selection-modal .selected-countries-list .selected-country-modal-item span {
+    color: #1d4ed8;
+}
+
+.remove-country-modal {
+    background: none;
+    border: none;
+    color: #1565c0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    line-height: 1;
+}
+
+.remove-country-modal:hover {
+    background-color: #1565c0;
+    color: white;
+}
+
+.modal-content.country-selection-modal .selected-countries-list .remove-country-modal {
+    color: #1d4ed8;
+}
+
+.modal-content.country-selection-modal .selected-countries-list .remove-country-modal:hover {
+    background-color: #1d4ed8;
+    color: #fff;
+}
+
+.no-countries {
+    text-align: center;
+    color: #94a3b8;
+    font-size: var(--text-small, 13px);
+    font-style: italic;
+    padding: 2rem 12px;
+    margin: auto 0;
+}
+
+.country-selection-modal-footer.modal-footer {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 28px 18px;
+    border-top: 1px solid #e5e7eb;
+    background: #fff;
+}
+
+.country-selection-modal-footer .btn {
+    min-width: 92px;
+    min-height: 36px;
+    padding: 0 16px;
+    font-size: var(--text-small, 13px);
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.process-page #countrySelectionModal .country-selection-modal-footer .btn.btn-save,
+.process-page #countrySelectionModal .country-selection-modal-footer .btn.btn-cancel,
+#countrySelectionModal .country-selection-modal-footer .btn {
+    min-width: 88px !important;
+    width: auto !important;
+    max-width: 140px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    max-height: 40px !important;
+    padding: 0 16px !important;
+    flex: 0 0 auto !important;
+    transform: none !important;
+}
+
+.process-page #countrySelectionModal .country-selection-add-btn.btn {
+    min-width: 0 !important;
+    width: auto !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+    padding: 0 16px !important;
+    flex: 0 0 auto !important;
+}
+
+@media (max-width: 720px) {
+    .country-selection-container {
+        grid-template-columns: 1fr;
+        height: auto;
+        max-height: none;
+        row-gap: 1rem;
+    }
+
+    #countrySelectionModal .available-countries-section {
+        border-right: none;
+        padding-right: 0;
+        border-bottom: 1px solid #e8ecf1;
+        padding-bottom: 12px;
+    }
+
+    #countrySelectionModal .selected-countries-section {
+        padding-left: 0;
+    }
+
+    #countrySelectionModal #existingCountries.country-list,
+    #countrySelectionModal .selected-countries-list {
+        min-height: 200px !important;
+        height: 200px !important;
+    }
+}
+
+/* Bank Supplier 排序表头样式，箭头与 Account List 一致 */
+.bank-th-supplier {
+    position: relative;
+    cursor: pointer;
+}
+
+.bank-th-supplier-text {
+    pointer-events: none;
+}
+
+.bank-sort-indicator {
+    font-size: clamp(8px, 0.6vw, 12px);
+    color: rgba(255, 255, 255, 0.8);
+    display: inline;
+    margin-left: 4px;
+}
+
+.bank-sort-indicator[style*="display: inline"] {
+    display: inline !important;
+}
+
+/* Bank Selection Modal — dual column + footer (matches Country Selection layout) */
+.process-page .modal-content.bank-selection-modal,
+.modal-content.bank-selection-modal {
+    width: min(56.25rem, 94vw);
+    max-width: 56.25rem;
+    max-height: min(90vh, 640px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden !important;
+    border-radius: 12px;
+}
+
+.bank-selection-modal-header.modal-header {
+    flex: 0 0 auto;
+    position: relative;
+    padding: 14px 40px 12px 18px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #fff;
+}
+
+.bank-selection-modal-header h2 {
+    margin: 0;
+    padding: 0;
+    font-size: var(--text-page-title, 1.25rem);
+    font-family: var(--font-heading-page);
+    font-weight: var(--font-weight-page-title, 700);
+    color: #0f172a;
+    letter-spacing: 0.02em;
+}
+
+.bank-selection-modal-header .close {
+    top: 10px;
+    right: 12px;
+}
+
+#bankSelectionModal .bank-selection-modal-body.modal-body {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 14px 18px 16px;
+    overflow: hidden;
+}
+
+.bank-selection-container {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 1.25rem;
+    align-items: stretch;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: min(52vh, 420px);
+    max-height: min(52vh, 420px);
+}
+
+#bankSelectionModal .available-banks-section {
+    display: grid;
+    grid-template-rows: auto auto auto minmax(160px, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-right: 1px solid #e8ecf1;
+    padding-right: 1rem;
+}
+
+#bankSelectionModal .selected-banks-section {
+    display: grid;
+    grid-template-rows: auto minmax(160px, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    padding-left: 0.25rem;
+}
+
+.available-banks-section {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid #e8ecf1;
+    padding-right: 1rem;
+}
+
+.selected-banks-section {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding-left: 0.25rem;
+}
+
+.available-banks-section h3,
+.selected-banks-section h3 {
+    margin: 0 0 8px 0;
+    color: #0f172a;
+    font-size: var(--text-small, 13px);
+    font-family: var(--font-heading-page);
+    font-weight: 600;
+}
+
+.add-bank-bar {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e8ecf1;
+}
+
+.add-bank-bar h3 {
+    margin: 0 0 8px 0;
+    color: #0f172a;
+    font-size: var(--text-small, 13px);
+    font-family: var(--font-heading-page);
+    font-weight: 600;
+}
+
+.add-bank-form {
+    margin: 0;
+}
+
+.add-bank-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.add-bank-input-group input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 12px;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    font-size: var(--text-small, 13px);
+    font-family: var(--font-ui);
+    min-height: 40px;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.bank-selection-add-btn.btn {
+    flex-shrink: 0;
+    min-height: 40px;
+    height: 40px;
+    padding: 0 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: var(--text-small, 13px);
+}
+
+.bank-search {
+    margin-bottom: 10px;
+}
+
+.bank-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    font-size: var(--text-small, 13px);
+    font-family: var(--font-ui);
+    min-height: 40px;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+/* Grid 第 4 行：填满剩余高度并在内部滚动（勿用 height:auto，否则会被外层裁切且无滚动条） */
+#bankSelectionModal #existingBanks.bank-list,
+#bankSelectionModal .bank-list {
+    grid-row: 4;
+    align-self: stretch;
+    min-height: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    padding: 6px 4px;
+    background: #fff;
+}
+
+#bankSelectionModal .selected-banks-list {
+    grid-row: 2;
+    align-self: stretch;
+    min-height: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    padding: 10px;
+    background: #fff;
+}
+
+/* Bank modal scrollbars: app-wide — dashboard-scrollbar.css */
+
+.bank-list {
+    flex: 1 1 auto;
+    min-height: 140px;
+    overflow-y: auto;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    padding: 6px 4px;
+    background: #fff;
+}
+
+.selected-banks-list {
+    flex: 1 1 auto;
+    min-height: 140px;
+    overflow-y: auto;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    padding: 10px;
+    background: #fff;
+}
+
+.modal-content.bank-selection-modal .bank-list .country-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    margin: 0 0 4px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.modal-content.bank-selection-modal .bank-list .country-item-left {
+    flex: 1;
+    min-width: 0;
+}
+
+.modal-content.bank-selection-modal .bank-list .country-item-code {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.modal-content.bank-selection-modal .bank-list .country-list-delete,
+.modal-content.bank-selection-modal .bank-list .remove-country-modal {
+    flex-shrink: 0;
+}
+
+.modal-content.bank-selection-modal .selected-banks-list .selected-country-modal-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    margin: 0 0 6px;
+    background: #e8f4fd;
+    border: 1px solid #64b5f6;
+    border-radius: 8px;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+}
+
+.modal-content.bank-selection-modal .selected-banks-list .selected-country-modal-item:last-child {
+    margin-bottom: 0;
+}
+
+.modal-content.bank-selection-modal .selected-banks-list .selected-country-modal-item span {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-small, 13px);
+    font-weight: 600;
+    color: #1565c0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.modal-content.bank-selection-modal .selected-banks-list .no-countries {
+    padding: 1.5rem 12px;
+}
+
+.modal-content.bank-selection-modal .bank-list .country-item:last-child {
+    margin-bottom: 0;
+}
+
+.modal-content.bank-selection-modal .bank-list .country-item:hover {
+    background: #f1f5f9;
+}
+
+.modal-content.bank-selection-modal .bank-list .country-item.is-picked {
+    background: #e8f4fd;
+    border-color: #90caf9;
+}
+
+.bank-selection-modal-footer.modal-footer {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px 14px;
+    border-top: 1px solid #e5e7eb;
+    background: #fff;
+}
+
+.process-page #bankSelectionModal .bank-selection-modal-footer .btn.btn-save,
+.process-page #bankSelectionModal .bank-selection-modal-footer .btn.btn-cancel,
+#bankSelectionModal .bank-selection-modal-footer .btn {
+    min-width: 88px !important;
+    width: auto !important;
+    max-width: 140px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    max-height: 40px !important;
+    padding: 0 16px !important;
+    font-size: var(--text-small, 13px) !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 0 0 auto !important;
+    transform: none !important;
+}
+
+.process-page #bankSelectionModal .bank-selection-add-btn.btn {
+    min-width: 0 !important;
+    width: auto !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+    padding: 0 16px !important;
+    flex: 0 0 auto !important;
+}
+
+@media (max-width: 720px) {
+    .bank-selection-container {
+        grid-template-columns: 1fr;
+        max-height: none;
+        row-gap: 1rem;
+    }
+
+    .available-banks-section {
+        border-right: none;
+        padding-right: 0;
+        border-bottom: 1px solid #e8ecf1;
+        padding-bottom: 12px;
+    }
+
+    .selected-banks-section {
+        padding-left: 0;
+    }
+}
+
+.bank-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: space-between;
+    padding: clamp(4px, 0.21vw, 8px) 0;
+    border-bottom: 0.0625rem solid #e9ecef;
+}
+
+.bank-item:last-child {
+    border-bottom: none;
+}
+
+.bank-item-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.bank-item input[type="checkbox"] {
+    margin: 0;
+    width: clamp(10px, 0.73vw, 14px);
+}
+
+.bank-item label {
+    margin: 0;
+    font-size: clamp(10px, 0.73vw, 14px);
+    cursor: pointer;
+    flex: 1;
+    color: #333;
+}
+
+.bank-delete-btn {
+    border: none;
+    background: transparent;
+    color: #c00;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+}
+
+.bank-delete-btn:hover {
+    color: #900;
+}
+
+.bank-item:hover {
+    background-color: #e9ecef;
+}
+
+.selected-bank-modal-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: clamp(2px, 0.42vw, 8px) 8px;
+    border-bottom: 0.0625rem solid #e9ecef;
+    background-color: #e3f2fd;
+    border-radius: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.selected-bank-modal-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.selected-bank-modal-item span {
+    flex: 1;
+    font-size: clamp(10px, 0.73vw, 14px);
+    color: #1976d2;
+    font-weight: 500;
+}
+
+.remove-bank-modal {
+    background: none;
+    border: none;
+    color: #1976d2;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0;
+    width: 1.25rem;
+    height: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.remove-bank-modal:hover {
+    background-color: #1976d2;
+    color: white;
+}
+
+.no-banks {
+    text-align: center;
+    color: #6c757d;
+    font-size: clamp(10px, 0.78vw, 15px);
+    font-style: italic;
+    padding: clamp(20px, 2.08vw, 40px) 20px;
+}
+
+/* Bank Process List header row (title + Accounting Due) */
+.bank-process-header-left {
+    display: flex;
+    align-items: center;
+    gap: clamp(12px, 1.04vw, 20px);
+    min-width: 0;
+    flex-wrap: nowrap;
+    position: relative;
+    z-index: 1;
+    margin-top: var(--text-page-title-mt) !important;
+}
+
+/* Accounting Due inbox trigger + popover (Contra Inbox design language) */
+.process-accounting-inbox-wrap {
+    position: relative;
+    flex-shrink: 0;
+    align-self: center;
+}
+
+.process-accounting-inbox-badge,
+.accounting-due-inbox-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #ff3b30;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.process-accounting-inbox-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s ease;
+}
+
+.process-accounting-inbox-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.process-accounting-inbox-btn.process-accounting-inbox-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    background: #ffffff;
+    font-size: clamp(11px, 0.83vw, 15px);
+    font-weight: 800;
+    color: #000033;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.process-accounting-inbox-btn.process-accounting-inbox-main:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.process-accounting-inbox-wrap--open .process-accounting-inbox-btn.process-accounting-inbox-main {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.process-accounting-inbox-main-label {
+    white-space: nowrap;
+}
+
+.process-accounting-inbox-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: #000033;
+}
+
+.process-accounting-inbox-chevron {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: #64748b;
+    transition: transform 0.2s ease;
+}
+
+.process-accounting-inbox-wrap--open .process-accounting-inbox-chevron {
+    transform: rotate(180deg);
+}
+
+.accounting-due-inbox-popover {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 12px);
+    width: min(1040px, calc(100vw - 48px));
+    max-height: min(620px, calc(100vh - 120px));
+    overflow: hidden;
+    border: 1px solid #e8edf5;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 4px 24px rgba(15, 23, 42, 0.12), 0 12px 40px rgba(15, 23, 42, 0.08);
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+}
+
+.accounting-due-inbox-popover.accounting-due-inbox-popover--fixed {
+    position: fixed;
+    top: auto;
+    left: auto;
+    z-index: 10050;
+}
+
+.accounting-due-inbox-popover::before {
+    content: "";
+    position: absolute;
+    top: -7px;
+    left: var(--accounting-due-caret-left, 28px);
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    border-left: 1px solid #e8edf5;
+    border-top: 1px solid #e8edf5;
+    transform: rotate(45deg);
+}
+
+.accounting-due-inbox-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #eef2f7;
+    background: #fff;
+}
+
+.accounting-due-inbox-popover-title {
+    font-weight: 800;
+    color: #000033;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: clamp(15px, 1.12vw, 19px);
+}
+
+.accounting-due-inbox-popover-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.accounting-due-inbox-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.accounting-due-inbox-btn.accounting-due-inbox-refresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: clamp(11px, 0.78vw, 14px);
+    font-weight: 700;
+    color: #2563eb;
+}
+
+.accounting-due-inbox-btn.accounting-due-inbox-refresh svg {
+    width: 16px;
+    height: 16px;
+}
+
+.accounting-due-inbox-btn.accounting-due-inbox-refresh:hover:not(:disabled) {
+    background: #eff6ff;
+}
+
+.accounting-due-inbox-btn.accounting-due-inbox-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    color: #64748b;
+}
+
+.accounting-due-inbox-btn.accounting-due-inbox-close svg {
+    width: 18px;
+    height: 18px;
+}
+
+.accounting-due-inbox-btn.accounting-due-inbox-close:hover {
+    background: #f1f5f9;
+    color: #334155;
+}
+
+.accounting-due-inbox-popover-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.accounting-due-inbox-table-wrap {
+    padding: 0 14px 10px;
+}
+
+.accounting-due-inbox-loading,
+.accounting-due-inbox-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--color-muted-fg);
+    font-size: var(--text-small);
+    font-weight: var(--font-weight-semibold);
+}
+
+.accounting-due-inbox-grid {
+    display: grid;
+    grid-template-columns: var(--accounting-due-grid-cols);
+    column-gap: var(--accounting-due-grid-gap);
+    align-items: stretch;
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--accounting-due-header-border);
+    border-top: none;
+    border-radius: 10px;
+    overflow: visible;
+    background: #fff;
+}
+
+.accounting-due-inbox-grid-row {
+    display: contents;
+}
+
+.accounting-due-inbox-grid-row--head .accounting-due-inbox-grid-cell--head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--accounting-due-head-min-height);
+    padding: var(--accounting-due-head-pad-y) var(--accounting-due-head-pad-x);
+    background: var(--accounting-due-header-bg) !important;
+    border-top: 1px solid var(--accounting-due-header-border);
+    border-bottom: 1px solid var(--accounting-due-header-border);
+    box-shadow:
+        inset -1px 0 0 var(--accounting-due-header-divider),
+        0 2px 6px rgba(15, 23, 42, 0.06);
+    text-align: center;
+}
+
+.accounting-due-inbox-grid-row--head .accounting-due-inbox-grid-cell--head:first-child {
+    border-top-left-radius: 9px;
+}
+
+.accounting-due-inbox-grid-row--head .accounting-due-inbox-grid-cell--head:last-child {
+    border-top-right-radius: 9px;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+}
+
+.accounting-due-inbox-grid-cell--head.accounting-due-inbox-grid-cell--cb,
+.accounting-due-inbox-grid-cell--head.accounting-due-inbox-grid-cell--delete {
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    padding: 0.45rem 0.25rem !important;
+}
+
+.accounting-due-inbox-select-head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+}
+
+.accounting-due-inbox-select-head-label {
+    font-size: var(--accounting-due-text-action-label);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.accounting-due-inbox-select-head-label--post {
+    color: #0f766e;
+}
+
+.accounting-due-inbox-select-head-label--delete {
+    color: #b42318;
+}
+
+.accounting-due-inbox-select-head-cb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: var(--accounting-due-checkbox-size);
+}
+
+.accounting-due-inbox-grid-row:not(.accounting-due-inbox-grid-row--head) .accounting-due-inbox-grid-cell {
+    display: flex;
+    align-items: center;
+    min-height: var(--accounting-due-row-min-height);
+    padding: var(--accounting-due-cell-pad-y) var(--accounting-due-cell-pad-x);
+    border-bottom: 1px solid var(--accounting-due-row-border);
+    background: #fff;
+}
+
+.accounting-due-inbox-grid-row:not(.accounting-due-inbox-grid-row--head):last-of-type .accounting-due-inbox-grid-cell {
+    border-bottom: none;
+}
+
+.accounting-due-inbox-grid-row:not(.accounting-due-inbox-grid-row--head):not(.accounting-due-inbox-grid-row--posted):hover .accounting-due-inbox-grid-cell {
+    background: #fafbfd;
+}
+
+.accounting-due-inbox-grid-row--posted .accounting-due-inbox-grid-cell {
+    background: #f8fafc;
+    opacity: 0.72;
+    color: #94a3b8;
+}
+
+.accounting-due-inbox-grid-cell {
+    min-width: 0;
+    font-size: var(--accounting-due-text-cell);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-body-strong);
+    line-height: 1.35;
+}
+
+.accounting-due-inbox-grid-cell--head {
+    font-size: var(--accounting-due-text-head);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--accounting-due-header-fg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+}
+
+.accounting-due-inbox-grid-cell--cb,
+.accounting-due-inbox-grid-cell--delete,
+.accounting-due-inbox-grid-cell--no,
+.accounting-due-inbox-grid-cell--date,
+.accounting-due-inbox-grid-cell--period,
+.accounting-due-inbox-grid-cell--bank,
+.accounting-due-inbox-grid-cell--contract {
+    justify-content: center;
+    text-align: center;
+}
+
+.accounting-due-inbox-grid-cell--cb,
+.accounting-due-inbox-grid-cell--delete {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+.accounting-due-inbox-grid-cell--head.accounting-due-inbox-grid-cell--owner {
+    justify-content: center;
+    text-align: center;
+}
+
+.accounting-due-inbox-grid-cell--owner {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.accounting-due-inbox-grid-cell--date,
+.accounting-due-inbox-grid-cell--period {
+    white-space: nowrap;
+}
+
+.accounting-due-inbox-grid-cell--owner,
+.accounting-due-inbox-grid-cell--contract {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.accounting-due-inbox-grid-cell input[type="checkbox"] {
+    width: var(--accounting-due-checkbox-size);
+    height: var(--accounting-due-checkbox-size);
+    margin: 0;
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: #2563eb;
+}
+
+.accounting-due-inbox-grid-cell input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.accounting-due-inbox-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    padding: 12px 16px;
+    border-top: 1px solid #eef2f7;
+    background: #fff;
+}
+
+.accounting-due-inbox-action-btn {
+    font-family: var(--font-heading-page);
+    width: clamp(7.5rem, 9vw, 10rem);
+    padding: clamp(0.5rem, 0.6vw, 0.7rem) 1.35rem;
+    font-size: clamp(12px, 0.85vw, 15px);
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.accounting-due-inbox-action-btn--primary {
+    background: linear-gradient(180deg, #0d9488 0%, #0f766e 100%);
+    color: #fff;
+    box-shadow: 0 2px 4px rgba(13, 148, 136, 0.3);
+}
+
+.accounting-due-inbox-action-btn--primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #0f766e 0%, #0d9488 100%);
+    box-shadow: 0 4px 8px rgba(13, 148, 136, 0.4);
+    transform: translateY(-1px);
+}
+
+.accounting-due-inbox-action-btn--delete {
+    background: linear-gradient(180deg, #F30E12 0%, #A91215 100%);
+    color: #fff;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+}
+
+.accounting-due-inbox-action-btn--delete:hover:not(:disabled) {
+    background: linear-gradient(180deg, #A91215 0%, #F30E12 100%);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+    transform: translateY(-1px);
+}
+
+.accounting-due-inbox-action-btn--cancel {
+    background: linear-gradient(180deg, #6c757d 0%, #495057 100%);
+    color: #fff;
+    box-shadow: 0 2px 4px rgba(108, 117, 125, 0.3);
+}
+
+.accounting-due-inbox-action-btn--cancel:hover:not(:disabled) {
+    background: linear-gradient(180deg, #495057 0%, #6c757d 100%);
+    box-shadow: 0 4px 8px rgba(108, 117, 125, 0.4);
+    transform: translateY(-1px);
+}
+
+.accounting-due-inbox-action-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Disabled Delete：与顶栏 .btn-delete:disabled 同款灰色（盖过红色渐变） */
+.accounting-due-inbox-action-btn--delete:disabled,
+.accounting-due-inbox-action-btn--delete:disabled:hover {
+    background: linear-gradient(180deg, #d8d8d8 0%, #8e9baa 100%) !important;
+    color: #f8fafc !important;
+    box-shadow: none !important;
+    transform: none !important;
+    cursor: not-allowed;
+    opacity: 0.9;
+}
+
+.accounting-due-inbox-popover-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px 12px;
+    border-top: 1px solid #eef2f7;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: clamp(11px, 0.78vw, 13px);
+    font-weight: 600;
+}
+
+.accounting-due-inbox-popover-footer svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: #94a3b8;
+}
+
+/* Accounting Due — centered popup modal */
+#processAccountingDueModal .accounting-due-modal-content {
+    width: min(1040px, 94vw) !important;
+    max-width: min(1040px, 94vw) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    display: flex;
+    flex-direction: column;
+    height: auto !important;
+    min-height: min-content !important;
+    max-height: min(94vh, 56rem);
+    overflow: hidden;
+}
+
+#processAccountingDueModal .modal-header h2 {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: clamp(15px, 1.12vw, 19px);
+    font-weight: 800;
+    color: #000033;
+}
+
+#processAccountingDueModal .modal-body.accounting-due-modal-body {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    box-sizing: border-box;
+    gap: 0;
+    padding: 0;
+}
+
+#processAccountingDueModal .accounting-due-inbox-table-wrap {
+    flex: 0 1 auto;
+    min-height: auto;
+    max-height: min(calc(94vh - 16rem), 520px);
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 0 16px 8px;
+    -webkit-overflow-scrolling: touch;
+}
+
+#processAccountingDueModal .accounting-due-inbox-grid-row--head .accounting-due-inbox-grid-cell--head {
+    top: 0;
+    z-index: 5;
+}
+
+#processAccountingDueModal .accounting-due-inbox-toolbar {
+    border-top: 1px solid #eef2f7;
+    padding: 12px 16px;
+}
+
+#processAccountingDueModal .accounting-due-inbox-popover-footer {
+    border-top: 1px solid #eef2f7;
+    border-radius: 0 0 1rem 1rem;
+}
+
+/* Bank Add Process 必填未填时红框 */
+#addBankModal .bank-field-error,
+#addBankModal .bank-select.bank-field-error,
+#addBankModal .bank-input.bank-field-error,
+#addBankModal .custom-select-button.bank-field-error {
+    border-color: #dc2626 !important;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25);
+}
+
+/* Frequency Dropdown Disabled Option Styling */
+#bank_day_start_frequency option:disabled {
+    color: #9ca3af !important;
+    background-color: #f3f4f6 !important;
+    cursor: not-allowed;
+}
+
+/* Add / Edit Bank Process modal: match reference — left-aligned labels, larger controls, blue section rules */
+#addBankModal .bank-form.process-form {
+    max-width: none;
+    width: 100%;
+    margin: 0;
+}
+
+#addBankModal .bank-form .form-group {
+    align-items: stretch;
+    text-align: left;
+}
+
+#addBankModal .bank-form .form-group label {
+    text-align: left;
+    align-self: flex-start;
+    width: 100%;
+    font-size: var(--text-medium);
+    font-weight: 600;
+    font-family: var(--font-heading-page);
+    letter-spacing: 0.015em;
+    color: #0f172a;
+}
+
+#addBankModal .bank-section-title {
+    text-align: left;
+    border-bottom: 1px solid var(--color-border-muted, #e2e8f0);
+}
+
+#addBankModal .bank-profit-sharing-container {
+    border-top: none;
+}
+
+#addBankModal .bank-profit-sharing-header {
+    text-align: left;
+}
+
+#addBankModal .bank-profit-sharing-header h3 {
+    text-align: left;
+}
+
+#addBankModal .bank-select {
+    text-align: left;
+}
+
+/* Compact "+" next to fields (was oversized vs inputs) */
+#addBankModal .bank-add-btn {
+    width: clamp(22px, 1.45vw, 26px) !important;
+    height: clamp(22px, 1.45vw, 26px) !important;
+    font-size: clamp(11px, 0.85vw, 14px) !important;
+}
+
+#addBankModal .no-profit-sharing {
+    align-items: flex-start;
+    justify-content: flex-start;
+    text-align: left;
+}
+
+#addBankModal .no-profit-sharing p {
+    font-size: var(--text-small);
+    font-family: var(--font-ui);
+}
+
+#addBankModal .bank-profit-sharing-list .profit-sharing-item {
+    margin-bottom: 8px;
+}
+
+#addBankModal .bank-profit-sharing-list .profit-sharing-item:last-child {
+    margin-bottom: 0;
+}
+
+/* Bank modal footer: match page toolbar Add Process / Cancel colors & sizing */
+.process-page #addBankModal .bank-actions .btn-save,
+.process-page #addBankModal .bank-actions .btn-cancel {
+    font-family: var(--font-heading-page);
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-semibold);
+    min-width: var(--userlist-btn-add-width);
+    width: auto;
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(5px, 0.42vw, 8px);
+    text-align: center;
+    --sweep-color: rgba(255, 255, 255, 0.2);
+}
+
+.process-page #addBankModal .bank-actions .btn-save {
+    background: var(--btn-add-gradient);
+    color: #ffffff;
+    box-shadow: var(--shadow-btn-add-page);
+}
+
+.process-page #addBankModal .bank-actions .btn-save:hover {
+    background: var(--btn-add-gradient-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-btn-add-page-hover);
+}
+
+.process-page #addBankModal .bank-actions .btn-save:active {
+    transform: translateY(0);
+}
+
+.process-page #addBankModal .bank-actions .btn-cancel {
+    background: var(--gradient-domain-muted-action);
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(88, 88, 88, 0.3);
+}
+
+.process-page #addBankModal .bank-actions .btn-cancel:hover {
+    background: var(--gradient-domain-muted-action-hover);
+    box-shadow: 0 4px 8px rgba(84, 84, 84, 0.4);
+    transform: translateY(-1px);
+}
+
+body.ec-auth-shell .process-page #addBankModal .bank-actions .btn-save,
+body.ec-auth-shell .process-page #addBankModal .bank-actions .btn-cancel {
+    font-size: var(--text-medium) !important;
+    font-weight: var(--font-weight-semibold) !important;
+    min-width: var(--userlist-btn-add-width) !important;
+    width: auto !important;
+    padding: clamp(6px, 0.42vw, 8px) 20px !important;
+    border-radius: 6px !important;
+    height: auto !important;
+}
+
+body.ec-auth-shell .process-page #addBankModal .bank-actions .btn-save:hover,
+body.ec-auth-shell .process-page #addBankModal .bank-actions .btn-cancel:hover {
+    transform: translateY(-1px) !important;
+}
+
+/* Bank Modal Styles - Separate from Gambling modal */
+.bank-modal .bank-modal-content {
+    max-width: 1100px;
+    width: 95%;
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden !important;
+}
+
+/* Title bar separator — match Account / Process form modals (not blue) */
+#addBankModal .modal-header {
+    border-bottom: 1px solid var(--color-border-muted, #e2e8f0);
+}
+
+/* Bank modal body: flex column — scrollable field area + fixed action bar */
+#addBankModal .modal-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden !important; /* body itself doesn't scroll, form does */
+}
+
+/* The bank form: flex column layout */
+#addBankModal .bank-form {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden; /* contain the scrollable area */
+}
+
+/* Scrollable area: all form rows */
+#addBankModal .bank-form-fields-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: visible;
+    padding-bottom: 10px; /* breathing room above the pinned buttons */
+}
+
+/* The action buttons bar: pinned at bottom, never scrolls */
+#addBankModal .bank-form > .bank-actions {
+    flex-shrink: 0;
+    background: #ffffff;
+    z-index: 10;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* Laptop screens: compact the form spacing */
+@media (max-height: 820px) {
+    #addBankModal .bank-form-fields-scroll .bank-form-row + .bank-form-row {
+        margin-top: 12px;
+    }
+    #addBankModal .bank-form-fields-scroll .bank-form-row {
+        gap: 20px;
+    }
+    #addBankModal .bank-profit-sharing-container {
+        margin-top: 6px;
+    }
+    #addBankModal .bank-profit-sharing-header {
+        padding: 8px 12px;
+    }
+    #addBankModal .no-profit-sharing {
+        padding: 16px 12px;
+    }
+    #addBankModal .bank-form > .bank-actions {
+        padding: 12px 0 16px 0;
+    }
+}
+
+.bank-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-width: 100% !important; /* Ensure form fills the full modal content width */
+}
+
+.bank-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    align-items: stretch;
+    min-height: 0;
+}
+
+.bank-form-row+.bank-form-row {
+    margin-top: 20px;
+}
+
+.bank-form-row-last {
+    min-height: 160px;
+}
+
+/* 右侧 Remark 区域拉伸至与左侧 Selected Profit Sharing 底部对齐 */
+.bank-form-row-last .bank-form-cell-right {
+    display: flex;
+    flex-direction: column;
+}
+
+.bank-form-row-last .bank-form-cell-right .bank-remark-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.bank-form-row-last .bank-form-cell-right .bank-remark-wrap .bank-remark-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.bank-form-row-last .bank-form-cell-right .bank-remark-wrap .bank-remark-actions .btn,
+#addBankModal .bank-remark-actions .bank-note-open-btn {
+    min-width: 120px;
+}
+
+.process-page #addBankModal .bank-remark-actions .bank-note-open-btn {
+    font-family: var(--font-heading-page);
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-semibold);
+    min-width: 120px;
+    width: auto;
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(5px, 0.42vw, 8px);
+    text-align: center;
+    background: var(--btn-add-gradient);
+    color: #ffffff;
+    box-shadow: var(--shadow-btn-add-page);
+    --sweep-color: rgba(255, 255, 255, 0.2);
+}
+
+.process-page #addBankModal .bank-remark-actions .bank-note-open-btn:hover {
+    background: var(--btn-add-gradient-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-btn-add-page-hover);
+}
+
+.process-page #addBankModal .bank-remark-actions .bank-note-open-btn:active {
+    transform: translateY(0);
+}
+
+body.ec-auth-shell .process-page #addBankModal .bank-remark-actions .bank-note-open-btn {
+    font-size: var(--text-medium) !important;
+    font-weight: var(--font-weight-semibold) !important;
+    min-width: 120px !important;
+    width: auto !important;
+    padding: clamp(6px, 0.42vw, 8px) 20px !important;
+    border-radius: 6px !important;
+    height: auto !important;
+}
+
+body.ec-auth-shell .process-page #addBankModal .bank-remark-actions .bank-note-open-btn:hover {
+    transform: translateY(-1px) !important;
+}
+
+.bank-form-row-last .bank-form-cell-right .bank-remark-wrap .bank-input {
+    flex: 1;
+    min-height: 2.5em;
+}
+
+.bank-form-cell {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.bank-form-cell-left,
+.bank-form-cell-right {
+    align-items: stretch;
+}
+
+.bank-form-cell .selected-countries-section {
+    flex: 1;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+}
+
+.bank-form-cell .selected-countries-list {
+    flex: 1;
+    min-height: 120px;
+    max-height: 280px; /* Enlarge height as requested */
+}
+
+.bank-form-left {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.bank-form-right {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.bank-section {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.bank-section:first-child {
+    margin-top: 0;
+}
+
+.bank-section-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #002C49;
+    margin-bottom: 10px;
+    margin-top: 0;
+    margin-left: 0;
+    padding-left: 4px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e0e0e0;
+    overflow: visible;
+}
+
+/* Bank Add/Edit Process：主/分区副标题保持原色；字段小标题黑色；输入内容与 Day start/end 占位同色 */
+#addBankModal .bank-form {
+    --bank-form-field-text: #94a3b8;
+}
+
+#addBankModal .bank-form .form-group label,
+#addBankModal .bank-form .bank-day-end-label-row > label,
+#addBankModal .bank-form .form-date-label-row.bank-day-end-label-row > label {
+    color: #0f172a !important;
+}
+
+#addBankModal .bank-form .bank-section-title {
+    color: #002C49 !important;
+}
+
+#addBankModal .bank-form .bank-profit-sharing-header h3 {
+    color: #1e293b !important;
+}
+
+#addBankModal .bank-form .bank-chinese,
+#addBankModal .bank-form .no-profit-sharing,
+#addBankModal .bank-form .no-profit-sharing p,
+#addBankModal .bank-form .ps-account-name,
+#addBankModal .bank-form .ps-amount-value,
+#addBankModal .bank-form .bank-remark-filled-hint {
+    color: var(--bank-form-field-text) !important;
+}
+
+#addBankModal .bank-form .bank-remark-filled-hint {
+    margin: 8px 0 0;
+    font-size: 12px;
+}
+
+#addBankModal .bank-form .bank-input,
+#addBankModal .bank-form .bank-select,
+#addBankModal .bank-form .bank-form-datepicker-input,
+#addBankModal .bank-form .custom-select-button,
+#addBankModal .bank-form .account-select-with-buttons .custom-select-button {
+    color: var(--bank-form-field-text) !important;
+}
+
+#addBankModal .bank-form .bank-input::placeholder {
+    color: var(--bank-form-field-text) !important;
+    opacity: 1;
+}
+
+#addBankModal .bank-form .custom-select-button::after {
+    color: var(--bank-form-field-text) !important;
+}
+
+#addBankModal .bank-form .ps-amount-value {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+}
+
+.bank-chinese {
+    font-size: 12px;
+    color: #666;
+    font-weight: normal;
+}
+
+.bank-row-two-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.bank-row-three-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 15px;
+}
+
+.bank-form .form-row {
+    margin-bottom: 0;
+}
+
+.bank-form .bank-day-start-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.bank-form .bank-day-start-row > .form-group {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.bank-form .bank-day-start-input-wrap,
+.bank-form .bank-day-end-input-wrap {
+    flex: 1 1 0; /* Balanced widths */
+}
+
+.bank-form .bank-day-start-input-wrap .bank-input {
+    width: 100%;
+}
+
+.bank-form .bank-day-end-field-group {
+    min-width: 0;
+    width: 100%;
+}
+
+.bank-form .bank-day-end-label-row,
+#addBankModal .bank-form .form-date-label-row.bank-day-end-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 12px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 0;
+}
+
+#addBankModal .bank-form .bank-day-end-label-row > label,
+#addBankModal .bank-form .form-date-label-row.bank-day-end-label-row > label {
+    width: auto !important;
+    flex: 0 1 auto;
+    margin-bottom: 0;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.bank-form .bank-day-end-monthly-cap-wrap {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    margin: 0 0 0 auto;
+    padding: 0;
+    min-width: 78px;
+    white-space: nowrap;
+}
+
+.bank-form .bank-day-end-cap-label {
+    font-size: 12px;
+    font-weight: 500;
+    font-family: var(--font-heading-page, inherit);
+    color: #94a3b8;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    user-select: none;
+    line-height: 1;
+    flex: 0 0 30px;
+    width: 30px;
+    min-width: 30px;
+    max-width: 30px;
+    white-space: nowrap;
+    text-align: right;
+    box-sizing: border-box;
+}
+
+.bank-form .bank-day-end-cap-label.is-on {
+    color: #94a3b8;
+}
+
+/* Bank modal：Day end 旁 toggle — 标签左、OFF/ON + pill 右（对齐参考 UI） */
+#addBankModal .bank-day-end-cap-switch {
+    position: relative;
+    display: inline-block;
+    width: 42px;
+    height: 22px;
+    min-width: 42px;
+    min-height: 22px;
+    max-width: 42px;
+    max-height: 22px;
+    flex: 0 0 42px;
+    flex-shrink: 0;
+    cursor: pointer;
+    margin: 0;
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+#addBankModal .bank-day-end-cap-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    inset: 0;
+    cursor: pointer;
+    z-index: 2;
+}
+
+#addBankModal .bank-day-end-cap-switch__track {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #d1dbe5;
+    border-radius: 999px;
+    border: none;
+    box-sizing: border-box;
+    overflow: hidden;
+    transition: background-color 0.2s ease;
+}
+
+#addBankModal .bank-day-end-cap-switch__track::before {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    top: 3px;
+    left: 3px;
+    transform: none;
+    background: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+}
+
+#addBankModal .bank-day-end-cap-switch input:checked + .bank-day-end-cap-switch__track {
+    background: #3b82f6;
+}
+
+#addBankModal .bank-day-end-cap-switch input:checked + .bank-day-end-cap-switch__track::before {
+    left: 3px;
+    transform: translateX(20px);
+}
+
+#addBankModal .bank-day-end-cap-switch:hover .bank-day-end-cap-switch__track {
+    background: #c5d0dc;
+}
+
+#addBankModal .bank-day-end-cap-switch:hover input:checked + .bank-day-end-cap-switch__track {
+    background: #2563eb;
+}
+
+#addBankModal .bank-day-end-cap-switch input:focus-visible + .bank-day-end-cap-switch__track {
+    outline: none;
+}
+
+#addBankModal .bank-day-end-cap-switch:has(input:focus-visible) {
+    outline: none;
+}
+
+#addBankModal .bank-day-end-cap-switch input:disabled + .bank-day-end-cap-switch__track {
+    opacity: 0.5;
+}
+
+#addBankModal .bank-day-end-cap-switch:has(input:disabled) {
+    cursor: not-allowed;
+}
+
+/* Add/Edit Bank Process + Resend modal — localized MaintenanceDateRangePicker (replaces native type="date") */
+#addBankModal .bank-form-datepicker-wrap,
+#confirmBankResendModal .bank-form-datepicker-wrap {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+}
+
+#addBankModal .bank-form-datepicker-wrap .bank-form-datepicker-input,
+#confirmBankResendModal .bank-form-datepicker-wrap .bank-form-datepicker-input {
+    width: 100%;
+    cursor: pointer;
+}
+
+#addBankModal .bank-form-datepicker-hitbox,
+#confirmBankResendModal .bank-form-datepicker-hitbox {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    opacity: 0;
+    cursor: pointer;
+    min-width: 0 !important;
+    width: 100% !important;
+    min-height: 100%;
+}
+
+#addBankModal .bank-form-datepicker-hitbox--disabled,
+#confirmBankResendModal .bank-form-datepicker-hitbox--disabled {
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+#addBankModal .bank-form-datepicker-wrap:focus-within .bank-form-datepicker-input {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+#addBankModal .bank-form-datepicker-sr-span,
+#confirmBankResendModal .bank-form-datepicker-sr-span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+#addBankModal .bank-form-datepicker-clear,
+#confirmBankResendModal .bank-form-datepicker-clear {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#addBankModal .bank-form-datepicker-clear:hover,
+#confirmBankResendModal .bank-form-datepicker-clear:hover {
+    color: #475569;
+}
+
+body.process-page .calendar-popup-clear-wrap {
+    padding: 8px 10px 4px;
+    border-top: 1px solid rgba(226, 232, 240, 0.95);
+    justify-content: flex-end;
+    box-sizing: border-box;
+}
+
+body.process-page .calendar-popup--match-anchor .calendar-popup-clear-wrap {
+    padding: 6px 4px 2px;
+}
+
+body.process-page .calendar-popup-clear-btn {
+    border: 1px solid rgba(203, 213, 225, 0.95);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+body.process-page .calendar-popup-clear-btn:hover:not(:disabled) {
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    color: #4338ca;
+}
+
+body.process-page .calendar-popup-clear-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* Bank Add/Edit + Resend — disabled fields match Contract gray fill + not-allowed cursor */
+#addBankModal .bank-form .custom-select-button:disabled,
+#addBankModal .bank-form .custom-select-button:disabled:hover,
+#addBankModal .bank-form .bank-input:disabled,
+#addBankModal .bank-form .bank-form-datepicker-wrap--disabled .bank-form-datepicker-input,
+#confirmBankResendModal .bank-form-datepicker-wrap--disabled .bank-form-datepicker-input {
+    background: #eceff3 !important;
+    color: var(--bank-form-field-text, #94a3b8) !important;
+    cursor: not-allowed !important;
+    opacity: 1;
+    box-shadow: none;
+}
+
+#addBankModal .bank-form .bank-form-datepicker-wrap--disabled,
+#confirmBankResendModal .bank-form-datepicker-wrap--disabled {
+    cursor: not-allowed;
+}
+
+#addBankModal .bank-form .bank-form-datepicker-wrap--disabled:focus-within .bank-form-datepicker-input,
+#confirmBankResendModal .bank-form-datepicker-wrap--disabled:focus-within .bank-form-datepicker-input {
+    border-color: #dbe3ee;
+    box-shadow: none;
+}
+
+body.process-page .calendar-popup.calendar-popup--transaction-range {
+    display: none;
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid rgba(203, 213, 225, 0.9);
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 16px 38px rgba(15, 23, 42, 0.16);
+}
+
+body.process-page .calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets {
+    grid-template-columns: 1fr;
+    width: min(292px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+}
+
+body.process-page.process-page--bank .calendar-popup.calendar-popup--transaction-range:not(.calendar-popup--no-presets) {
+    grid-template-columns: var(--drp-preset-col) 1fr;
+    width: var(--drp-popup-width);
+    max-width: calc(100vw - 24px);
+}
+
+body.process-page.process-page--bank .calendar-popup.calendar-popup--transaction-range:not(.calendar-popup--no-presets) .transaction-calendar-presets {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 9px 6px;
+    border-right: 1px solid rgba(226, 232, 240, 0.95);
+    background: linear-gradient(180deg, #fbfdff 0%, #f8fbff 100%);
+}
+
+body.process-page.process-page--bank .calendar-popup.calendar-popup--transaction-range:not(.calendar-popup--no-presets) .transaction-calendar-preset {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 25px;
+    padding: 5px 6px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #334155;
+    font-family: var(--font-heading-page);
+    font-size: var(--text-tiny);
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background 0.16s ease,
+        color 0.16s ease,
+        box-shadow 0.16s ease;
+}
+
+body.process-page.process-page--bank .calendar-popup.calendar-popup--transaction-range:not(.calendar-popup--no-presets) .transaction-calendar-preset:hover,
+body.process-page.process-page--bank .calendar-popup.calendar-popup--transaction-range:not(.calendar-popup--no-presets) .transaction-calendar-preset:focus-visible {
+    outline: none;
+    background: rgba(59, 130, 246, 0.1);
+    color: #1d4ed8;
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.15);
+}
+
+body.process-page.process-page--bank .calendar-popup.calendar-popup--transaction-range:not(.calendar-popup--no-presets) .transaction-calendar-preset.is-active {
+    background: var(--btn-add-gradient);
+    color: #ffffff;
+    box-shadow: 0 3px 8px rgba(37, 99, 235, 0.2);
+}
+
+body.process-page.process-page--bank .calendar-popup.calendar-popup--transaction-range:not(.calendar-popup--no-presets) .calendar-header {
+    max-width: 250px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Bank Process 顶栏：宽度由 JS 测量药丸后写入 --bank-toolbar-date-width */
+body.process-page.process-page--bank .calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor,
+body.process-page.process-page--bank .calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets {
+    width: auto;
+    min-width: 0;
+    max-width: calc(100vw - 24px);
+}
+
+body.process-page .calendar-popup.calendar-popup--transaction-range[style*="display: block"] {
+    display: grid !important;
+}
+
+/* Above Add/Edit Bank Process + Resend modals (ProcessModalPortal backdrop z-index 10050). */
+.calendar-popup.calendar-popup--bank-process-modal {
+    z-index: 10150 !important;
+}
+
+body.process-page .transaction-calendar-panel {
+    padding: 12px 14px 14px;
+    background: #ffffff;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-header {
+    display: grid;
+    grid-template-columns: 1fr 5fr 1fr;
+    align-items: center;
+    max-width: none;
+    width: 100%;
+    margin: 0 0 10px;
+    padding: 0;
+    column-gap: 4px;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-month-year {
+    grid-column: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    justify-self: center;
+    overflow: visible;
+    min-height: 36px;
+    border: 1px solid rgba(203, 213, 225, 0.86);
+    border-radius: 10px;
+    background: #f8fafc;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-month-trigger,
+body.process-page .calendar-popup--transaction-range .calendar-year-trigger {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: #334155;
+    font-size: var(--text-small);
+    font-weight: 800;
+    text-align: center;
+    box-shadow: none;
+    cursor: pointer;
+    font-family: var(--font-heading-page);
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-month-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 5.5rem;
+    min-height: 34px;
+    padding: 6px 10px;
+    border-right: 1px solid rgba(203, 213, 225, 0.74);
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-year-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 4.5rem;
+    min-height: 34px;
+    padding: 6px 10px;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-month-trigger:hover,
+body.process-page .calendar-popup--transaction-range .calendar-month-trigger:focus,
+body.process-page .calendar-popup--transaction-range .calendar-year-trigger:hover,
+body.process-page .calendar-popup--transaction-range .calendar-year-trigger:focus {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-month-trigger.is-active,
+body.process-page .calendar-popup--transaction-range .calendar-year-trigger.is-active {
+    background: var(--btn-add-gradient);
+    color: #ffffff;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-month-trigger::after,
+body.process-page .calendar-popup--transaction-range .calendar-year-trigger::after {
+    content: "";
+    display: inline-block;
+    flex-shrink: 0;
+    width: 5px;
+    height: 5px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: translateY(-1px) rotate(45deg);
+    opacity: 0.85;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-nav-btn {
+    color: #2563eb;
+    border-radius: 999px;
+    justify-self: center;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-nav-btn:hover {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-weekdays {
+    margin-bottom: 5px;
+    max-width: none;
+    width: 100%;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-weekday {
+    color: #8b95a5;
+    font-size: var(--text-tiny);
+    font-weight: 700;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-days {
+    max-width: none;
+    width: 100%;
+    margin: 0;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-day {
+    min-height: 25px;
+    border-radius: 6px;
+    color: #111827;
+    font-size: var(--text-tiny);
+    font-weight: 700;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-day.other-month {
+    color: #cbd5e1;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-day.in-range,
+body.process-page .calendar-popup--transaction-range .calendar-day.preview-range {
+    background: #eff6ff;
+    color: #2563eb;
+    border-radius: 0;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-day.start-date,
+body.process-page .calendar-popup--transaction-range .calendar-day.end-date,
+body.process-page .calendar-popup--transaction-range .calendar-day.selected {
+    background: var(--btn-add-gradient);
+    color: #ffffff;
+    box-shadow: 0 3px 8px rgba(37, 99, 235, 0.2);
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-day.start-date {
+    border-radius: 6px 0 0 6px;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-day.end-date {
+    border-radius: 0 6px 6px 0;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-day.start-date.end-date {
+    border-radius: 6px;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-days.calendar-month-grid,
+body.process-page .calendar-popup--transaction-range .calendar-days.calendar-year-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 8px 0 2px;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-month-option,
+body.process-page .calendar-popup--transaction-range .calendar-year-option {
+    min-height: 34px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: #f8fafc;
+    color: #334155;
+    font-family: var(--font-heading-page);
+    font-size: var(--text-tiny);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+body.process-page .calendar-popup--transaction-range .calendar-month-option.is-active,
+body.process-page .calendar-popup--transaction-range .calendar-year-option.is-active {
+    background: var(--btn-add-gradient);
+    color: #ffffff;
+}
+
+/* Bank Add/Edit / Resend：日历宽度与输入框一致（宽度由 JS 写入 inline style） */
+body.process-page:not(.process-page--bank) .calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor {
+    width: auto;
+    min-width: 0;
+    max-width: calc(100vw - 24px);
+    box-sizing: border-box;
+}
+
+body.process-page .calendar-popup--match-anchor .transaction-calendar-panel {
+    padding: 8px 6px 10px;
+}
+
+body.process-page .calendar-popup--match-anchor .calendar-header {
+    column-gap: 2px;
+}
+
+body.process-page .calendar-popup--match-anchor .calendar-month-year {
+    min-height: 30px;
+    width: 100%;
+    max-width: 100%;
+}
+
+body.process-page .calendar-popup--match-anchor .calendar-month-trigger,
+body.process-page .calendar-popup--match-anchor .calendar-year-trigger {
+    min-height: 28px;
+    padding: 4px 6px;
+    font-size: var(--drp-trigger-text, var(--text-medium));
+}
+
+body.process-page .calendar-popup--match-anchor .calendar-weekday {
+    font-size: var(--drp-popup-text);
+}
+
+body.process-page .calendar-popup--match-anchor .calendar-day {
+    min-height: var(--drp-day-min-h);
+    font-size: var(--drp-popup-text);
+    border-radius: 5px;
+}
+
+body.process-page .calendar-popup--transaction-range.calendar-popup--no-presets .transaction-calendar-panel,
+body.process-page .calendar-popup--transaction-range.calendar-popup--no-presets .calendar-header,
+body.process-page .calendar-popup--transaction-range.calendar-popup--no-presets .calendar-weekdays,
+body.process-page .calendar-popup--transaction-range.calendar-popup--no-presets .calendar-days {
+    max-width: none;
+    width: 100%;
+}
+
+.bank-form .bank-day-start-frequency-wrap {
+    width: 100%;
+    min-width: 160px;
+}
+
+.bank-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.bank-form-left .bank-row-two-cols,
+.bank-form-left .bank-row-three-cols,
+.bank-form-cell-left .bank-row-two-cols,
+.bank-form-cell-left .bank-row-three-cols,
+.bank-form-cell-right .bank-row-two-cols,
+.bank-form-cell-right .bank-row-three-cols {
+    display: grid;
+    gap: 15px;
+}
+
+.bank-form-left .bank-row-two-cols,
+.bank-form-cell-left .bank-row-two-cols,
+.bank-form-cell-right .bank-row-two-cols {
+    grid-template-columns: 1fr 1fr;
+}
+
+.bank-form-left .bank-row-type-name,
+.bank-form-cell-left .bank-row-type-name {
+    grid-template-columns: 1fr 1fr; /* Balanced Type and Card Owner */
+}
+
+.bank-form-left .bank-row-three-cols,
+.bank-form-cell-left .bank-row-three-cols,
+.bank-form-cell-right .bank-row-three-cols {
+    grid-template-columns: 0.85fr 0.85fr 1fr;
+}
+
+.bank-form .form-group label {
+    font-size: var(--text-medium);
+    font-weight: 600;
+    font-family: var(--font-heading-page);
+    letter-spacing: 0.015em;
+    color: #0f172a;
+    margin-bottom: 0;
+}
+
+.select-with-add {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.select-with-add .bank-select,
+.select-with-add .custom-select-wrapper {
+    flex: 1;
+    min-width: 0;
+}
+
+.bank-add-btn {
+    width: clamp(18px, 1.25vw, 24px);
+    height: clamp(18px, 1.25vw, 24px);
+    border-radius: 50%;
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: clamp(12px, 0.83vw, 16px);
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.bank-add-btn:hover {
+    background: linear-gradient(180deg, #0D60FF 0%, #63C4FF 100%);
+    transform: scale(1.05);
+}
+
+.bank-input,
+.bank-select {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid #dbe3ee;
+    border-radius: 0.52rem;
+    font-size: var(--text-small);
+    box-sizing: border-box;
+    background: #ffffff;
+    color: #374151;
+    font-family: var(--font-ui);
+    min-height: 2.55rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    line-height: 1.4;
+}
+
+.bank-input:focus,
+.bank-select:focus {
+    outline: none;
+    border-color: #0D60FF;
+    box-shadow: 0 0 0 4px rgba(13, 96, 255, 0.08);
+}
+
+.account-select-with-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.account-select-with-buttons .custom-select-wrapper {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+}
+
+#addBankModal .account-select-with-buttons .custom-select-wrapper,
+#profitSharingModal .account-select-with-buttons .custom-select-wrapper {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+}
+
+.custom-select-dropdown.custom-select-dropdown-portal {
+    display: flex !important;
+    flex-direction: column;
+    box-sizing: border-box;
+    border: 1px solid #dbe3ee;
+    border-radius: 0.52rem;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+    background: #ffffff;
+    overflow: hidden;
+    /* 紧凑列表：JS 会再按视口收紧；此处作兜底上限 */
+    max-height: min(280px, calc(100vh - 32px));
+    /* Above ProcessModalPortal backdrop (10050); inline style from JS may raise further in nested modals */
+    z-index: 10060;
+}
+
+/* Portal 挂在 body：总高度由 JS max-height 约束，选项区占满剩余空间并在内部滚动 */
+.custom-select-dropdown.custom-select-dropdown-portal .custom-select-search {
+    flex-shrink: 0;
+}
+
+.custom-select-dropdown.custom-select-dropdown-portal .custom-select-options {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+    overflow-y: auto;
+}
+
+#addBankModal .custom-select-dropdown.custom-select-dropdown-portal,
+#profitSharingModal .custom-select-dropdown.custom-select-dropdown-portal {
+    font-family: var(--font-ui);
+}
+
+/* Portal 挂在 body 上，不在 #addBankModal 内，需单独指定字号 */
+body.process-page .custom-select-dropdown.custom-select-dropdown-portal .custom-select-search input,
+.custom-select-dropdown.custom-select-dropdown-portal .custom-select-search input {
+    font-size: var(--text-small) !important;
+    font-family: var(--font-ui) !important;
+}
+
+body.process-page .custom-select-dropdown.custom-select-dropdown-portal .custom-select-option,
+.custom-select-dropdown.custom-select-dropdown-portal .custom-select-option {
+    font-size: var(--text-small) !important;
+    font-family: var(--font-ui) !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.process-page .custom-select-dropdown.custom-select-dropdown-portal .custom-select-no-results,
+.custom-select-dropdown.custom-select-dropdown-portal .custom-select-no-results {
+    font-size: var(--text-small) !important;
+    font-family: var(--font-ui) !important;
+}
+
+/* Card Merchant / Customer select bar: match Add Process / Account modal */
+.bank-form .account-select-with-buttons .custom-select-button {
+    width: 100%;
+    padding: 0.625rem 2.75rem 0.625rem 0.875rem;
+    border: 1px solid #dbe3ee;
+    border-radius: 0.52rem;
+    font-size: var(--text-small);
+    box-sizing: border-box;
+    background: #ffffff;
+    color: #374151;
+    font-family: var(--font-ui);
+    min-height: 2.55rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    cursor: pointer;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    position: relative;
+}
+
+.bank-form .account-select-with-buttons .custom-select-button:focus {
+    outline: none;
+    border-color: #0D60FF;
+    box-shadow: 0 0 0 4px rgba(13, 96, 255, 0.08);
+}
+
+.account-add-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.account-add-btn:hover {
+    background: linear-gradient(180deg, #0D60FF 0%, #63C4FF 100%);
+    transform: scale(1.05);
+}
+
+.custom-select-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.custom-select-button {
+    width: 100%;
+    padding: 8px 30px 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    text-align: left;
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    position: relative;
+}
+
+.custom-select-button::after {
+    content: '▼';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: #666;
+    pointer-events: none;
+}
+
+.custom-select-button.open::after {
+    content: '▲';
+}
+
+.custom-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    display: none;
+    max-height: min(420px, 70vh);
+    overflow: hidden;
+    margin-top: 2px;
+}
+
+.custom-select-dropdown.show {
+    display: block;
+}
+
+/* 下方空间不足时下拉在按钮上方展开，避免 Company 等靠下字段被遮挡 */
+.custom-select-dropdown.custom-select-dropdown-above {
+    top: auto;
+    bottom: 100%;
+    margin-top: 0;
+    margin-bottom: 2px;
+}
+
+.custom-select-search {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 1;
+}
+
+.custom-select-search input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: var(--text-small);
+    font-family: var(--font-ui);
+    box-sizing: border-box;
+}
+
+.custom-select-options {
+    max-height: min(380px, 60vh);
+    overflow-y: auto;
+}
+
+.custom-select-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: var(--text-small);
+    font-family: var(--font-ui);
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.custom-select-option:hover {
+    background-color: #f0f0f0;
+}
+
+.custom-select-option.selected {
+    background-color: #e3f2fd;
+    font-weight: bold;
+}
+
+.custom-select-option:last-child {
+    border-bottom: none;
+}
+
+.custom-select-no-results {
+    padding: 12px;
+    text-align: center;
+    color: #999;
+    font-size: var(--text-small);
+    font-family: var(--font-ui);
+}
+
+/* Add Process 内 Copy From 下拉：框高不变，选项更紧凑以同屏显示更多条，文字不裁切 */
+#add_copy_from_dropdown .custom-select-options {
+    max-height: min(380px, 60vh);
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+#add_copy_from_dropdown .custom-select-option {
+    padding: 4px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+    min-height: 1.4em;
+}
+
+#add_copy_from_dropdown .custom-select-no-results {
+    padding: 8px;
+    font-size: 13px;
+}
+
+.profit-sharing-with-add {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.profit-sharing-with-add .bank-input {
+    flex: 1;
+}
+
+.bank-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+    padding: 20px 0 30px 0; /* Add bottom padding */
+    border-top: 1px solid #eee;
+}
+
+#addBankModal .bank-actions {
+    border-top: 1px solid #e5e7eb;
+}
+
+/* Supplier/Customer/Company 下拉可溢出各层祖先显示（但不影响 modal-body / bank-form 的 overflow 控制） */
+#addBankModal .bank-form-row,
+#addBankModal .bank-form-cell,
+#addBankModal .bank-form-cell-left,
+#addBankModal .bank-form-cell-right,
+#addBankModal .form-row,
+#addBankModal .form-group,
+#addBankModal .account-select-with-buttons,
+#addBankModal .custom-select-wrapper {
+    overflow: visible;
+}
+
+#addBankModal .custom-select-wrapper {
+    position: relative;
+}
+
+/* Bank 弹窗内非 Portal 下拉：紧凑高度，选项区内滚动 */
+#addBankModal .custom-select-dropdown {
+    max-height: 280px !important;
+}
+
+#addBankModal .custom-select-options {
+    max-height: 228px !important;
+}
+
+/* Bank flow custom-select: trigger + list match Add Process / Account modal */
+#addBankModal .custom-select-button,
+.bank-modal .custom-select-button {
+    font-size: var(--text-small) !important;
+    font-family: var(--font-ui) !important;
+    border: 1px solid #dbe3ee !important;
+    border-radius: 0.52rem !important;
+    min-height: 4rem !important;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    padding: 0.625rem 2.75rem 0.625rem 0.875rem !important;
+    line-height: 1.4;
+}
+
+#profitSharingModal .custom-select-button {
+    font-size: var(--text-small) !important;
+    font-family: var(--font-ui) !important;
+    border: 1px solid #dbe3ee !important;
+    border-radius: 0.52rem !important;
+    min-height: 3.3rem !important;
+    height: 3.3rem !important;
+    width: 100%;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    padding: 0.625rem 2.75rem 0.625rem 0.875rem !important;
+    line-height: 1.4;
+}
+
+#addBankModal .custom-select-search input,
+#addBankModal .custom-select-option,
+#addBankModal .custom-select-no-results,
+#profitSharingModal .custom-select-search input,
+#profitSharingModal .custom-select-option,
+#profitSharingModal .custom-select-no-results,
+.bank-modal .custom-select-search input,
+.bank-modal .custom-select-option,
+.bank-modal .custom-select-no-results {
+    font-size: var(--text-small) !important;
+    font-family: var(--font-ui) !important;
+}
+
+#addBankModal .custom-select-option.selected,
+#profitSharingModal .custom-select-option.selected,
+.bank-modal .custom-select-option.selected {
+    background-color: #e7f0ff;
+    color: #0D60FF;
+    font-weight: 600;
+}
+
+#addBankModal .custom-select-option--disabled,
+.bank-modal .custom-select-option--disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Add Account 弹窗优先级最高，在 Add Process / Profit Sharing 之上显示 */
+#account-addModal,
+#account-editModal,
+#addAccountModal {
+    z-index: 20050 !important;
+}
+
+/* Add Profit Sharing 弹窗层级低于 Add Account，避免盖住 Add Account */
+#profitSharingModal {
+    z-index: 10100;
+}
+
+/* Ensure account modal is on top of profit sharing modal */
+.process-page .account-modal {
+    z-index: 20000;
+}
+
+/* Add Account 内操作（创建币种等）的 toast：高于 account-modal(20050) 与公司选择器(25500)，位置仍在右上 */
+.process-notification-container.process-notification-container--above-account-modal {
+    z-index: 26000;
+}
+
+/* modal-content 覆盖全局 88% 宽度：固定宽度填满弹窗，随行数增加高度自然增长 */
+#profitSharingModal .modal-content {
+    width: min(640px, 92vw) !important;
+    max-width: min(640px, 92vw) !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+}
+
+/* modal-body 最小高度确保底部按钮贴合 */
+#profitSharingModal .modal-body {
+    min-height: 215px;
+}
+
+#profitSharingModal .modal-header {
+    border-top-left-radius: 1rem;
+    border-top-right-radius: 1rem;
+    /* 与 modal-body 左右内边距一致：标题对齐 Account，关闭按钮对齐 Amount 列右缘 */
+    padding: 3px 1.75rem !important;
+}
+
+#profitSharingModal .modal-header h2 {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+#profitSharingModal .modal-header .close {
+    margin-right: 10px !important;
+}
+
+/* 弹窗及到下拉之间的所有祖先都允许溢出，让 Account 下拉可以溢出弹窗显示 */
+#profitSharingModal.modal,
+#profitSharingModal .modal-header,
+#profitSharingModal .modal-body,
+#profitSharingModal .bank-form,
+#profitSharingModal .form-row,
+#profitSharingModal .form-group,
+#profitSharingModal .account-select-with-buttons,
+#profitSharingModal .custom-select-wrapper {
+    overflow: visible !important;
+}
+
+/* 行数区域：≤7 行自然撑开；第 8 行起在弹窗内滚动，弹窗高度锁定为 7 行时的大小 */
+#profitSharingModal #profitSharingRowsContainer {
+    --profit-sharing-row-label-height: calc(var(--text-medium) * 1.3);
+    --profit-sharing-row-gap: 6px;
+    --profit-sharing-row-control-height: 3.3rem;
+    --profit-sharing-row-spacing: 15px;
+    --profit-sharing-row-inner: calc(
+        var(--profit-sharing-row-label-height)
+        + var(--profit-sharing-row-gap)
+        + var(--profit-sharing-row-control-height)
+    );
+    --profit-sharing-max-visible-rows: 7;
+    max-height: none;
+    overflow: visible;
+}
+
+#profitSharingModal #profitSharingRowsContainer.profit-sharing-rows-scroll {
+    max-height: calc(
+        var(--profit-sharing-row-inner) * var(--profit-sharing-max-visible-rows)
+        + var(--profit-sharing-row-spacing) * (var(--profit-sharing-max-visible-rows) - 1)
+        + 1rem
+    );
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-right: 2px;
+    box-sizing: border-box;
+}
+
+#profitSharingModal #profitSharingRowsContainer.profit-sharing-rows-scroll .profit-sharing-row:last-child {
+    margin-bottom: 0;
+}
+
+/* 下拉可向下溢出弹窗，不设 max-height 裁切，选项区内部滚动 */
+#profitSharingModal .custom-select-wrapper {
+    position: relative;
+}
+
+#profitSharingModal .custom-select-dropdown {
+    max-height: none !important;
+    overflow: visible !important;
+    z-index: 10101;
+}
+
+#profitSharingModal .custom-select-options {
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+#profitSharingModal .form-actions.bank-actions {
+    justify-content: center;
+}
+
+/* + Add Account：与 Company Settings Share % 虚线胶囊按钮一致 */
+#profitSharingModal .profit-sharing-add-row-wrap {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+    width: 100%;
+}
+
+#profitSharingModal .profit-sharing-add-account-btn {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 10px 14px;
+    background-color: rgba(13, 96, 255, 0.04);
+    color: #0d60ff;
+    border: 2px dashed rgba(13, 96, 255, 0.35);
+    border-radius: 12px;
+    font-size: var(--text-small);
+    font-family: var(--font-ui);
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+#profitSharingModal .profit-sharing-add-account-btn:hover {
+    background-color: rgba(13, 96, 255, 0.08);
+    border-color: rgba(13, 96, 255, 0.55);
+    transform: translateY(-1px);
+}
+
+#profitSharingModal .profit-sharing-add-account-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(13, 96, 255, 0.15);
+}
+
+/* Profit Sharing 弹窗：Account 列略宽；Amount+删除铺满右侧 */
+#profitSharingModal #profitSharingRowsContainer .profit-sharing-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) 15px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 8px;
+    row-gap: 6px;
+    align-items: center;
+    margin-bottom: 15px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#profitSharingModal .profit-sharing-label {
+    margin: 0;
+    font-size: var(--text-medium);
+    font-weight: 600;
+    font-family: var(--font-heading-page);
+    letter-spacing: 0.015em;
+    color: #0f172a;
+}
+
+#profitSharingModal .profit-sharing-label-account {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+#profitSharingModal .profit-sharing-label-amount {
+    grid-column: 3;
+    grid-row: 1;
+}
+
+#profitSharingModal .profit-sharing-control {
+    min-width: 0;
+    width: 100%;
+}
+
+#profitSharingModal .profit-sharing-control-account {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+#profitSharingModal .profit-sharing-control-amount {
+    grid-column: 3;
+    grid-row: 2;
+}
+
+#profitSharingModal .profit-sharing-amount-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+}
+
+#profitSharingModal .profit-sharing-amount-field .bank-input.profit-sharing-amount {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+}
+
+#profitSharingModal .profit-sharing-control-account .account-select-with-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+}
+
+#profitSharingModal .profit-sharing-control-account .account-select-with-buttons .custom-select-wrapper {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+}
+
+/* Account 旁新增：与删除按钮同尺寸，浅色描边方钮（替代小圆渐变 +） */
+#profitSharingModal .profit-sharing-inline-add-btn {
+    width: 3.3rem;
+    height: 3.3rem;
+    min-width: 3.3rem;
+    padding: 0;
+    border-radius: 0.52rem;
+    border: 1px solid rgba(13, 96, 255, 0.28);
+    background: rgba(13, 96, 255, 0.05);
+    color: #0d60ff;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+#profitSharingModal .profit-sharing-inline-add-icon {
+    display: block;
+    flex-shrink: 0;
+}
+
+#profitSharingModal .profit-sharing-inline-add-btn:hover {
+    background: rgba(13, 96, 255, 0.1);
+    border-color: rgba(13, 96, 255, 0.45);
+    color: #0b52db;
+    box-shadow: 0 1px 2px rgba(13, 96, 255, 0.12);
+}
+
+#profitSharingModal .profit-sharing-inline-add-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(13, 96, 255, 0.18);
+}
+
+/* Amount 与 Account 下拉同高：覆盖 process-page .form-group input 的较大 padding/字号 */
+#profitSharingModal .profit-sharing-row .form-group .bank-input.profit-sharing-amount {
+    width: 100%;
+    padding: 0.625rem 0.875rem !important;
+    border: 1px solid #dbe3ee !important;
+    border-radius: 0.52rem !important;
+    font-size: var(--text-small) !important;
+    font-family: var(--font-ui) !important;
+    min-height: 3.3rem !important;
+    height: 3.3rem !important;
+    line-height: 1.4;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    transform: none;
+}
+
+#profitSharingModal .profit-sharing-row .form-group .bank-input.profit-sharing-amount:focus {
+    outline: none;
+    border-color: #0D60FF !important;
+    box-shadow: 0 0 0 4px rgba(13, 96, 255, 0.08) !important;
+    transform: none;
+}
+
+#profitSharingModal .profit-sharing-amount::-webkit-outer-spin-button,
+#profitSharingModal .profit-sharing-amount::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+#profitSharingModal .profit-sharing-amount {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+#profitSharingModal .profit-sharing-modal-btn {
+    width: clamp(90px, 7vw, 130px);
+    min-height: 2.35rem;
+    font-size: var(--text-medium);
+    font-family: var(--font-heading-page);
+    font-weight: var(--font-weight-semibold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+#profitSharingModal .profit-sharing-delete-row-btn {
+    width: 3.3rem;
+    height: 3.3rem;
+    min-width: 3.3rem;
+    padding: 0;
+    border-radius: 0.52rem;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #94a3b8;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+#profitSharingModal .profit-sharing-delete-row-spacer {
+    width: 3.3rem;
+    height: 3.3rem;
+    min-width: 3.3rem;
+    flex-shrink: 0;
+}
+
+#profitSharingModal .profit-sharing-delete-row-icon {
+    display: block;
+    flex-shrink: 0;
+}
+
+#profitSharingModal .profit-sharing-delete-row-btn:hover {
+    background: #fef2f2;
+    color: #dc2626;
+    border-color: #fecaca;
+    box-shadow: 0 1px 2px rgba(220, 38, 38, 0.08);
+}
+
+#profitSharingModal .profit-sharing-delete-row-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+}
+
+/* SOP Modal：固定弹窗尺寸与底部按钮 */
+.sop-modal .sop-modal-content {
+    width: 1000px;
+    height: 735px;
+    max-width: none;
+    display: flex;
+    flex-direction: column;
+}
+
+.sop-modal .sop-modal-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.sop-modal .sop-modal-textarea {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    resize: none;
+    box-sizing: border-box;
+    font-size: var(--text-small);
+    font-family: var(--font-ui);
+    border: 1px solid #dbe3ee;
+    border-radius: 0.52rem;
+    padding: 0.625rem 0.875rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.sop-modal .sop-modal-textarea:focus {
+    outline: none;
+    border-color: #0D60FF;
+    box-shadow: 0 0 0 4px rgba(13, 96, 255, 0.08);
+}
+
+.sop-modal .sop-modal-actions {
+    flex: none;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.sop-modal .sop-modal-actions .btn {
+    width: clamp(90px, 7vw, 130px);
+    min-width: clamp(90px, 7vw, 130px);
+    padding: clamp(0.375rem, 0.42vw, 0.5rem) 1.25rem;
+    font-size: var(--text-medium);
+    font-family: var(--font-heading-page);
+    font-weight: var(--font-weight-semibold);
+    box-sizing: border-box;
+}
+
+/* --- Beautified Selected Profit Sharing --- */
+.bank-profit-sharing-container {
+    margin-top: 10px;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    overflow: hidden;
+}
+
+.bank-profit-sharing-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.bank-profit-sharing-header h3 {
+    margin: 0;
+    font-size: var(--text-medium);
+    font-family: var(--font-heading-page);
+    color: #1e293b;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: 0.015em;
+}
+
+.bank-add-ps-btn {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+}
+
+.bank-add-ps-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
+    filter: brightness(1.1);
+}
+
+.bank-profit-sharing-list {
+    padding: 12px;
+    max-height: 180px;
+    overflow-y: auto;
+    background: #ffffff;
+}
+
+/* Scrollbars: app-wide — dashboard-scrollbar.css */
+
+/* Empty State */
+.no-profit-sharing {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px 20px;
+    color: #94a3b8;
+    text-align: center;
+}
+
+.no-ps-icon {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    opacity: 0.5;
+}
+
+.no-profit-sharing p {
+    margin: 0;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+/* Profit Sharing Item Card */
+.profit-sharing-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #3b82f6;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: all 0.2s ease;
+}
+
+.profit-sharing-item:last-child {
+    margin-bottom: 0;
+}
+
+.profit-sharing-item:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    transform: translateX(2px);
+}
+
+.ps-item-content {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-right: 12px;
+}
+
+.ps-account-name {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    color: #334155;
+    font-size: var(--text-small);
+    font-family: var(--font-ui);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ps-amount-value {
+    flex-shrink: 0;
+    font-family: var(--font-ui);
+    font-weight: var(--font-weight-semibold);
+    color: #2563eb;
+    font-size: var(--text-small);
+    font-variant-numeric: tabular-nums;
+    background: #eff6ff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #bfdbfe;
+}
+
+.remove-profit-sharing-item {
+    background: #fee2e2;
+    color: #ef4444;
+    border: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.remove-profit-sharing-item:hover {
+    background: #ef4444;
+    color: white;
+    transform: rotate(90deg);
+}
+

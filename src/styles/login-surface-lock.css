@@ -1,0 +1,41 @@
+/*
+ * Login card width must not change when toggling EN/中文.
+ * Card min-height is set in design-tokens (--login-card-min-height*) + login-shadcn so the shell height follows the Chinese layout.
+ *
+ * Why this file:
+ * - index.html links /css/login-shadcn.css *before* the Vite bundle; Tailwind + app-shell
+ *   (dashboard/sidebar) load later and can override earlier rules.
+ * - Import this file *last* in main.jsx so it wins the cascade.
+ * - On viewports that fit 420px + body padding, use a fixed 420px width so we do not depend
+ *   on `100%` (scrollbar appearance can change the percentage base and look like "撐開").
+ * - Input border/chrome: src/styles/login-auth-fields.css (imported after this file).
+ */
+
+@media (min-width: 480px) {
+  body.bg #root .sc-login-column,
+  body.bg #root .login-container {
+    width: 420px !important;
+    max-width: 428px !important;
+    min-width: 0 !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-sizing: border-box !important;
+  }
+
+  body.bg #root .login-container .login-card {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+@media (max-width: 479.98px) {
+  body.bg #root .sc-login-column,
+  body.bg #root .login-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-sizing: border-box !important;
+  }
+}

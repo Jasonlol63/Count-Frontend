@@ -1,0 +1,109 @@
+/* Shared capsule tab switcher — Auto Renew, Announcement, Ownership */
+
+body.auto-renew-page-body,
+body.announcement-page,
+body.ownership-page {
+  --page-pill-tab-track-padding: 3px;
+  --page-pill-tab-width: clamp(112px, 9vw, 132px);
+}
+
+body.announcement-page {
+  --page-pill-tab-width: clamp(128px, 11vw, 152px);
+}
+
+body.ownership-page {
+  --page-pill-tab-width: clamp(156px, 13vw, 196px);
+}
+
+body.auto-renew-page-body .page-tabs,
+body.announcement-page .page-tabs,
+body.ownership-page .page-tabs {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: fit-content;
+  gap: 2px;
+  padding: var(--page-pill-tab-track-padding);
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f1f5f9;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+body.auto-renew-page-body .page-tab,
+body.announcement-page .page-tab,
+body.ownership-page .page-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--page-pill-tab-width);
+  width: var(--page-pill-tab-width);
+  min-width: var(--page-pill-tab-width);
+  min-height: 30px;
+  box-sizing: border-box;
+  gap: 5px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: clamp(5px, 0.45vw, 7px) clamp(10px, 0.9vw, 14px);
+  font-size: clamp(12px, 0.85vw, 14px);
+  font-weight: 700;
+  font-family: var(--font-heading-page);
+  color: #475569;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1.25;
+  white-space: nowrap;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+  box-shadow: none;
+}
+
+body.auto-renew-page-body .page-tab__label {
+  line-height: 1.25;
+  text-align: center;
+}
+
+body.ownership-page .page-tab svg {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+}
+
+body.auto-renew-page-body .page-tab:hover:not(.active),
+body.announcement-page .page-tab:hover:not(.active),
+body.ownership-page .page-tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.72);
+  color: #0d60ff;
+}
+
+body.auto-renew-page-body .page-tab:focus-visible,
+body.announcement-page .page-tab:focus-visible,
+body.ownership-page .page-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #6366f1;
+  position: relative;
+  z-index: 1;
+}
+
+body.auto-renew-page-body .page-tab.active,
+body.announcement-page .page-tab.active,
+body.ownership-page .page-tab.active {
+  background: linear-gradient(180deg, #63c4ff 0%, #0d60ff 100%);
+  color: #ffffff;
+  box-shadow:
+    0 2px 8px rgba(13, 96, 255, 0.32),
+    0 1px 2px rgba(13, 96, 255, 0.2);
+}
+
+body.auto-renew-page-body .page-tab.active:hover,
+body.announcement-page .page-tab.active:hover,
+body.ownership-page .page-tab.active:hover {
+  background: linear-gradient(180deg, #4db8ff 0%, #0a56e8 100%);
+  color: #ffffff;
+  transform: translateY(-0.5px);
+  box-shadow:
+    0 4px 12px rgba(13, 96, 255, 0.36),
+    0 1px 3px rgba(13, 96, 255, 0.22);
+}

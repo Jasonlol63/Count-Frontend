@@ -1,0 +1,567 @@
+﻿/* Reset and Base Styles — :root 字体与 src/styles/design-tokens.css 保持一致（登录壳先于 bundle） */
+:root {
+    --font-heading-page: 'Inter', 'Noto Sans SC', ui-sans-serif, system-ui, sans-serif;
+    --font-ui: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+        Ubuntu, Cantarell, sans-serif;
+    --font-weight-semibold: 600;
+    --userlist-btn-add-width: clamp(80px, 6.25vw, 120px);
+    --userlist-btn-delete-width: clamp(90px, 7.25vw, 120px);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body.bg {
+    color-scheme: light;
+    --login-input-cursor: text;
+    font-family: var(--font-ui, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+    background: url('/images/count_bg.png') center/cover no-repeat;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    position: relative;
+    overflow-x: hidden;
+}
+
+body.bg::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* Language Switch - Original Design */
+.language-switch-container {
+    text-align: center;
+    margin-top: 5px;
+}
+
+.lang-switch {
+    position: relative;
+    width: 172px;
+    height: 31px;
+    padding: 1px 2px 1px 2px;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    background: white;
+    border: 2px solid #56ccf2;
+    border-radius: 15px;
+    transition: all 0.3s ease;
+}
+
+.lang-option {
+    font-size: 12px;
+    font-weight: 600;
+    color: #56ccf2;
+    background: transparent;
+    padding: 4px 8px;
+    border-radius: 30px;
+    transition: all 0.3s ease;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+}
+
+.lang-switch button.lang-option {
+    cursor: pointer;
+    font: inherit;
+    font-family: inherit;
+    border: none;
+}
+
+
+.lang-option.active {
+    color: white;
+    background: linear-gradient(135deg, #56ccf2, #004ff9);
+    border: none;
+}
+
+.lang-switch:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(86, 204, 242, 0.3);
+}
+
+.lang-switch:hover .lang-option:not(.active) {
+    background: rgba(86, 204, 242, 0.1);
+    color: #004ff9;
+}
+
+
+
+/* Main Container — 与 .login-card 450px 对齐，避免子卡比容器宽 */
+.login-container {
+    width: 100%;
+    max-width: min(450px, 92vw);
+    margin: 0 auto;
+    position: relative;
+    z-index: 2;
+}
+
+/* Login Card */
+.login-card {
+    display: flex;
+    justify-content: center;
+    width: 450px;
+    max-width: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 0 0 20px 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    padding: 0;
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+    box-sizing: border-box;
+}
+
+/* 独立白卡（二次验证等，无顶部 gradient header）— 高度随内容，避免底部大块留白 */
+.login-card--solo {
+    border-radius: var(--login-radius-xl);
+    box-sizing: border-box;
+}
+
+/* Tabs */
+.role-tabs {
+    display: flex;
+    background: linear-gradient(135deg, #004ff9, #56ccf2);
+    border-radius: 20px 20px 0 0;
+    overflow: hidden;
+}
+
+.role-tab {
+    flex: 1;
+    padding: 12px 14px;
+    border: none;
+    background: transparent;
+    color: white;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 18px;
+    text-align: center;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.role-tab.active {
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+}
+
+
+/* Form Content — 设计稿 padding 30×20；字号/色用 design-tokens */
+.form-content {
+    padding: 30px 20px;
+    font-size: var(--text-base, 1rem);
+    font-family: var(--font-ui, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+    color: var(--color-page-fg, #334155);
+}
+
+.form-content--secondary-verify {
+    box-sizing: border-box;
+}
+
+.secondary-verify-header {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.secondary-verify-back-btn {
+    grid-row: 1;
+    grid-column: 1;
+    justify-self: start;
+    align-self: center;
+    z-index: 1;
+    border: none;
+    background: transparent;
+    color: #56ccf2;
+    font-size: var(--text-h2, 1.25rem);
+    font-weight: 600;
+    font-family: var(--font-ui, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1.25;
+    transition: color 0.2s ease;
+}
+
+.secondary-verify-back-btn:hover {
+    color: #004ff9;
+}
+
+.secondary-verify-back-btn:focus-visible {
+    outline: 2px solid #004ff9;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.secondary-verify-title {
+    grid-row: 1;
+    grid-column: 1;
+    text-align: center;
+    margin: 0;
+    padding: 0 36px;
+    box-sizing: border-box;
+    color: var(--color-body-strong);
+    font-size: var(--text-h2);
+    font-weight: 700;
+    font-family: var(--font-ui, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+    line-height: 1.25;
+}
+
+.secondary-verify-lead {
+    text-align: center;
+    margin: 0 0 24px;
+    color: var(--color-muted-fg);
+    font-size: var(--text-small);
+    font-weight: 400;
+    font-family: var(--font-ui, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+    line-height: 1.35;
+}
+
+/* Header */
+.login-header {
+    text-align: center;
+    background: linear-gradient(135deg, #004ff9, #56ccf2);
+    padding: clamp(12px, 3vw, 15px);
+    border-radius: 20px 20px 0 0;
+}
+
+.login-header h2 {
+    font-size: clamp(18px, 4vw, 24px);
+    font-weight: 700;
+    color: white;
+}
+
+/* Form */
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-icon {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--login-bg-end);
+    font-size: 15px;
+    z-index: 2;
+    pointer-events: none;
+}
+
+body.bg .sc-login-input-row,
+body.bg .login-container .input-group {
+    cursor: var(--login-input-cursor);
+}
+
+/* LoginPage (.sc-login-input) + 二级密码 / reset (.login-container .input-group input) */
+body.bg .sc-login-input,
+body.bg .login-container .input-group input {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    min-height: 46.5px;
+    padding: 12px 25px 12px 46px;
+    border-width: 2px;
+    border-style: solid;
+    border-color: var(--login-bg-end);
+    border-radius: var(--login-radius-pill);
+    font-size: var(--text-base);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    color: var(--login-text, #333333);
+    /* Windows 深色模式 / 高对比度下，浅色输入框的插入符可能渲染成白色条块 */
+    color-scheme: light;
+    caret-color: var(--login-text, #333333);
+    cursor: var(--login-input-cursor);
+}
+
+body.bg .sc-login-input {
+    background: rgba(255, 255, 255, 0.9);
+}
+
+body.bg .login-container .input-group input {
+    background: var(--login-surface);
+}
+
+body.bg .sc-login-input:focus,
+body.bg .login-container .input-group input:focus {
+    outline: none;
+    border-color: var(--login-bg-start);
+    box-shadow: 0 0 0 3px rgba(0, 79, 249, 0.1);
+}
+
+body.bg .sc-login-input::placeholder,
+body.bg .login-container .input-group input::placeholder {
+    color: var(--login-bg-end);
+    font-weight: 400;
+}
+
+/* TAC Container */
+.tac-container {
+    display: flex;
+    align-items: center;
+}
+
+.tac-container .input-group {
+    flex: 1;
+}
+
+.tac-container input {
+    border-radius: 50px 0 0 50px;
+    border-right: none;
+    padding: 12px 25px 12px 46px;
+}
+
+.tac-btn {
+    background: linear-gradient(135deg, #004ff9, #56ccf2);
+    color: white;
+    border: 2px solid #004ff9;
+    padding: clamp(9px, 2.5vw, 13px) clamp(20px, 6vw, 30px);
+    border-radius: 0 50px 50px 0;
+    cursor: pointer;
+    font-size: clamp(12px, 3vw, 14px);
+    font-weight: 600;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    text-transform: uppercase;
+}
+
+.tac-btn:hover {
+    background: linear-gradient(135deg, #56ccf2, #004ff9);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 79, 249, 0.3);
+}
+
+.tac-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Form Options */
+.form-options {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Remember Me */
+.remember-switch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.remember-switch input[type="checkbox"] {
+    display: none;
+}
+
+.slider {
+    position: relative;
+    width: 40px;
+    height: 20px;
+    background: #ddd;
+    border-radius: 20px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.slider::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.remember-switch input[type="checkbox"]:checked + .slider {
+    background: linear-gradient(135deg, #004ff9 0%, #56ccf2 100%);
+}
+
+.remember-switch input[type="checkbox"]:checked + .slider::before {
+    transform: translateX(20px);
+}
+
+.remember-text {
+    font-size: clamp(12px, 3vw, 14px);
+    color: #666;
+    font-weight: 500;
+}
+
+.forgot-link {
+    color: #56ccf2;
+    text-decoration: none;
+    font-size: clamp(12px, 3vw, 14px);
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.forgot-link:hover {
+    color: #004ff9;
+    text-decoration: underline;
+}
+
+/* Login Button — 与 login-shadcn 主提交钮同一套 --login-* + 字号接近原 18px 用 --text-h3 */
+.login-btn {
+    box-sizing: border-box;
+    height: var(--login-submit-height);
+    min-height: var(--login-submit-height);
+    max-height: var(--login-submit-height);
+    background: linear-gradient(135deg, var(--login-bg-start), var(--login-bg-end));
+    color: #ffffff;
+    border: none;
+    padding: 0 var(--login-submit-pad-x);
+    border-radius: var(--login-radius-pill);
+    font-family: Arial, var(--font-ui, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+    font-size: var(--text-h3);
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(8px, 2vw, 10px);
+    box-shadow: 0 4px 15px rgba(0, 79, 249, 0.3);
+    width: 100%;
+    white-space: nowrap;
+}
+
+.login-btn > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.login-btn:hover {
+    background: linear-gradient(135deg, var(--login-bg-end), var(--login-bg-start));
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 79, 249, 0.4);
+}
+
+.login-btn:active {
+    transform: translateY(0);
+}
+
+.login-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 0 4px 15px rgba(0, 79, 249, 0.2);
+}
+
+/* Language Switch Container */
+.language-switch-container {
+    text-align: center;
+}
+
+/* Back to Login */
+.back-to-login {
+    text-align: center;
+}
+
+.back-link {
+    color: #56ccf2;
+    text-decoration: none;
+    font-size: clamp(14px, 3vw, 16px);
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: clamp(4px, 1vw, 6px);
+    transition: all 0.3s ease;
+}
+
+.back-link:hover {
+    color: #004ff9;
+    text-decoration: underline;
+}
+
+.back-link i {
+    font-size: clamp(8px, 2vw, 10px);
+}
+
+/* Company ID styling - removed readonly appearance */
+
+/* Hide TAC container for member tab */
+.tac-container.hidden {
+    display: none;
+}
+
+/* Reset Password specific */
+.login-subtitle {
+    color: #666;
+    font-size: 12px;
+    margin-bottom: 25px;
+    text-align: center;
+}
+
+@media (max-width: 480px) {
+    .role-tab {
+        padding: 11px 12px;
+        font-size: 16px;
+    }
+
+    .form-content {
+        padding: 24px 16px;
+    }
+}
+
+/* Animation — opacity only to avoid vertical jump when switching auth routes */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* SPA route changes (login → secondary password): skip motion to avoid perceived stutter */
+.login-container {
+    animation: none;
+}
+
+/* Input focus effects — 二级密码 / reset（pulse 定义见下方 @keyframes） */
+body.bg .login-container .input-group input:focus {
+    animation: pulse 0.3s ease-out;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 79, 249, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(0, 79, 249, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(0, 79, 249, 0);
+    }
+}

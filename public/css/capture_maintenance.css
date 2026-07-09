@@ -1,0 +1,1489 @@
+﻿@import "./maintenance_empty_state.css";
+
+/* capture_maintenance.php - 提取的页面样式 */
+/* 限定在 maintenance 路由，便于在 SPA 中 static import 而不污染登录页等 body.bg */
+body.dashboard-page.maintenance-page {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    height: auto;
+    background-color: #e9f1ff;
+    background-image:
+        radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 48%),
+        radial-gradient(circle at 70% 15%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 45%),
+        radial-gradient(circle at 40% 70%, rgba(206, 232, 255, 0.55) 0%, rgba(255, 255, 255, 0) 60%),
+        radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%),
+        linear-gradient(145deg, #97BFFC 0%, #AECFFA 40%, #f9fbff 100%);
+    background-blend-mode: screen, screen, multiply, screen, normal;
+    color: #334155;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+/* Capture maintenance pages run under `body.dashboard-page` which defaults to
+   `overflow: hidden` in dashboard styles. Re-enable native page scrolling here. */
+html,
+body.dashboard-page.maintenance-page {
+    height: auto !important;
+    min-height: 100vh !important;
+    max-height: none !important;
+    overflow-y: hidden !important;
+    overflow-x: hidden !important;
+}
+
+.container {
+    max-width: none;
+    margin: 0;
+    /* 与 Domain/Customer Report、Transaction 主区一致：左侧 sidebar 留白 + 右侧响应式边距 */
+    padding: var(--layout-page-top-gap) clamp(20px, 2.08vw, 40px) 20px var(--layout-main-offset);
+    width: 100%;
+    min-height: 100vh;
+    height: auto;
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.maintenance-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.maintenance-toggle-dropdown {
+    margin-top: 0;
+}
+
+.restaurant-selector {
+    position: relative;
+}
+
+.selector-button {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+    font-weight: 500;
+    padding: clamp(6px, 0.52vw, 10px) clamp(16px, 1.04vw, 20px);
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: clamp(10px, 0.73vw, 14px);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    width: clamp(100px, 8vw, 150px);
+    justify-content: space-between;
+    position: relative;
+    font-family: var(--font-heading-page);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.selector-button:hover {
+    background: linear-gradient(180deg, #0D60FF 0%, #63C4FF 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+}
+
+.selector-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: white;
+    border: 2px solid #000000ff;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 123, 255, 0.2);
+    min-width: 150px;
+    z-index: 10000;
+    display: none;
+    margin-top: 4px;
+}
+
+.selector-dropdown.show {
+    display: block;
+}
+
+.selector-dropdown .dropdown-item {
+    padding: clamp(6px, 0.42vw, 8px) clamp(10px, 0.83vw, 16px);
+    cursor: pointer;
+    border-bottom: 1px solid #e5e7eb;
+    transition: all 0.2s;
+    color: #000000ff;
+    font-size: clamp(8px, 0.74vw, 14px);
+    font-weight: 500;
+    font-family: var(--font-heading-page);
+}
+
+.selector-dropdown .dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.selector-dropdown .dropdown-item:hover {
+    background-color: #e6f2ff;
+}
+
+.selector-dropdown .dropdown-item.active {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.maintenance-search-section {
+    padding: 10px 20px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background-color: #fff;
+    box-shadow: 0 2px 8px #0000001a;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: none;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+}
+
+/* 第一行三列：与 payment_maintenance.php / Payment 页一致（底对齐） */
+.maintenance-filters {
+    display: flex;
+    gap: clamp(12px, 1.25vw, 24px);
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.maintenance-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(6px, 0.52vw, 10px);
+    min-width: clamp(150px, 12.5vw, 240px);
+}
+
+.maintenance-label {
+    font-size: clamp(11px, 0.85vw, 13px);
+    font-weight: 600;
+    color: #374151;
+    font-family: var(--font-heading-page);
+}
+
+.maintenance-input,
+.maintenance-select {
+    padding: clamp(8px, 0.65vw, 12px) clamp(10px, 1vw, 14px);
+    border: 0.125rem solid #e5e7eb;
+    border-radius: 0.5rem;
+    font-size: clamp(11px, 0.85vw, 14px);
+    background: #ffffff;
+    color: #374151;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    width: 100%;
+}
+
+/* 与 payment 页 .maintenance-form-group .maintenance-select 同档（图二第一行三列） */
+.maintenance-form-group .custom-select-wrapper {
+    width: 100%;
+}
+
+.maintenance-form-group .custom-select-button {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    padding: clamp(6px, 0.42vw, 8px) 30px clamp(6px, 0.42vw, 8px) 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: clamp(9px, 0.73vw, 14px);
+    font-weight: normal;
+    background: #fff;
+}
+
+.maintenance-input:focus,
+.maintenance-select:focus {
+    outline: none;
+    border-color: #007AFF;
+    box-shadow: 0 0 0 0.1875rem rgba(0, 122, 255, 0.1);
+}
+
+.maintenance-select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%23333' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 35px;
+}
+
+.maintenance-company-filter {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 0.83vw, 16px);
+    flex-wrap: wrap;
+}
+
+/* 第二行左侧：与 payment_maintenance.php 图二分行堆叠 */
+.maintenance-filter-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(4px, 0.52vw, 8px);
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.maintenance-filter-left .maintenance-company-filter {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: clamp(8px, 0.83vw, 14px);
+    width: 100%;
+    max-width: 100%;
+}
+
+.maintenance-filter-left .maintenance-company-label {
+    min-width: 6.25rem;
+    flex-shrink: 0;
+}
+
+/* Category 权限区域（右上角，与 bankprocess_maintenance 一致） */
+.maintenance-permission-filter-header {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 0.83vw, 16px);
+    flex-wrap: wrap;
+    padding: 0;
+    margin-top: clamp(12px, 1.04vw, 20px);
+}
+
+.maintenance-company-label {
+    font-weight: bold;
+    color: #374151;
+    font-size: clamp(10px, 0.73vw, 14px);
+    font-family: var(--font-heading-page);
+    white-space: nowrap;
+}
+
+.maintenance-company-buttons {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.maintenance-company-btn {
+    padding: clamp(3px, 0.31vw, 6px) clamp(10px, 0.83vw, 16px);
+    border: 1px solid #d0d7de;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #1f2937;
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.maintenance-company-btn:hover {
+    background: #e2e8f0;
+    border-color: #a5b4fc;
+}
+
+.maintenance-company-btn.active {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.maintenance-date-inputs {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+}
+
+.maintenance-date-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.maintenance-date-inputs span {
+    color: #666;
+    font-size: clamp(9px, 0.63vw, 12px);
+    flex-shrink: 0;
+}
+
+.maintenance-actions {
+    display: flex;
+    align-items: center;
+    gap: clamp(12px, 1.04vw, 20px);
+    flex-shrink: 0;
+    min-height: 32px;
+    align-self: flex-end;
+}
+
+.maintenance-filter-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: clamp(12px, 1.04vw, 20px);
+    flex-wrap: wrap;
+}
+
+/* Period / Quick Select 视觉由 main.jsx → maintenanceToolbarUnified.css 统一，避免与本文件重复打架 */
+
+.maintenance-search-section .quick-select-dropdown .dropdown-menu {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.maintenance-search-btn {
+    background: linear-gradient(180deg, #bcbcbc 0%, #585858 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    width: clamp(80px, 6.25vw, 120px);
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    font-size: clamp(10px, 0.83vw, 16px);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(88, 88, 88, 0.3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.maintenance-search-btn:hover {
+    background: linear-gradient(180deg, #585858 0%, #bcbcbc 100%);
+    box-shadow: 0 4px 8px rgba(84, 84, 84, 0.4);
+    transform: translateY(-1px);
+}
+
+.maintenance-delete-btn {
+    background: linear-gradient(180deg, #F30E12 0%, #A91215 100%);
+    color: white;
+    font-family: var(--font-heading-page);
+    width: auto;
+    min-width: clamp(72px, 5.5vw, 110px);
+    padding: clamp(3px, 0.31vw, 6px) clamp(14px, 1.04vw, 22px);
+    font-size: clamp(9px, 0.63vw, 12px);
+    font-weight: bold;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.maintenance-delete-btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #A91215 0%, #F30E12 100%);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+    transform: translateY(-1px);
+}
+
+/* 参考图：禁用 Delete 为中灰渐变 + 白字（非浅灰字） */
+.maintenance-delete-btn:disabled {
+    background: linear-gradient(180deg, #9ca3af 0%, #6b7280 100%);
+    color: #ffffff;
+    border: 1px solid transparent;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+    opacity: 1;
+}
+
+.maintenance-confirm-delete-label {
+    display: flex;
+    align-items: center;
+    gap: clamp(6px, 0.52vw, 10px);
+    cursor: pointer;
+    font-size: clamp(10px, 0.73vw, 14px);
+    color: #334155;
+    user-select: none;
+    font-family: var(--font-heading-page);
+}
+
+.maintenance-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    margin-right: 8px;
+    width: clamp(12px, 0.83vw, 16px);
+    height: clamp(12px, 0.83vw, 16px);
+    border: 2px solid #000000ff;
+    border-radius: 3px;
+    background-color: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.maintenance-checkbox:checked {
+    background-color: #1a237e;
+    border-color: #1a237e;
+}
+
+.maintenance-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: clamp(8px, 0.73vw, 14px);
+    font-weight: bold;
+    line-height: 1;
+}
+
+.flatpickr-calendar {
+    font-family: var(--font-heading-page);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.flatpickr-day.selected {
+    background: #4a90e2;
+    border-color: #4a90e2;
+}
+
+.flatpickr-day.today {
+    border-color: #4a90e2;
+}
+
+.flatpickr-day.today:hover,
+.flatpickr-day.today:focus {
+    background: #e6f2ff;
+    border-color: #4a90e2;
+}
+
+/* 与筛选白卡同宽：铺满主内容区，避免宽屏右侧大块留白 */
+.maintenance-list-container {
+    margin-bottom: clamp(20px, 1.67vw, 32px);
+    margin-top: 10px;
+    max-width: none;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+}
+
+.maintenance-table {
+    width: 100%;
+    border-collapse: separate;
+    table-layout: fixed;
+    border-spacing: 0;
+}
+
+.maintenance-table th,
+.maintenance-table td {
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+.maintenance-table thead tr {
+    background: linear-gradient(180deg, #60C1FE 0%, #0F61FF 100%);
+    color: #ffffff;
+}
+
+.maintenance-table thead th {
+    padding: clamp(5px, 0.55vw, 9px) clamp(10px, 1vw, 18px);
+    text-align: center;
+    min-height: clamp(30px, 2.1vw, 38px);
+    box-sizing: border-box;
+}
+
+.maintenance-table thead th:first-child {
+    border-top-left-radius: 8px;
+}
+
+.maintenance-table thead th:last-child {
+    border-top-right-radius: 8px;
+
+}
+
+.maintenance-table tbody tr {
+    background: #ffffff;
+    box-shadow: none;
+    transition: background-color 0.15s ease;
+}
+
+.maintenance-table tbody tr:hover {
+    box-shadow: none;
+    transform: none;
+}
+
+.maintenance-table tbody td,
+.maintenance-table tbody td.maintenance-table-cell {
+    background-color: transparent;
+}
+
+.maintenance-table tbody tr:nth-child(even) {
+    background: #cceeff99;
+}
+
+.maintenance-table tbody tr:nth-child(odd) {
+    background: #ffffff;
+}
+
+.maintenance-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Data Capture 9 列：宽度合计 100%，铺满整表；末列为勾选 */
+.maintenance-table th:nth-child(1),
+.maintenance-table td:nth-child(1) {
+    width: 3%;
+    text-align: center;
+}
+
+.maintenance-table th:nth-child(2),
+.maintenance-table td:nth-child(2) {
+    width: 13%;
+}
+
+.maintenance-table th:nth-child(3),
+.maintenance-table td:nth-child(3) {
+    width: 10%;
+}
+
+.maintenance-table th:nth-child(4),
+.maintenance-table td:nth-child(4) {
+    width: 10%;
+}
+
+.maintenance-table th:nth-child(5),
+.maintenance-table td:nth-child(5) {
+    width: 9.5%;
+}
+
+.maintenance-table th:nth-child(6),
+.maintenance-table td:nth-child(6) {
+    width: 13.5%;
+}
+
+.maintenance-table th:nth-child(7),
+.maintenance-table td:nth-child(7) {
+    width: 13.5%;
+}
+
+.maintenance-table th:nth-child(8),
+.maintenance-table td:nth-child(8) {
+    width: 21%;
+}
+
+.maintenance-table th:nth-child(9),
+.maintenance-table td:nth-child(9) {
+    width: 6.5%;
+    min-width: clamp(40px, 3.5vw, 56px);
+    box-sizing: border-box;
+}
+
+/* Currency～Deleted By 列内留白略增；Deleted By 与勾选列收紧，减少右侧大块空 */
+.maintenance-list-container .maintenance-table th:nth-child(5),
+.maintenance-list-container .maintenance-table td:nth-child(5) {
+    padding-left: clamp(8px, 0.9vw, 14px);
+    padding-right: clamp(10px, 1.1vw, 18px);
+}
+
+.maintenance-list-container .maintenance-table th:nth-child(6),
+.maintenance-list-container .maintenance-table td:nth-child(6) {
+    padding-left: clamp(10px, 1.05vw, 18px);
+    padding-right: clamp(10px, 1.05vw, 18px);
+}
+
+.maintenance-list-container .maintenance-table th:nth-child(7),
+.maintenance-list-container .maintenance-table td:nth-child(7) {
+    padding-left: clamp(10px, 1.05vw, 18px);
+    padding-right: clamp(10px, 1.05vw, 18px);
+}
+
+.maintenance-list-container .maintenance-table th:nth-child(8),
+.maintenance-list-container .maintenance-table td:nth-child(8) {
+    padding-left: clamp(10px, 1.05vw, 18px);
+    padding-right: clamp(6px, 0.75vw, 12px);
+}
+
+/* 勾选列（第 9 列）：仅列宽，水平 padding 由下方 checkbox 专用规则统一 */
+.maintenance-list-container .maintenance-table th:nth-child(9):not(.maintenance-select-all-header),
+.maintenance-list-container .maintenance-table td:nth-child(9):not(.maintenance-cell-checkbox) {
+    padding-left: clamp(4px, 0.5vw, 10px);
+    padding-right: clamp(6px, 0.65vw, 12px);
+}
+
+/* 与 payment 维护表同一条目（10 列页用）；本页 9 列时不匹配 */
+.maintenance-table th:nth-child(10),
+.maintenance-table td:nth-child(10) {
+    width: unset;
+}
+
+.maintenance-table-cell {
+    color: #374151;
+    padding: clamp(4px, 0.5vw, 8px) clamp(10px, 1vw, 18px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+    text-align: center;
+    min-height: clamp(28px, 1.95vw, 36px);
+    box-sizing: border-box;
+}
+
+.maintenance-table th:nth-child(3),
+.maintenance-table td:nth-child(3),
+.maintenance-table th:nth-child(4),
+.maintenance-table td:nth-child(4),
+.maintenance-table th:nth-child(6),
+.maintenance-table td:nth-child(6),
+.maintenance-table th:nth-child(8),
+.maintenance-table td:nth-child(8) {
+    text-align: left;
+}
+
+.maintenance-cell-currency {
+    text-align: center;
+}
+
+.maintenance-cell-checkbox {
+    text-align: center;
+}
+
+.maintenance-row-deleted .maintenance-table-cell {
+    color: #b91c1c;
+    text-decoration: line-through;
+}
+
+/* 与 Payment 维护一致：已删除行仍保留禁用勾选，避免末列「空白」与表头不对齐 */
+.maintenance-row-deleted .maintenance-row-checkbox:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.maintenance-row-deleted td.maintenance-cell-checkbox {
+    text-decoration: none;
+}
+
+/* 勿用 flex：th 会变成 flex 容器，与同列 td 的 table-cell 布局不一致，勾选框易错位 */
+.maintenance-select-all-header {
+    display: table-cell;
+    text-align: center;
+    vertical-align: middle;
+}
+
+#select_all_capture {
+    cursor: pointer;
+}
+
+.maintenance-row-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: clamp(10px, 0.73vw, 14px);
+    height: clamp(10px, 0.73vw, 14px);
+    border: 2px solid #000000ff;
+    border-radius: 3px;
+    background-color: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    margin: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.maintenance-row-checkbox:checked {
+    background-color: #1a237e;
+    border-color: #1a237e;
+}
+
+.maintenance-row-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: clamp(10px, 0.83vw, 14px);
+    font-weight: bold;
+    line-height: 1;
+}
+
+.maintenance-notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 400px;
+}
+
+.maintenance-notification {
+    padding: 16px 20px;
+    border-radius: 12px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    transform: translateX(100%);
+    transition: all 0.3s ease-in-out;
+    font-weight: 500;
+    position: relative;
+    word-wrap: break-word;
+    border-left: 4px solid;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.maintenance-notification.show {
+    transform: translateX(0);
+}
+
+.maintenance-notification-success {
+    background-color: #f0fdf4;
+    color: #166534;
+    border-left-color: #22c55e;
+}
+
+.maintenance-notification-error {
+    background-color: #fef2f2;
+    color: #991b1b;
+    border-left-color: #ef4444;
+}
+
+.maintenance-notification-info {
+    background-color: #eff6ff;
+    color: #1e40af;
+    border-left-color: #3b82f6;
+}
+
+/* Confirm Delete Modal Styles - same as account page */
+.maintenance-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(0.25rem);
+}
+
+#confirmDeleteModal.maintenance-modal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    animation: accountConfirmFadeIn 0.2s ease-out;
+}
+
+@keyframes accountConfirmFadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.maintenance-confirm-modal-content {
+    background: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 24px;
+    width: clamp(400px, 35vw, 550px);
+    max-width: 90%;
+    flex: 0 0 auto;
+    align-self: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    animation: accountConfirmSlideDown 0.3s ease-out;
+    overflow: hidden;
+    position: relative;
+}
+
+@keyframes accountConfirmSlideDown {
+    from {
+        transform: translateY(-80px) scale(0.95);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+.maintenance-confirm-icon-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: clamp(30px, 2.6vw, 50px);
+    padding-bottom: clamp(15px, 1.3vw, 25px);
+}
+
+.maintenance-confirm-icon {
+    width: clamp(50px, 4.17vw, 80px);
+    height: clamp(50px, 4.17vw, 80px);
+    color: #dc2626;
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border-radius: 50%;
+    padding: clamp(10px, 0.83vw, 16px);
+    animation: iconPulse 2s ease-in-out infinite;
+}
+
+@keyframes iconPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+    }
+
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+    }
+}
+
+.maintenance-confirm-title {
+    text-align: center;
+    color: #1e293b;
+    font-size: var(--text-h2);
+    font-weight: 700;
+    margin: 0 0 clamp(15px, 1.3vw, 25px) 0;
+    font-family: var(--font-heading-page), -apple-system, sans-serif;
+    letter-spacing: -0.02em;
+}
+
+.maintenance-confirm-message {
+    text-align: center;
+    font-size: var(--text-h3);
+    color: #475569;
+    line-height: 1.7;
+    margin: 0;
+    padding: 0 clamp(25px, 2.08vw, 40px);
+    white-space: pre-line;
+    font-weight: 500;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.maintenance-confirm-actions {
+    display: flex;
+    gap: 12px;
+    padding: clamp(25px, 2.08vw, 40px);
+    justify-content: center;
+    background: rgba(248, 250, 252, 0.8);
+    margin-top: clamp(18px, 1.67vw, 32px);
+}
+
+body.maintenance-page #confirmDeleteModal .confirm-cancel,
+body.maintenance-page #confirmDeleteModal .confirm-delete {
+    flex: 0 0 auto;
+    min-width: clamp(90px, 7vw, 130px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* Scrollbars: app-wide — dashboard-scrollbar.css */
+
+/* Button styles for confirm modal (scoped — avoid overriding sidebar .logout-btn) */
+body.maintenance-page .maintenance-modal .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: var(--font-heading-page);
+    font-weight: 600;
+    padding: clamp(10px, 0.83vw, 16px) clamp(20px, 1.67vw, 32px);
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: var(--text-base);
+    white-space: nowrap;
+}
+
+body.maintenance-page .maintenance-modal .btn-cancel {
+    background: linear-gradient(180deg, #9ca3af 0%, #5a6370 100%);
+    color: white;
+    box-shadow: 0 2px 4px rgba(107, 114, 128, 0.3);
+}
+
+body.maintenance-page .maintenance-modal .btn-cancel:hover {
+    background: linear-gradient(180deg, #5a6370 0%, #9ca3af 100%);
+    box-shadow: 0 4px 8px rgba(107, 114, 128, 0.4);
+    transform: translateY(-1px);
+}
+
+body.maintenance-page .maintenance-modal .btn-delete {
+    background: var(--btn-delete-gradient);
+    color: white;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+}
+
+body.maintenance-page .maintenance-modal .btn-delete:hover {
+    background: var(--btn-delete-gradient-hover);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+    transform: translateY(-1px);
+}
+
+
+/* GroupID / Company：与 Account List 同款 user-gc 栅格 — 共享规则见 maintenance_unified_filters.css */
+
+/* 与 Domain Report 一致：静默刷新时顶栏细条 + 表体略灰，避免整表 Loading 闪动 */
+.capture-maintenance-page-root .capture-maintenance-table-region {
+    position: relative;
+}
+
+.capture-maintenance-page-root .capture-maintenance-sync-track {
+    height: 2px;
+    overflow: hidden;
+    border-radius: 2px;
+    margin-bottom: 10px;
+    background: rgba(229, 231, 235, 0.9);
+}
+
+.capture-maintenance-page-root .capture-maintenance-sync-bar {
+    height: 100%;
+    width: 38%;
+    max-width: 180px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.95), rgba(59, 130, 246, 0.15));
+    animation: capture-maintenance-sync-slide 0.95s ease-in-out infinite;
+}
+
+@keyframes capture-maintenance-sync-slide {
+    0% {
+        transform: translateX(-120%);
+    }
+
+    100% {
+        transform: translateX(420%);
+    }
+}
+
+.capture-maintenance-page-root .maintenance-list-container--syncing {
+    opacity: 0.94;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+.capture-maintenance-page-root .maintenance-table {
+    width: 100%;
+    border-collapse: separate;
+    table-layout: fixed;
+    border-spacing: 0;
+}
+
+.capture-maintenance-page-root .maintenance-table th,
+.capture-maintenance-page-root .maintenance-table td {
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+.capture-maintenance-page-root .maintenance-table thead tr {
+    background: linear-gradient(180deg, #60C1FE 0%, #0F61FF 100%);
+    color: #ffffff;
+}
+
+.capture-maintenance-page-root .maintenance-table thead th {
+    padding: clamp(5px, 0.55vw, 9px) clamp(10px, 1vw, 18px);
+    text-align: center;
+    min-height: clamp(30px, 2.1vw, 38px);
+    box-sizing: border-box;
+}
+
+.capture-maintenance-page-root .maintenance-table thead th:first-child {
+    border-top-left-radius: 8px;
+}
+
+.capture-maintenance-page-root .maintenance-table thead th:last-child {
+    border-top-right-radius: 8px;
+}
+
+.capture-maintenance-page-root .maintenance-table tbody tr {
+    background: #ffffff;
+    box-shadow: none;
+    transition: background-color 0.15s ease;
+}
+
+.capture-maintenance-page-root .maintenance-table tbody tr:hover {
+    box-shadow: none;
+    transform: none;
+}
+
+.capture-maintenance-page-root .maintenance-table tbody td,
+.capture-maintenance-page-root .maintenance-table tbody td.maintenance-table-cell {
+    background-color: transparent;
+}
+
+.capture-maintenance-page-root .maintenance-table tbody tr:nth-child(even) {
+    background: #cceeff99;
+}
+
+.capture-maintenance-page-root .maintenance-table tbody tr:nth-child(odd) {
+    background: #ffffff;
+}
+
+.capture-maintenance-page-root .maintenance-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.capture-maintenance-page-root .maintenance-table th:nth-child(1),
+.capture-maintenance-page-root .maintenance-table td:nth-child(1) {
+    width: 5%;
+    text-align: center;
+}
+
+.capture-maintenance-page-root .maintenance-table th:nth-child(2),
+.capture-maintenance-page-root .maintenance-table td:nth-child(2) {
+    width: 10%;
+}
+
+.capture-maintenance-page-root .maintenance-table th:nth-child(3),
+.capture-maintenance-page-root .maintenance-table td:nth-child(3) {
+    width: 14%;
+}
+
+.capture-maintenance-page-root .maintenance-table th:nth-child(4),
+.capture-maintenance-page-root .maintenance-table td:nth-child(4) {
+    width: 12.5%;
+}
+
+.capture-maintenance-page-root .maintenance-table th:nth-child(5),
+.capture-maintenance-page-root .maintenance-table td:nth-child(5) {
+    width: 9.5%;
+}
+
+.capture-maintenance-page-root .maintenance-table th:nth-child(6),
+.capture-maintenance-page-root .maintenance-table td:nth-child(6) {
+    width: 14.5%;
+}
+
+.capture-maintenance-page-root .maintenance-table th:nth-child(7),
+.capture-maintenance-page-root .maintenance-table td:nth-child(7) {
+    width: 9%;
+}
+
+.capture-maintenance-page-root .maintenance-table th:nth-child(8),
+.capture-maintenance-page-root .maintenance-table td:nth-child(8) {
+    width: 15%;
+}
+
+.capture-maintenance-page-root .maintenance-table th:nth-child(9),
+.capture-maintenance-page-root .maintenance-table td:nth-child(9) {
+    width: 5%;
+    min-width: clamp(40px, 3.5vw, 56px);
+    box-sizing: border-box;
+}
+
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(5),
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(5) {
+    padding-left: clamp(8px, 0.9vw, 14px);
+    padding-right: clamp(10px, 1.1vw, 18px);
+}
+
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(6),
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(6) {
+    padding-left: clamp(10px, 1.05vw, 18px);
+    padding-right: clamp(10px, 1.05vw, 18px);
+}
+
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(7),
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(7) {
+    padding-left: clamp(10px, 1.05vw, 18px);
+    padding-right: clamp(10px, 1.05vw, 18px);
+}
+
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(8),
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(8) {
+    padding-left: clamp(10px, 1.05vw, 18px);
+    padding-right: clamp(6px, 0.75vw, 12px);
+}
+
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table th:nth-child(9):not(.maintenance-select-all-header),
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table td:nth-child(9):not(.maintenance-cell-checkbox) {
+    padding-left: clamp(4px, 0.5vw, 10px);
+    padding-right: clamp(6px, 0.65vw, 12px);
+}
+
+.capture-maintenance-page-root .maintenance-table th:nth-child(10),
+.capture-maintenance-page-root .maintenance-table td:nth-child(10) {
+    width: unset;
+}
+
+.capture-maintenance-page-root .maintenance-table-cell {
+    color: #374151;
+    padding: clamp(4px, 0.5vw, 8px) clamp(10px, 1vw, 18px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+    text-align: center;
+    min-height: clamp(28px, 1.95vw, 36px);
+    box-sizing: border-box;
+}
+
+.capture-maintenance-page-root .maintenance-table th:nth-child(3),
+.capture-maintenance-page-root .maintenance-table td:nth-child(3),
+.capture-maintenance-page-root .maintenance-table th:nth-child(4),
+.capture-maintenance-page-root .maintenance-table td:nth-child(4),
+.capture-maintenance-page-root .maintenance-table th:nth-child(6),
+.capture-maintenance-page-root .maintenance-table td:nth-child(6),
+.capture-maintenance-page-root .maintenance-table th:nth-child(7),
+.capture-maintenance-page-root .maintenance-table td:nth-child(7),
+.capture-maintenance-page-root .maintenance-table th:nth-child(8),
+.capture-maintenance-page-root .maintenance-table td:nth-child(8) {
+    text-align: left;
+}
+
+.capture-maintenance-page-root .maintenance-cell-currency {
+    text-align: center;
+}
+
+.capture-maintenance-page-root .maintenance-cell-checkbox {
+    text-align: center;
+}
+
+.capture-maintenance-page-root .maintenance-row-deleted .maintenance-table-cell {
+    color: #b91c1c;
+    text-decoration: line-through;
+}
+
+.capture-maintenance-page-root .maintenance-row-deleted .maintenance-row-checkbox:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.capture-maintenance-page-root .maintenance-row-deleted td.maintenance-cell-checkbox {
+    text-decoration: none;
+}
+
+.capture-maintenance-page-root .maintenance-select-all-header {
+    display: table-cell;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-th.maintenance-select-all-header {
+    display: flex;
+}
+
+.capture-maintenance-page-root #select_all_capture {
+    cursor: pointer;
+}
+
+.capture-maintenance-page-root .maintenance-row-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: clamp(10px, 0.73vw, 14px);
+    height: clamp(10px, 0.73vw, 14px);
+    border: 2px solid #000000ff;
+    border-radius: 3px;
+    background-color: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    margin: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.capture-maintenance-page-root .maintenance-row-checkbox:checked {
+    background-color: #1a237e;
+    border-color: #1a237e;
+}
+
+.capture-maintenance-page-root .maintenance-row-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: clamp(10px, 0.83vw, 14px);
+    font-weight: bold;
+    line-height: 1;
+}
+
+/* 勾选列：thead th 与 tbody td 对称 padding，flex 内层居中，与虚拟表一致 */
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table>thead>tr>th.maintenance-select-all-header,
+.capture-maintenance-page-root .maintenance-list-container .maintenance-table>tbody>tr>td.maintenance-cell-checkbox {
+    padding-top: clamp(4px, 0.5vw, 8px) !important;
+    padding-bottom: clamp(4px, 0.5vw, 8px) !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.capture-maintenance-page-root .maintenance-checkbox-cell-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: clamp(14px, 1.1vw, 22px);
+    margin: 0;
+    padding: 0;
+}
+
+@media (max-width: 1400px) {
+    .capture-maintenance-page-root .maintenance-table-cell {
+        white-space: normal;
+    }
+}
+
+/* Filter panel: same width alignment as Transaction Maintenance */
+.capture-maintenance-page-root .customer-report-filter-container,
+.capture-maintenance-page-root .capture-maintenance-table-region {
+    width: 100%;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+}
+
+/* Virtual table (aligned with payment maintenance) */
+.capture-maintenance-page-root {
+    --capture-list-cell-padding-y: clamp(4px, 0.5vw, 8px);
+    --capture-list-cell-padding-x: clamp(10px, 1vw, 18px);
+    --capture-list-cell-min-height: clamp(36px, 2.6vw, 48px);
+    --capture-list-cell-line-height: 1.35;
+}
+
+.capture-maintenance-page-root .capture-virtual-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.capture-maintenance-page-root .capture-virtual-table-inner {
+    min-width: 1100px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.capture-maintenance-page-root .maintenance-list-container--syncing .maintenance-virtual-scroll {
+    opacity: 0.92;
+    transition: opacity 0.15s ease;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-thead {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+}
+
+.capture-maintenance-page-root .capture-virtual-head-row,
+.capture-maintenance-page-root .capture-virtual-data-row {
+    display: grid;
+    grid-template-columns:
+        minmax(32px, 4fr) minmax(88px, 8fr) minmax(64px, 15fr) minmax(64px, 13fr) minmax(56px, 10fr) minmax(80px, 15.5fr) minmax(80px, 10fr) minmax(100px, 16fr) minmax(40px, 6.5fr);
+    align-items: stretch;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* No. + Dts Created: narrower columns, less gap between them */
+.capture-maintenance-page-root .capture-virtual-head-row .maintenance-virtual-th:nth-child(1),
+.capture-maintenance-page-root .capture-virtual-head-row .maintenance-virtual-th:nth-child(2),
+.capture-maintenance-page-root .capture-virtual-data-row .maintenance-virtual-cell:nth-child(1),
+.capture-maintenance-page-root .capture-virtual-data-row .maintenance-virtual-cell:nth-child(2) {
+    padding-left: clamp(6px, 0.45vw, 10px);
+    padding-right: clamp(6px, 0.45vw, 10px);
+}
+
+.capture-maintenance-page-root .capture-virtual-head-row .maintenance-virtual-th:nth-child(1),
+.capture-maintenance-page-root .capture-virtual-data-row .maintenance-virtual-cell:nth-child(1) {
+    padding-right: clamp(2px, 0.2vw, 5px);
+}
+
+.capture-maintenance-page-root .capture-virtual-head-row .maintenance-virtual-th:nth-child(2),
+.capture-maintenance-page-root .capture-virtual-data-row .maintenance-virtual-cell:nth-child(2) {
+    padding-left: clamp(2px, 0.2vw, 5px);
+}
+
+.capture-maintenance-page-root .maintenance-virtual-th {
+    background: linear-gradient(180deg, #60c1fe 0%, #0f61ff 100%);
+    color: #ffffff;
+    font-weight: bold;
+    font-size: var(--text-base);
+    padding: clamp(5px, 0.55vw, 9px) var(--capture-list-cell-padding-x);
+    text-align: center;
+    min-height: clamp(30px, 2.1vw, 38px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+.capture-maintenance-page-root .capture-virtual-th--left {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.capture-maintenance-page-root .capture-virtual-head-row .maintenance-virtual-th:first-child {
+    border-top-left-radius: 8px;
+}
+
+.capture-maintenance-page-root .capture-virtual-th-checkbox {
+    border-top-right-radius: 8px;
+    justify-content: center;
+    padding-top: clamp(4px, 0.5vw, 8px) !important;
+    padding-bottom: clamp(4px, 0.5vw, 8px) !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-scroll {
+    border-radius: 8px;
+    background: #fff;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-row-wrap {
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-row-wrap .capture-virtual-data-row {
+    height: 100%;
+    min-height: 100%;
+    align-items: stretch;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-data-row {
+    background: #ffffff;
+    box-shadow: none;
+    transition: background-color 0.15s ease;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-data-row--stripe {
+    background: #cceeff99;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-data-row:hover {
+    box-shadow: none;
+    transform: none;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-cell {
+    font-size: var(--text-medium);
+    font-weight: var(--font-weight-bold);
+    color: #374151;
+    line-height: var(--capture-list-cell-line-height);
+    padding: var(--capture-list-cell-padding-y) var(--capture-list-cell-padding-x);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: none;
+    min-height: var(--capture-list-cell-min-height);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-cell--left {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-cell--mono {
+    font-variant-numeric: tabular-nums;
+}
+
+.capture-maintenance-page-root .capture-virtual-cell--wrap {
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    align-items: center;
+    align-self: stretch;
+    height: auto;
+    min-height: 100%;
+}
+
+.capture-maintenance-page-root .capture-virtual-cell-checkbox {
+    justify-content: center;
+    padding-top: clamp(4px, 0.5vw, 8px) !important;
+    padding-bottom: clamp(4px, 0.5vw, 8px) !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+.capture-maintenance-page-root .capture-virtual-cell--no {
+    overflow: visible;
+    text-overflow: clip;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-data-row .maintenance-cell-currency {
+    text-align: center;
+    justify-content: center;
+}
+
+.capture-maintenance-page-root .maintenance-list-container .maintenance-virtual-data-row .maintenance-virtual-cell:nth-child(5) {
+    padding-left: clamp(8px, 0.9vw, 14px);
+    padding-right: clamp(10px, 1.1vw, 18px);
+}
+
+.capture-maintenance-page-root .maintenance-list-container .maintenance-virtual-data-row .maintenance-virtual-cell:nth-child(6),
+.capture-maintenance-page-root .maintenance-list-container .maintenance-virtual-data-row .maintenance-virtual-cell:nth-child(7) {
+    padding-left: clamp(10px, 1.05vw, 18px);
+    padding-right: clamp(10px, 1.05vw, 18px);
+}
+
+.capture-maintenance-page-root .maintenance-list-container .maintenance-virtual-data-row .maintenance-virtual-cell:nth-child(8) {
+    padding-left: clamp(10px, 1.05vw, 18px);
+    padding-right: clamp(6px, 0.75vw, 12px);
+}
+
+.capture-maintenance-page-root .maintenance-row-deleted .maintenance-virtual-cell {
+    color: #b91c1c;
+    text-decoration: line-through;
+}
+
+.capture-maintenance-page-root .maintenance-row-deleted .capture-virtual-cell-checkbox {
+    text-decoration: none;
+}
+
+.capture-maintenance-page-root .maintenance-list-container--syncing {
+    pointer-events: none;
+}
+
+/* Truncate long text with ellipsis and support hover tooltips */
+.capture-maintenance-page-root .capture-cell-text {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-cell--left .capture-cell-text {
+    text-align: left;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-cell--center .capture-cell-text {
+    text-align: center;
+}
+
+.capture-maintenance-page-root .maintenance-virtual-cell--right .capture-cell-text {
+    text-align: right;
+}
+

@@ -1,0 +1,31 @@
+/**
+ * Maintenance empty state — imported by each *_maintenance.css so rules ship in the
+ * page Vite chunk (not only the shared ReportGcFilterPanel chunk). Avoids FOUC when
+ * the shared chunk loads late. Canonical override: maintenance_unified_filters.css.
+ */
+body.dashboard-page.maintenance-page .empty-state-container {
+    position: relative;
+    top: 10px;
+    background: #ffffff;
+    border: 1px solid #d0d7de;
+    border-radius: 8px;
+    padding: clamp(40px, 3.33vw, 64px);
+    margin-bottom: clamp(20px, 1.67vw, 32px);
+    margin-top: 10px;
+    max-width: none;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+body.dashboard-page.maintenance-page .empty-state {
+    color: #64748b;
+    font-size: clamp(14px, 1.04vw, 20px);
+}
+
+body.dashboard-page.maintenance-page .empty-state p {
+    margin: 0;
+    font-family: var(--font-heading-page);
+}

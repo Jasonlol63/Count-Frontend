@@ -1,0 +1,2323 @@
+﻿/* Sidebar 自己的字体设置，避免被各页面 body 的全局字体覆盖导致闪一下样式 */
+.informationmenu,
+.informationmenu * {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+/* 用户信息容器（包裹头像和用户信息）- 整体水平居中，名字长时向左右对称扩展 */
+.user-info-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: clamp(4px, 0.52vw, 10px) clamp(8px, 0.83vw, 16px);
+    margin-right: clamp(-40px, -2.1vw, -20px);
+
+    margin-bottom: clamp(2px, 0.31vw, 6px);
+    min-height: 50px;
+    contain: layout style;
+    will-change: auto;
+    /* 确保头像选择菜单不被裁剪 */
+    overflow: visible;
+    /* 创建新的堆叠上下文，确保头像选择菜单能够显示在其他元素之上 */
+    position: relative;
+    z-index: 9999;
+}
+
+/* 登录后头像和下拉菜单样式 */
+.user-avatar-dropdown {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-direction: row;
+    gap: 0;
+    cursor: pointer;
+    padding: clamp(2px, 0.4vw, 8px);
+    padding-left: 0px;
+    border-radius: 25px;
+    /* 只对背景色应用过渡，避免布局属性变化导致的闪烁 */
+    transition: background-color 0.3s ease;
+    text-align: center;
+    color: white;
+    flex-shrink: 0;
+    /* 优化渲染性能 */
+    min-width: 0;
+    contain: layout style;
+    /* 确保不会被头像选择菜单覆盖，但也不覆盖菜单 */
+    z-index: 1;
+}
+
+.user-avatar-dropdown:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.user-avatar {
+    width: 36px;
+    height: 36px;
+    background: white;
+    color: #1a237e;
+    font-weight: bold;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    user-select: none;
+    box-sizing: border-box;
+}
+
+.avatar-selector-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;     
+    align-items: flex-end;
+    margin-left: 0;
+    flex-shrink: 0;
+    width: fit-content;
+    /* 优化渲染性能，防止页面切换时的布局重排 */
+    min-width: clamp(40px, 3.65vw, 70px);
+    /* 移除 paint 限制，允许头像选择菜单超出容器边界显示 */
+    contain: layout style;
+    /* 确保头像选择菜单不被裁剪 */
+    overflow: visible;
+    /* 创建新的堆叠上下文，确保子元素（头像选择菜单）的z-index能够覆盖其他元素 */
+    z-index: 10000;
+    isolation: isolate;
+}
+
+/* 当前头像显示 */
+.current-avatar {
+    width: clamp(30px, 2.6vw, 50px);
+    height: clamp(30px, 2.6vw, 50px);
+    margin: 0;
+    padding: 0;
+    font: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+    border-radius: 50%;
+    cursor: pointer;
+    /* 只对需要动画的属性应用过渡，避免页面切换时位置属性变化导致的闪烁 */
+    transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 24px;
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+    /* 优化渲染性能，防止闪烁 - 强制 GPU 加速并隔离布局 */
+    transform: translateZ(0);
+    will-change: border-color, box-shadow;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    /* 确保尺寸固定，避免 flex 布局重新计算时的抖动 */
+    flex-shrink: 0;
+}
+
+.current-avatar:hover {
+    border-color: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* 头像选择菜单 */
+.avatar-options {
+    position: absolute;
+    top: 75%;
+    left: calc(100% + clamp(8px, 0.83vw, 16px));
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    padding: clamp(8px, 0.78vw, 15px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(20px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
+    /* 使用非常高的 z-index 确保显示在所有内容之上 */
+    z-index: 9999;
+    width: clamp(120px, 10vw, 180px);
+    max-height: clamp(300px, 40vh, 500px);
+    overflow-y: auto;
+}
+
+.avatar-options.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-50%);
+}
+
+.avatar-options::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -8px;
+    transform: translateY(-50%);
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-right: 8px solid rgba(255, 255, 255, 0.95);
+}
+
+.avatar-option {
+    width: clamp(34px, 3vw, 56px);
+    height: clamp(34px, 3vw, 56px);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: white;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.avatar-option:hover {
+    border-color: #667eea;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.avatar-option.selected {
+    border-color: #4facfe;
+    box-shadow: 0 0 15px rgba(79, 172, 254, 0.5);
+}
+
+.options-title {
+    text-align: center;
+    color: #333;
+    font-size: clamp(7px, 0.58vw, 11px);
+    font-weight: 600;
+    margin-bottom: clamp(4px, 0.42vw, 8px);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.gender-selection {
+    display: flex;
+    gap: clamp(6px, 0.63vw, 12px);
+    margin-bottom: clamp(8px, 0.83vw, 16px);
+    justify-content: center;
+}
+
+.gender-btn {
+    flex: 1;
+    padding: clamp(6px, 0.63vw, 12px);
+    border: 2px solid rgba(102, 126, 234, 0.3);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.8);
+    color: #667eea;
+    font-size: clamp(8px, 0.73vw, 14px);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.gender-btn:hover {
+    background: rgba(102, 126, 234, 0.1);
+    border-color: #667eea;
+}
+
+.gender-btn.active {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.avatar-list {
+    display: none;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(6px, 0.63vw, 12px);
+    margin-top: clamp(6px, 0.63vw, 12px);
+    justify-items: center;
+}
+
+.avatar-list.show {
+    display: grid;
+}
+
+.avatar-option {
+    width: clamp(32px, 2.8vw, 48px);
+    height: clamp(32px, 2.8vw, 48px);
+}
+
+/* .avatar-options scrollbars: app-wide — dashboard-scrollbar.css */
+
+/* Avatar picker — centered modal (portal), replaces sidebar dropdown */
+.avatar-picker-modal-root {
+    position: fixed;
+    inset: 0;
+    z-index: 28000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    pointer-events: none;
+}
+
+.avatar-picker-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    border: none;
+    padding: 0;
+    margin: 0;
+    background: rgba(0, 45, 73, 0.38);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.avatar-picker-modal {
+    position: relative;
+    z-index: 1;
+    width: min(400px, 100%);
+    max-height: min(85vh, 520px);
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    box-shadow:
+        0 24px 48px -12px rgba(0, 44, 73, 0.2),
+        0 8px 20px -8px rgba(15, 23, 42, 0.12);
+    overflow: hidden;
+    pointer-events: auto;
+}
+
+.avatar-picker-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+    font-weight: 700;
+    font-size: 16px;
+    color: #002c49;
+    flex-shrink: 0;
+}
+
+.avatar-picker-modal-close {
+    border: none;
+    background: #f1f5f9;
+    font-size: 18px;
+    line-height: 1;
+    color: #64748b;
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.avatar-picker-modal-close:hover {
+    background: #e2e8f0;
+    color: #002c49;
+}
+
+.avatar-picker-modal-body {
+    padding: 16px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+
+.avatar-picker-modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.avatar-picker-modal-body::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+}
+
+.avatar-picker-modal-gender {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.avatar-picker-modal-gender-btn {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.avatar-picker-modal-gender-btn:hover {
+    border-color: #93c5fd;
+    background: #f0f7ff;
+}
+
+.avatar-picker-modal-gender-btn.is-active {
+    background: #0d60ff;
+    border-color: #0d60ff;
+    color: #ffffff;
+}
+
+.avatar-picker-modal-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    justify-items: center;
+}
+
+.avatar-picker-modal-option {
+    width: 100%;
+    max-width: 96px;
+    aspect-ratio: 1;
+    margin: 0;
+    padding: 4px;
+    border: 2px solid #e2e8f0;
+    border-radius: 50%;
+    background: #f8fafc;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        border-color 0.15s ease,
+        transform 0.15s ease,
+        box-shadow 0.15s ease,
+        background-color 0.15s ease;
+}
+
+.avatar-picker-modal-option:hover {
+    border-color: #667eea;
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.avatar-picker-modal-option.is-selected {
+    border-color: #0d60ff;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(13, 96, 255, 0.18);
+}
+
+.avatar-picker-modal-option-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+}
+
+.user-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 2px;
+    margin-left: 10px;
+    min-width: clamp(60px, 5vw, 100px);
+    flex: 0 1 auto;
+    text-align: center;
+}
+
+.user-name {
+    margin: 0;
+    font-size: clamp(10px, 0.83vw, 16px);
+    font-weight: 600;
+    color: white;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.user-role {
+    font-size: clamp(9px, 0.57vw, 11px);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.2;
+    text-align: center;
+}
+
+/* 左边的选项bar */
+.informationmenu-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.05);
+    z-index: 999;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    pointer-events: none;
+}
+
+.informationmenu-overlay.show {
+    opacity: 0;
+    visibility: visible;
+}
+
+.informationmenu-overlay.hide {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.informationmenu {
+    width: var(--layout-sidebar-width);
+    height: 100%;
+    background: var(--sidebar-shell-bg, #002d49);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8);
+    position: fixed;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    z-index: 1000;
+    transform: translateX(0) translateZ(0);
+    /* 只对transform应用过渡，避免页面切换时其他CSS属性变化导致的闪烁 */
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+    /* 优化渲染性能，防止闪烁 */
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    /* 确保sidebar始终可见，不会被重新渲染影响 */
+    visibility: visible;
+    opacity: 1;
+    /* 强制GPU加速，提高渲染稳定性 */
+    -webkit-transform: translateX(0) translateZ(0);
+}
+
+.informationmenu.show {
+    transform: translateX(0);
+}
+
+.informationmenu.hide {
+    transform: translateX(-100%);
+}
+
+@media (max-width: 1280px) {
+    .informationmenu {
+        width: var(--layout-sidebar-width);
+        height: 100vh;
+    }
+    .informationmenu-footer {
+        background: #002d49;
+        padding: 10px 10px 12px;
+        gap: 8px;
+    }
+}
+
+.informationmenu-header {
+    padding: 10px 10px 8px;
+    border-bottom: 0px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    /* 确保头像选择菜单不被裁剪 */
+    overflow: visible;
+}
+
+.sidebar-lang-switch-wrap {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-top: 4px;
+}
+
+/* ios26 language switch — same system as login (login-shadcn .sc-login-lang-ios): glass track, gradient thumb, glow, shimmer */
+.sidebar-lang-switch {
+    --sidebar-lang-thumb-x: 0;
+    --sidebar-lang-glow-x: 0;
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    width: 108px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    background:
+        linear-gradient(160deg, rgba(255, 255, 255, 0.94), rgba(242, 248, 255, 0.85)),
+        linear-gradient(135deg, rgba(96, 165, 250, 0.15), rgba(59, 130, 246, 0.08));
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    padding: 3px;
+    box-shadow:
+        0 10px 22px rgba(15, 23, 42, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.92),
+        inset 0 -1px 0 rgba(59, 130, 246, 0.1);
+    isolation: isolate;
+    transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.24s ease;
+}
+
+.sidebar-lang-switch::before {
+    content: "";
+    position: absolute;
+    left: 7px;
+    right: 7px;
+    top: 4px;
+    height: 45%;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0));
+    pointer-events: none;
+    z-index: 1;
+}
+
+.sidebar-lang-switch::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: calc(50% - 6px);
+    height: calc(100% - 8px);
+    border-radius: 999px;
+    pointer-events: none;
+    z-index: 1;
+    filter: blur(10px);
+    opacity: 0.8;
+    transform: translateX(var(--sidebar-lang-glow-x, 0));
+    background: radial-gradient(ellipse at center, rgba(56, 189, 248, 0.45), rgba(56, 189, 248, 0));
+    transition: transform 0.8s cubic-bezier(0.16, 0.92, 0.24, 1.12), opacity 0.3s ease;
+    animation: sc-login-lang-glow-breathe 1.9s ease-in-out infinite;
+}
+
+.sidebar-lang-switch:hover {
+    transform: translateY(-1px);
+    box-shadow:
+        0 14px 26px rgba(15, 23, 42, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.96),
+        inset 0 -1px 0 rgba(59, 130, 246, 0.14);
+}
+
+.sidebar-lang-option {
+    position: relative;
+    z-index: 3;
+    flex: 1 1 0;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #0f172a;
+    border-radius: 999px;
+    transition: color 0.2s ease, transform 0.18s ease, text-shadow 0.2s ease;
+    padding: 0 4px;
+    overflow: visible;
+    font-family: Inter, "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: normal;
+}
+
+.sidebar-lang-option-label {
+    position: relative;
+    z-index: 1;
+    display: block;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.sidebar-lang-option:hover {
+    transform: translateY(-0.5px);
+}
+
+.sidebar-lang-option.active {
+    color: #ffffff;
+    text-shadow: 0 1px 4px rgba(30, 64, 175, 0.28);
+    animation: sc-login-lang-text-breathe 1.8s ease-in-out infinite;
+}
+
+.sidebar-lang-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    z-index: 1;
+    width: calc(50% - 3px);
+    height: calc(100% - 6px);
+    border-radius: 999px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0)) 0 0 / 100% 55% no-repeat,
+        linear-gradient(135deg, #1d4ed8, #38bdf8);
+    box-shadow:
+        0 4px 12px rgba(30, 64, 175, 0.38),
+        inset 0 1px 0 rgba(255, 255, 255, 0.45),
+        inset 0 -1px 0 rgba(2, 6, 23, 0.15);
+    transform: translateX(var(--sidebar-lang-thumb-x, 0));
+    transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.28s ease;
+    will-change: transform;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.sidebar-lang-thumb::before {
+    content: "";
+    position: absolute;
+    top: -38%;
+    left: -30%;
+    width: 42%;
+    height: 176%;
+    pointer-events: none;
+    transform: rotate(20deg);
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.62) 50%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    mix-blend-mode: screen;
+    animation: sc-login-lang-shimmer 2.1s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.sidebar-lang-switch:active .sidebar-lang-thumb {
+    box-shadow:
+        0 3px 8px rgba(30, 64, 175, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.sidebar-lang-switch.is-en {
+    --sidebar-lang-thumb-x: 0;
+    --sidebar-lang-glow-x: 0;
+}
+
+.sidebar-lang-switch.is-zh {
+    --sidebar-lang-thumb-x: 100%;
+    --sidebar-lang-glow-x: 100%;
+}
+
+.informationmenu-logo {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 18px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.informationmenu-close-btn {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: white;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.informationmenu-close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+.informationmenu-content {
+    overflow-y: clip;
+    overflow-x: hidden;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.informationmenu-section {
+    margin: 0;
+}
+
+.informationmenu-section-title {
+    padding: var(--sidebar-menu-pad-y, 0.95rem) var(--sidebar-menu-pad-x, 0.85rem);
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: var(--sidebar-icon-size, 18px) minmax(0, 1fr);
+    column-gap: var(--sidebar-icon-gap, 0.65rem);
+    align-items: center;
+    justify-content: flex-start;
+    transition: all 0.3s ease;
+    border-radius: 25px 0 0 25px;
+    margin: 0;
+    position: relative;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    min-width: 0;
+    text-decoration: none;
+}
+
+.informationmenu-section-title:has(.section-arrow) {
+    grid-template-columns:
+        var(--sidebar-icon-size, 18px)
+        var(--sidebar-menu-text-track, 8rem)
+        auto;
+}
+
+.informationmenu-section-title::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -100%;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    box-shadow: 
+        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.4);
+    transition: right 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    z-index: -1;
+    border-radius: 25px 0 0 25px;
+}
+
+.informationmenu-section-title:hover::before {
+    right: 0;
+}
+
+.informationmenu-section-title:hover {
+    color: white;
+    transform: translateX(5px);
+    box-shadow: 0 4px 20px rgba(79, 172, 254, 0.4);
+}
+
+.informationmenu-section-title:hover .section-icon {
+    filter: brightness(0) invert(1);
+    transform: scale(1.1);
+}
+
+.informationmenu-section-title:hover .section-arrow {
+    color: white;
+    transform: translateX(3px);
+}
+
+.informationmenu-section-title.active {
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+/* 添加active状态样式 */
+.informationmenu-section-title.current-page {
+    background: var(--sidebar-active-bg, #0e93f3);
+    color: #fff;
+    transform: translate(5px);
+    box-shadow: 0 4px 20px #4facfe66;
+}
+
+.informationmenu-section-title.current-page::before {
+    right: 0;
+}
+
+.informationmenu-section-title.current-page .section-icon {
+    filter: brightness(0) invert(1);
+    transform: scale(1.1);
+}
+
+.informationmenu-section-title.current-page .section-arrow {
+    color: white;
+    transform: translateX(3px);
+}
+
+.section-arrow {
+    grid-column: 8;
+    font-size: 10px;
+    transition: transform 0.3s ease;
+    margin-left: var(--sidebar-menu-arrow-gap, 0.12rem);
+    flex-shrink: 0;
+    align-self: center;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.informationmenu-section--transaction-payment {
+    margin-bottom: 0.4rem;
+}
+
+.informationmenu-section--transaction-payment .informationmenu-section-title {
+    align-items: flex-start;
+    padding-top: calc(var(--sidebar-menu-pad-y, 0.95rem) - 0.05rem);
+    padding-bottom: calc(var(--sidebar-menu-pad-y, 0.95rem) - 0.05rem);
+}
+
+.informationmenu-section--transaction-payment .section-icon {
+    margin-top: 0.12rem;
+}
+
+.account-arrow {
+    transform: none !important;
+    transition: none !important;
+}
+
+.account-direct:hover .account-arrow {
+    transform: translateX(3px) !important;
+}
+
+.account-direct.active .account-arrow {
+    transform: none !important;
+}
+
+.informationmenu-section-title.active .section-arrow {
+    transform: rotate(90deg);
+}
+
+.section-icon {
+    grid-column: 1;
+    width: var(--sidebar-icon-size, 18px);
+    height: var(--sidebar-icon-size, 18px);
+    margin-right: 0;
+    vertical-align: middle;
+    flex-shrink: 0;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+    opacity: 0.9;
+}
+
+/* 下拉显示的菜单项区域 */
+.dropdown-menu-items {
+    max-height: 0;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.05);
+    margin: 0 10px;
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    transform: translateY(-4px);
+    padding: 0;
+    pointer-events: none;
+    transition:
+        max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.22s ease-in-out,
+        transform 0.22s ease-in-out,
+        padding 0.22s ease-in-out;
+    will-change: max-height, opacity, transform, padding;
+}
+
+.dropdown-menu-items.show {
+    max-height: 500px;
+    opacity: 1;
+    transform: translateY(0);
+    padding: 8px 0 10px;
+    pointer-events: auto;
+}
+
+.menu-item-wrapper {
+    position: relative;
+}
+
+.informationmenu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    border-radius: 10px;
+    margin: 0px 10px;
+}
+
+.informationmenu-item:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    transform: translateX(0px);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.informationmenu-arrow {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    transition: transform 0.3s ease;
+}
+
+.informationmenu-item:hover .informationmenu-arrow {
+    transform: translateX(3px);
+}
+
+/* 子菜单 - 紧凑型，显示在菜单项旁边（显隐仅改 opacity，避免与 fixed 无坐标时落回静态区冲突） */
+.submenu {
+    position: fixed;
+    width: clamp(100px, 10.42vw, 200px);
+    min-height: auto;
+    background:rgb(0, 84, 136);
+    color: white;
+    border-radius: 0 12px 12px 0;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+    z-index: 3000;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+    margin-left: 0px;
+}
+
+.menu-item-wrapper:hover .informationmenu-section-title {
+    background: rgba(255, 255, 255, 0.25);
+    color: white;
+}
+
+.submenu-content {
+    padding: clamp(2px, 0.42vw, 8px) 0;
+}
+
+.submenu-item {
+    display: flex;
+    align-items: center;
+    padding: clamp(4px, 0.52vw, 10px) clamp(10px, 0.83vw, 16px);
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: none;
+    font-size: var(--sidebar-menu-font, 1.6rem);
+    font-weight: bold;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    position: relative;
+}
+
+.submenu-item:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+}
+
+.submenu-item.current-page {
+    background: rgba(14, 147, 243, 0.9);
+    color: white;
+}
+
+.submenu-item::after {
+    content: '›';
+    margin-left: auto;
+    font-weight: bold;
+    transition: transform 0.2s ease;
+    opacity: 0.6;
+    font-size: 16px;
+}
+
+.submenu-item:hover::after {
+    transform: translateX(3px);
+    opacity: 1;
+}
+
+.btn:hover::after {
+    transform: translateX(120%);
+}
+
+/* Logout Button Specific Styles */
+.logout-btn {
+    background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
+    color: white;
+    padding: clamp(6px, 0.42vw, 8px) 20px;
+    font-size: clamp(10px, 0.83vw, 16px);
+    width: clamp(70px, 6.25vw, 120px);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    --sweep-color: rgba(255, 255, 255, 0.2);
+    cursor: pointer
+}
+
+.logout-btn:hover {
+    background: linear-gradient(180deg, #0D60FF 0%, #63C4FF 100%);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+    transform: translateY(-1px);
+}
+
+.informationmenu-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-end;
+    padding: 10px 10px 14px;
+    border-top: none;
+    background: transparent;
+    margin-top: auto;
+    flex-shrink: 0;
+    gap: 8px;
+    box-sizing: border-box;
+}
+
+.informationmenu-footer .company-expiration-countdown,
+.informationmenu-footer .logout-btn {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.informationmenu-footer .logout-btn {
+    align-self: stretch;
+    margin: 0;
+    min-height: 34px;
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: clamp(11px, 0.78vw, 13px);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+/* 滚动条样式 */
+/* .informationmenu-content scrollbars: app-wide — dashboard-scrollbar.css */
+
+/* Keep sidebar language switch size stable across pages/viewports */
+.informationmenu-header .sidebar-lang-switch-wrap {
+    margin-top: 6px;
+    min-height: 32px;
+}
+
+.informationmenu-header .sidebar-lang-switch,
+.informationmenu-header .sidebar-lang-option,
+.informationmenu-header .sidebar-lang-thumb {
+    box-sizing: border-box;
+}
+
+@media (max-width: 1280px) {
+    .sidebar-lang-switch {
+        width: 108px;
+        height: 32px;
+    }
+
+    .sidebar-lang-option {
+        font-size: 11px;
+    }
+}
+
+/* 添加一些微妙的动画 */
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-2px); }
+}
+
+.header-logo-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(4px, 0.625vw, 12px);
+    margin-bottom: clamp(4px, 0.52vw, 10px);
+    width: 100%;
+}
+
+.header-logo {
+    height: clamp(32px, 2.3vw, 44px);
+    object-fit: contain;
+    width: auto;
+}
+
+.content-separator {
+    height: clamp(1px, 0.1vw, 2px);
+    margin: clamp(0px, 0.52vw, 10px) 20px 14px 20px;
+    background: linear-gradient(
+        to right, 
+        transparent 0%, 
+        rgba(255, 255, 255, 1) 50%, 
+        transparent 100%
+    );
+    position: relative;
+}
+
+/* Keep first menu item's top spacing consistent even when current page is Home */
+.informationmenu-content > .informationmenu-section:first-of-type {
+    margin-top: 6px;
+}
+
+/* Match "管理页" visual spacing when Home is active */
+.informationmenu-content > .informationmenu-section:first-of-type .informationmenu-section-title.current-page {
+    margin-top: 8px;
+}
+
+.content-separator::before {
+    content: "";
+    display: block;
+    width: 0%;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.6);
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
+}
+
+/* 语言切换按钮样式 */
+.language-switcher {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: clamp(2px, 0.31vw, 6px);
+    padding: clamp(0px, 0.21vw, 4px) 8px;
+}
+
+.language-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.language-btn {
+    display: flex;
+    align-items: center;
+    gap: clamp(4px, 0.42vw, 8px);
+    padding: clamp(4px, 0.42vw, 8px) clamp(6px, 0.63vw, 12px);
+    background: #9abff7;
+    border: none;
+    border-radius: clamp(4px, 0.42vw, 8px);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    justify-content: space-between;
+}
+
+.language-btn:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+}
+
+.flag-icon {
+    width: clamp(15px, 1.04vw, 20px);
+    height: clamp(10px, 0.78vw, 15px);
+    object-fit: cover;
+    border-radius: clamp(0px, 0.1vw, 2px);
+}
+
+.language-text {
+    font-size: clamp(7px, 0.63vw, 12px);
+    font-weight: 600;
+    color: #333;
+}
+
+.dropdown-arrow {
+    font-size: clamp(6px, 0.52vw, 10px);
+    color: #002c65;
+    transition: transform 0.3s ease;
+}
+
+.language-btn.active .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.language-dropdown-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #9abff7;
+    border-radius: clamp(4px, 0.42vw, 8px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+    z-index: 1000;
+    margin-top: 4px;
+    overflow: hidden;
+}
+
+.language-dropdown-list.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.language-option {
+    display: flex;
+    align-items: center;
+    gap: clamp(4px, 0.42vw, 8px);
+    padding: clamp(4px, 0.42vw, 8px) clamp(6px, 0.63vw, 12px);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.language-option:last-child {
+    border-bottom: none;
+}
+
+.language-option:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.language-option span {
+    font-size: clamp(7px, 0.63vw, 12px);
+    font-weight: 600;
+    color: #333;
+}
+
+/* 通知铃铛样式 */
+.notification-bell {
+    position: relative;
+    width: clamp(26px, 1.88vw, 36px);
+    height: clamp(26px, 1.88vw, 36px);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: white;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    flex-shrink: 0;
+}
+
+.notification-bell:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.notification-bell svg {
+    width: clamp(16px, 1.14vw, 22px);
+    height: clamp(16px, 1.14vw, 22px);
+    transform-origin: 50% 10%;
+    animation: bell-shake 1s ease-in-out infinite;
+}
+
+@keyframes bell-shake {
+    0%   { transform: rotate(0deg); }
+    15%  { transform: rotate(12deg); }
+    30%  { transform: rotate(-10deg); }
+    45%  { transform: rotate(8deg); }
+    60%  { transform: rotate(-6deg); }
+    75%  { transform: rotate(3deg); }
+    100% { transform: rotate(0deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar-lang-switch,
+    .sidebar-lang-option,
+    .sidebar-lang-thumb,
+    .sidebar-lang-thumb::before,
+    .sidebar-lang-switch::after,
+    .sidebar-lang-option.active {
+        transition: none;
+        animation: none;
+    }
+}
+
+/* 通知面板遮罩层 */
+.notification-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 1200;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.notification-overlay.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+/* 通知面板 */
+.notification-panel {
+    position: fixed;
+    top: 0;
+    right: -400px;
+    width: clamp(260px, 20.83vw, 400px);
+    height: 100vh;
+    background: #ffffff;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+    z-index: 1300;
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.notification-panel.show {
+    right: 0;
+}
+
+/* 通知面板头部 */
+.notification-header {
+    padding: clamp(10px, 1.04vw, 20px) clamp(16px, 1.25vw, 24px);
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f9fafb;
+}
+
+.notification-header h2 {
+    margin: 0;
+    font-size: clamp(14px, 1.04vw, 20px);
+    font-weight: 600;
+    color: #1a237e;
+}
+
+.notification-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6b7280;
+    transition: all 0.2s ease;
+}
+
+.notification-close:hover {
+    background: #e5e7eb;
+    color: #1a237e;
+}
+
+.notification-close svg {
+    width: clamp(16px, 1.04vw, 20px);
+    height: clamp(16px, 1.04vw, 20px);
+}
+
+/* 通知内容区域 */
+.notification-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: clamp(10px, 0.83vw, 16px);
+}
+
+.notification-item {
+    padding: clamp(10px, 0.83vw, 16px);
+    margin-bottom: clamp(8px, 0.625vw, 12px);
+    background: #f9fafb;
+    border-radius: 12px;
+    border-left: 4px solid #1a237e;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.notification-item:hover {
+    background: #f3f4f6;
+    transform: translateX(-2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.notification-bell.has-unread::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+    border: 2px solid rgba(26, 35, 126, 0.85);
+    box-sizing: content-box;
+}
+
+.notification-item.unread {
+    background: #eff6ff;
+    border-left-color: #3b82f6;
+}
+
+.notification-item.expiration-reminder-item.unread {
+    background: #fff7ed;
+    border-left-color: #f97316;
+}
+
+.notification-title {
+    font-size: clamp(10px, 0.73vw, 14px);
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 6px;
+}
+
+.notification-message {
+    font-size: clamp(9px, 0.68vw, 13px);
+    color: #6b7280;
+    line-height: 1.5;
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.notification-time {
+    font-size: clamp(8px, 0.625vw, 12px);
+    color: #9ca3af;
+}
+
+.notification-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: #9ca3af;
+}
+
+.notification-empty svg {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.notification-empty p {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* 公司到期倒计时样式 */
+@keyframes exp-sidebar-glow-yellow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    border-color: rgba(253, 224, 71, 0.95);
+  }
+  50% {
+    box-shadow: 0 0 18px 4px rgba(250, 204, 21, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    border-color: #fde047;
+  }
+}
+
+@keyframes exp-sidebar-glow-orange {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(251, 146, 60, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    border-color: rgba(251, 146, 60, 0.95);
+  }
+  50% {
+    box-shadow: 0 0 20px 5px rgba(249, 115, 22, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+    border-color: #fb923c;
+  }
+}
+
+@keyframes exp-sidebar-glow-critical {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    border-color: rgba(248, 113, 113, 0.95);
+  }
+  50% {
+    box-shadow: 0 0 16px 4px rgba(239, 68, 68, 0.82), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    border-color: #f87171;
+  }
+}
+
+@keyframes exp-sidebar-glow-expired {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    border-color: rgba(239, 68, 68, 0.9);
+  }
+  50% {
+    box-shadow: 0 0 24px 7px rgba(220, 38, 38, 0.95), inset 0 0 12px rgba(127, 29, 29, 0.35);
+    border-color: #ef4444;
+  }
+}
+
+@keyframes exp-sidebar-text-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.88; }
+}
+
+.company-expiration-countdown {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  margin: 0;
+  min-height: 32px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.company-expiration-countdown.is-clickable {
+  cursor: pointer;
+}
+
+.company-expiration-countdown.is-clickable:hover {
+  filter: brightness(1.05);
+}
+
+.company-expiration-countdown.normal {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(96, 165, 250, 0.55);
+}
+
+.company-expiration-countdown.exp-yellow {
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.92) 0%, rgba(234, 179, 8, 0.78) 100%);
+  border-color: #fde047;
+  animation: exp-sidebar-glow-yellow 1.8s ease-in-out infinite;
+}
+
+.company-expiration-countdown.exp-orange {
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.94) 0%, rgba(249, 115, 22, 0.82) 100%);
+  border-color: #fb923c;
+  animation: exp-sidebar-glow-orange 1.45s ease-in-out infinite;
+}
+
+.company-expiration-countdown.exp-critical,
+.company-expiration-countdown.warning {
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.96) 0%, rgba(239, 68, 68, 0.88) 100%);
+  border-color: #f87171;
+  animation: exp-sidebar-glow-critical 1.05s ease-in-out infinite;
+}
+
+.company-expiration-countdown.expired {
+  background: linear-gradient(135deg, rgba(185, 28, 28, 0.95) 0%, rgba(127, 29, 29, 0.92) 100%);
+  border-color: #ef4444;
+  animation: exp-sidebar-glow-expired 0.85s ease-in-out infinite;
+}
+
+.company-expiration-countdown.exp-yellow .expiration-label,
+.company-expiration-countdown.exp-yellow .expiration-countdown-text,
+.company-expiration-countdown.exp-orange .expiration-label,
+.company-expiration-countdown.exp-orange .expiration-countdown-text,
+.company-expiration-countdown.exp-critical .expiration-label,
+.company-expiration-countdown.exp-critical .expiration-countdown-text,
+.company-expiration-countdown.warning .expiration-label,
+.company-expiration-countdown.warning .expiration-countdown-text,
+.company-expiration-countdown.expired .expiration-label,
+.company-expiration-countdown.expired .expiration-countdown-text {
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  animation: exp-sidebar-text-pulse 1.8s ease-in-out infinite;
+}
+
+.company-expiration-countdown.exp-orange .expiration-label,
+.company-expiration-countdown.exp-orange .expiration-countdown-text {
+  animation-duration: 1.45s;
+}
+
+.company-expiration-countdown.exp-critical .expiration-label,
+.company-expiration-countdown.exp-critical .expiration-countdown-text,
+.company-expiration-countdown.warning .expiration-label,
+.company-expiration-countdown.warning .expiration-countdown-text {
+  animation-duration: 1.05s;
+}
+
+.company-expiration-countdown.expired .expiration-label,
+.company-expiration-countdown.expired .expiration-countdown-text {
+  animation-duration: 0.85s;
+}
+
+.expiration-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: #ffffff;
+  margin: 0;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+
+.company-expiration-countdown.normal .expiration-icon,
+.company-expiration-countdown.exp-yellow .expiration-icon,
+.company-expiration-countdown.exp-orange .expiration-icon,
+.company-expiration-countdown.exp-critical .expiration-icon,
+.company-expiration-countdown.warning .expiration-icon,
+.company-expiration-countdown.expired .expiration-icon {
+  color: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .company-expiration-countdown.exp-yellow,
+  .company-expiration-countdown.exp-orange,
+  .company-expiration-countdown.exp-critical,
+  .company-expiration-countdown.warning,
+  .company-expiration-countdown.expired {
+    animation: none;
+  }
+
+  .company-expiration-countdown.exp-yellow .expiration-label,
+  .company-expiration-countdown.exp-yellow .expiration-countdown-text,
+  .company-expiration-countdown.exp-orange .expiration-label,
+  .company-expiration-countdown.exp-orange .expiration-countdown-text,
+  .company-expiration-countdown.exp-critical .expiration-label,
+  .company-expiration-countdown.exp-critical .expiration-countdown-text,
+  .company-expiration-countdown.warning .expiration-label,
+  .company-expiration-countdown.warning .expiration-countdown-text,
+  .company-expiration-countdown.expired .expiration-label,
+  .company-expiration-countdown.expired .expiration-countdown-text {
+    animation: none;
+  }
+}
+
+.expiration-content {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.32em;
+    flex: 1;
+    min-width: 0;
+}
+
+.expiration-label {
+    font-size: clamp(10px, 0.75vw, 12px);
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1.2;
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+.expiration-countdown-text {
+    font-size: clamp(10px, 0.75vw, 12px);
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1.2;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 1 1 auto;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+/* 头像图片（替代内联样式） */
+.current-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+    display: block;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.avatar-option-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+/* Final size lock: AuthenticatedLayout sets body.ec-auth-shell (stable across routes).
+   Use clamp so small viewports match legacy .informationmenu + max-width:1280px (≈150px), not forced desktop width. */
+body.ec-auth-shell .informationmenu {
+    width: var(--layout-sidebar-width) !important;
+}
+
+body.ec-auth-shell .informationmenu-header {
+    padding: var(--sidebar-header-pad-t, 1rem) var(--sidebar-header-pad-x, 1rem) var(--sidebar-header-pad-b, 0.8rem) !important;
+}
+
+body.ec-auth-shell .informationmenu .header-logo {
+    height: var(--sidebar-logo-height, 3.6rem) !important;
+}
+
+body.ec-auth-shell .informationmenu .user-info-container {
+    padding: 0.6rem 1.2rem !important;
+    margin-right: -2.4rem !important;
+    margin-bottom: 0.4rem !important;
+}
+
+body.ec-auth-shell .informationmenu .current-avatar {
+    width: var(--sidebar-avatar-lock, 4rem) !important;
+    height: var(--sidebar-avatar-lock, 4rem) !important;
+}
+
+body.ec-auth-shell .informationmenu .user-name {
+    font-size: var(--sidebar-user-name-size, 1.6rem) !important;
+    line-height: 1.2 !important;
+}
+
+body.ec-auth-shell .informationmenu .user-role {
+    font-size: var(--sidebar-user-role-size, 1.1rem) !important;
+    line-height: 1.2 !important;
+}
+
+body.ec-auth-shell .informationmenu .sidebar-lang-switch {
+    width: var(--sidebar-lang-width, 10.8rem) !important;
+    height: var(--sidebar-lang-height, 3.2rem) !important;
+}
+
+body.ec-auth-shell .informationmenu .sidebar-lang-option {
+    font-size: var(--sidebar-lang-font, 1.1rem) !important;
+}
+
+body.ec-auth-shell .informationmenu .section-icon {
+    width: var(--sidebar-icon-size, 1.8rem) !important;
+    height: var(--sidebar-icon-size, 1.8rem) !important;
+    margin-right: 0 !important;
+}
+
+body.ec-auth-shell .informationmenu .informationmenu-section-title {
+    padding: var(--sidebar-menu-pad-y, 1.2rem) var(--sidebar-menu-pad-x, 1.6rem) !important;
+    font-size: var(--sidebar-menu-font, 1.6rem) !important;
+}
+
+body.ec-auth-shell .informationmenu .informationmenu-item {
+    padding: var(--sidebar-submenu-pad-y, 0.8rem) var(--sidebar-menu-pad-x, 1.6rem) !important;
+    font-size: var(--sidebar-submenu-font, 1.2rem) !important;
+}
+
+body.ec-auth-shell .informationmenu .submenu-item {
+    font-size: var(--sidebar-menu-font, 1.6rem) !important;
+}
+
+/* Narrow screens: keep shell visually aligned with base .informationmenu @media (max-width: 1280px) */
+@media (max-width: 1280px) {
+    body.ec-auth-shell .informationmenu {
+        width: var(--layout-sidebar-width) !important;
+    }
+
+    body.ec-auth-shell .informationmenu-header {
+        padding: 0.8rem 0.8rem 0.6rem !important;
+    }
+
+    body.ec-auth-shell .informationmenu .header-logo {
+        height: 3rem !important;
+    }
+
+    body.ec-auth-shell .informationmenu .user-info-container {
+        padding: 0.5rem 0.8rem !important;
+        margin-right: -1.6rem !important;
+    }
+
+    body.ec-auth-shell .informationmenu .current-avatar {
+        width: 3.6rem !important;
+        height: 3.6rem !important;
+    }
+
+    body.ec-auth-shell .informationmenu .user-name {
+        font-size: 1.4rem !important;
+    }
+
+    body.ec-auth-shell .informationmenu .user-role {
+        font-size: 1rem !important;
+    }
+
+    body.ec-auth-shell .informationmenu .sidebar-lang-switch {
+        width: var(--sidebar-lang-width, 10.8rem) !important;
+        height: var(--sidebar-lang-height, 3.2rem) !important;
+    }
+
+    body.ec-auth-shell .informationmenu .sidebar-lang-option {
+        font-size: var(--sidebar-lang-font, 1.1rem) !important;
+    }
+
+    body.ec-auth-shell .informationmenu .section-icon {
+        width: 1.6rem !important;
+        height: 1.6rem !important;
+        margin-right: 0 !important;
+    }
+
+    body.ec-auth-shell .informationmenu .informationmenu-section-title {
+        padding: var(--sidebar-menu-pad-y, 1.05rem) var(--sidebar-menu-pad-x, 1.2rem) !important;
+        font-size: 1.4rem !important;
+    }
+
+    body.ec-auth-shell .informationmenu .informationmenu-item {
+        padding: var(--sidebar-submenu-pad-y, 0.7rem) var(--sidebar-menu-pad-x, 1.2rem) !important;
+        font-size: 1.1rem !important;
+    }
+
+    body.ec-auth-shell .informationmenu.is-collapsed .user-info-container {
+        padding: 0.4rem !important;
+        margin-right: 0 !important;
+    }
+
+    body.ec-auth-shell .informationmenu.is-collapsed .current-avatar {
+        width: 2.25rem !important;
+        height: 2.25rem !important;
+    }
+}
+
+/* Same keyframe names as login-shadcn.css so sidebar ios26 matches login (dashboard does not load login-shadcn) */
+@keyframes sc-login-lang-shimmer {
+    0% {
+        transform: translateX(-115%) rotate(20deg);
+        opacity: 0;
+    }
+    16% {
+        opacity: 0.95;
+    }
+    42% {
+        transform: translateX(260%) rotate(20deg);
+        opacity: 0;
+    }
+    100% {
+        transform: translateX(260%) rotate(20deg);
+        opacity: 0;
+    }
+}
+
+@keyframes sc-login-lang-glow-breathe {
+    0%,
+    100% {
+        opacity: 0.62;
+        filter: blur(9px);
+    }
+    50% {
+        opacity: 0.98;
+        filter: blur(12px);
+    }
+}
+
+@keyframes sc-login-lang-text-breathe {
+    0%,
+    100% {
+        text-shadow: 0 1px 4px rgba(30, 64, 175, 0.28);
+    }
+    50% {
+        text-shadow: 0 1px 10px rgba(147, 197, 253, 0.85);
+    }
+}
+
+/* =============================================================================
+   Tablet sidebar: hamburger toggle + icon-only collapse
+   ============================================================================= */
+
+.sidebar-hamburger-toggle {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 8px 6px;
+    transition: opacity 0.2s ease;
+}
+
+.sidebar-hamburger-toggle:hover {
+    opacity: 0.85;
+}
+
+.sidebar-hamburger-box {
+    width: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    pointer-events: none;
+}
+
+.sidebar-hamburger-line {
+    display: block;
+    width: 100%;
+    height: 3px;
+    border-radius: 2px;
+    background: #ffffff;
+}
+
+.sidebar-menu-label {
+    grid-column: 2;
+    flex: unset;
+    min-width: 0;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.informationmenu-section--transaction-payment .sidebar-menu-label {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
+}
+
+.informationmenu-section-title:has(.section-arrow) .sidebar-menu-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 1280px) {
+    /* 平板侧栏展开：点击主内容区遮罩收起（无 ✕ 动画） */
+    .informationmenu-overlay.sidebar-dismiss-overlay.show {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        background: rgba(0, 45, 73, 0.42);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+    }
+
+    .header-logo-section {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .sidebar-hamburger-toggle {
+        display: inline-flex;
+    }
+
+    body.ec-auth-shell.sidebar-tablet-expanded .informationmenu {
+        z-index: 1001;
+    }
+
+    /* Expanded tablet: only Transaction Payment wraps; other labels stay single-line */
+    .informationmenu:not(.is-collapsed) .informationmenu-section-title {
+        text-overflow: clip;
+        overflow: visible;
+        line-height: 1.25;
+        align-items: center;
+        font-size: 13px;
+        padding-top: var(--sidebar-menu-pad-y, 1.05rem);
+        padding-bottom: var(--sidebar-menu-pad-y, 1.05rem);
+    }
+
+    .informationmenu:not(.is-collapsed) .informationmenu-section--transaction-payment .informationmenu-section-title {
+        align-items: flex-start;
+    }
+
+    body.ec-auth-shell .informationmenu:not(.is-collapsed) .informationmenu-section-title {
+        font-size: 1.25rem !important;
+        padding: var(--sidebar-menu-pad-y, 1.05rem) var(--sidebar-menu-pad-x, 1rem) !important;
+        text-overflow: clip !important;
+        overflow: visible !important;
+        align-items: center !important;
+    }
+
+    body.ec-auth-shell .informationmenu:not(.is-collapsed) .informationmenu-section--transaction-payment .informationmenu-section-title {
+        align-items: flex-start !important;
+    }
+
+    /* Icon-only collapsed sidebar */
+    .informationmenu.is-collapsed {
+        width: var(--layout-sidebar-width-icon, 4.5rem);
+        transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body.ec-auth-shell .informationmenu.is-collapsed {
+        width: var(--layout-sidebar-width-icon, 4.5rem) !important;
+    }
+
+    .informationmenu.is-collapsed .header-logo,
+    .informationmenu.is-collapsed .notification-bell,
+    .informationmenu.is-collapsed .user-info,
+    .informationmenu.is-collapsed .sidebar-lang-switch-wrap,
+    .informationmenu.is-collapsed .company-expiration-countdown,
+    .informationmenu.is-collapsed .content-separator,
+    .informationmenu.is-collapsed .sidebar-menu-label {
+        display: none !important;
+    }
+
+    .informationmenu.is-collapsed .informationmenu-header {
+        padding: 10px 6px 8px;
+    }
+
+    .informationmenu.is-collapsed .header-logo-section {
+        margin-bottom: 6px;
+        justify-content: center;
+    }
+
+    .informationmenu.is-collapsed .user-info-container {
+        padding: 4px;
+        margin-right: 0;
+        min-height: auto;
+        justify-content: center;
+    }
+
+    .informationmenu.is-collapsed .avatar-selector-container {
+        min-width: 0;
+        margin: 0 auto;
+    }
+
+    .informationmenu.is-collapsed .current-avatar {
+        width: 36px;
+        height: 36px;
+    }
+
+    .informationmenu.is-collapsed .informationmenu-content {
+        overflow-x: hidden;
+    }
+
+    .informationmenu.is-collapsed .informationmenu-section-title {
+        display: flex;
+        grid-template-columns: unset;
+        justify-content: center;
+        padding: 10px 0;
+        border-radius: 12px;
+        margin: 2px 6px;
+        white-space: nowrap;
+        overflow: hidden;
+        transform: none;
+        gap: 0;
+    }
+
+    .informationmenu.is-collapsed .informationmenu-section-title:hover {
+        transform: none;
+    }
+
+    .informationmenu.is-collapsed .section-icon {
+        width: 22px;
+        height: 22px;
+        margin-right: 0;
+        flex-shrink: 0;
+    }
+
+    body.ec-auth-shell .informationmenu.is-collapsed .informationmenu-section-title {
+        padding: 0.65rem 0 !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+        justify-content: center !important;
+        overflow: hidden !important;
+    }
+
+    body.ec-auth-shell .informationmenu.is-collapsed .sidebar-menu-label {
+        display: none !important;
+        width: 0 !important;
+        max-width: 0 !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    body.ec-auth-shell .informationmenu.is-collapsed .section-icon {
+        width: 1.35rem !important;
+        height: 1.35rem !important;
+        margin-right: 0 !important;
+    }
+
+    .informationmenu.is-collapsed .section-arrow {
+        display: none !important;
+    }
+
+    .informationmenu.is-collapsed .informationmenu-section-title.current-page,
+    .informationmenu.is-collapsed .informationmenu-section-title.active {
+        margin-left: 6px;
+        margin-right: 6px;
+    }
+
+    .informationmenu.is-collapsed .informationmenu-footer {
+        padding: 10px 6px 14px;
+    }
+
+    .informationmenu.is-collapsed .logout-btn {
+        width: 36px;
+        min-width: 36px;
+        height: 36px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+    }
+
+    .informationmenu.is-collapsed .logout-btn-icon {
+        width: 20px;
+        height: 20px;
+    }
+
+    /* 主内容区：随侧栏宽（展开 16.5rem / 收起 4.5rem）自动贴合 — 所有 Authenticated 页面 */
+    body.ec-auth-shell .informationmenu {
+        transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* #root 下页面顶层壳（与各页 .container / -container 一致） */
+    body.ec-auth-shell #root > :is(
+        .container,
+        .container-fluid.transaction-container,
+        .dashboard-container,
+        .own-container,
+        .datacapture-container,
+        [class*="-maintenance-page-root"],
+        [class*="-page-root"]
+    ),
+    body.ec-auth-shell :is(
+        .user-page .container,
+        .account-page .container,
+        .process-page .container,
+        .process-page--bank .container,
+        .transaction-page .transaction-container,
+        .dashboard-page .dashboard-container,
+        .dashboard-page .container,
+        .datacapture-page .container,
+        .datacapture-page .datacapture-container,
+        .domain-page .container,
+        .domain-page .container.domain-react-page,
+        .maintenance-page .container,
+        .report-page .container,
+        .ownership-page .container,
+        .ownership-page .own-container,
+        .announcement-page .container,
+        .announcement-page .announcement-page-container,
+        .transaction-page .container-fluid.transaction-container
+    ) {
+        padding-left: var(--layout-main-offset) !important;
+        transition: padding-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        box-sizing: border-box;
+    }
+}
+
+/* Laptop (1281px–1440px): Transaction Payment may wrap; arrows stay on text track */
+@media screen and (min-width: 1281px) and (max-width: 1440px) {
+    .informationmenu .informationmenu-section-title {
+        text-overflow: clip;
+        overflow: visible;
+        line-height: 1.3;
+        align-items: center;
+    }
+
+    .informationmenu .informationmenu-section--transaction-payment .informationmenu-section-title {
+        align-items: flex-start;
+    }
+
+    .informationmenu-content > .informationmenu-section + .informationmenu-section {
+        margin-top: 4px;
+    }
+
+    body.ec-auth-shell .informationmenu .informationmenu-section-title {
+        text-overflow: clip !important;
+        overflow: visible !important;
+        align-items: center !important;
+        line-height: 1.3 !important;
+        padding-top: var(--sidebar-menu-pad-y, 1.15rem) !important;
+        padding-bottom: var(--sidebar-menu-pad-y, 1.15rem) !important;
+    }
+
+    body.ec-auth-shell .informationmenu .informationmenu-section--transaction-payment .informationmenu-section-title {
+        align-items: flex-start !important;
+    }
+}
+
+/* 桌面端也使用变量，保证与侧栏宽度一致（非平板收起时等同原 clamp） */
+body.ec-auth-shell #root > :is(
+    .container,
+    .container-fluid.transaction-container,
+    .dashboard-container,
+    .own-container,
+    .datacapture-container,
+    [class$="-page-root"],
+    [class$="-maintenance-page-root"]
+) {
+    padding-left: var(--layout-main-offset);
+    box-sizing: border-box;
+}
+
+.informationmenu-section-title.has-sidebar-pending-badge .sidebar-menu-label-wrap {
+    grid-column: 2;
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.informationmenu-section-title.has-sidebar-pending-badge .sidebar-menu-label-wrap .sidebar-menu-label {
+    grid-column: unset;
+    display: inline;
+    overflow: visible;
+    text-overflow: clip;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.informationmenu-section-title.has-sidebar-pending-badge .sidebar-pending-badge {
+    position: static;
+    top: auto;
+    left: auto;
+    right: auto;
+    margin-left: 0;
+    transform: none;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 16px;
+    text-align: center;
+    pointer-events: none;
+    box-shadow: none;
+}
+
+.informationmenu-section-title .sidebar-menu-label-wrap {
+    grid-column: 2;
+    position: relative;
+    display: w-fit;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.informationmenu-section-title .sidebar-pending-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 16px;
+    text-align: center;
+    pointer-events: none;
+}
+
+.informationmenu-section-title.current-page .sidebar-pending-badge,
+.informationmenu-section-title:hover .sidebar-pending-badge {
+    background: #ef4444;
+}
+
+/* Collapsed sidebar: badge on menu icon top-right */
+@media (max-width: 1280px) {
+    .informationmenu.is-collapsed .informationmenu-section-title.has-sidebar-pending-badge .sidebar-menu-label-wrap {
+        position: absolute;
+        inset: 0;
+        display: block;
+        grid-column: 1 / -1;
+        width: auto;
+        max-width: none;
+        pointer-events: none;
+    }
+
+    .informationmenu.is-collapsed .informationmenu-section-title.has-sidebar-pending-badge .sidebar-pending-badge {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        line-height: 16px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+}

@@ -1,0 +1,1988 @@
+﻿/* Single scrollbar on body (Ownership-page pattern; all viewport widths) */
+html:has(body.datacapture-summary-page) {
+    height: auto !important;
+    overflow: visible !important;
+}
+
+body.dashboard-page.datacapture-summary-page,
+body.ec-auth-shell.dashboard-page.datacapture-summary-page {
+    min-height: 100vh !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
+body.dashboard-page.datacapture-summary-page #root,
+body.dashboard-page.datacapture-summary-page .ec-page-shell,
+body.dashboard-page.datacapture-summary-page .ec-page-shell__content {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+body.dashboard-page.datacapture-summary-page .ec-page-shell__content {
+    min-height: 0 !important;
+}
+
+body.dashboard-page.datacapture-summary-page .container {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+body.dashboard-page.datacapture-summary-page #summaryTableContainer,
+body.dashboard-page.datacapture-summary-page .summary-table-container {
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    max-height: none !important;
+    height: auto !important;
+}
+
+        body.datacapture-summary-page {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh !important;
+            height: auto !important;
+            background-color: #e9f1ff;
+            background-image:
+                radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 48%),
+                radial-gradient(circle at 70% 15%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 45%),
+                radial-gradient(circle at 40% 70%, rgba(206, 232, 255, 0.55) 0%, rgba(255, 255, 255, 0) 60%),
+                radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%),
+                linear-gradient(145deg, #97BFFC 0%, #AECFFA 40%, #f9fbff 100%);
+            background-blend-mode: screen, screen, multiply, screen, normal;
+            color: #334155;
+            overflow-x: hidden !important;
+        }
+
+        .container {
+            max-width: none;
+            margin: 0;
+            padding: var(--layout-page-top-gap) 40px 20px var(--layout-main-offset);
+            width: 100%;
+            min-height: 100vh !important;
+            height: auto !important;
+            box-sizing: border-box;
+            overflow: visible !important;
+        }
+
+        h1 {
+            color: #002C49;
+            text-align: left;
+            margin-top: var(--layout-page-first-block-mt);
+            margin-bottom: clamp(16px, 1.35vw, 26px);
+            font-size: clamp(26px, 2.08vw, 40px);
+            font-family: var(--font-heading-page);
+            font-weight: 500;
+            letter-spacing: -0.025em;
+        }
+
+        /* Action Buttons Styles */
+        .summary-action-buttons {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: clamp(10px, 1.04vw, 20px);
+        }
+        
+        .batch-controls-group {
+            display: flex;
+            align-items: center;
+            gap: clamp(8px, 0.73vw, 14px);
+        }
+        
+        .batch-controls-group .batch-label {
+            font-weight: bold;
+            color: #002C49;
+            font-size: clamp(12px, 0.94vw, 18px);
+            font-family: var(--font-heading-page);
+            white-space: nowrap;
+        }
+        
+        .batch-controls-group .batch-input {
+            width: clamp(120px, 10.25vw, 150px);
+            padding: clamp(4px, 0.42vw, 8px) clamp(8px, 0.83vw, 16px);
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: clamp(12px, 0.94vw, 18px);
+            transition: all 0.2s;
+        }
+        
+        .batch-controls-group .batch-input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+        }
+
+        /* Submit Button Container - Between Tables */
+        .summary-submit-container {
+            display: flex;
+            justify-content: flex-start !important;
+            align-items: center;
+            gap: 12px;
+            margin-top: clamp(10px, 1.04vw, 20px);
+            margin-bottom: clamp(10px, 1.04vw, 20px);
+            padding: 0;
+        }
+
+        /* Refresh button style */
+        .btn-refresh {
+            background: transparent;
+            color: #4a90e2;
+            font-family: var(--font-heading-page);
+            width: clamp(40px, 3.125vw, 50px);
+            height: clamp(32px, 2.5vw, 40px);
+            padding: 0;
+            font-size: clamp(16px, 1.25vw, 20px);
+            border: none;
+            border-radius: 6px;
+            box-shadow: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-refresh img {
+            width: 20px;
+            height: 20px;
+            display: block;
+        }
+
+        .summary-table-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: clamp(10px, 1.04vw, 20px);
+            overflow: visible;
+            border: 1px solid #ddd; /* 与datacapture.php中的excel-table-container边框一致 */
+            border-radius: 4px; /* 与datacapture.php中的excel-table-container圆角一致 */
+        }
+
+        /* Process Information Container */
+        .process-info-container {
+            background-color: #f6f8fa;
+            border-bottom: 2px solid #d0d7de;
+            padding: clamp(10px, 0.83vw, 16px) clamp(16px, 1.35vw, 26px);
+            margin-bottom: 0;
+        }
+
+        .process-info-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: clamp(24px, 2.5vw, 48px);
+            align-items: center;
+        }
+
+        .process-info-item {
+            display: flex;
+            align-items: center;
+            gap: clamp(8px, 0.73vw, 14px);
+            flex: 0 1 auto;
+        }
+
+        .process-info-label {
+            font-weight: 600;
+            color: #57606a;
+            font-size: clamp(9px, 0.63vw, 12px);
+            white-space: nowrap;
+            font-family: Arial, sans-serif;
+        }
+
+        .process-info-value {
+            color: #24292f;
+            font-size: clamp(9px, 0.63vw, 12px);
+            font-weight: 600;
+            word-break: break-word;
+            font-family: Arial, sans-serif;
+        }
+
+        .summary-table-x-scroll {
+            overflow-x: auto;
+            overflow-y: visible;
+            max-height: none;
+        }
+
+        /* Captured Data Table fixed viewport (approx 10 rows) with vertical scroll */
+        .captured-table-container .table-wrapper {
+            height: clamp(160px, 13.54vw, 260px); /* ~10 rows incl. header */
+            overflow-y: auto;
+        }
+
+        /* Captured Data Table Header Styles */
+        .captured-table-container .table-header {
+            display: flex;
+            justify-content: space-between; /* 与datacapture.php中的excel-table-header布局一致 */
+            align-items: center;
+            padding: clamp(4px, 0.42vw, 8px) clamp(6px, 0.63vw, 12px); /* 与datacapture.php中的excel-table-header padding一致 */
+            background-color: #ffffffff; /* 与datacapture.php中的excel-table-header背景色一致 */
+            font-size: clamp(12px, 0.94vw, 18px); /* 与datacapture.php中的excel-table-header字体大小一致 */
+            font-weight: bold;
+            color: #24292f; /* 与datacapture.php中的excel-table-header文字颜色一致 */
+        }
+
+        .captured-table-container .table-header span {
+            font-size: clamp(12px, 0.94vw, 18px);
+            font-weight: bold;
+            color: #24292f;
+        }
+
+        .summary-table {
+            width: 100%;
+            min-width: 1200px;
+            border-collapse: collapse;
+            font-size: clamp(12px, 0.94vw, 18px);
+            font-family: Arial, sans-serif;
+            table-layout: fixed;
+        }
+        
+        /* Set specific widths for Summary Table columns only */
+        #summaryTable th:nth-child(1), /* Id Product (merged) - 加宽并允许换行，完整显示长 id_product 包括 SUB */
+        #summaryTable td:nth-child(1) {
+            width: 21%;
+            min-width: 380px;
+            white-space: normal !important;
+            word-break: break-word;
+            overflow: visible;
+            box-sizing: border-box;
+        }
+        
+        #summaryTable th:nth-child(2), /* Account */
+        #summaryTable td:nth-child(2) {
+            width: 12%;
+        }
+        
+        #summaryTable th:nth-child(3), /* Add button */
+        #summaryTable td:nth-child(3) {
+            width: 3%;
+        }
+        
+        #summaryTable th:nth-child(4), /* Currency */
+        #summaryTable td:nth-child(4) {
+            width: 3%;
+        }
+        
+        #summaryTable th:nth-child(5), /* Formula - 加宽以便 Save 后完整显示 */
+        #summaryTable td:nth-child(5) {
+            width: 26%;
+            min-width: 200px;
+        }
+        
+        #summaryTable th:nth-child(6), /* Batch Selection */
+        #summaryTable td:nth-child(6) {
+            width: 3%;
+        }
+        
+        #summaryTable th:nth-child(7), /* Source */
+        #summaryTable td:nth-child(7) {
+            width: 2%;
+        }
+        
+        #summaryTable th:nth-child(8), /* Formula */
+        #summaryTable td:nth-child(8) {
+            width: 4%;
+        }
+        
+        #summaryTable th:nth-child(9), /* Source % - wider */
+        #summaryTable td:nth-child(9) {
+            width: 6%;
+        }
+        
+        #summaryTable th:nth-child(10), /* Rate - new */
+        #summaryTable td:nth-child(10) {
+            width: 2%;
+        }
+        
+        #summaryTable th:nth-child(11), /* Processed Amount - narrower */
+        #summaryTable td:nth-child(11) {
+            width: 2%;
+        }
+        
+        #summaryTable th:nth-child(12), /* Select column */
+        #summaryTable td:nth-child(12) {
+            width: 2%;
+        }
+
+        #summaryTable th:nth-child(13), /* Select column */
+        #summaryTable td:nth-child(13) {
+            width: 2%;
+        }
+
+        .summary-table th,
+        .summary-table td {
+            border: 1px solid #d0d7de;
+            padding: clamp(8px, 0.63vw, 12px);
+            text-align: left;
+            white-space: nowrap;
+        }
+        /* 第一列 Id Product 不参与 nowrap，避免被上面的规则覆盖 */
+        #summaryTable th:nth-child(1),
+        #summaryTable td:nth-child(1),
+        #summaryTable td.id-product {
+            white-space: normal !important;
+        }
+
+        #summaryTable tfoot tr {
+            background-color: #f6f8fa;
+        }
+
+        #summaryTable tfoot td {
+            border-top: 2px solid #d0d7de;
+            font-weight: bold;
+            color: #24292f;
+        }
+
+        .summary-total-label {
+            text-align: right;
+            padding-right: clamp(8px, 0.63vw, 12px);
+        }
+
+        #summaryTotalAmount {
+            text-align: center;
+            background-color: #f6f8fa;
+        }
+
+        /* Id Product and Account columns alignment */
+        .summary-table td:nth-child(1), /* Id Product (merged) */
+        .summary-table td:nth-child(2) { /* Account */
+            text-align: left;
+        }
+
+        /* Remove vertical border between Account (2) and Add (3) columns (only in summary table) */
+        #summaryTable th:nth-child(2){
+            border-right: none;
+        }
+
+        #summaryTable tbody td:nth-child(2) {
+            border-right: none;
+        }
+
+        #summaryTable th:nth-child(3),
+        #summaryTable td:nth-child(3) {
+            border-left: none;
+        }
+
+        #summaryTable th:nth-child(4),
+        #summaryTable td:nth-child(4) {
+            border-left: none;
+        }
+
+
+        /* Account column header align right; cells keep original alignment */
+        #summaryTable th:nth-child(2) {
+            text-align: center;
+        }
+
+        /* Data Capture Table first column (A) alignment */
+        #capturedDataTable td:nth-child(1) {
+            text-align: center;
+        }
+        
+        /* Data Capture 表 id_Product 列（第 2 列）加宽并允许换行，避免长名称显示不完整 */
+        #capturedDataTable th:nth-child(2),
+        #capturedDataTable td:nth-child(2) {
+            min-width: 140px;
+            max-width: 280px;
+            white-space: normal !important;
+            word-break: break-word;
+            text-align: left;
+        }
+        
+        /* Clickable table cell styles */
+        .clickable-table-cell {
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        
+        .clickable-table-cell:hover {
+            background-color: #e3f2fd !important;
+            box-shadow: inset 0 0 0 1px #2196f3;
+        }
+
+        /* Id Product 列允许换行，完整显示长名称（含 SUB Id_Product），不被截断 */
+        #summaryTable td:nth-child(1),
+        #summaryTable td.id-product {
+            white-space: normal !important;
+            word-break: break-word;
+            overflow: visible !important;
+            text-overflow: unset;
+            min-width: 380px;
+            max-width: none;
+        }
+        #summaryTable th:nth-child(1) {
+            white-space: normal !important;
+            overflow: visible;
+            text-overflow: unset;
+            min-width: 380px;
+        }
+        
+        /* Id Product Main and Sub cell styling */
+        .main-id-product {
+            text-align: left;
+        }
+        
+        .sub-id-product {
+            text-align: left;
+        }
+
+        .summary-table th {
+            background-color: #f6f8fa;
+            font-weight: bold;
+            color: #24292f;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        /* Id Product header styling */
+        .id-product-header {
+            text-align: center;
+        }
+        
+        /* Sub headers (Main and Sub) styling */
+        .sub-header {
+            font-size: clamp(10px, 0.83vw, 16px);
+            background-color: #e8f0f7;
+        }
+
+        /* Checkbox Styles */
+        .summary-row-checkbox,
+        .summary-select-checkbox {
+            width: clamp(10px, 0.73vw, 14px);
+            height: clamp(10px, 0.73vw, 14px);
+            margin: 2px;
+            cursor: pointer;
+            accent-color: #007bff;
+        }
+
+        .summary-row-checkbox:hover {
+            transform: scale(1.1);
+        }
+
+        .summary-row-checkbox:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: #f8f9fa;
+        }
+
+        .summary-row-checkbox:disabled:hover {
+            transform: none;
+        }
+
+        /* Select 勾选后整行加删除线效果 */
+        .summary-row-selected td {
+            text-decoration: line-through;
+            color: #6c757d; /* 变灰，表示该行已被标记 */
+        }
+
+        /* Confirmation Modal Styles — viewport-fixed, centered, unaffected by page scroll */
+        .summary-modal {
+            display: none;
+            position: fixed;
+            z-index: 10000;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            animation: fadeIn 0.2s ease-out;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+
+        /* Center Edit Formula modal within main content area (exclude sidebar) */
+        #editFormulaModal.summary-modal {
+            align-items: center;
+            margin-top: 0;
+            padding-top: clamp(12px, 2vh, 24px);
+            padding-bottom: clamp(12px, 2vh, 24px);
+            /* Shift overlay content area to the right by sidebar width,
+               so centering occurs within the main content area */
+            padding-left: clamp(150px, 13.02vw, 250px);
+            padding-right: 20px;
+            box-sizing: border-box;
+            justify-content: center;
+            pointer-events: none;
+            overflow: visible;
+        }
+        
+        /* Make modal content clickable while allowing background clicks to pass through */
+        #editFormulaModal .summary-confirm-modal-content {
+            pointer-events: auto;
+        }
+
+        /* Center Confirm Delete modal within right content area (exclude sidebar) */
+        #confirmDeleteModal.summary-modal {
+            align-items: center;
+            justify-content: center;
+            padding-top: clamp(12px, 2vh, 24px);
+            padding-bottom: clamp(12px, 2vh, 24px);
+            padding-left: clamp(150px, 13.02vw, 250px);
+            padding-right: 20px;
+            box-sizing: border-box;
+            pointer-events: none;
+            overflow: visible;
+        }
+
+        #confirmDeleteModal .summary-confirm-modal-content {
+            pointer-events: auto;
+        }
+
+        /*
+         * Shared AccountModal (#account-addModal): center in full viewport (not sidebar-offset).
+         */
+        body.dashboard-page #account-addModal.account-modal {
+            z-index: 10001;
+            padding: 0;
+            box-sizing: border-box;
+            align-items: center;
+            justify-content: center;
+        }
+
+        body.dashboard-page #account-addModal .account-modal-content {
+            top: auto;
+            margin: 0;
+            transform: none;
+        }
+
+        body.dashboard-page .user-modal-company-picker-root--above-modals {
+            z-index: 25500;
+        }
+
+        /* Legacy PHP #addModal only (SPA uses #account-addModal) */
+        #addModal.account-modal {
+            display: none;
+            position: fixed;
+            z-index: 10001;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            padding-left: clamp(150px, 13.02vw, 250px);
+            padding-right: clamp(16px, 2vw, 28px);
+            box-sizing: border-box;
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .summary-confirm-modal-content {
+            background: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);
+            margin-top: 0;
+            padding: 0;
+            border: none;
+            border-radius: 16px;
+            width: clamp(700px, 62.5vw, 1100px);
+            max-width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: slideDown 0.3s ease-out;
+            overflow: visible;
+            position: relative;
+        }
+
+        /* Remove extra outer frame specifically for Edit Formula modal
+           and add inner padding to reveal right-side border of inner form */
+        #editFormulaModal .summary-confirm-modal-content {
+            background: transparent;
+            box-shadow: none;
+            border-radius: 0;
+            margin-top: 0;
+            padding-left: clamp(8px, 0.63vw, 12px);
+            padding-right: clamp(8px, 0.63vw, 12px);
+            box-sizing: border-box;
+            overflow: visible;
+            /* Ensure modal content is clickable */
+            pointer-events: auto;
+            /* Make Edit Formula modal wider - ensure it fits within viewport */
+            width: clamp(900px, 75vw, 1400px);
+            max-width: calc(100vw - clamp(150px, 13.02vw, 250px) - 40px); /* Account for sidebar and padding */
+            /* Prevent modal content from creating scrollbar - use max-height to fit viewport */
+            max-height: calc(100vh - clamp(32px, 6vh, 64px));
+            display: flex;
+            flex-direction: column;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-80px) scale(0.95);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0) scale(1);
+                opacity: 1;
+            }
+        }
+
+        .summary-confirm-icon-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding-top: clamp(30px, 2.6vw, 50px);
+            padding-bottom: clamp(15px, 1.3vw, 25px);
+        }
+
+        .summary-confirm-icon {
+            width: clamp(50px, 4.17vw, 80px);
+            height: clamp(50px, 4.17vw, 80px);
+            color: #dc2626;
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            border-radius: 50%;
+            padding: clamp(10px, 0.83vw, 16px);
+            animation: iconPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes iconPulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+            }
+        }
+
+        .summary-confirm-title {
+            text-align: center;
+            color: #1e293b;
+            font-size: clamp(20px, 1.67vw, 32px);
+            font-weight: 700;
+            margin: 0 0 clamp(15px, 1.3vw, 25px) 0;
+            font-family: var(--font-heading-page), -apple-system, sans-serif;
+            letter-spacing: -0.02em;
+        }
+
+        .summary-confirm-message {
+            text-align: center;
+            font-size: clamp(13px, 0.94vw, 18px);
+            color: #475569;
+            line-height: 1.7;
+            margin: 0;
+            padding: 0 clamp(25px, 2.08vw, 40px);
+            white-space: pre-line;
+            font-weight: 500;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .summary-confirm-actions {
+            display: flex;
+            gap: clamp(8px, 0.63vw, 12px);
+            padding: clamp(20px, 1.67vw, 32px);
+            justify-content: center;
+            background: rgba(248, 250, 252, 0.8);
+            margin-top: clamp(12px, 1.04vw, 20px);
+        }
+
+        .summary-confirm-cancel,
+        .summary-confirm-delete {
+            flex: 0 0 auto;
+            max-width: none;
+        }
+
+        /* Scrollbars: app-wide — dashboard-scrollbar.css */
+
+        .summary-table td {
+            background-color: white;
+            color: #000000;
+        }
+
+        #summaryTable tbody tr:hover td {
+            background-color: #e0f2f7 !important;
+        }
+
+        #summaryTable tbody tr:hover {
+            background-color: #e0f2f7 !important;
+        }
+
+        /* Editable cell styles for double-click editing */
+        .editable-cell {
+            cursor: pointer;
+            position: relative;
+        }
+
+        .editable-cell:hover {
+            background-color: #f0f9ff;
+            border-radius: 3px;
+        }
+
+        .inline-edit-input {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            padding: 4px 8px !important;
+            border: 2px solid #6366f1 !important;
+            border-radius: 4px !important;
+            font-size: inherit !important;
+            font-family: inherit !important;
+            background-color: white !important;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1) !important;
+            outline: none !important;
+            box-sizing: border-box !important;
+        }
+
+
+        /* Notification Popup Styles */
+        .notification-popup {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            z-index: 26000;
+            min-width: 280px;
+            max-width: 400px;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.3s ease;
+        }
+
+        .notification-popup.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .notification-popup.success {
+            border-left: 4px solid #28a745;
+        }
+
+        .notification-popup.error {
+            border-left: 4px solid #dc3545;
+        }
+
+        .notification-popup.info {
+            border-left: 4px solid #17a2b8;
+        }
+
+        .notification-popup.warning {
+            border-left: 4px solid #ffc107;
+        }
+
+        .notification-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .notification-header--solo {
+            border-bottom: none;
+        }
+
+        .notification-title {
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .notification-close {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: #6c757d;
+        }
+
+        .notification-message {
+            padding: 12px 16px;
+            font-size: 14px;
+            color: #495057;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: var(--layout-page-top-gap) 20px 20px var(--layout-main-offset);
+            }
+            
+            .edit-formula-form-container .form-layout {
+                gap: 15px;
+            }
+            
+            .edit-formula-form-container .form-left-column {
+                flex: 1.1;
+                max-width: 340px;
+                min-width: 0;
+                flex-shrink: 1;
+            }
+            
+            .edit-formula-form-container .form-middle-column {
+                flex: 1.1;
+                max-width: 320px;
+                min-width: 0;
+                flex-shrink: 1;
+            }
+            
+            .edit-formula-form-container .form-right-column {
+                flex: 0.3;
+                min-width: 160px;
+            }
+            
+            .calculator-keypad {
+                max-width: 200px;
+                min-width: 180px;
+            }
+            
+            .calc-btn {
+                min-width: clamp(24px, 1.88vw, 36px);
+                height: clamp(22px, 1.72vw, 33px);
+                font-size: clamp(9px, 0.70vw, 13px);
+            }
+            
+            /* Ensure modal fits on small screens */
+            #editFormulaModal .summary-confirm-modal-content {
+                max-width: calc(100vw - clamp(150px, 13.02vw, 250px) - 20px);
+                padding-left: clamp(4px, 0.5vw, 8px);
+                padding-right: clamp(4px, 0.5vw, 8px);
+            }
+        }
+        
+        @media (max-width: 1200px) {
+            .edit-formula-form-container .form-layout {
+                gap: 20px;
+            }
+            
+            .edit-formula-form-container .form-left-column {
+                max-width: 480px;
+                min-width: 0;
+                flex-shrink: 1;
+            }
+            
+            .edit-formula-form-container .form-middle-column {
+                max-width: 480px;
+                min-width: 0;
+                flex-shrink: 1;
+            }
+            
+            .edit-formula-form-container .form-right-column {
+                min-width: 190px;
+                max-width: 210px;
+            }
+            
+            .calculator-keypad {
+                max-width: 210px;
+                min-width: 190px;
+            }
+        }
+
+
+        /* Empty State Styles */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+        }
+
+        .empty-state p {
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        /* Captured Table Container Styles */
+        .captured-table-container {
+            margin-top: 0px; /* 与原始表格保持间距 */
+            /* Ensure table is clickable even when modal is open */
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Ensure table cells are clickable when modal is open */
+        .captured-table-container .clickable-table-cell {
+            position: relative;
+            z-index: 2;
+        }
+
+        .empty-state-container {
+            margin-top: 20px; /* 与原始表格保持间距 */
+        }
+
+        /* Add Account Button Styles */
+        .add-account-btn {
+            background: var(--btn-add-gradient);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: clamp(12px, 0.94vw, 18px);
+            height: clamp(12px, 0.94vw, 18px);
+            font-size: clamp(8px, 0.63vw, 12px);
+            font-weight: bold;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            float: right;
+            box-shadow: 0 1px 3px rgba(0, 123, 255, 0.3);
+        }
+
+        .add-account-btn:hover {
+            background: var(--btn-add-gradient-hover);
+            transform: scale(1.05);
+        }
+
+        .add-account-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Add column cell alignment - center the button within the column */
+        .summary-table td:nth-child(3) {
+            text-align: center;
+            position: relative;
+        }
+
+        /* Edit Formula Form Styles */
+        .edit-formula-form-container {
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: clamp(10px, 1.04vw, 20px);
+            overflow: visible;
+            border: 1px solid #ddd;
+            width: 100%;
+        }
+
+        /* Ensure Edit Formula box shows full border inside modal viewport */
+        #editFormulaModal .edit-formula-form-container {
+            margin-right: clamp(8px, 0.63vw, 12px);
+            background: #f1f1f1;
+            border: 1px solid #d0d7de;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .edit-formula-form-container .form-header {
+            background-color: #cbcbcb;
+            padding: clamp(4px, 0.42vw, 8px) clamp(6px, 0.63vw, 12px);
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .edit-formula-form-container .form-header h3 {
+            margin: 0;
+            color: #000000;
+            font-size: clamp(12px, 0.94vw, 18px);
+            font-weight: bold;
+        }
+
+        .edit-formula-form-container .form-content {
+            padding: clamp(8px, 0.8vw, 14px) clamp(16px, 1.25vw, 24px) clamp(4px, 0.42vw, 8px);
+            overflow: visible;
+            width: 100%;
+            box-sizing: border-box;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+
+        .edit-formula-form-container .form-layout {
+            display: flex;
+            gap: clamp(12px, 1.04vw, 20px);
+            flex-wrap: nowrap;
+            overflow: visible;
+            justify-content: flex-start;
+            align-items: flex-start;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .edit-formula-form-container .form-left-column {
+            flex: 2;
+            max-width: 500px;
+            min-width: 0;
+            flex-shrink: 1;
+            box-sizing: border-box;
+            overflow: visible;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(6px, 0.52vw, 10px);
+            position: relative;
+            z-index: 2;
+        }
+        
+        
+        .edit-formula-form-container .form-left-column .form-group input,
+        .edit-formula-form-container .form-left-column .form-group select {
+            width: 100%;
+            min-width: 0;
+        }
+        
+        .edit-formula-form-container .form-left-column .account-select-with-buttons {
+            width: 100%;
+            min-width: 0;
+            flex: 1;
+        }
+        
+        .edit-formula-form-container .form-left-column .account-select-with-buttons .custom-select-wrapper {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .edit-formula-form-container .form-left-column .description-select-with-buttons {
+            width: 100%;
+        }
+        
+        .edit-formula-form-container .form-left-column .description-select-with-buttons select {
+            width: 100%;
+            min-width: 0;
+        }
+        
+        .edit-formula-form-container .form-left-column .source-percent-group {
+            flex: 1;
+            min-width: 0;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .edit-formula-form-container .form-left-column .source-percent-group input {
+            flex: 1;
+            min-width: 110px;
+            max-width: 370px;
+            position: relative;
+            z-index: 2;
+            pointer-events: auto;
+        }
+        
+        .edit-formula-form-container .form-left-column .form-row .form-group.checkbox-group {
+            flex: 0 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Make Formula input span across left and middle columns */
+        .edit-formula-form-container .form-left-column .form-row.formula-row-full-width {
+            position: relative;
+            width: calc(200% + 30px); /* left column (100%) + gap (30px) + middle column (100%) */
+            max-width: calc(200% + 30px);
+            min-width: 360px; /* 数字键输入时公式能完整展示 */
+            z-index: 1;
+            overflow: visible;
+            box-sizing: border-box;
+        }
+        
+        .edit-formula-form-container .form-left-column .form-row.formula-row-full-width .form-group {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .edit-formula-form-container .form-left-column .form-row.formula-row-full-width input {
+            width: 100%;
+            box-sizing: border-box;
+            /* 数字键输入时公式能完整展示：保证最小宽度并允许横向滚动 */
+            min-width: min(100%, 380px);
+        }
+        
+        /* Edit Formula 弹窗内 Formula 输入框：确保长公式完整可见、可横向滚动 */
+        #editFormulaModal #formula {
+            min-width: 320px;
+        }
+        
+        /* Responsive adjustment for Formula width on smaller screens */
+        @media (max-width: 1400px) {
+            .edit-formula-form-container .form-left-column .form-row.formula-row-full-width {
+                width: calc(200% + 20px); /* Adjust gap for smaller screens */
+                max-width: calc(200% + 20px);
+            }
+        }
+        
+        .edit-formula-form-container .form-middle-column {
+            flex: 2;
+            max-width: 500px;
+            min-width: 0;
+            flex-shrink: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: clamp(6px, 0.52vw, 10px);
+            margin-left: 0;
+            padding-left: 0px;
+            box-sizing: border-box;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .edit-formula-form-container .form-middle-column .form-group {
+            width: 100%;
+            max-width: 100%;
+        }
+        
+        .edit-formula-form-container .form-middle-column .form-group input,
+        .edit-formula-form-container .form-middle-column .form-group select {
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+        
+        .edit-formula-form-container .form-middle-column .form-row {
+            justify-content: flex-start;
+            width: 100%;
+        }
+        
+        .edit-formula-form-container .form-right-column {
+            flex: 0 0 auto;
+            min-width: 200px;
+            max-width: 220px;
+            flex-shrink: 0;
+            margin-left: auto;
+            box-sizing: border-box;
+            position: relative;
+            z-index: 2;
+        }
+
+        .edit-formula-form-container .calculator-column {
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-end;
+            width: 100%;
+        }
+        
+        /* Calculator Keypad Styles */
+        .calculator-keypad {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(3px, 0.31vw, 6px);
+            width: 100%;
+            max-width: 220px;
+            min-width: 200px;
+            margin-left: auto;
+        }
+        
+        .calculator-row {
+            display: flex;
+            gap: clamp(3px, 0.31vw, 6px);
+        }
+        
+        .calc-btn {
+            flex: 1;
+            min-width: clamp(28px, 2.19vw, 42px);
+            height: clamp(26px, 2.03vw, 39px);
+            border: 1px solid #d1d5db;
+            border-radius: clamp(3px, 0.31vw, 6px);
+            background-color: #ffffff;
+            color: #000000;
+            font-size: clamp(10px, 0.78vw, 15px);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+        
+        .calc-btn:hover {
+            background-color: #f3f4f6;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+        }
+        
+        .calc-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            background-color: #e5e7eb;
+        }
+        
+        .calc-btn.calc-operator {
+            background-color: #f9fafb;
+            font-weight: 600;
+        }
+        
+        .calc-btn.calc-operator:hover {
+            background-color: #e5e7eb;
+        }
+        
+        .calc-btn.calc-clear {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .calc-btn.calc-clear:hover {
+            background-color: #fecaca;
+        }
+        
+        .calc-btn.calc-empty {
+            background-color: transparent;
+            border: none;
+            cursor: default;
+            box-shadow: none;
+        }
+        
+        .calc-btn.calc-empty:hover {
+            background-color: transparent;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        /* Input Method specific styling - shorter width */
+        .edit-formula-form-container #inputMethod {
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .edit-formula-form-container .form-row {
+            display: flex;
+            gap: clamp(8px, 0.73vw, 14px);
+            align-items: center;
+            overflow: visible;
+        }
+        
+        .edit-formula-form-container .form-left-column .form-row {
+            align-items: center;
+            position: relative;
+        }
+        
+        .edit-formula-form-container .form-left-column .source-percent-row {
+            align-items: center;
+            gap: 12px;
+        }
+
+        .edit-formula-form-container .form-group {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            overflow: visible;
+            position: relative;
+            margin-bottom: 0;
+        }
+        
+        /* Ensure account form group allows dropdown overflow */
+        #editFormulaModal .edit-formula-form-container .form-group {
+            overflow: visible;
+        }
+
+        .edit-formula-form-container .form-group.checkbox-group {
+            flex: 0 0 auto;
+        }
+
+        .edit-formula-form-container .form-group label {
+            font-weight: bold;
+            color: #374151;
+            font-size: clamp(10px, 0.73vw, 14px);
+            min-width: clamp(80px, 6.25vw, 120px);
+            flex-shrink: 0;
+        }
+
+        .edit-formula-form-container .form-group input,
+        .edit-formula-form-container .form-group select {
+            padding: clamp(4px, 0.42vw, 8px) clamp(6px, 0.83vw, 16px);
+            border: 1px solid #d1d5db;
+            border-radius: clamp(4px, 0.42vw, 8px);
+            font-size: clamp(8px, 0.73vw, 14px);
+            flex: 1;
+            box-sizing: border-box;
+            transition: all 0.2s;
+            background-color: white;
+        }
+
+        .edit-formula-form-container .form-group input:focus,
+        .edit-formula-form-container .form-group select:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+
+        .edit-formula-form-container .dual-input {
+            display: flex;
+            gap: clamp(4px, 0.42vw, 8px);
+            flex: 1;
+        }
+
+        .edit-formula-form-container .dual-input input {
+            flex: 1;
+            padding: clamp(4px, 0.42vw, 8px) clamp(6px, 0.83vw, 16px);
+            border: 1px solid #d1d5db;
+            border-radius: clamp(4px, 0.42vw, 8px);
+            font-size: clamp(8px, 0.73vw, 14px);
+            box-sizing: border-box;
+            transition: all 0.2s;
+            background-color: white;
+        }
+
+        .edit-formula-form-container .dual-input input:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+
+        .edit-formula-form-container .checkbox-group {
+            flex-direction: row;
+            align-items: center;
+        }
+
+        .edit-formula-form-container .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: clamp(8px, 0.73vw, 14px);
+            min-width: 0 !important;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .edit-formula-form-container .checkbox-label input[type="checkbox"] {
+            width: clamp(12px, 0.94vw, 16px);
+            height: clamp(12px, 0.94vw, 16px);
+        }
+
+        /* Batch Selection Checkbox Styles */
+        .batch-selection-checkbox {
+            width: clamp(10px, 0.73vw, 14px);
+            height: clamp(10px, 0.73vw, 14px);
+            cursor: pointer;
+            accent-color: #007bff;
+        }
+
+        .batch-selection-checkbox:hover {
+            transform: scale(1.1);
+        }
+        
+        /* Rate Checkbox Styles */
+        .rate-checkbox {
+            width: clamp(10px, 0.73vw, 14px);
+            height: clamp(10px, 0.73vw, 14px);
+            cursor: pointer;
+            accent-color: #007bff;
+        }
+
+        .rate-checkbox:hover {
+            transform: scale(1.1);
+        }
+
+        /* Formula Cell Content Styles */
+        .formula-cell-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0px;
+            min-width: 0;
+        }
+
+        .formula-text {
+            flex: 1;
+            word-break: break-all;
+            min-width: 0;
+            overflow: visible;
+            white-space: normal;
+        }
+
+        /* Formula 列完整展示，避免 Save 后或 SUB 行 formula 被截断 */
+        #summaryTable td:nth-child(5) {
+            overflow: visible;
+            min-width: 200px;
+            max-width: none;
+            white-space: normal !important; /* 允许换行，完整显示长公式 */
+        }
+        #summaryTable th:nth-child(5) {
+            white-space: normal !important;
+        }
+        #summaryTable td:nth-child(5) .formula-cell-content {
+            overflow: visible;
+        }
+
+        .edit-formula-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: clamp(8px, 0.625vw, 12px);
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .edit-formula-btn:hover {
+            background-color: #f0f0f0;
+            transform: scale(1.1);
+        }
+
+        .edit-formula-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Source Percent Edit Container Styles */
+        .source-percent-edit-container {
+            display: flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            width: 100% !important;
+        }
+
+        /* Source Percent Edit Input Styles */
+        .source-percent-edit-input {
+            flex: 1 !important;
+            padding: 4px !important;
+            border: 1px solid #007bff !important;
+            border-radius: 4px !important;
+            font-size: 12px !important;
+            text-align: center !important;
+            background-color: white !important;
+        }
+
+        .source-percent-edit-input:focus {
+            outline: none !important;
+            border-color: #0056b3 !important;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25) !important;
+        }
+
+        /* Save and Cancel Button Styles */
+        .save-source-percent-btn,
+        .cancel-source-percent-btn {
+            width: 20px !important;
+            height: 20px !important;
+            border: none !important;
+            border-radius: 3px !important;
+            font-size: 12px !important;
+            font-weight: bold !important;
+            cursor: pointer !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: all 0.2s ease !important;
+            flex-shrink: 0 !important;
+        }
+
+        .save-source-percent-btn {
+            background-color: #28a745 !important;
+            color: white !important;
+        }
+
+        .save-source-percent-btn:hover {
+            background-color: #218838 !important;
+            transform: scale(1.1) !important;
+        }
+
+        .cancel-source-percent-btn {
+            background-color: #dc3545 !important;
+            color: white !important;
+        }
+
+        .cancel-source-percent-btn:hover {
+            background-color: #c82333 !important;
+            transform: scale(1.1) !important;
+        }
+
+        .save-source-percent-btn:active,
+        .cancel-source-percent-btn:active {
+            transform: scale(0.95) !important;
+        }
+
+        .edit-formula-form-container .form-actions,
+        .edit-formula-form-container .edit-formula-form-actions {
+            display: flex;
+            gap: clamp(8px, 0.63vw, 12px);
+            justify-content: center !important;
+            align-items: center;
+            margin: 0;
+            margin-top: clamp(8px, 0.73vw, 12px) !important;
+            padding: clamp(6px, 0.52vw, 10px) clamp(16px, 1.25vw, 24px) clamp(12px, 1.04vw, 16px);
+            padding-top: clamp(6px, 0.52vw, 10px) !important;
+            border-top: none !important;
+            width: 100%;
+            box-sizing: border-box;
+            flex-shrink: 0;
+        }
+
+        #editFormulaModal .edit-formula-form-actions .btn-save,
+        #editFormulaModal .edit-formula-form-actions .btn-cancel {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: var(--userlist-btn-add-width);
+            width: auto;
+            padding: clamp(6px, 0.42vw, 8px) 20px;
+            font-size: var(--text-medium, clamp(10px, 0.83vw, 16px));
+            font-weight: var(--font-weight-semibold, 600);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        #editFormulaModal .edit-formula-form-actions .btn-save {
+            background: var(--btn-add-gradient);
+            color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+        }
+
+        #editFormulaModal .edit-formula-form-actions .btn-save:hover:not(:disabled) {
+            background: var(--btn-add-gradient-hover);
+            box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+            transform: translateY(-1px);
+        }
+
+        #editFormulaModal .edit-formula-form-actions .btn-save:disabled,
+        #editFormulaModal .edit-formula-form-actions .btn-save:disabled:hover {
+            background: linear-gradient(180deg, #dde3e9 0%, #9aa5b1 100%) !important;
+            color: #f8fafc !important;
+            box-shadow: none !important;
+            transform: none !important;
+            cursor: not-allowed;
+            opacity: 0.9;
+        }
+
+        #editFormulaModal .edit-formula-form-actions .btn-cancel {
+            background: linear-gradient(180deg, #bcbcbc 0%, #585858 100%);
+            color: #fff;
+            box-shadow: 0 2px 4px rgba(88, 88, 88, 0.3);
+        }
+
+        #editFormulaModal .edit-formula-form-actions .btn-cancel:hover {
+            background: linear-gradient(180deg, #585858 0%, #bcbcbc 100%);
+            box-shadow: 0 4px 8px rgba(84, 84, 84, 0.4);
+            transform: translateY(-1px);
+        }
+
+        /* Enhanced Table Styles for Captured Data - 与datacapture.php中的excel-table样式完全一致 */
+        /* Data Capture Table - 自动调整列宽，同时占满容器宽度（与datacapture.php中的excel-table一致） */
+        #capturedDataTable {
+            table-layout: auto !important;
+            width: 100%;
+        }
+
+        #capturedDataTable .row-header {
+            background-color: #f6f8fa !important;
+            font-weight: bold;
+            color: #24292f;
+            min-width: 30px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        #capturedDataTable td {
+            border: 1px solid #d0d7de;
+            font-size: clamp(8px, 0.63vw, 12px); /* 与datacapture.php中的excel-table td字体大小一致 */
+            font-weight: 600;
+            padding: clamp(0px, 0.2vw, 4px) clamp(6px, 0.63vw, 12px) clamp(0px, 0.2vw, 4px) clamp(3px, 0.31vw, 6px);
+            text-align: center;
+            position: relative;
+            font-family: Arial, sans-serif;
+            white-space: nowrap;
+            min-width: 40px;
+        }
+
+        #capturedDataTable th {
+            border: 1px solid #d0d7de;
+            font-size: clamp(10px, 0.63vw, 12px); /* 与datacapture.php中的excel-table th字体大小一致 */
+            padding: clamp(2px, 0.31vw, 6px) 0px; /* 与datacapture.php中的excel-table th padding一致 */
+            text-align: center;
+            background-color: #f6f8fa;
+            font-weight: bold;
+            color: #24292f;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            white-space: nowrap;
+            min-width: 40px;
+        }
+
+        /* 保留原有样式用于其他表格 */
+        .summary-table .row-header {
+            background-color: #f6f8fa !important;
+            font-weight: bold;
+            color: #24292f;
+            min-width: 30px;
+            text-align: center;
+        }
+
+        .summary-table td {
+            border: 1px solid #d0d7de;
+            font-size: clamp(8px, 0.63vw, 12px); /* 与datacapture.php中的excel-table td字体大小一致 */
+            font-weight: 600;
+            padding: clamp(0px, 0.2vw, 4px) clamp(6px, 0.63vw, 12px) clamp(0px, 0.2vw, 4px) clamp(3px, 0.31vw, 6px);
+            text-align: center;
+            position: relative;
+            font-family: Arial, sans-serif;
+        }
+
+        .summary-table th {
+            border: 1px solid #d0d7de;
+            font-size: clamp(10px, 0.63vw, 12px); /* 与datacapture.php中的excel-table th字体大小一致 */
+            padding: clamp(2px, 0.31vw, 6px) 0px; /* 与datacapture.php中的excel-table th padding一致 */
+            text-align: center;
+            background-color: #f6f8fa;
+            font-weight: bold;
+            color: #24292f;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            min-width: 40px;
+        }
+
+        /* Loading State Styles */
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            text-align: center;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 0;
+        }
+
+        .loading-container--compact {
+            padding: 24px 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-container p {
+            color: #666;
+            font-size: 16px;
+            margin: 0;
+            font-family: var(--font-heading-page);
+        }
+
+        /* Account Select with Buttons Styles */
+        .account-select-with-buttons {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .account-select-with-buttons .custom-select-wrapper {
+            flex: 1;
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Ensure account dropdown wrapper allows overflow */
+        #editFormulaModal .account-form-row {
+            position: relative;
+            z-index: 5;
+        }
+
+        #editFormulaModal .account-select-with-buttons .custom-select-wrapper {
+            overflow: visible;
+            z-index: 1;
+        }
+        
+        #editFormulaModal .account-select-with-buttons {
+            overflow: visible;
+            position: relative;
+            z-index: 1;
+            min-width: 0;
+            flex: 1;
+        }
+
+        /* Custom Select Styles for Account */
+        .custom-select-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        .custom-select-button {
+            width: 100%;
+            padding: clamp(4px, 0.3vw, 8px) clamp(6px, 0.63vw, 12px);
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            text-align: left;
+            font-size: clamp(10px, 0.73vw, 14px);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            position: relative;
+        }
+
+        .custom-select-button::after {
+            content: '▼';
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: #666;
+            pointer-events: none;
+        }
+
+        .custom-select-button.open::after {
+            content: '▲';
+        }
+
+        .custom-select-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 10001;
+            display: none;
+            max-height: 300px;
+            overflow: hidden;
+            margin-top: 2px;
+        }
+        
+        /* Ensure account dropdown in edit formula modal has highest priority and can overflow */
+        #editFormulaModal .custom-select-dropdown {
+            z-index: 10002;
+        }
+
+        .custom-select-dropdown.show {
+            display: block;
+        }
+
+        .custom-select-search {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 1;
+        }
+
+        .custom-select-search input {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .custom-select-options {
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .custom-select-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .custom-select-option:hover {
+            background-color: #f0f0f0;
+        }
+
+        .custom-select-option.selected {
+            background-color: #e3f2fd;
+            font-weight: bold;
+        }
+
+        .custom-select-option:last-child {
+            border-bottom: none;
+        }
+
+        .custom-select-no-results {
+            padding: 12px;
+            text-align: center;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .account-add-btn {
+            background: var(--btn-add-gradient);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: clamp(16px, 1.25vw, 24px);
+            height: clamp(16px, 1.25vw, 24px);
+            font-size: clamp(14px, 0.94vw, 18px);
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 10003;
+            pointer-events: auto;
+            box-shadow: 0 1px 3px rgba(0, 123, 255, 0.3);
+        }
+
+        #editFormulaModal .account-add-btn {
+            pointer-events: auto;
+            position: relative;
+            z-index: 6;
+            min-width: 28px;
+            min-height: 28px;
+            width: 28px;
+            height: 28px;
+        }
+
+        .account-add-btn:hover {
+            background: var(--btn-add-gradient-hover);
+            transform: scale(1.05);
+        }
+
+        .account-add-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Description Select with Buttons Styles */
+        .description-select-with-buttons {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .description-select-with-buttons select {
+            flex: 1;
+        }
+
+        .description-add-btn {
+            background: var(--btn-add-gradient);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: clamp(2px, 0.21vw, 4px) clamp(6px, 0.52vw, 10px);
+            font-size: clamp(10px, 0.73vw, 14px);
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0, 123, 255, 0.3);
+        }
+
+        .description-add-btn:hover {
+            background: var(--btn-add-gradient-hover);
+            transform: scale(1.05);
+        }
+
+        .description-add-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Formula Data Grid Styles */
+        .formula-data-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 0px;
+            padding-bottom: 4px;
+            padding-top: 2px;
+        }
+
+        .formula-data-grid-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            overflow-x: hidden;
+            overflow-y: visible;
+            padding-bottom: 2px;
+        }
+
+        .formula-data-grid-item {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: clamp(2px, 0.21vw, 4px) clamp(4px, 0.42vw, 8px);
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: clamp(8px, 0.63vw, 12px);
+            color: #333;
+            white-space: nowrap;
+            flex-shrink: 0;
+            min-width: fit-content;
+            position: relative;
+            z-index: 1;
+        }
+
+        .formula-data-grid-item:hover {
+            background: #e0e0e0;
+            border-color: #007bff;
+            transform: translateY(-1px);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+        }
+
+        .formula-data-grid-item:active {
+            transform: translateY(0);
+            background: #007bff;
+            color: white;
+        }
+        
+        /* Scrollbars: app-wide — dashboard-scrollbar.css */
+
+        /* Print Styles */
+        @media print {
+            .notification-popup {
+                display: none !important;
+            }
+            
+            .summary-action-buttons {
+                display: none !important;
+            }
+            
+            .summary-modal {
+                display: none !important;
+            }
+            
+            .summary-table-container {
+                box-shadow: none;
+                border: 1px solid #000;
+            }
+            
+            .loading-container {
+                display: none !important;
+            }
+        }
+
+        /* Edit Formula — compact vertical rhythm (gap between rows, not zero margin) */
+        #editFormulaModal .edit-formula-form-container .form-left-column,
+        #editFormulaModal .edit-formula-form-container .form-middle-column {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: clamp(6px, 0.52vw, 10px) !important;
+        }
+
+        #editFormulaModal .edit-formula-form-container .form-row {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+        }
+
+        #editFormulaModal .edit-formula-form-container .form-group,
+        #editFormulaModal .edit-formula-form-container .form-group label {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+        }
+
+        #editFormulaModal .edit-formula-form-actions.form-actions {
+            margin-top: clamp(8px, 0.73vw, 12px) !important;
+            margin-bottom: 0 !important;
+            padding-top: clamp(6px, 0.52vw, 10px) !important;
+            border-top: none !important;
+        }
+

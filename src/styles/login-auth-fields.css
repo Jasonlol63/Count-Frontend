@@ -1,0 +1,93 @@
+/*
+ * 登录 / 二级密码 / reset 共用输入框（2px 描边）。
+ * main.jsx 最后一行 import，在 Vite bundle 内排在 Tailwind 之后，无需 !important。
+ * 与 public/css/style.css 保持同步，供 bundle 加载前的首屏绘制。
+ */
+body.bg {
+  --login-input-cursor: text;
+}
+
+body.bg .sc-login-input-row,
+body.bg .login-container .input-group {
+  cursor: var(--login-input-cursor);
+}
+
+body.bg .sc-login-input-icon,
+body.bg .login-container .input-icon {
+  pointer-events: none;
+}
+
+body.bg .sc-login-input,
+body.bg .login-container .input-group input {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  min-height: 46.5px;
+  padding: 12px 25px 12px 46px;
+  border-width: 2px;
+  border-style: solid;
+  border-color: var(--login-bg-end);
+  border-radius: var(--login-radius-pill);
+  font-size: var(--text-base);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  color: var(--login-text, #333333);
+  /* Windows 深色模式 / 高对比度下，浅色输入框的插入符可能渲染成白色条块 */
+  color-scheme: light;
+  caret-color: var(--login-text, #333333);
+  cursor: var(--login-input-cursor);
+}
+
+body.bg .sc-login-input {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+body.bg .login-container .input-group input {
+  background: var(--login-surface);
+}
+
+body.bg .sc-login-input:focus,
+body.bg .login-container .input-group input:focus {
+  outline: none;
+  border-color: var(--login-bg-start);
+  box-shadow: 0 0 0 3px rgba(0, 79, 249, 0.1);
+}
+
+body.bg .login-container .input-group input:focus {
+  animation: pulse 0.3s ease-out;
+}
+
+body.bg .sc-login-input::placeholder,
+body.bg .login-container .input-group input::placeholder {
+  color: var(--login-bg-end);
+  font-weight: 400;
+}
+
+/* Remember me / Forgot password — bundle 内最后加载，避免被 Tailwind base 覆盖 */
+body.bg .sc-login-remember-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--login-muted, #666);
+  font-size: var(--text-small, 1.3rem);
+  font-weight: 500;
+}
+
+body.bg .sc-login-forgot-link {
+  justify-self: end;
+  max-width: 100%;
+  color: #56ccf2;
+  text-decoration: none;
+  font-size: var(--text-small, 1.3rem);
+  font-weight: 500;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.3s ease;
+}
+
+body.bg .sc-login-forgot-link:hover {
+  color: var(--login-bg-start);
+  text-decoration: underline;
+}
