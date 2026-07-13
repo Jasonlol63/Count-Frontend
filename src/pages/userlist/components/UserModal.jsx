@@ -143,6 +143,7 @@ import {
   roleHasReadOnlyToggle,
   canInteractWithReadOnlyToggle,
   isUserModalPageReadOnlyLock,
+  rowIsOwnerShadow,
 } from "../userListLogic.js";
 import { sanitizeEmailInput } from "../../../utils/input/emailValidation.js";
 
@@ -379,13 +380,14 @@ export default function UserModal({
   );
 
   const showProcessColumn = dualTenantPicker ? selectedCompanyIds.length > 0 : !groupPickerMode;
+  const isOwnerShadowRow = rowIsOwnerShadow(editingRow);
 
   const selectedPermissionLabels = useMemo(
     () => PERMISSION_KEYS.filter((k) => permSelected.has(k)).map((k) => getPermissionLabel(k, t)),
     [permSelected, t]
   );
 
-  const readOnlyToggleVisible = !editingRow?.is_owner_shadow && roleHasReadOnlyToggle(form.role);
+  const readOnlyToggleVisible = !isOwnerShadowRow && roleHasReadOnlyToggle(form.role);
   const readOnlyToggleCanInteract = canInteractWithReadOnlyToggle(currentUserRole, form.role);
   const pageReadOnlyLock =
     Boolean(sessionMutationsBlocked) ||
@@ -398,14 +400,14 @@ export default function UserModal({
     setCompanySearchQuery("");
   }, [open, pageReadOnlyLock]);
 
-  const permissionsLocked = fieldLocks.sidebar || !!editingRow?.is_owner_shadow || pageReadOnlyLock;
-  const showSecondaryPassword = isC168Company || !!editingRow?.is_owner_shadow;
+  const permissionsLocked = fieldLocks.sidebar || !!isOwnerShadowRow || pageReadOnlyLock;
+  const showSecondaryPassword = isC168Company || !!isOwnerShadowRow;
 
   const userModalShell = (
     <div id="userModal" className="modal" style={{ display: open ? "block" : "none", zIndex: accountModalOverlayZIndex }} aria-hidden={!open}>
       <div className={`modal-content user-modal-content${isEditMode ? " edit-mode" : ""}`}>
         <div className="modal-header-bar">
-          <h2 id="modalTitle">{isEditMode ? (editingRow?.is_owner_shadow ? t("editOwner") : t("editUser")) : t("addUser")}</h2>
+          <h2 id="modalTitle">{isEditMode ? (isOwnerShadowRow ? t("editOwner") : t("editUser")) : t("addUser")}</h2>
           <button type="button" className="btn-back" onClick={onClose}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
@@ -470,7 +472,7 @@ export default function UserModal({
                       applyPermTemplate(v, true);
                     }}>
                       <option value="">{t("selectRole")}</option>
-                      {editingRow?.is_owner_shadow ? (
+                      {isOwnerShadowRow ? (
                         <option value="owner">Owner</option>
                       ) : (
                         <>
@@ -513,7 +515,7 @@ export default function UserModal({
                         id="user-modal-company-open-btn"
                         type="button"
                         className="user-modal-company-open-btn"
-                        disabled={fieldLocks.company || !!editingRow?.is_owner_shadow || pageReadOnlyLock}
+                        disabled={fieldLocks.company || !!isOwnerShadowRow || pageReadOnlyLock}
                         onClick={() => {
                           setCompanySearchQuery("");
                           setCompanyPickerOpen(true);
@@ -618,7 +620,7 @@ export default function UserModal({
                         type="checkbox"
                         id={`acc-${a.id}`}
                         checked={selectedAccountIds.has(Number(a.id))}
-                        disabled={!!editingRow?.is_owner_shadow || pageReadOnlyLock}
+                        disabled={!!isOwnerShadowRow || pageReadOnlyLock}
                         onChange={(e) => {
                           setSelectedAccountIds((prev) => {
                             const n = new Set(prev);
@@ -635,8 +637,8 @@ export default function UserModal({
                   ))}
                 </div>
                 <div className="account-control-buttons user-modal-col-actions">
-                  <button type="button" className="btn-account-control" disabled={!!editingRow?.is_owner_shadow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedAccountIds(new Set(accountIdList)))}>{t("selectAll")}</button>
-                  <button type="button" className="btn-clearall" disabled={!!editingRow?.is_owner_shadow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedAccountIds(new Set()))}>{t("clearAll")}</button>
+                  <button type="button" className="btn-account-control" disabled={!!isOwnerShadowRow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedAccountIds(new Set(accountIdList)))}>{t("selectAll")}</button>
+                  <button type="button" className="btn-clearall" disabled={!!isOwnerShadowRow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedAccountIds(new Set()))}>{t("clearAll")}</button>
                 </div>
               </div>
 
@@ -650,7 +652,7 @@ export default function UserModal({
                           type="checkbox"
                           id={`proc-${p.id}`}
                           checked={selectedProcessIds.has(Number(p.id))}
-                          disabled={!!editingRow?.is_owner_shadow || pageReadOnlyLock}
+                          disabled={!!isOwnerShadowRow || pageReadOnlyLock}
                           onChange={(e) => {
                             setSelectedProcessIds((prev) => {
                               const n = new Set(prev);
@@ -666,8 +668,8 @@ export default function UserModal({
                     ))}
                   </div>
                   <div className="account-control-buttons user-modal-col-actions">
-                    <button type="button" className="btn-account-control" disabled={!!editingRow?.is_owner_shadow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedProcessIds(new Set(processIdList)))}>{t("selectAll")}</button>
-                    <button type="button" className="btn-clearall" disabled={!!editingRow?.is_owner_shadow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedProcessIds(new Set()))}>{t("clearAll")}</button>
+                    <button type="button" className="btn-account-control" disabled={!!isOwnerShadowRow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedProcessIds(new Set(processIdList)))}>{t("selectAll")}</button>
+                    <button type="button" className="btn-clearall" disabled={!!isOwnerShadowRow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedProcessIds(new Set()))}>{t("clearAll")}</button>
                   </div>
                 </div>
             ) : null}
@@ -747,7 +749,7 @@ export default function UserModal({
                 <button
                   type="button"
                   className="user-modal-company-picker-select-all"
-                  disabled={fieldLocks.company || !!editingRow?.is_owner_shadow || modalCompanies.length === 0 || pageReadOnlyLock}
+                  disabled={fieldLocks.company || !!isOwnerShadowRow || modalCompanies.length === 0 || pageReadOnlyLock}
                   onClick={() => {
                     if (dualTenantPicker && setSelectedGroupIds) {
                       setSelectedGroupIds(pickerGroupRows.map((c) => Number(c.id)));
@@ -770,7 +772,7 @@ export default function UserModal({
                           const id = Number(c.id);
                           const label = String(c?.group_id || c?.company_id || "").trim().toUpperCase();
                           const checked = selectedGroupIds.includes(id);
-                          const rowDisabled = fieldLocks.company || !!editingRow?.is_owner_shadow || pageReadOnlyLock;
+                          const rowDisabled = fieldLocks.company || !!isOwnerShadowRow || pageReadOnlyLock;
                           return (
                             <li key={`g-${c.id}`} className="user-modal-company-picker-row">
                               <label className={checked ? "user-modal-company-picker-label is-checked" : "user-modal-company-picker-label"}>
@@ -799,7 +801,7 @@ export default function UserModal({
                           const id = Number(c.id);
                           const label = getCompanyPickerLabel(c);
                           const checked = selectedCompanyIds.includes(id);
-                          const rowDisabled = fieldLocks.company || !!editingRow?.is_owner_shadow || pageReadOnlyLock;
+                          const rowDisabled = fieldLocks.company || !!isOwnerShadowRow || pageReadOnlyLock;
                           return (
                             <li key={`c-${c.id}`} className="user-modal-company-picker-row">
                               <label className={checked ? "user-modal-company-picker-label is-checked" : "user-modal-company-picker-label"}>
@@ -828,7 +830,7 @@ export default function UserModal({
                       const id = Number(c.id);
                       const label = getCompanyPickerLabel(c);
                       const checked = selectedCompanyIds.includes(id);
-                      const rowDisabled = fieldLocks.company || !!editingRow?.is_owner_shadow || pageReadOnlyLock;
+                      const rowDisabled = fieldLocks.company || !!isOwnerShadowRow || pageReadOnlyLock;
                       return (
                         <li key={c.id} className="user-modal-company-picker-row">
                           <label className={checked ? "user-modal-company-picker-label is-checked" : "user-modal-company-picker-label"}>

@@ -1,4 +1,12 @@
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
+import {
+  featureModulesToPermissionNames,
+  feeShareSpringToUi,
+  feeShareUiToSpring,
+  groupToTenantSaveEntry,
+  companyToTenantSaveEntry,
+  permissionNamesToFeatureModules,
+} from "./domainHelpers.js";
 
 async function postJson(path, body) {
   const res = await fetch(buildApiUrl(path), {
@@ -20,6 +28,15 @@ async function putJson(path, body) {
   });
   const json = await res.json().catch(() => ({}));
   return { res, json };
+}
+
+function normalizeTenantSaveEntry(entry) {
+  if (!entry || typeof entry !== "object") return entry;
+  const type = String(entry.tenantType ?? entry.tenant_type ?? "").toUpperCase();
+  if (type === "GROUP") return groupToTenantSaveEntry(entry);
+  if (type === "COMPANY") return companyToTenantSaveEntry(entry);
+  if (entry.group_code != null) return groupToTenantSaveEntry(entry);
+  return companyToTenantSaveEntry(entry);
 }
 
 /**
@@ -54,30 +71,42 @@ function aggregateOwnerTenantRows(rows) {
       const type = String(t.tenantType ?? t.tenant_type ?? "").toUpperCase();
       const code = String(t.code ?? "").trim().toUpperCase();
       const expDate = t.expirationDate ?? t.expiration_date ?? null;
-      const catCode = t.categoryCode ?? t.category_code ?? [];
+      const permissions = featureModulesToPermissionNames(
+        t.featureModules ?? t.feature_modules
+      );
+      const legacyCategory = t.categoryCode ?? t.category_code;
+      const categoryCode = permissions.length
+        ? permissions
+        : Array.isArray(legacyCategory)
+          ? legacyCategory
+          : [];
+      const feeShareAllocations = feeShareSpringToUi(
+        t.feeShareAllocations ?? t.fee_share_allocations
+      );
 
       if (type === "GROUP") {
         entry.groups.push({
           id: t.id,
           code,
           expiration_date: expDate,
-          category_code: catCode,
+          category_code: categoryCode,
+          feature_modules: t.featureModules ?? t.feature_modules ?? [],
+          fee_share_allocations: feeShareAllocations,
         });
       } else if (type === "COMPANY") {
-        // resolve parent code: look up parentId among the groups already known
-        // parent_code will be patched in a second pass below
         entry.companies.push({
           id: t.id,
           code,
           expiration_date: expDate,
-          category_code: catCode,
+          category_code: categoryCode,
+          feature_modules: t.featureModules ?? t.feature_modules ?? [],
+          fee_share_allocations: feeShareAllocations,
           _parentId: t.parentId ?? t.parent_id ?? null,
         });
       }
     }
   }
 
-  // Build a tenantId → code lookup from all groups for parent resolution
   const tenantIdToCode = new Map();
   for (const row of rows) {
     const t = row?.tenant;
@@ -86,7 +115,6 @@ function aggregateOwnerTenantRows(rows) {
     }
   }
 
-  // Patch parent_code on companies and clean up internal field
   for (const entry of ownerMap.values()) {
     entry.companies = entry.companies.map((c) => {
       const parentCode = c._parentId ? (tenantIdToCode.get(c._parentId) ?? null) : null;
@@ -96,9 +124,10 @@ function aggregateOwnerTenantRows(rows) {
         expiration_date: c.expiration_date,
         parent_code: parentCode,
         category_code: c.category_code || [],
+        feature_modules: c.feature_modules || [],
+        fee_share_allocations: c.fee_share_allocations,
       };
     });
-    // Sort for stable display
     entry.groups.sort((a, b) => a.code.localeCompare(b.code));
     entry.companies.sort((a, b) => a.code.localeCompare(b.code));
   }
@@ -113,30 +142,6 @@ export async function fetchDomainList() {
   }
   const rawRows = Array.isArray(json?.data) ? json.data : [];
   return aggregateOwnerTenantRows(rawRows);
-}
-
-export async function validateDomainCode(code, excludeOwnerId) {
-  const { json } = await postJson("api/domain/validate-code", {
-    code: String(code ?? "").trim(),
-    exclude_owner_id: excludeOwnerId ?? null,
-  });
-  return json;
-}
-
-function toGroupSaveDto(entry) {
-  return {
-    code: String(entry?.group_code ?? entry?.code ?? "").trim().toUpperCase(),
-    expiration_date: entry?.expiration_date ?? null,
-  };
-}
-
-function toCompanySaveDto(entry) {
-  const parent = entry?.group_id ?? entry?.parent_code ?? entry?.parentCode ?? null;
-  return {
-    code: String(entry?.company_id ?? entry?.code ?? "").trim().toUpperCase(),
-    expiration_date: entry?.expiration_date ?? null,
-    parent_code: parent ? String(parent).trim().toUpperCase() : null,
-  };
 }
 
 export async function createDomain({
@@ -154,8 +159,8 @@ export async function createDomain({
     email,
     password,
     secondary_password: secondaryPassword,
-    groups: (groups || []).map(toGroupSaveDto),
-    companies: (companies || []).map(toCompanySaveDto),
+    groups: (groups || []).map(normalizeTenantSaveEntry),
+    companies: (companies || []).map(normalizeTenantSaveEntry),
   });
   return json;
 }
@@ -175,8 +180,8 @@ export async function updateDomain({
     owner_code: ownerCode,
     name,
     email,
-    groups: (groups || []).map(toGroupSaveDto),
-    companies: (companies || []).map(toCompanySaveDto),
+    groups: (groups || []).map(normalizeTenantSaveEntry),
+    companies: (companies || []).map(normalizeTenantSaveEntry),
   };
   if (password) body.password = password;
   if (secondaryPassword) body.secondary_password = secondaryPassword;
@@ -189,14 +194,23 @@ export async function updateTenantSetting({
   code,
   ownerId,
   expirationDate,
-  categoryCode,
+  permissions,
+  feeShareAllocations,
 }) {
-  const { json } = await putJson("api/domain/update-setting", {
+  const body = {
     id,
     code,
-    owner_id: ownerId,
-    expiration_date: expirationDate,
-    category_code: categoryCode,
-  });
+    ownerId,
+    expirationDate: expirationDate || null,
+  };
+
+  if (permissions != null) {
+    body.featureModules = permissionNamesToFeatureModules(permissions);
+  }
+  if (feeShareAllocations != null) {
+    body.feeShareAllocations = feeShareUiToSpring(feeShareAllocations, id);
+  }
+
+  const { json } = await putJson("api/domain/update-setting", body);
   return json;
 }

@@ -10,8 +10,8 @@ import {
   fmtOwnershipPct,
   validateOwnershipRowsForSave,
   mapOwnerApiRows,
-  accountsFromOwnerRows,
   mergeEditorAccounts,
+  normalizeOwnershipAccounts,
   rowsToSavePayload,
   allocationRowsForSave,
 } from "../shared/ownershipRowHelpers.js";
@@ -114,7 +114,7 @@ export function useGroupEarnings(shell) {
         for (const { gid, oRes } of pairs) {
           if (!isApiSuccess(oRes)) continue;
           const rows = mapOwnerApiRows(oRes.data);
-          next[gid] = { accounts: accountsFromOwnerRows(rows), rows };
+          next[gid] = { accounts: mergeEditorAccounts([], rows), rows };
           if (!bannerSet) {
             const meta = oRes.meta || {};
             setHistoryBanner({
@@ -169,7 +169,7 @@ export function useGroupEarnings(shell) {
           setHistoryBanner(null);
         }
         const rows = mapOwnerApiRows(oRes.status === "success" ? oRes.data : []);
-        const pickerAccounts = aRes.status === "success" ? aRes.data : [];
+        const pickerAccounts = normalizeOwnershipAccounts(aRes.status === "success" ? aRes.data : []);
         const stateAccounts = mergeEditorAccounts(pickerAccounts, rows);
         const nextState = { accounts: stateAccounts, rows };
         setGeStates((prev) => ({

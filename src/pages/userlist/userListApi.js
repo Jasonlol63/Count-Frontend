@@ -47,7 +47,7 @@ export function normalizeAdminListItem(item) {
     createdAt: admin.createdAt ?? null,
     lastLogin: admin.lastLogin ?? null,
     readOnly: admin.readOnly ?? false,
-    isOwnerShadow: isOwner && !hasAccess, // 如果是 owner 且没有 tenant access，则标记为 shadow
+    isOwnerShadow: item?.isOwnerShadow === true || (isOwner && !hasAccess),
     tenantAccess: hasAccess ? {
       id: access.id ?? null,
       userId: access.userId ?? null,
@@ -296,6 +296,41 @@ export function buildAdminUpdateRequest({
  */
 export async function updateAdminUser(request, signal) {
   const res = await fetch(buildApiUrl("api/userlist/update"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(request),
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) {
+    throw new Error(json?.message || "saveFailed");
+  }
+  return normalizeAdminListItem(json.data);
+}
+
+/** Build Spring body for POST /api/userlist/update-owner-profile. */
+export function buildAdminOwnerProfileUpdateRequest({
+  id,
+  name,
+  email,
+  password,
+  secondaryPassword,
+}) {
+  const body = { id: Number(id) };
+  if (name) body.name = name;
+  if (email) body.email = email;
+  if (password) body.password = password;
+  if (secondaryPassword) body.secondaryPassword = secondaryPassword;
+  return body;
+}
+
+/**
+ * POST /api/userlist/update-owner-profile
+ * @returns {Promise<object>} normalized list row
+ */
+export async function updateAdminOwnerProfile(request, signal) {
+  const res = await fetch(buildApiUrl("api/userlist/update-owner-profile"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",

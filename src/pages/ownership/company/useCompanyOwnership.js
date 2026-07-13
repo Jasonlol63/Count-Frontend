@@ -11,8 +11,8 @@ import {
   reorderOwnershipRows,
   validateOwnershipRowsForSave,
   mapOwnerApiRows,
-  accountsFromOwnerRows,
   mergeEditorAccounts,
+  normalizeOwnershipAccounts,
   rowsToSavePayload,
   allocationRowsForSave,
 } from "../shared/ownershipRowHelpers.js";
@@ -99,7 +99,7 @@ export function useCompanyOwnership(shell) {
         for (const { cid, oRes } of pairs) {
           if (!isApiSuccess(oRes)) continue;
           const rows = mapOwnerApiRows(oRes.data);
-          next[cid] = { accounts: accountsFromOwnerRows(rows), rows };
+          next[cid] = { accounts: mergeEditorAccounts([], rows), rows };
           if (!bannerSet) {
             const meta = oRes.meta || {};
             setHistoryBanner({
@@ -139,8 +139,6 @@ export function useCompanyOwnership(shell) {
 
       setLoadingCompanyId(cid);
       try {
-        const compData = allCompanies.find((c) => Number(c.id) === cid);
-        const compGid = compData?.group_id || "";
         const ownersUrl = isHistoricalView
           ? `api/ownership/get_owners_api.php?company_id=${cid}&month=${encodeURIComponent(selectedMonth)}`
           : `api/ownership/get_owners_api.php?company_id=${cid}`;
@@ -152,17 +150,7 @@ export function useCompanyOwnership(shell) {
             credentials: "include",
           }).then((r) => r.json()),
         ]);
-        const accounts = aRes.status === "success" ? aRes.data : [];
-        if (compGid && !accounts.some((a) => String(a.id) === `G_${compGid}`)) {
-          accounts.push({
-            id: `G_${compGid}`,
-            account_name: `Group: ${compGid}`,
-            name: `Group Equity`,
-            role: "GROUP",
-            type: "group",
-            is_main_owner: 0,
-          });
-        }
+        const accounts = normalizeOwnershipAccounts(aRes.status === "success" ? aRes.data : []);
         const rows = mapOwnerApiRows(oRes.status === "success" ? oRes.data : []);
         const stateAccounts = mergeEditorAccounts(accounts, rows);
         const meta = oRes.meta || {};
@@ -187,7 +175,7 @@ export function useCompanyOwnership(shell) {
         setLoadingCompanyId(null);
       }
     },
-    [allCompanies, isHistoricalView, selectedMonth, setHistoryBanner, lang, showToast],
+    [isHistoricalView, selectedMonth, setHistoryBanner, lang, showToast],
   );
 
   const toggleCard = useCallback(

@@ -88,6 +88,7 @@ import {
 } from "./userListLogic.js";
 import {
   buildAdminCreateRequest,
+  buildAdminOwnerProfileUpdateRequest,
   buildAdminUpdateRequest,
   createAdminUser,
   deleteAdminUser,
@@ -98,6 +99,7 @@ import {
   resolveAdminTenantIds,
   resolveListTenantId,
   toggleAdminUserStatus,
+  updateAdminOwnerProfile,
   updateAdminUser,
 } from "./userListApi.js";
 
@@ -2295,17 +2297,14 @@ export default function UserListPage() {
       }
 
       if (rowIsOwnerShadow(editingRow)) {
-        const res = await fetch(buildApiUrl("api/users/userlist_api.php"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
+        const ownerRequest = buildAdminOwnerProfileUpdateRequest({
+          id: Number(form.id),
+          name: form.name.trim(),
+          email: emailCheck.normalized,
+          password: form.password.trim() || undefined,
+          secondaryPassword: payload.secondary_password,
         });
-        const json = await res.json();
-        if (!json.success) {
-          notifyApi(json.message, "saveFailed", "danger");
-          return;
-        }
+        const updated = await updateAdminOwnerProfile(ownerRequest);
         if (form.id) {
           editUserDetailCacheRef.current.delete(String(form.id));
           setEditReadyIds((prev) => {
@@ -2314,7 +2313,7 @@ export default function UserListPage() {
             return next;
           });
         }
-        notifyApi(json.message, "saved", "success");
+        notify(t("saved"), "success");
         closeModal();
         if (Array.isArray(saveGroupCodes) && saveGroupCodes.length > 0) {
           for (const code of saveGroupCodes) {
@@ -2323,15 +2322,13 @@ export default function UserListPage() {
             );
           }
         }
-        if (json.data?.will_lose_access) {
-          setUsersRaw((prev) => prev.filter((u) => Number(u.id) !== Number(form.id)));
-        } else if (json.data && !groupOnlyUserList) {
+        if (updated && !groupOnlyUserList) {
           setUsersRaw((prev) =>
             prev.map((u) =>
-              Number(u.id) === Number(json.data.id)
-                ? { ...u, ...json.data, isOwnerShadow: rowIsOwnerShadow(u) }
-                : u
-            )
+              Number(u.id) === Number(updated.id)
+                ? { ...u, ...updated, isOwnerShadow: true }
+                : u,
+            ),
           );
         }
         void fetchUsers();

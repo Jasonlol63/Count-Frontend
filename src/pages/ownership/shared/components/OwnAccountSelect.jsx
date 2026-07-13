@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatSpringOwnershipLabel } from "../ownershipRowHelpers.js";
 
 export function formatOwnAccountLabel(acc, t) {
   if (!acc) return "";
   const mainStr = parseInt(acc.is_main_owner, 10) === 1 ? t("mainOwnerSuffix") : "";
-  const accountType = String(acc.type || "").toLowerCase();
-  if (accountType === "group") {
-    return `${acc.account_name}${mainStr}`;
+  if (acc.account_label) return `${acc.account_label}${mainStr}`;
+
+  const ownerType = String(acc.owner_type || "").toLowerCase();
+  const role = String(acc.role || "").toUpperCase();
+  if (ownerType === "group" || role === "GROUP") {
+    return `${formatSpringOwnershipLabel(acc)}${mainStr}`;
   }
   return `${acc.account_name} (${acc.name})${mainStr}`;
 }
@@ -33,8 +37,8 @@ export default function OwnAccountSelect({ value, onChange, accounts, displayLab
   const placeholder = t("selectAccountPlaceholder");
 
   const selected = useMemo(
-    () => accounts.find((a) => String(a.id) === String(value)),
-    [accounts, value]
+    () => accounts.find((a) => String(a.account_id) === String(value)),
+    [accounts, value],
   );
 
   const triggerLabel = useMemo(() => {
@@ -49,7 +53,11 @@ export default function OwnAccountSelect({ value, onChange, accounts, displayLab
     close();
   };
 
-  const isGroupValue = (id) => String(id || "").startsWith("G_");
+  const isGroupAccount = (acc) => {
+    const ownerType = String(acc?.owner_type || "").toLowerCase();
+    const role = String(acc?.role || "").toUpperCase();
+    return ownerType === "group" || role === "GROUP" || String(acc?.account_id || "").startsWith("G_");
+  };
 
   return (
     <div className="own-account-select-wrap" ref={wrapRef}>
@@ -64,9 +72,7 @@ export default function OwnAccountSelect({ value, onChange, accounts, displayLab
           setOpen((v) => !v);
         }}
       >
-        <span className="own-account-select-trigger-text">
-          {triggerLabel}
-        </span>
+        <span className="own-account-select-trigger-text">{triggerLabel}</span>
       </button>
       {open ? (
         <div className="own-account-select-menu" role="listbox">
@@ -80,17 +86,17 @@ export default function OwnAccountSelect({ value, onChange, accounts, displayLab
             {placeholder}
           </button>
           {accounts.map((acc) => {
-            const id = acc.id;
-            const isGroup = String(acc.type || "").toLowerCase() === "group" || isGroupValue(id);
-            const isSelected = String(value) === String(id);
+            const accountId = acc.account_id;
+            const isGroup = isGroupAccount(acc);
+            const isSelected = String(value) === String(accountId);
             return (
               <button
-                key={String(id)}
+                key={String(accountId)}
                 type="button"
                 role="option"
                 aria-selected={isSelected}
                 className={`own-account-select-option${isSelected ? " is-selected" : ""}${isGroup ? " is-group" : ""}`}
-                onClick={() => pick(id)}
+                onClick={() => pick(accountId)}
               >
                 {formatOwnAccountLabel(acc, t)}
               </button>

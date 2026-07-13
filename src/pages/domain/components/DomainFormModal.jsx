@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { updateDomain } from "../domainApi.js";
+import { createDomain, updateDomain } from "../domainApi.js";
 import { notifySessionRefreshRequested } from "../../../utils/company/companySessionEvents.js";
 import { showDomainAlert } from "./DomainNotification.jsx";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
@@ -18,6 +17,7 @@ import {
   groupToDomainPayloadEntry,
   groupToTenantSaveEntry,
   companyToTenantSaveEntry,
+  buildDomainListEntryFromForm,
   tempGroupCode,
   forceUppercaseValue,
   forceNumericValue,
@@ -400,26 +400,31 @@ export default function DomainFormModal({
           companies: buildCompaniesPayload().map(companyToTenantSaveEntry),
         });
       } else {
-        const res = await fetch(buildApiUrl("api/domain/add"), {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            owner_code: ownerCode,
-            name,
-            email: emailCheck.normalized,
-            password,
-            secondary_password: secondaryPassword,
-            groups: buildGroupsPayload().map(groupToTenantSaveEntry),
-            companies: buildCompaniesPayload().map(companyToTenantSaveEntry),
-          }),
+        json = await createDomain({
+          ownerCode,
+          name,
+          email: emailCheck.normalized,
+          password,
+          secondaryPassword,
+          groups: buildGroupsPayload().map(groupToTenantSaveEntry),
+          companies: buildCompaniesPayload().map(companyToTenantSaveEntry),
         });
-        json = await res.json();
       }
 
       if (json.success) {
         showDomainAlert(isEditMode ? t("ownerUpdated") : t("ownerCreated"));
-        onSaved(json.data);
+        const savedId = json.data?.id ?? editingOwnerId;
+        onSaved(
+          buildDomainListEntryFromForm({
+            id: savedId,
+            ownerCode,
+            name,
+            email: emailCheck.normalized,
+            createdBy: isEditMode ? (editingDomain?.created_by ?? "") : "",
+            groups: tempGroups,
+            companies: tempCompanies,
+          })
+        );
         notifySessionRefreshRequested();
         onClose();
       } else {

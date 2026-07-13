@@ -22,6 +22,7 @@ export default function AccountEditorRow({
   idx,
   row,
   accounts,
+  allRows = [],
   maxPercentage = 100,
   onUpdate,
   onRemove,
@@ -62,6 +63,10 @@ export default function AccountEditorRow({
   }, [dragEnabled]);
 
   const isPartnership = String(row.role || "").toLowerCase() === "partnership";
+  const isGroupRow =
+    String(row.role || "").toUpperCase() === "GROUP" ||
+    String(row.owner_type || "").toLowerCase() === "group" ||
+    String(row.account_id || "").startsWith("G_");
   const showRo = isPartnership || row.is_external_partner;
 
   const commitSliderPct = (raw) => {
@@ -156,9 +161,9 @@ export default function AccountEditorRow({
       </div>
       <OwnAccountSelect
         value={row.account_id}
-        accounts={accountsForRowPicker(accounts, row.account_id)}
+        accounts={accountsForRowPicker(accounts, row.account_id, allRows)}
         displayLabel={row.account_label}
-        disabled={layoutLocked || row.is_external_partner}
+        disabled={layoutLocked || row.is_external_partner || (isGroupRow && row.ownership_id)}
         t={t}
         onChange={(id) => onUpdate(idx, "account_id", id)}
       />

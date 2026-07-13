@@ -228,7 +228,8 @@ export function computeRowCapabilities(row, currentUserId, currentUserRole) {
     canDelete = false;
   } else if (isOwnerShadow) {
     canEditDelete = normRole(currentUserRole) === "owner";
-    canDelete = canEditDelete;
+    canDelete = false;
+    canToggleStatus = false;
   } else if (isLowPrivilegeUser && (isAdminUser || isOwnerUser)) {
     canEditDelete = false;
     canDelete = false;

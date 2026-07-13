@@ -201,6 +201,7 @@ export default function CompanyCard({
                     idx={idx}
                     row={row}
                     accounts={st.accounts}
+                    allRows={st.rows}
                     maxPercentage={maxAllowedOwnershipPct(st.rows, idx)}
                     dragContextRef={dragRef}
                     onUpdate={(i, f, v) => onUpdateRow(id, i, f, v)}

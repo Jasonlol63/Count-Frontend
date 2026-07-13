@@ -120,6 +120,7 @@ export default function GroupEarningCard({
                     idx={idx}
                     row={row}
                     accounts={st.accounts}
+                    allRows={st.rows}
                     maxPercentage={maxAllowedOwnershipPct(st.rows, idx)}
                     enableDrag={false}
                     onUpdate={(i, f, v) => onUpdateRow(gid, i, f, v)}

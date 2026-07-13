@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { updateTenantSetting } from "../domainApi.js";
 import { notifySessionRefreshRequested } from "../../../utils/company/companySessionEvents.js";
 import { showDomainAlert } from "./DomainNotification.jsx";
@@ -293,19 +292,17 @@ export default function CompanySettingsModal({
     const apiEntityCode = originalEntityCode;
 
     if (commissionOnly) {
+      if (!company.id) {
+        showDomainAlert(t("shareSaveFailed"), "danger");
+        return;
+      }
       try {
-        const action = isGroup ? "save_group_share_settings" : "save_company_share_settings";
-        const payload = isGroup
-          ? { action, group_code: apiEntityCode, fee_share_allocations: cleanFsa }
-          : { action, company_id: apiEntityCode, fee_share_allocations: cleanFsa };
-        const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
-          cache: "no-cache",
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+        const json = await updateTenantSetting({
+          id: company.id,
+          code: apiEntityCode,
+          ownerId: excludeOwnerId,
+          feeShareAllocations: cleanFsa,
         });
-        const json = await res.json();
         if (!json.success) {
           showDomainAlert(json.message || t("shareSaveFailed"), "danger");
           return;
@@ -360,7 +357,8 @@ export default function CompanySettingsModal({
             code: newEntityCode,
             ownerId: excludeOwnerId,
             expirationDate: expDate || null,
-            categoryCode: [],
+            permissions: [],
+            feeShareAllocations: cleanFsa,
           });
           if (!json.success) {
             showDomainAlert(json.message || t("shareSaveFailed"), "danger");
@@ -402,7 +400,8 @@ export default function CompanySettingsModal({
           code: newEntityCode,
           ownerId: excludeOwnerId,
           expirationDate: expDate || null,
-          categoryCode: permissions,
+          permissions,
+          feeShareAllocations: cleanFsa,
         });
         if (!json.success) {
           showDomainAlert(json.message || t("permissionsSaveFailed"), "danger");
