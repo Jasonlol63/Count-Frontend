@@ -430,37 +430,86 @@ export function notifyTransactionDataChanged(sourceTag) {
   }
 }
 
-const bankCategoryCompanyCache = new Map();
+const bankCategoryTenantCache = new Map();
 
-/** When session company matches, skip domain API for bank-only vs games routing. */
+/**
+ * Normalize Spring / legacy feature flags from session or switch-tenant `data`.
+ * Spring: has_bank / has_game / tenant_has_* ; switch-tenant also has_gambling (= game).
+ */
+export function tenantFeatureFlagsFromPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return { hasBank: false, hasGame: false };
+  }
+  const hasBank = Boolean(
+    payload.has_bank ?? payload.tenant_has_bank ?? payload.company_has_bank,
+  );
+  const hasGame = Boolean(
+    payload.has_game ??
+      payload.tenant_has_game ??
+      payload.has_gambling ??
+      payload.company_has_gambling,
+  );
+  return { hasBank, hasGame };
+}
+
+/** Bank Process page when bank is on and games/gambling is off. */
+export function isBankOnlyTenantFlags(payload) {
+  const { hasBank, hasGame } = tenantFeatureFlagsFromPayload(payload);
+  return hasBank && !hasGame;
+}
+
+/**
+ * When session tenant matches target id, derive bank-only from session flags (no API).
+ * @returns {boolean|null} null = unknown (need switch-tenant / other lookup)
+ */
 export function resolveBankOnlyCategoryHint(sessionMe, companyNumericId) {
   if (!sessionMe || companyNumericId == null) return null;
-  if (Number(sessionMe.company_id) !== Number(companyNumericId)) return null;
-  if (sessionMe.company_has_bank && !sessionMe.company_has_gambling) return true;
-  if (sessionMe.company_has_gambling) return false;
+  const sessionId = Number(sessionMe.tenant_id ?? sessionMe.company_id);
+  if (!Number.isFinite(sessionId) || sessionId !== Number(companyNumericId)) return null;
+  const { hasBank, hasGame } = tenantFeatureFlagsFromPayload(sessionMe);
+  if (hasBank && !hasGame) return true;
+  if (hasGame) return false;
   return null;
 }
 
-export async function isBankCategoryCompany(companyCode, buildApiUrl) {
-  const cacheKey = String(companyCode || "").trim().toUpperCase();
-  if (!cacheKey) return false;
-  if (bankCategoryCompanyCache.has(cacheKey)) return bankCategoryCompanyCache.get(cacheKey);
-  try {
-    const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ action: "get_company_permissions", company_id: companyCode }),
-    });
-    const json = await res.json();
-    const permissions = Array.isArray(json?.data?.permissions) ? json.data.permissions : [];
-    const normalized = permissions.map((p) => String(p || "").toLowerCase());
-    const isBankOnly = normalized.includes("bank") && !normalized.includes("games") && !normalized.includes("gambling");
-    bankCategoryCompanyCache.set(cacheKey, isBankOnly);
-    return isBankOnly;
-  } catch {
-    return false;
+/**
+ * Resolve whether tenant is bank-only via session hint or Spring `POST auth/switch-tenant`.
+ * Prefer this over PHP domain_api get_company_permissions.
+ */
+export async function resolveTenantIsBankOnly(tenantId, sessionMe = null) {
+  const id = Number(tenantId);
+  if (!Number.isFinite(id) || id <= 0) return { bankOnly: false, syncJson: null };
+
+  const hint = resolveBankOnlyCategoryHint(sessionMe, id);
+  if (hint !== null) {
+    return { bankOnly: hint, syncJson: null };
   }
+
+  if (bankCategoryTenantCache.has(id)) {
+    return { bankOnly: bankCategoryTenantCache.get(id), syncJson: null };
+  }
+
+  const { syncCompanySessionApi } = await import("../../../utils/company/companySessionSync.js");
+  const syncJson = await syncCompanySessionApi(id);
+  if (!syncJson?.success || !syncJson?.data) {
+    return { bankOnly: false, syncJson: syncJson || { success: false }, syncFailed: true };
+  }
+  const bankOnly = isBankOnlyTenantFlags(syncJson.data);
+  bankCategoryTenantCache.set(id, bankOnly);
+  return { bankOnly, syncJson };
+}
+
+/**
+ * @deprecated Prefer {@link resolveTenantIsBankOnly} with numeric tenant.id.
+ * Kept for call sites that still pass a code string — returns false without a numeric id.
+ */
+export async function isBankCategoryCompany(companyCodeOrTenantId, _buildApiUrl, sessionMe = null) {
+  const asNum = Number(companyCodeOrTenantId);
+  if (Number.isFinite(asNum) && asNum > 0 && String(companyCodeOrTenantId).trim() === String(asNum)) {
+    const { bankOnly } = await resolveTenantIsBankOnly(asNum, sessionMe);
+    return bankOnly;
+  }
+  return false;
 }
 
 export function profitSharingTotalFromString(s) {

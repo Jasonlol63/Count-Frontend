@@ -58,8 +58,7 @@ import {
   isBankResendDayStartBackendErrorMessage,
   notifyTransactionDataChanged,
   bankProcessStatusTargetPatch,
-  isBankCategoryCompany,
-  resolveBankOnlyCategoryHint,
+  resolveTenantIsBankOnly,
   parseProfitSharingToRows,
   serializeProfitSharingRows,
   calcBankNetProfitDisplay,
@@ -280,7 +279,6 @@ export function useBankProcessListPage() {
   const bankProcessListWarmInflightRef = useRef(new Map());
   const suppressCrossPageSyncRef = useRef(false);
   const onSwitchCompanyRef = useRef(null);
-  const companySessionAbortRef = useRef(null);
   const rowsRef = useRef([]);
   const bankDatePickerInitRef = useRef(false);
   const listRegionRef = useRef(null);
@@ -815,11 +813,10 @@ export function useBankProcessListPage() {
         const currentCompanyRow =
           effectiveNum != null ? cs.find((c) => Number(c.id) === Number(effectiveNum)) : null;
         if (currentCompanyRow?.company_id) {
-          const bankOnlyHint = resolveBankOnlyCategoryHint(sessionUser, effectiveNum);
-          const bankCategory =
-            bankOnlyHint !== null
-              ? bankOnlyHint
-              : await isBankCategoryCompany(currentCompanyRow.company_id, buildApiUrl);
+          const { bankOnly: bankCategory, syncJson } = await resolveTenantIsBankOnly(effectiveNum, sessionUser);
+          if (syncJson?.success) {
+            notifyCompanySessionUpdated(syncJson.data ?? null);
+          }
           if (!bankCategory) {
             const warm = await prefetchGamesProcessListPayload(effectiveNum);
             navigate(`/process-list?company_id=${effectiveNum}`, {
@@ -1390,76 +1387,51 @@ export function useBankProcessListPage() {
 
       suppressCrossPageSyncRef.current = true;
       try {
-        const sessionCompanyId = authMe?.company_id != null ? Number(authMe.company_id) : null;
-        const bankCategoryPromise = isBankCategoryCompany(c.company_id, buildApiUrl);
+        const { bankOnly, syncJson, syncFailed } = await resolveTenantIsBankOnly(nextId, authMe);
+
+        if (syncFailed) {
+          notify(apiMsg(syncJson, "switchCompanyFailed"), "danger");
+          return;
+        }
+        if (syncJson?.success) {
+          notifyCompanySessionUpdated(syncJson.data ?? null);
+        }
+
+        if (!bankOnly) {
+          const warm = await prefetchGamesProcessListPayload(nextId);
+          navigate(`/process-list?company_id=${nextId}`, {
+            replace: true,
+            state: {
+              processListPrefetch: {
+                companyId: nextId,
+                companies,
+                groupFilterKind: "follow",
+                rows: warm.rows,
+                meta: warm.meta,
+                currencyCodes: warm.currencyCodes,
+              },
+            },
+          });
+          return;
+        }
+
         void fetchRows({ companyId: nextId, silent: true, preservePage: true, preserveSelection: true });
         if (accountingOpen) void loadAccountingInbox({ silent: true });
-
-        try {
-          const bankCategory = await bankCategoryPromise;
-          if (!bankCategory) {
-            const warm = await prefetchGamesProcessListPayload(nextId);
-            navigate(`/process-list?company_id=${nextId}`, {
-              replace: true,
-              state: {
-                processListPrefetch: {
-                  companyId: nextId,
-                  companies,
-                  groupFilterKind: "follow",
-                  rows: warm.rows,
-                  meta: warm.meta,
-                  currencyCodes: warm.currencyCodes,
-                },
-              },
-            });
-            return;
-          }
-        } catch {
-          /* fall through to session sync */
-        }
-
-        if (sessionCompanyId === nextId) return;
-
-        companySessionAbortRef.current?.abort();
-        const sessionAc = new AbortController();
-        companySessionAbortRef.current = sessionAc;
-
-        try {
-          const res = await fetch(
-            buildApiUrl(`api/session/update_company_session_api.php?company_id=${nextId}`),
-            { credentials: "include", signal: sessionAc.signal },
-          );
-          const json = await res.json();
-          if (sessionAc.signal.aborted) return;
-          if (!res.ok || !json.success) {
-            notify(apiMsg(json, "switchCompanyFailed"), "danger");
-            return;
-          }
-          notifyCompanySessionUpdated(json.data ?? null);
-        } catch {
-          if (sessionAc.signal.aborted) return;
-          notify(t("switchCompanyFailed"), "danger");
-        } finally {
-          if (companySessionAbortRef.current === sessionAc) {
-            companySessionAbortRef.current = null;
-          }
-        }
+      } catch {
+        notify(t("switchCompanyFailed"), "danger");
       } finally {
         suppressCrossPageSyncRef.current = false;
       }
     },
     [
       accountingOpen,
-      applyBankProcessListCache,
-      authMe?.company_id,
+      authMe,
       companies,
-      companyId,
       fetchRows,
-      groupFilterKind,
       loadAccountingInbox,
       navigate,
       notify,
-      selectedGroup,
+      apiMsg,
       t,
     ],
   );

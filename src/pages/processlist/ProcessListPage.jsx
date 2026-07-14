@@ -20,7 +20,7 @@ import { findOwnerCompanyById } from "../../utils/company/sharedCompanyFilter.js
 import { useGroupAnchorSessionSync } from "../../utils/company/useGroupAnchorSessionSync.js";
 import { isPartnershipAuditReadOnlyLocked } from "../../utils/audit/partnershipAuditReadOnly.js";
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
-import { isBankCategoryCompany, resolveBankOnlyCategoryHint } from "../bankprocesslist/lib/bankProcessHelpers.js";
+import { resolveTenantIsBankOnly } from "../bankprocesslist/lib/bankProcessHelpers.js";
 import "../../../public/css/processCSS.css";
 import "../../../public/css/processlist.css";
 import "../../../public/css/accountCSS.css";
@@ -415,11 +415,13 @@ export default function ProcessListPage() {
 
         const currentCompanyRow = cs.find((c) => Number(c.id) === Number(effectiveCompany));
         if (currentCompanyRow?.company_id) {
-          const bankOnlyHint = resolveBankOnlyCategoryHint(layoutMe, effectiveCompany);
-          const bankCategory =
-            bankOnlyHint !== null
-              ? bankOnlyHint
-              : await isBankCategoryCompany(currentCompanyRow.company_id, buildApiUrl);
+          const { bankOnly: bankCategory, syncJson } = await resolveTenantIsBankOnly(
+            effectiveCompany,
+            layoutMe,
+          );
+          if (syncJson?.success) {
+            notifyCompanySessionUpdated(syncJson.data ?? null);
+          }
           if (bankCategory) {
             const warm = await prefetchBankProcessListPayload(effectiveCompany);
             navigate(`/bank-process-list?company_id=${effectiveCompany}`, {
@@ -883,104 +885,63 @@ export default function ProcessListPage() {
       const nextId = Number(company?.id);
       if (!nextId) return;
 
+      const sessionCompanyId =
+        sessionMeFromLayout?.company_id != null
+          ? Number(sessionMeFromLayout.company_id)
+          : sessionMeFromLayout?.tenant_id != null
+            ? Number(sessionMeFromLayout.tenant_id)
+            : null;
+      const previousCompanyId = Number(companyId) === nextId ? sessionCompanyId : companyId;
+
       suppressCrossPageSyncRef.current = true;
       try {
-        const sessionCompanyId =
-          sessionMeFromLayout?.company_id != null ? Number(sessionMeFromLayout.company_id) : null;
+        const { bankOnly, syncJson, syncFailed } = await resolveTenantIsBankOnly(
+          nextId,
+          sessionMeFromLayout,
+        );
 
-        const bankCategoryPromise = isBankCategoryCompany(company.company_id, buildApiUrl);
-        void loadFormMeta(nextId);
-
-        try {
-          const bankCategory = await bankCategoryPromise;
-          if (bankCategory) {
-            const warm = await prefetchBankProcessListPayload(nextId);
-            navigate(`/bank-process-list?company_id=${nextId}`, {
-              replace: true,
-              state: {
-                bankProcessListPrefetch: {
-                  companyId: nextId,
-                  companies,
-                  groupFilterKind: "follow",
-                  rows: warm.rows,
-                  currencyCodes: warm.currencyCodes,
-                },
-              },
-            });
-            return;
-          }
-        } catch {
-          /* fall through to session sync */
+        if (syncFailed) {
+          notify(syncJson?.message || t("switchCompanyFailed"), "danger");
+          return;
         }
+        if (syncJson?.success) {
+          notifyCompanySessionUpdated(syncJson.data ?? null);
+        }
+
+        if (bankOnly) {
+          const warm = await prefetchBankProcessListPayload(nextId);
+          navigate(`/bank-process-list?company_id=${nextId}`, {
+            replace: true,
+            state: {
+              bankProcessListPrefetch: {
+                companyId: nextId,
+                companies,
+                groupFilterKind: "follow",
+                rows: warm.rows,
+                currencyCodes: warm.currencyCodes,
+              },
+            },
+          });
+          return;
+        }
+
+        void loadFormMeta(nextId);
 
         const runFetch = async () => {
           await hydrateProcessListCompanyCache(nextId);
           await fetchRows({ companyId: nextId, silent: true });
         };
 
-        if (sessionCompanyId === nextId) {
-          void runFetch();
-          return;
-        }
-
-        const previousCompanyId = Number(companyId) === nextId ? sessionCompanyId : companyId;
-        companySessionAbortRef.current?.abort();
-        const sessionAc = new AbortController();
-        companySessionAbortRef.current = sessionAc;
-
         void runFetch();
-
-        try {
-          const res = await fetch(
-            buildApiUrl(`api/session/update_company_session_api.php?company_id=${nextId}`),
-            { credentials: "include", signal: sessionAc.signal },
-          );
-          const json = await res.json();
-          if (sessionAc.signal.aborted) return;
-          if (!res.ok || !json.success) {
-            const reason = json?.data?.reason;
-            if (reason === "expired" || reason === "no_set") {
-              if (previousCompanyId != null && Number(previousCompanyId) !== nextId) {
-                skipCompanyFetchEffectRef.current = true;
-                flushSync(() => {
-                  setCompanyId(previousCompanyId);
-                  applyProcessListCache(previousCompanyId);
-                });
-                void fetchRows({ companyId: previousCompanyId, silent: true });
-              }
-              setExpirationCompanies([
-                { company_id: company.company_id, expiration_date: company.expiration_date ?? null },
-              ]);
-              return;
-            }
-            if (previousCompanyId != null && Number(previousCompanyId) !== nextId) {
-              skipCompanyFetchEffectRef.current = true;
-              flushSync(() => {
-                setCompanyId(previousCompanyId);
-                applyProcessListCache(previousCompanyId);
-              });
-              void fetchRows({ companyId: previousCompanyId, silent: true });
-            }
-            notify(json.message || json.error || t("switchCompanyFailed"), "danger");
-            return;
-          }
-          notifyCompanySessionUpdated(json.data ?? null);
-          runFetch();
-        } catch {
-          if (sessionAc.signal.aborted) return;
-          if (previousCompanyId != null && Number(previousCompanyId) !== nextId) {
-            skipCompanyFetchEffectRef.current = true;
-            flushSync(() => {
-              setCompanyId(previousCompanyId);
-              applyProcessListCache(previousCompanyId);
-            });
-            void fetchRows({ companyId: previousCompanyId, silent: true });
-          }
-          notify(t("switchCompanyFailed"), "danger");
-        } finally {
-          if (companySessionAbortRef.current === sessionAc) {
-            companySessionAbortRef.current = null;
-          }
+      } catch {
+        notify(t("switchCompanyFailed"), "danger");
+        if (previousCompanyId != null && Number(previousCompanyId) !== nextId) {
+          skipCompanyFetchEffectRef.current = true;
+          flushSync(() => {
+            setCompanyId(previousCompanyId);
+            applyProcessListCache(previousCompanyId);
+          });
+          void fetchRows({ companyId: previousCompanyId, silent: true });
         }
       } finally {
         suppressCrossPageSyncRef.current = false;
@@ -995,7 +956,6 @@ export default function ProcessListPage() {
       loadFormMeta,
       navigate,
       notify,
-      selectedGroup,
       sessionMeFromLayout,
       t,
     ],
