@@ -1,6 +1,11 @@
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { mergeCurrencyCodesWithSavedOrder } from "../../utils/company/currencyDisplayOrder.js";
-import { normalizeRows as normalizeGamesProcessRows, processListCacheHasEntry, processListCacheHasRows } from "./processListHelpers.js";
+import {
+  applyProcessFilters,
+  processListCacheHasEntry,
+  processListCacheHasRows,
+} from "./processListHelpers.js";
+import { fetchProcessListByTenantId } from "./processListApi.js";
 import { normalizeRows as normalizeBankProcessRows } from "../bankprocesslist/lib/bankProcessHelpers.js";
 
 const processListRouteWarmCache = new Map();
@@ -69,36 +74,28 @@ export async function fetchGamesProcessListSlice(
     return { rows: null, currencyCodes: null };
   }
 
-  const listUrl = new URL(buildApiUrl("api/process/list"));
-  listUrl.searchParams.set("tenant_id", String(cid));
-  const q = String(search || "").trim();
-  if (q) listUrl.searchParams.set("search", q);
-  if (showInactive) listUrl.searchParams.set("showInactive", "1");
-  if (showAll) listUrl.searchParams.set("showAll", "1");
-
   const curUrl = new URL(buildApiUrl("api/currency/list"));
   curUrl.searchParams.set("tenant_id", String(cid));
 
   try {
     const fetchOpts = { credentials: "include", signal };
-    const [listRes, curRes] = await Promise.all([
-      fetch(listUrl.toString(), { ...fetchOpts, method: "POST" }),
+    const [allRows, curRes] = await Promise.all([
+      fetchProcessListByTenantId(cid, signal).catch(() => null),
       fetch(curUrl.toString(), { ...fetchOpts, method: "POST" }),
     ]);
-    const listJson = await listRes.json();
     const curJson = await curRes.json();
- 
-    const rows =
-      listRes.ok && listJson?.success && Array.isArray(listJson.data)
-        ? normalizeGamesProcessRows(listJson.data)
-        : null;
- 
+
     let currencyCodes = null;
     if (curRes.ok && curJson?.success && Array.isArray(curJson.data)) {
       const codes = curJson.data.map((r) => String(r.code).toUpperCase());
       const savedOrder = null; // Fallback to default sorting order
       currencyCodes = mergeCurrencyCodesWithSavedOrder(codes, savedOrder);
     }
+
+    // Spring list returns all statuses; filter client-side (default=active, showInactive=inactive).
+    const rows = Array.isArray(allRows)
+      ? applyProcessFilters(allRows, { search, showInactive, showAll })
+      : allRows;
 
     return { rows, currencyCodes };
   } catch (err) {
