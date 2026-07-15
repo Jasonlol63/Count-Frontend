@@ -22,9 +22,9 @@ import {
 export const FORMAT_PREVIEW_HTML_KEY = "capturedFormatPreviewHtml";
 export const FORMAT_PREVIEW_HTML_KEY_LEGACY = "captured655PreviewHtml";
 
-/** Preview HTML is session-only; legacy keys lived in localStorage and caused reload residue. */
+/** PHP stores the 2.Format preview in localStorage and restores it across reloads. */
 const formatPreviewStorage =
-  typeof sessionStorage !== "undefined" ? sessionStorage : null;
+  typeof localStorage !== "undefined" ? localStorage : null;
 
 export function isHardPageReload() {
   try {
@@ -35,18 +35,9 @@ export function isHardPageReload() {
   }
 }
 
-/** Drop stale preview on hard refresh (not on ?restore=1 Back flow). */
+/** PHP leaves cached 2.Format preview HTML in place across hard refreshes. */
 export function clearStaleFormatPreviewForFreshEntry(shouldRestore = false) {
-  try {
-    localStorage.removeItem(FORMAT_PREVIEW_HTML_KEY);
-    localStorage.removeItem(FORMAT_PREVIEW_HTML_KEY_LEGACY);
-  } catch {
-    /* ignore */
-  }
-  if (shouldRestore) return;
-  if (!isHardPageReload()) return;
-  clearFormatPreviewHtml();
-  setFormatGridReady(false);
+  void shouldRestore;
 }
 
 /** Whether switching to 2.Format may hydrate the grid from cached preview HTML. */
@@ -57,7 +48,7 @@ export function shouldRestoreFormatFromPreview() {
   } catch {
     /* ignore */
   }
-  return !isHardPageReload();
+  return true;
 }
 
 /** Whether 2.Format grid has been filled from a paste (legacy `isFormatGridReady`). */
@@ -110,6 +101,10 @@ export function clearFormatStyles() {
   if (tableBody) {
     tableBody.querySelectorAll("td[contenteditable='true']").forEach((cell) => {
       cell.removeAttribute("style");
+      // Icon-only pasted chrome (empty text + child button/svg) should not survive clear.
+      if (cell.children.length > 0 && !(cell.textContent || "").trim()) {
+        cell.textContent = "";
+      }
       const essentialClasses = ["selected", "multi-selected"];
       Array.from(cell.classList).forEach((cls) => {
         if (!essentialClasses.includes(cls)) {

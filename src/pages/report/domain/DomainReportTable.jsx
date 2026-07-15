@@ -23,19 +23,6 @@ export default function DomainReportTable({
     </div>
   );
 
-  const renderEmpty = (message) => (
-    <div className="domain-report-list-container">
-      {tableHeader}
-      <div className="domain-report-cards">
-        <div className="domain-report-card">
-          <div className="domain-report-card-item" style={{ gridColumn: "1 / -1", textAlign: "center", justifyContent: "center", padding: 20 }}>
-            {message}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   if (error) {
     return (
       <div className="domain-report-list-container">
@@ -57,15 +44,13 @@ export default function DomainReportTable({
   const isEmpty = !reportData?.data?.length;
   if (isEmpty) {
     const awaitingData = reportData == null && !error;
-    if (awaitingData || reportSyncing) {
-      return (
-        <div className="domain-report-list-container">
-          {tableHeader}
-          <div className="domain-report-cards" />
+    return (
+      <div className="empty-state-container" style={{ display: "block" }}>
+        <div className="empty-state">
+          <p>{(awaitingData || reportSyncing) ? t("loading") : t("noDataAdjustSearch")}</p>
         </div>
-      );
-    }
-    return renderEmpty(t("noDataFound"));
+      </div>
+    );
   }
 
   const data = reportData.data;

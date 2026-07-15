@@ -131,6 +131,10 @@ export function earningsRowsLookUniform(rows) {
     .filter((n) => Number.isFinite(n));
   if (values.length < 2) return false;
   const first = values[0];
+  // All-zero rows are valid when viewer has no ownership setup.
+  if (Math.abs(first) < 0.0001 && values.every((n) => Math.abs(n) < 0.0001)) {
+    return false;
+  }
   return values.every((n) => Math.abs(n - first) < 0.01);
 }
 
@@ -148,6 +152,8 @@ export function earningsRowsDuplicatePrimary(rows, primaryCode) {
     return false;
   }
   const primaryValue = Number(primaryRow.earnings);
+  // 0-valued earnings can be a legitimate "no ownership" outcome, not a stale mirror.
+  if (Math.abs(primaryValue) < 0.0001) return false;
   return rows.some((row) => {
     const code = String(row?.code || "").trim().toUpperCase();
     if (!code || code === primary || row.earnings == null) return false;
@@ -172,6 +178,8 @@ export function sanitizeDuplicateNonPrimaryEarnings(rows, primaryCode, primaryEa
     }
   }
   if (primaryValue == null) return rows;
+  // Keep zero rows untouched; these are valid for ownership-not-configured scopes.
+  if (Math.abs(primaryValue) < 0.0001) return rows;
   return rows.map((row) => {
     const code = String(row?.code || "").trim().toUpperCase();
     if (!code || code === primary || row.earnings == null) return row;

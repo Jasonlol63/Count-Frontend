@@ -8,7 +8,6 @@ import { getDefaultPasteAnchorCell } from "./dataCapturePasteApply.js";
 import {
   autoDetectCaptureTypeFromPaste,
   parseCitibetPasteData,
-  shouldExitCitibetMode,
 } from "./dataCapturePasteDetect.js";
 import { handleCitibetPaste } from "../vendors/dataCaptureCitibetPaste.js";
 import { handleTextModePaste } from "./dataCaptureTextPaste.js";
@@ -28,7 +27,6 @@ import { handleAlipayPaste } from "../vendors/dataCaptureAlipayPaste.js";
 import { handleC8PlayPaste } from "../vendors/dataCaptureC8PlayPaste.js";
 import { handleMaxbetPaste } from "../vendors/dataCaptureMaxbetPaste.js";
 import {
-  applyActiveCaptureType,
   getActiveCaptureType,
   setTableActiveForPaste,
 } from "../../lib/dataCaptureBridge.js";
@@ -137,34 +135,46 @@ export function handleGlobalGridPaste(e) {
  * Full paste orchestrator — all formats in React.
  */
 export function handleCellPasteEvent(e) {
-  const cell = resolvePasteCell(e.target);
+  let cell = resolvePasteCell(e.target);
+  if (!cell?.closest?.("#dataTable")) {
+    cell = getDefaultPasteAnchorCell();
+  }
+  if (!cell) return;
 
   e.preventDefault();
 
   const pastedData = getClipboardPlainText(e);
-  const detected = autoDetectCaptureTypeFromPaste(pastedData);
-  if (detected) {
-    applyActiveCaptureType(detected);
-  } else if (shouldExitCitibetMode(pastedData, getActiveCaptureType())) {
-    applyActiveCaptureType("1.Text");
-  }
-
   const captureType = getActiveCaptureType();
 
   if (captureType === "2.Format") {
     if (handleFormatCellPaste(e, pastedData)) return;
-    invokeGenericPasteFallback(e, pastedData);
+    // Format-only: never fall through to generic N×1 for report field dumps.
+    // Generic paste maps each newline to its own row and recreates the screenshot bug.
     return;
   }
 
   if (TYPED_CAPTURE_TYPES.has(captureType)) {
     if (handleTypedCapturePaste(e, pastedData, captureType)) return;
-    invokeGenericPasteFallback(e, pastedData);
+    // 4.RETURN / API_RETURN must not fall back to generic tab/HTML paste (keeps formulas intact).
+    if (captureType !== "4.RETURN" && captureType !== "API_RETURN") {
+      invokeGenericPasteFallback(e, pastedData);
+    }
     return;
   }
 
   if (captureType === "1.Text") {
+    // Fail-closed Citibet layout bypass: only when clipboard strictly detects as a
+    // Citibet report. Dropdown stays on 1.Text — reuse CITIBET parse/fill only.
+    // Miss → existing 1.Text path unchanged (vertical dump / HTML / plain).
+    if (autoDetectCaptureTypeFromPaste(pastedData) === "CITIBET") {
+      const citibetParsed = parseCitibetPasteData(pastedData, "CITIBET");
+      if (citibetParsed && handleCitibetPaste(e, pastedData, cell, "CITIBET", citibetParsed)) {
+        return;
+      }
+    }
     if (handleTextModePaste(e, pastedData, cell)) return;
+    invokeGenericPasteFallback(e, pastedData);
+    return;
   }
 
   const citibetParsed = parseCitibetPasteData(pastedData, captureType);

@@ -3,7 +3,8 @@
    Smart Density & Readability Enhancements for the Entire System
    ========================================================================== */
 
-@media screen and (max-width: 1440px) {
+/* Touch tablets (iPad, Galaxy Tab) keep desktop tokens; laptop 13" uses fine pointer. */
+@media screen and (max-width: 1440px) and (pointer: fine) {
 
     /* ----------------------------------------------------
        1. Base Typography & Hierarchy
@@ -164,12 +165,12 @@
     }
 
     body.ec-auth-shell.account-page .account-table-header {
-        font-size: var(--text-base) !important;
+        font-size: 1.6rem !important;
     }
 
     /* Process List（Games 等）：与 User / Account 表头一致 — 字号 + padding token */
-    body.ec-auth-shell.process-page .table-header:not(.bank-virtual-head-row) {
-        font-size: var(--text-base) !important;
+    body.ec-auth-shell.process-page:not(.process-page--bank) .table-header:not(.bank-virtual-head-row) {
+        font-size: 1.6rem !important;
         padding: var(--table-header-height) !important;
     }
 
@@ -207,7 +208,7 @@
     body.ec-auth-shell.account-page:not(.account-page--show-all) .account-card {
         padding: 0 22px !important;
         min-height: 0 !important;
-        flex: 0 1 auto !important;
+        flex: 0 0 auto !important;
     }
 
     body.ec-auth-shell .card-item,
@@ -217,6 +218,23 @@
         font-size: var(--text-medium) !important;
         line-height: 1.5 !important;
         letter-spacing: 0.015em !important;
+    }
+
+    body.ec-auth-shell.account-page:not(.account-page--show-all) .account-list-row .account-card-item {
+        font-size: 1.4rem !important;
+        line-height: 1.1 !important;
+        letter-spacing: 0 !important;
+    }
+
+    body.ec-auth-shell.user-page:not(.user-page--show-all) .user-list-row .card-item {
+        line-height: 1.3 !important;
+        letter-spacing: 0 !important;
+    }
+
+    body.ec-auth-shell.user-page:not(.user-page--show-all) .user-card.user-list-row {
+        padding: 0 22px !important;
+        min-height: 0 !important;
+        flex: 0 0 auto !important;
     }
 
 
@@ -244,6 +262,30 @@
         padding: 0 !important;
     }
 
+    body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .bank-virtual-th {
+        font-size: 1.6rem !important;
+        line-height: 1.2 !important;
+    }
+
+    body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .bank-virtual-cell {
+        min-height: var(--bank-list-cell-min-height, 26px) !important;
+        font-size: 1.4rem !important;
+        line-height: 1.1 !important;
+    }
+
+    body.ec-auth-shell.process-page.process-page--bank .bank-status-button,
+    body.ec-auth-shell.process-page.process-page--bank .bank-contract-pill {
+        box-sizing: border-box !important;
+        height: var(--bank-list-pill-height, 20px) !important;
+        min-height: var(--bank-list-pill-height, 20px) !important;
+        padding: 0 8px !important;
+        font-size: 1.1rem !important;
+        line-height: 1.1 !important;
+        border-radius: 6px !important;
+        white-space: nowrap !important;
+        min-width: max-content !important;
+    }
+
     /* Stop Bank badges from overflowing horizontally due to global constraints */
     .process-page.process-page--bank .bank-data-table .contract-badge,
     .process-page.process-page--bank .bank-data-table .status-badge {
@@ -262,12 +304,10 @@
     /* ----------------------------------------------------
        5. Status & Role Badges (Visual Cues)
        ---------------------------------------------------- */
-    .role-badge,
-    .account-role-badge,
+    body.ec-auth-shell:not(.user-page) .role-badge,
     .contract-badge,
     .status-badge,
-    .member-badge,
-    span.account-role-badge {
+    .member-badge {
         font-size: 10px !important;
         /* Set slightly smaller but perfectly legible, overriding the user's 9px edit */
         padding: 4px 10px !important;
@@ -281,16 +321,7 @@
         line-height: 1 !important;
     }
 
-    /* Account List：Role / Alert / Status 药丸与 design token 对齐 */
-    .account-role-badge,
-    span.account-role-badge {
-        font-size: var(--text-tiny) !important;
-    }
-
-    /* User List：Role / Status 药丸（.role-badge） */
-    body.ec-auth-shell.user-page .role-badge {
-        font-size: var(--text-tiny) !important;
-    }
+    /* User List：Role / Status 药丸由 userlist.css 固定 1.1rem，此处不覆盖 */
 
     /* ----------------------------------------------------
        6. Edit Action Buttons Sizing
@@ -318,9 +349,16 @@
             minmax(84px, 0.7fr)
             minmax(52px, 0.42fr)
             minmax(72px, 0.55fr)
-            minmax(130px, 1fr)
+            minmax(131px, 1fr)
             minmax(60px, 1.2fr)
-            minmax(92px, 0.55fr);
+            minmax(64px, 0.25fr);
+    }
+
+    body.ec-auth-shell.account-page .account-list-table-header,
+    body.ec-auth-shell.account-page .account-cards {
+        min-width: max(100%, var(--list-table-min-width, 980px)) !important;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     body.ec-auth-shell.account-page .account-list-table-header .account-header-item,
@@ -332,48 +370,48 @@
     body.ec-auth-shell.user-page .user-list-table {
         --user-list-grid-cols:
             38px
-            minmax(92px, 1fr)
-            minmax(80px, 1fr)
-            minmax(140px, 1.5fr)
-            minmax(88px, 0.9fr)
-            minmax(72px, 0.68fr)
-            minmax(128px, 1.3fr)
-            minmax(96px, 1fr)
-            minmax(72px, 0.5fr);
+            minmax(120px, 1.5fr)
+            minmax(120px, 1.5fr)
+            minmax(130px, 1.2fr)
+            minmax(84px, 0.7fr)
+            minmax(72px, 0.55fr)
+            minmax(131px, 1fr)
+            minmax(96px, 1.2fr)
+            minmax(64px, 0.25fr);
         --user-list-grid-cols-bulk:
             38px
-            minmax(92px, 1fr)
-            minmax(80px, 1fr)
-            minmax(140px, 1.5fr)
-            minmax(88px, 0.9fr)
-            minmax(72px, 0.68fr)
-            minmax(128px, 1.3fr)
-            minmax(96px, 1fr)
-            minmax(68px, 0.48fr)
+            minmax(120px, 1.5fr)
+            minmax(120px, 1.5fr)
+            minmax(130px, 1.2fr)
+            minmax(84px, 0.7fr)
+            minmax(72px, 0.55fr)
+            minmax(131px, 1fr)
+            minmax(96px, 1.2fr)
+            minmax(60px, 0.23fr)
             48px;
     }
 
     body.lang-zh.user-page .user-list-table {
         --user-list-grid-cols:
             54px
-            minmax(100px, 1.05fr)
-            minmax(80px, 1fr)
-            minmax(140px, 1.5fr)
-            minmax(72px, 0.85fr)
-            minmax(64px, 0.65fr)
-            minmax(108px, 1.25fr)
-            minmax(88px, 0.95fr)
-            minmax(64px, 0.48fr);
+            minmax(120px, 1.5fr)
+            minmax(120px, 1.5fr)
+            minmax(130px, 1.2fr)
+            minmax(84px, 0.7fr)
+            minmax(72px, 0.55fr)
+            minmax(131px, 1fr)
+            minmax(96px, 1.2fr)
+            minmax(64px, 0.25fr);
         --user-list-grid-cols-bulk:
             54px
-            minmax(100px, 1.05fr)
-            minmax(80px, 1fr)
-            minmax(140px, 1.5fr)
-            minmax(72px, 0.85fr)
-            minmax(64px, 0.65fr)
-            minmax(108px, 1.25fr)
-            minmax(88px, 0.95fr)
-            minmax(60px, 0.46fr)
+            minmax(120px, 1.5fr)
+            minmax(120px, 1.5fr)
+            minmax(130px, 1.2fr)
+            minmax(84px, 0.7fr)
+            minmax(72px, 0.55fr)
+            minmax(131px, 1fr)
+            minmax(96px, 1.2fr)
+            minmax(60px, 0.23fr)
             48px;
     }
 
@@ -412,6 +450,12 @@
     body.ec-auth-shell.process-page:not(.process-page--bank) .games-process-table-header .header-item,
     body.ec-auth-shell.process-page:not(.process-page--bank) .games-process-row .card-item {
         padding: 0 !important;
+    }
+
+    body.ec-auth-shell.process-page:not(.process-page--bank):not(.process-page--show-all) .games-process-row .card-item {
+        font-size: 1.4rem !important;
+        font-weight: bold !important;
+        line-height: 1.1 !important;
     }
 
     /* ----------------------------------------------------
@@ -668,17 +712,147 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
         max-height: 100vh !important;
     }
 
-    body.user-page:not(.user-page--show-all) .container,
-    body.account-page:not(.account-page--show-all) .container {
+    body.user-page:not(.user-page--show-all) .container {
         height: 100vh !important;
+        min-height: 0 !important;
+        max-height: 100vh !important;
         overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding-bottom: 0 !important;
+        box-sizing: border-box !important;
     }
 
-    body.user-page:not(.user-page--show-all) .content,
-    body.account-page:not(.account-page--show-all) .content {
-        height: calc(100vh - var(--layout-page-top-inset)) !important;
+    body.user-page:not(.user-page--show-all) .content {
+        flex: 1 1 auto !important;
         min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
         overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding-bottom: 0 !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .action-buttons-container {
+        flex-shrink: 0 !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .user-table-wrapper {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        -webkit-overflow-scrolling: touch;
+        display: flex !important;
+        flex-direction: column !important;
+        padding-bottom: 52px !important;
+        box-sizing: border-box !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .user-table-wrapper.user-list-table {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .user-list-table-header {
+        flex-shrink: 0 !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .user-cards {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow-x: visible !important;
+        overflow-y: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .user-cards.user-cards--paged-fill {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        grid-template-rows: repeat(var(--user-list-page-size, 15), minmax(0, 1fr)) !important;
+        flex: 1 1 0 !important;
+        align-content: stretch !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .user-cards.user-cards--paged-fill .user-list-row {
+        flex: unset !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        align-self: stretch !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .user-table-wrapper {
+        padding-bottom: 52px !important;
+    }
+
+    body.user-page:not(.user-page--show-all) .pagination-container {
+        position: fixed !important;
+        right: max(40px, env(safe-area-inset-right, 0px)) !important;
+        bottom: max(20px, env(safe-area-inset-bottom, 0px)) !important;
+        left: auto !important;
+        top: auto !important;
+        margin: 0 !important;
+        z-index: 120 !important;
+        width: fit-content !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* Account List（非 Show All）：与 Games Process List 一屏 flex 布局 */
+    body.account-page:not(.account-page--show-all) .container {
+        height: 100vh !important;
+        min-height: 0 !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding-bottom: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    body.account-page:not(.account-page--show-all) .content {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding-bottom: 0 !important;
+    }
+
+    body.account-page:not(.account-page--show-all) .action-buttons-container {
+        flex-shrink: 0 !important;
+    }
+
+    body.account-page:not(.account-page--show-all) .account-table-wrapper {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        -webkit-overflow-scrolling: touch;
+        display: flex !important;
+        flex-direction: column !important;
+        padding-bottom: 52px !important;
+        box-sizing: border-box !important;
+    }
+
+    body.account-page:not(.account-page--show-all) .account-table-wrapper.account-list-table {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    body.account-page:not(.account-page--show-all) .account-list-table-header,
+    body.account-page:not(.account-page--show-all) .account-table-header.account-list-table-header {
+        flex-shrink: 0 !important;
     }
 
     /* Bank Process（非 Show All）：覆盖下方 Global Unlock，桌面一屏无整页滚动 */
@@ -708,11 +882,22 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
     }
 
     body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body,
-    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region,
-    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip,
-    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table,
-    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .process-table-wrapper.bank-process-table-region {
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table {
         overflow: hidden !important;
+        max-height: none !important;
+    }
+
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .process-table-wrapper.bank-process-table-region {
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        -webkit-overflow-scrolling: touch;
+        max-height: none !important;
+    }
+
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip {
+        overflow-x: visible !important;
+        overflow-y: hidden !important;
         max-height: none !important;
     }
 
@@ -748,17 +933,25 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
     }
 
     body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body,
-    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region,
-    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip,
-    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table,
-    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .process-table-wrapper.bank-process-table-region {
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table {
         overflow: hidden !important;
+    }
+
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .process-table-wrapper.bank-process-table-region {
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+    }
+
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip {
+        overflow-x: visible !important;
+        overflow-y: hidden !important;
     }
 
     body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .pagination-container {
         position: fixed !important;
         right: max(40px, env(safe-area-inset-right, 0px)) !important;
-        bottom: max(20px, env(safe-area-inset-bottom, 0px)) !important;
+        bottom: var(--bank-list-pagination-offset-bottom, max(28px, env(safe-area-inset-bottom, 0px))) !important;
         left: auto !important;
         top: auto !important;
         margin: 0 !important;
@@ -768,16 +961,46 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
     }
 
     body.user-page:not(.user-page--show-all) .user-cards {
-        overflow: hidden !important;
-    }
-
-    body.user-page:not(.user-page--show-all) .user-cards {
-        min-height: var(--list-table-body-min-height) !important;
+        overflow-x: visible !important;
+        overflow-y: hidden !important;
+        min-height: 0 !important;
     }
 
     body.account-page:not(.account-page--show-all) .account-cards {
-        overflow: hidden !important;
+        flex: 1 1 auto !important;
         min-height: 0 !important;
+        max-height: none !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    body.account-page:not(.account-page--show-all) .account-cards.account-cards--paged-fill {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        grid-template-rows: repeat(var(--account-list-page-size, 15), minmax(0, 1fr)) !important;
+        flex: 1 1 auto !important;
+        align-content: stretch !important;
+    }
+
+    body.account-page:not(.account-page--show-all) .account-cards.account-cards--paged-fill .account-list-row {
+        flex: unset !important;
+        min-height: 0 !important;
+        align-self: stretch !important;
+    }
+
+    body.ec-auth-shell.process-page:not(.process-page--bank) .games-process-row .role-badge {
+        box-sizing: border-box !important;
+        height: var(--games-process-pill-height, 20px) !important;
+        padding: 0 8px !important;
+        line-height: 1.1 !important;
+        font-size: 1.1rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.02em !important;
+        border-radius: 6px !important;
+        min-width: max-content !important;
+        flex-shrink: 0;
+        white-space: nowrap;
     }
 
     body.account-page:not(.account-page--show-all) .account-table-wrapper {
@@ -821,7 +1044,9 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
         flex: 1 1 auto !important;
         min-height: 0 !important;
         max-height: none !important;
-        overflow: hidden !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        -webkit-overflow-scrolling: touch;
         display: flex !important;
         flex-direction: column !important;
         padding-bottom: 52px !important;
@@ -832,9 +1057,27 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
         flex: 1 1 auto !important;
         min-height: 0 !important;
         max-height: none !important;
-        overflow: hidden !important;
+        overflow-x: visible !important;
+        overflow-y: hidden !important;
         display: flex !important;
         flex-direction: column !important;
+    }
+
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards.process-cards--paged-fill:not(.bank-virtual-scroll) {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        grid-template-rows: repeat(var(--games-process-page-size, 15), minmax(0, 1fr)) !important;
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        align-content: stretch !important;
+    }
+
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards.process-cards--paged-fill .games-process-row {
+        flex: unset !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        align-items: center !important;
+        align-self: stretch !important;
     }
 
     /* Games Process List Show All：小屏下覆盖 global unlock，整页可滚 */
@@ -1045,7 +1288,13 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
     body.dashboard-home-page .dashboard-summary-currency-list-body {
         overflow-y: auto !important;
         min-height: 0 !important;
-        max-height: 100% !important;
+        max-height: none !important;
+        flex: 0 1 auto !important;
+    }
+
+    body.dashboard-home-page .dashboard-summary-currency-list.is-compact-breakdown .dashboard-summary-currency-list-body {
+        max-height: none !important;
+        overflow-y: visible !important;
     }
 
     body.dashboard-home-page .dashboard-panels-row--with-summary-tabs {

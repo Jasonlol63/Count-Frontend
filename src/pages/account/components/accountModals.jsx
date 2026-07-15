@@ -3,6 +3,7 @@ import { accountModalOverlayZIndex, portalToDocumentBody } from "../../../compon
 import ConfirmDeleteModal from "../../../components/ConfirmDeleteModal.jsx";
 import { toUpper } from "../accountLogic.js";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
+import { formatAccountRoleDisplay } from "../../../translateFile/pages/accountTranslate.js";
 
 const confirmModalZIndex = accountModalOverlayZIndex + 50;
 
@@ -103,7 +104,7 @@ export function LinkAccountModal({
   return portalToDocumentBody(
     <div id="linkAccountModal" className="account-modal" style={{ display: "block", zIndex: accountModalOverlayZIndex }}>
       <div className="account-modal-content">
-        <div className="account-modal-header">
+        <div className="account-modal-header account-form-modal-header">
           <h2>{t("linkAccountTitle")}</h2>
           <span className="account-close" onClick={onClose} role="button" tabIndex={0} aria-label={t("close")} />
         </div>
@@ -216,6 +217,7 @@ export function CurrencySettingModal({
   currencyInput,
   setCurrencyInput,
   onCreateCurrency,
+  onRemoveCurrency,
   t,
 }) {
   const roleDropdownRef = useRef(null);
@@ -242,8 +244,8 @@ export function CurrencySettingModal({
 
   if (!open) return null;
 
-  const roleOptions = [{ value: "", label: t("filterRow") }, ...roles.map(r => ({ value: r, label: toUpper(r) }))];
-  const roleLabel = settingRole ? toUpper(settingRole) : t("filterRow");
+  const roleOptions = [{ value: "", label: t("filterRow") }, ...roles.map(r => ({ value: r, label: formatAccountRoleDisplay(t, r) }))];
+  const roleLabel = settingRole ? formatAccountRoleDisplay(t, settingRole) : t("filterRow");
   const selectedCurrencyMatchesList =
     settingCurrencyId != null &&
     currencies.some((c) => Number(c.id) === Number(settingCurrencyId));
@@ -294,25 +296,54 @@ export function CurrencySettingModal({
             <div className="currency-setting-list-row-stacked">
               <label>{t("currency")}</label>
               <div className="currency-setting-pill-list">
-                {currencies.map(c => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className={`currency-setting-pill ${settingCurrencyId === Number(c.id) ? "active" : ""}`}
-                    aria-pressed={settingCurrencyId === Number(c.id)}
-                    onClick={() => {
-                      const id = Number(c.id);
-                      if (settingCurrencyId === id) {
-                        onClearCurrencySelection();
-                      } else {
-                        setSettingCurrencyId(id);
-                        onLoadCurrencyLinks(id);
-                      }
-                    }}
-                  >
-                    {c.code}
-                  </button>
-                ))}
+                {currencies.map((c) => {
+                  const id = Number(c.id);
+                  const isActive = settingCurrencyId === id;
+                  return (
+                    <div
+                      key={c.id}
+                      className={`currency-setting-pill currency-setting-pill-toggle ${isActive ? "active" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={isActive}
+                      onClick={() => {
+                        if (isActive) {
+                          onClearCurrencySelection();
+                        } else {
+                          setSettingCurrencyId(id);
+                          onLoadCurrencyLinks(id);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          if (isActive) {
+                            onClearCurrencySelection();
+                          } else {
+                            setSettingCurrencyId(id);
+                            onLoadCurrencyLinks(id);
+                          }
+                        }
+                      }}
+                    >
+                      <span className="currency-setting-pill-code">{c.code}</span>
+                      {!isActive && c.deletable !== false && typeof onRemoveCurrency === "function" ? (
+                        <button
+                          type="button"
+                          className="currency-delete-btn"
+                          aria-label={`${t("delete")} ${c.code}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onRemoveCurrency(c.id);
+                          }}
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

@@ -5,6 +5,7 @@
 
 :root {
     --dash-scrollbar-size: 12px;
+    --sidebar-scrollbar-clip-pad: 24px;
     --dash-scrollbar-track: #ececec;
     --dash-scrollbar-thumb: #4b5563;
     --dash-scrollbar-thumb-hover: #374151;
@@ -14,20 +15,20 @@
     --dash-scrollbar-track-margin: 6px 0;
 }
 
-/* Firefox */
+/* Firefox — exclude sidebar nav scroll rail (.sidebar-scroll), not only legacy .informationmenu-content */
 html,
 body,
 body #root,
-body * {
+body *:not(.informationmenu-content):not(.sidebar-scroll) {
     scrollbar-width: auto;
     scrollbar-color: var(--dash-scrollbar-thumb) var(--dash-scrollbar-track);
 }
 
-/* WebKit — page + all nested scroll containers */
+/* WebKit — page + nested scroll containers (not sidebar nav rail) */
 html::-webkit-scrollbar,
 body::-webkit-scrollbar,
 body #root::-webkit-scrollbar,
-body *::-webkit-scrollbar {
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar {
     width: var(--dash-scrollbar-size) !important;
     height: var(--dash-scrollbar-size) !important;
 }
@@ -35,16 +36,29 @@ body *::-webkit-scrollbar {
 html::-webkit-scrollbar-button,
 body::-webkit-scrollbar-button,
 body #root::-webkit-scrollbar-button,
-body *::-webkit-scrollbar-button,
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar-button,
 html::-webkit-scrollbar-button:single-button,
 body::-webkit-scrollbar-button:single-button,
-body *::-webkit-scrollbar-button:single-button,
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar-button:single-button,
 html::-webkit-scrollbar-button:vertical:decrement,
 html::-webkit-scrollbar-button:vertical:increment,
 body::-webkit-scrollbar-button:vertical:decrement,
 body::-webkit-scrollbar-button:vertical:increment,
-body *::-webkit-scrollbar-button:vertical:decrement,
-body *::-webkit-scrollbar-button:vertical:increment {
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar-button:vertical:decrement,
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar-button:vertical:increment {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+html::-webkit-scrollbar-button:horizontal:decrement,
+html::-webkit-scrollbar-button:horizontal:increment,
+body::-webkit-scrollbar-button:horizontal:decrement,
+body::-webkit-scrollbar-button:horizontal:increment,
+body #root::-webkit-scrollbar-button:horizontal:decrement,
+body #root::-webkit-scrollbar-button:horizontal:increment,
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar-button:horizontal:decrement,
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar-button:horizontal:increment {
     display: none;
     width: 0;
     height: 0;
@@ -53,7 +67,7 @@ body *::-webkit-scrollbar-button:vertical:increment {
 html::-webkit-scrollbar-track,
 body::-webkit-scrollbar-track,
 body #root::-webkit-scrollbar-track,
-body *::-webkit-scrollbar-track {
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar-track {
     background: var(--dash-scrollbar-track) !important;
     border-radius: var(--dash-scrollbar-radius) !important;
 }
@@ -61,7 +75,7 @@ body *::-webkit-scrollbar-track {
 html::-webkit-scrollbar-thumb,
 body::-webkit-scrollbar-thumb,
 body #root::-webkit-scrollbar-thumb,
-body *::-webkit-scrollbar-thumb {
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar-thumb {
     background: var(--dash-scrollbar-thumb) !important;
     border-radius: var(--dash-scrollbar-radius) !important;
     border: var(--dash-scrollbar-thumb-border) !important;
@@ -71,21 +85,21 @@ body *::-webkit-scrollbar-thumb {
 html::-webkit-scrollbar-thumb:hover,
 body::-webkit-scrollbar-thumb:hover,
 body #root::-webkit-scrollbar-thumb:hover,
-body *::-webkit-scrollbar-thumb:hover {
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar-thumb:hover {
     background: var(--dash-scrollbar-thumb-hover) !important;
 }
 
 html::-webkit-scrollbar-thumb:active,
 body::-webkit-scrollbar-thumb:active,
 body #root::-webkit-scrollbar-thumb:active,
-body *::-webkit-scrollbar-thumb:active {
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar-thumb:active {
     background: var(--dash-scrollbar-thumb-active) !important;
 }
 
 html::-webkit-scrollbar-corner,
 body::-webkit-scrollbar-corner,
 body #root::-webkit-scrollbar-corner,
-body *::-webkit-scrollbar-corner {
+body *:not(.informationmenu-content):not(.sidebar-scroll)::-webkit-scrollbar-corner {
     background: var(--dash-scrollbar-track);
 }
 
@@ -122,4 +136,92 @@ body.member-winloss-page .avatar-options {
 body.member-winloss-page .member-dash-matrix-scroll::-webkit-scrollbar-track,
 body.member-winloss-page .member-dash-total-matrix-body::-webkit-scrollbar-track {
     margin: var(--dash-scrollbar-track-margin);
+}
+
+/* ==========================================================================
+   Touch momentum scroll (-webkit-overflow-scrolling: touch)
+   Finger swipe on tablet — keep scroll, hide thumb/track (no nested bar).
+   ========================================================================== */
+body.user-page .user-gc-inline-pills--segment-scroll,
+body.account-page .user-gc-inline-pills--segment-scroll,
+body.maintenance-page .user-gc-inline-pills--segment-scroll,
+body.process-page .user-gc-inline-pills--segment-scroll,
+body.report-page .user-gc-inline-pills--segment-scroll,
+body.datacapture-page .user-gc-inline-pills--segment-scroll,
+body.member-winloss-page .user-gc-inline-pills--segment-scroll,
+body.dashboard-page .user-gc-inline-pills--segment-scroll,
+body.transaction-page .user-gc-inline-pills--segment-scroll,
+body.transaction-page .transaction-search-section .transaction-checkboxes.userlist-filter-chips {
+    scrollbar-width: none !important;
+    scrollbar-gutter: auto !important;
+    -ms-overflow-style: none !important;
+}
+
+body.user-page .user-gc-inline-pills--segment-scroll::-webkit-scrollbar,
+body.account-page .user-gc-inline-pills--segment-scroll::-webkit-scrollbar,
+body.maintenance-page .user-gc-inline-pills--segment-scroll::-webkit-scrollbar,
+body.process-page .user-gc-inline-pills--segment-scroll::-webkit-scrollbar,
+body.report-page .user-gc-inline-pills--segment-scroll::-webkit-scrollbar,
+body.datacapture-page .user-gc-inline-pills--segment-scroll::-webkit-scrollbar,
+body.member-winloss-page .user-gc-inline-pills--segment-scroll::-webkit-scrollbar,
+body.dashboard-page .user-gc-inline-pills--segment-scroll::-webkit-scrollbar,
+body.transaction-page .user-gc-inline-pills--segment-scroll::-webkit-scrollbar,
+body.transaction-page .transaction-search-section .transaction-checkboxes.userlist-filter-chips::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+}
+
+/* Portaled sidebar flyout — override body * 12px scrollbar */
+body.ec-auth-shell .submenu.submenu--scrollable {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent !important;
+}
+
+body.ec-auth-shell .submenu.submenu--scrollable::-webkit-scrollbar {
+    width: 4px !important;
+    height: 4px !important;
+}
+
+body.ec-auth-shell .submenu.submenu--scrollable::-webkit-scrollbar-track {
+    background: transparent !important;
+    border: none !important;
+}
+
+body.ec-auth-shell .submenu.submenu--scrollable::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18) !important;
+    border: none !important;
+    min-height: 24px;
+}
+
+body.ec-auth-shell .submenu.submenu--scrollable:hover::-webkit-scrollbar-thumb,
+body.ec-auth-shell .submenu.submenu--scrollable:focus-within::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* Auth sidebar nav — desktop-like: no OS scrollbar gutter (clip rail in sidebar-scroll.css) */
+body.ec-auth-shell .sidebar-scroll,
+body.ec-auth-shell .informationmenu-content {
+    scrollbar-width: none !important;
+    scrollbar-color: transparent transparent !important;
+    scrollbar-gutter: auto !important;
+    -ms-overflow-style: none !important;
+}
+
+body.ec-auth-shell .sidebar-scroll::-webkit-scrollbar,
+body.ec-auth-shell .sidebar-scroll::-webkit-scrollbar-track,
+body.ec-auth-shell .sidebar-scroll::-webkit-scrollbar-thumb,
+body.ec-auth-shell .sidebar-scroll::-webkit-scrollbar-corner,
+body.ec-auth-shell .informationmenu-content::-webkit-scrollbar,
+body.ec-auth-shell .informationmenu-content::-webkit-scrollbar-track,
+body.ec-auth-shell .informationmenu-content::-webkit-scrollbar-thumb,
+body.ec-auth-shell .informationmenu-content::-webkit-scrollbar-corner {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    opacity: 0 !important;
 }

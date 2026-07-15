@@ -1,5 +1,6 @@
 body.transaction-page {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: var(--font-ui) !important;
+    font-size: var(--text-medium) !important;
     margin: 0;
     padding: 0;
     min-height: 100vh;
@@ -13,7 +14,6 @@ body.transaction-page {
     background-blend-mode: screen, screen, multiply, screen, normal;
     color: #334155;
     overflow-x: hidden;
-    overflow-y: auto;
 }
 
 /* Short result sets leave a tall empty canvas — paint the workspace shell too (not only body). */
@@ -280,7 +280,7 @@ body.transaction-page .transaction-bottom-filters .user-gc-inline-panel {
     display: grid;
     grid-template-columns: auto 1fr;
     column-gap: var(--user-gc-inline-column-gap, 4px);
-    align-items: center;
+    align-items: start;
     border-top: none;
     padding: 0 0 4px;
     background: transparent;
@@ -319,8 +319,73 @@ body.transaction-page .transaction-bottom-filters .user-gc-inline-pills--segment
     gap: var(--user-gc-inline-pills-gap, 4px);
     padding-top: 2px;
     padding-bottom: 2px;
-    scrollbar-gutter: stable;
     -webkit-overflow-scrolling: touch;
+}
+
+body.transaction-page .transaction-bottom-filters #currency-buttons-wrapper .transaction-currency-pills {
+    margin-left: 0;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    align-self: stretch;
+    overflow-x: hidden;
+    overflow-y: visible;
+    gap: var(--user-gc-inline-pills-gap, 4px);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    box-sizing: border-box;
+    position: relative;
+}
+
+body.transaction-page .transaction-bottom-filters .transaction-currency-measure {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: -1;
+}
+
+body.transaction-page .transaction-bottom-filters .transaction-currency-measure .user-gc-segment,
+body.transaction-page .transaction-bottom-filters #currency-buttons-wrapper .transaction-currency-segments .user-gc-segment {
+    width: auto;
+    min-width: max-content;
+    padding: var(--user-gc-segment-padding, 4px clamp(10px, 1.2vw, 18px));
+    box-sizing: border-box;
+    font-size: 1.4rem !important;
+    line-height: 1.25;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+body.transaction-page .transaction-bottom-filters #currency-buttons-wrapper .transaction-currency-segments {
+    margin-inline-start: 0;
+    align-self: flex-start;
+    max-width: 100%;
+    display: inline-flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    width: auto;
+    align-items: stretch;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+body.transaction-page .transaction-bottom-filters #currency-buttons-wrapper .transaction-currency-segments .user-gc-segment.is-on {
+    overflow: hidden;
+}
+
+body.transaction-page .transaction-bottom-filters #currency-buttons-wrapper .transaction-currency-segments .user-gc-segment.is-on + .user-gc-segment.is-on {
+    border-left: 1px solid rgba(255, 255, 255, 0.28);
 }
 
 body.transaction-page .transaction-bottom-filters .user-gc-segment-group {
@@ -345,7 +410,7 @@ body.transaction-page .transaction-bottom-filters .user-gc-segment {
     border-right: 1px solid var(--color-border, #e5e7eb);
     background: var(--color-surface, #ffffff);
     color: #1f2937;
-    font-size: var(--text-medium) !important;
+    font-size: 1.4rem !important;
     font-weight: var(--font-weight-semibold) !important;
     font-family: inherit;
     cursor: pointer;
@@ -448,6 +513,7 @@ body.transaction-page .transaction-bottom-filters .user-gc-segment:disabled {
     padding: clamp(3px, 0.31vw, 6px) clamp(6px, 0.52vw, 10px);
     border: 1px solid #ddd;
     border-radius: 4px;
+    font-family: inherit;
     font-size: var(--text-small);
     box-sizing: border-box;
     transition: all 0.2s;
@@ -543,37 +609,59 @@ body.transaction-page .transaction-search-section .transaction-category-date-row
     width: 100%;
 }
 
+body.transaction-page .transaction-search-section .transaction-category-date-row .transaction-category-multiselect {
+    min-width: 0;
+    width: 100%;
+}
+
 body.transaction-page .transaction-search-section .report-outlined-inner .category-dropdown-button {
-    flex: 1 1 auto;
+    position: relative;
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
     min-height: clamp(38px, 2.45vw, 40px);
-    height: 100%;
+    height: auto;
     max-height: none;
     overflow: hidden;
-    padding: 4px 10px;
+    padding: 4px clamp(26px, 2vw, 30px) 4px 10px;
     box-sizing: border-box;
+    display: flex;
     align-items: center;
+    justify-content: flex-start;
 }
 
 body.transaction-page .transaction-search-section .report-outlined-inner .category-dropdown-button > .fas.fa-chevron-down {
-    align-self: center;
+    position: absolute;
+    right: clamp(8px, 0.65vw, 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 0;
     flex-shrink: 0;
-    margin-left: 6px;
+    pointer-events: none;
+    color: #64748b;
+    font-size: var(--drp-trigger-chevron, var(--text-medium));
 }
 
 body.transaction-page .transaction-search-section .report-outlined-inner .category-selected-tags {
     display: flex;
     flex: 1 1 auto;
-    align-self: stretch;
+    align-self: center;
     min-width: 0;
+    width: 100%;
     min-height: 0;
-    height: 100%;
+    height: auto;
     overflow-x: hidden;
     overflow-y: auto;
-    scrollbar-gutter: stable;
+    scrollbar-gutter: auto;
     -webkit-overflow-scrolling: touch;
     align-items: center;
     align-content: center;
     justify-content: flex-start;
+}
+
+/* Placeholder only — no inner scrollbar track beside the chevron */
+body.transaction-page .transaction-search-section .report-outlined-inner .category-selected-tags:has(.category-placeholder) {
+    overflow-y: hidden;
 }
 
 body.transaction-page .transaction-search-section .report-outlined-inner .category-placeholder {
@@ -614,10 +702,7 @@ body.transaction-page .transaction-date-range-group .date-range-picker:focus-vis
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
 }
 
-body.transaction-page .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
-body.maintenance-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
-body.dashboard-page.report-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
-body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
+body.transaction-page .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -636,9 +721,33 @@ body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .t
     z-index: 1;
 }
 
+/* Maintenance / report outlined Date Range: radius matches shell inner corner (not standalone 11px pill) */
+body.maintenance-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
+body.dashboard-page.report-page .customer-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
+body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    width: clamp(34px, 2.45vw, 42px);
+    height: auto;
+    margin: 0;
+    border-radius: calc(clamp(6px, 0.52vw, 8px) - 1px) 0 0 calc(clamp(6px, 0.52vw, 8px) - 1px);
+    color: #ffffff;
+    background: #3b82f6;
+    background-clip: padding-box;
+    box-shadow: none;
+    font-size: var(--drp-trigger-icon, var(--text-medium));
+    flex: 0 0 auto;
+    position: relative;
+    z-index: 1;
+}
+
 body.transaction-page .transaction-date-range-group #date-range-display,
 body.transaction-page .transaction-date-range-group #add-tx-date-range-display,
-body.transaction-page .transaction-date-range-group #rate-tx-date-range-display {
+body.transaction-page .transaction-date-range-group #rate-tx-date-range-display,
+body.dashboard-page.report-page .customer-report-filters .report-outlined-inner .transaction-date-range-group #date-range-display,
+body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .transaction-date-range-group #date-range-display {
     flex: 1 1 auto;
     min-width: 0;
     color: #1f2937;
@@ -710,6 +819,7 @@ body.dashboard-page.report-page .transaction-date-range-group .date-range-picker
     background: #f3f3f3;
     cursor: pointer;
     text-align: left;
+    font-family: inherit;
     font-size: var(--text-small);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -806,7 +916,9 @@ body.dashboard-page.report-page .transaction-date-range-group .date-range-picker
 }
 
 .transaction-page .custom-select-option.keyboard-focus {
-    background-color: #e3f2fd;
+    background-color: var(--select-option-keyboard-focus-bg, #0d60ff);
+    color: var(--select-option-keyboard-focus-text, #ffffff);
+    font-weight: 600;
 }
 
 .transaction-page .custom-select-option:last-child {
@@ -874,16 +986,16 @@ body.transaction-page .transaction-search-section .transaction-checkboxes,
     gap: 8px;
 }
 
-/* 单行 chip：窄屏或文案较长时横向滚动，不折行撑高区块 */
+/* 单行 chip：随视口等比压缩；仍放不下时横向滚动兜底 */
 body.transaction-page .transaction-search-section .transaction-checkboxes.userlist-filter-chips {
     flex-wrap: nowrap;
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-gutter: stable;
     -webkit-overflow-scrolling: touch;
     min-width: 0;
     width: 100%;
     align-items: center;
+    gap: clamp(5px, 0.42vw, 8px);
     padding-bottom: 0px;
 }
 
@@ -894,8 +1006,8 @@ body.transaction-page .transaction-search-section .transaction-checkboxes.userli
 body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 14px 6px 10px;
+    gap: clamp(5px, 0.42vw, 8px);
+    padding: clamp(5px, 0.42vw, 6px) clamp(8px, 0.73vw, 14px) clamp(5px, 0.42vw, 6px) clamp(6px, 0.52vw, 10px);
     margin: 0;
     border: 1px solid var(--color-border, #e5e7eb);
     border-radius: 999px;
@@ -903,7 +1015,7 @@ body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
     cursor: pointer;
     font-family: inherit;
-    font-size: var(--text-small);
+    font-size: clamp(11px, 0.72vw, 13px);
     font-weight: var(--font-weight-semibold);
     color: #475569;
     line-height: 1.2;
@@ -932,8 +1044,8 @@ body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter
 
 body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip__dot {
     flex-shrink: 0;
-    width: 18px;
-    height: 18px;
+    width: clamp(14px, 1vw, 18px);
+    height: clamp(14px, 1vw, 18px);
     border-radius: 50%;
     background: #e2e8f0;
     display: flex;
@@ -948,23 +1060,13 @@ body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter
 }
 
 body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip__check {
-    width: 11px;
-    height: 11px;
+    width: clamp(9px, 0.62vw, 11px);
+    height: clamp(9px, 0.62vw, 11px);
     display: block;
 }
 
 body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip__label {
     white-space: nowrap;
-}
-
-body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip:nth-child(1) {
-    min-width: 8.25rem;
-    justify-content: flex-start;
-}
-
-body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter-chip:nth-child(2) {
-    min-width: 6.75rem;
-    justify-content: flex-start;
 }
 
 .transaction-page .transaction-checkbox-label {
@@ -1043,6 +1145,32 @@ body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter
     transform: translateY(-1px);
 }
 
+.transaction-page .transaction-refresh-btn {
+    background: transparent;
+    color: #4a90e2;
+    font-family: var(--font-heading-page);
+    width: clamp(40px, 3.125vw, 50px);
+    height: clamp(32px, 2.5vw, 40px);
+    padding: 0;
+    font-size: clamp(16px, 1.25vw, 20px);
+    border: none;
+    border-radius: 6px;
+    box-shadow: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.transaction-page .transaction-refresh-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.transaction-page .transaction-refresh-btn img {
+    display: block;
+}
+
 .transaction-page .transaction-submit-btn {
     background: linear-gradient(180deg, #63C4FF 0%, #0D60FF 100%);
     color: white;
@@ -1111,35 +1239,13 @@ body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter
     transition: opacity 0.2s ease;
 }
 
+/* Boot indicator only — keep filters/company pills interactive under slow networks. */
 .transaction-page .transaction-main--booting .transaction-main-content {
-    opacity: 0.72;
-    pointer-events: none;
-    user-select: none;
+    opacity: 1;
 }
 
 .transaction-page .transaction-tables-section {
     transition: opacity 0.2s ease;
-}
-
-.transaction-page .transaction-boot-loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 48px;
-    margin: 0 0 12px 0;
-    color: #6b7280;
-    font-size: clamp(9px, 0.73vw, 14px);
-}
-
-.transaction-page .transaction-boot-loading::before {
-    content: '';
-    width: 20px;
-    height: 20px;
-    margin-right: 10px;
-    border: 2px solid #e5e7eb;
-    border-top-color: #002C49;
-    border-radius: 50%;
-    animation: transaction-loading-spin 0.7s linear infinite;
 }
 
 .transaction-page .transaction-tables-section {
@@ -1148,31 +1254,14 @@ body.transaction-page .transaction-checkboxes.userlist-filter-chips .user-filter
     margin-bottom: 0;
 }
 
+/* User-facing Loading / empty chrome disabled — keep SWR tables, no spinner banners. */
+.transaction-page .transaction-boot-loading,
+.transaction-page .transaction-boot-loading::before,
 .transaction-page .transaction-tables-loading,
-.transaction-page .transaction-tables-refreshing {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 120px;
-    width: 100%;
-    color: #6b7280;
-    font-size: clamp(9px, 0.73vw, 14px);
-}
-
-.transaction-page .transaction-tables-refreshing {
-    min-height: 36px;
-    margin-bottom: 8px;
-}
-
-.transaction-page .transaction-tables-loading::before {
-    content: '';
-    width: 24px;
-    height: 24px;
-    margin-right: 10px;
-    border: 2px solid #e5e7eb;
-    border-top-color: #002C49;
-    border-radius: 50%;
-    animation: transaction-loading-spin 0.7s linear infinite;
+.transaction-page .transaction-tables-loading::before,
+.transaction-page .transaction-tables-refreshing,
+.transaction-page .transaction-tables-empty {
+    display: none !important;
 }
 
 @keyframes transaction-loading-spin {
@@ -3115,7 +3204,7 @@ body.transaction-page .transaction-add-section .rate-fields .rate-row.rate-row-f
  */
 body.transaction-page .transaction-add-section .rate-fields .rate-row.rate-row-mm {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 5px;
     align-items: stretch;
     flex: 1 1 auto;
@@ -3386,6 +3475,12 @@ body.transaction-page .transaction-add-section .rate-fields .transaction-account
     background-color: #f9fafb;
 }
 
+body.transaction-page .category-option.keyboard-focus,
+body.transaction-page .category-option.keyboard-focus .category-checkbox-label {
+    background-color: var(--select-option-keyboard-focus-bg, #0d60ff);
+    color: var(--select-option-keyboard-focus-text, #ffffff);
+}
+
 /* Protect Transaction route layout from Member page CSS collisions in SPA bundles. */
 body.transaction-page:not(.member-winloss-page) .transaction-main-content {
     display: flex;
@@ -3441,9 +3536,9 @@ body.transaction-page .transaction-search-section .transaction-category-date-row
     left: clamp(46px, 3.35vw, 58px);
 }
 
-/* Outlined shell: icon pill clips to shell left corner (same as dashboard / maintenance) */
+/* Outlined shell: icon pill clips to shell *inner* left corner */
 body.transaction-page .transaction-search-section .transaction-outlined-field-col--date .report-outlined-inner .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
-    border-radius: clamp(6px, 0.52vw, 8px) 0 0 clamp(6px, 0.52vw, 8px);
+    border-radius: calc(clamp(6px, 0.52vw, 8px) - 1px) 0 0 calc(clamp(6px, 0.52vw, 8px) - 1px);
     z-index: 5;
 }
 
@@ -3562,14 +3657,23 @@ body.transaction-page .transaction-add-section .transaction-account-inputs--to-o
     max-width: none;
 }
 
-/* Unlock native page scroll — dashboard-page sets body overflow:hidden + height:100vh */
-html:has(body.dashboard-page.transaction-page:not(.member-winloss-page)) {
-    height: auto;
-    overflow-y: auto;
+/* Unlock native page scroll — dashboard-page sets body overflow:hidden + height:100vh.
+   Scroll on body only; html overflow visible (same as datacapture-summary-page). */
+html:has(
+    body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+        .transaction-payment-history-page
+      )
+  ) {
+    height: auto !important;
+    overflow: visible !important;
 }
 
-body.dashboard-page.transaction-page:not(.member-winloss-page),
-body.ec-auth-shell.dashboard-page.transaction-page:not(.member-winloss-page) {
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  ),
+body.ec-auth-shell.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  ) {
     height: auto !important;
     min-height: 100vh !important;
     max-height: none !important;
@@ -3577,22 +3681,34 @@ body.ec-auth-shell.dashboard-page.transaction-page:not(.member-winloss-page) {
     overflow-y: auto !important;
 }
 
-body.dashboard-page.transaction-page:not(.member-winloss-page) #root {
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  #root {
     height: auto !important;
     min-height: 100vh !important;
     max-height: none !important;
     overflow: visible !important;
 }
 
-body.dashboard-page.transaction-page:not(.member-winloss-page) .ec-page-shell,
-body.dashboard-page.transaction-page:not(.member-winloss-page) .ec-page-shell__content {
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  .ec-page-shell,
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  .ec-page-shell__content {
     height: auto !important;
     min-height: 0 !important;
     max-height: none !important;
     overflow: visible !important;
 }
 
-body.dashboard-page.transaction-page:not(.member-winloss-page) .transaction-container {
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  .transaction-container {
     height: auto !important;
     min-height: 100vh !important;
     max-height: none !important;
@@ -3600,8 +3716,14 @@ body.dashboard-page.transaction-page:not(.member-winloss-page) .transaction-cont
     padding-bottom: clamp(24px, 3vh, 48px) !important;
 }
 
-body.dashboard-page.transaction-page:not(.member-winloss-page) .transaction-main,
-body.dashboard-page.transaction-page:not(.member-winloss-page) .transaction-tables-section {
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  .transaction-main,
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  .transaction-tables-section {
     overflow: visible !important;
     max-height: none !important;
 }
@@ -3737,17 +3859,17 @@ body.transaction-payment-history-page--popup .transaction-payment-history-panel.
     max-width: none !important;
 }
 
-body.transaction-payment-history-page--popup .transaction-history-modal .transaction-modal-body .transaction-table [class*="transaction-history-col-"],
-body.ec-payment-history-chromeless.transaction-payment-history-page--popup .transaction-history-modal .transaction-modal-body .transaction-table [class*="transaction-history-col-"] {
-    min-width: 0 !important;
-    white-space: normal !important;
-    overflow: visible !important;
-    text-overflow: clip !important;
-    font-size: var(--txn-history-text-table) !important;
+body.transaction-payment-history-page--popup-compact .transaction-history-modal .transaction-modal-body .transaction-table [class*="transaction-history-col-"],
+body.ec-payment-history-chromeless.transaction-payment-history-page--popup-compact .transaction-history-modal .transaction-modal-body .transaction-table [class*="transaction-history-col-"] {
+  min-width: 0 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  font-size: var(--txn-history-text-table) !important;
 }
 
-body.transaction-payment-history-page--popup .transaction-history-modal .transaction-modal-body .transaction-table thead th[class*="transaction-history-col-"],
-body.ec-payment-history-chromeless.transaction-payment-history-page--popup .transaction-history-modal .transaction-modal-body .transaction-table thead th[class*="transaction-history-col-"] {
+body.transaction-payment-history-page--popup-compact .transaction-history-modal .transaction-modal-body .transaction-table thead th[class*="transaction-history-col-"],
+body.ec-payment-history-chromeless.transaction-payment-history-page--popup-compact .transaction-history-modal .transaction-modal-body .transaction-table thead th[class*="transaction-history-col-"] {
     font-size: var(--txn-history-text-table-head-compact) !important;
     white-space: nowrap !important;
     word-break: normal !important;
@@ -3761,4 +3883,12 @@ body.ec-payment-history-chromeless.transaction-payment-history-page--popup .tran
     text-align: center;
     font-size: var(--txn-history-text-error);
 }
+
+/* Unify font weight to 700 in the transaction/payment type add section */
+body.transaction-page .transaction-add-section,
+body.transaction-page .transaction-add-section *,
+body.transaction-page .transaction-add-section input::placeholder {
+    font-weight: 700 !important;
+}
+
 

@@ -1,10 +1,10 @@
-import { rememberCompanySessionFlags } from "./companySessionFlagsCache.js";
+﻿import { rememberCompanySessionFlags } from "./companySessionFlagsCache.js";
 
 /**
- * Call after `update_company_session_api.php` succeeds so AuthenticatedLayout
- * can patch sidebar flags immediately (without waiting for current_user_api).
+ * Call after POST /auth/switch-tenant succeeds so AuthenticatedLayout
+ * can patch sidebar flags immediately (without waiting for current-user).
+ * @param {object|null} [sessionData] — payload from switch-tenant `data`
  */
-/** @param {object|null} [sessionData] — payload from update_company_session_api.php `data` */
 export function notifyCompanySessionUpdated(sessionData = null) {
   if (sessionData && typeof sessionData === "object") {
     rememberCompanySessionFlags(sessionData);
@@ -14,7 +14,7 @@ export function notifyCompanySessionUpdated(sessionData = null) {
   );
 }
 
-/** Refresh sidebar expiration / current_user after company settings change (Domain, etc.). */
+/** Refresh sidebar expiration / current-user after company settings change (Domain, etc.). */
 export function notifySessionRefreshRequested() {
   window.dispatchEvent(new CustomEvent("eazycount:session-refresh-requested"));
 }

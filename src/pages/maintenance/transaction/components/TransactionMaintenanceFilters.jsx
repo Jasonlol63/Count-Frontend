@@ -6,11 +6,14 @@ import {
 } from "../../shared/maintenanceDateHelpers.js";
 import ReportDatePicker from "../../../report/common/ReportDatePicker.jsx";
 import ReportGcFilterPanel from "../../../report/shared/ReportGcFilterPanel.jsx";
+import { normalizeMaintenanceSearchInput } from "../../shared/maintenanceSearchInput.js";
 
 export default function TransactionMaintenanceFilters({
   processes,
   selectedProcess,
   setSelectedProcess,
+  query,
+  setQuery,
   dateFrom,
   dateTo,
   onDateRangeChange,
@@ -55,6 +58,32 @@ export default function TransactionMaintenanceFilters({
                 noResultsText={m.noResultsFound}
                 ariaLabelledBy="transaction-maintenance-process-legend"
               />
+            </div>
+          </div>
+        </div>
+
+        <div className="customer-report-filter-group report-outlined-anchor">
+          <div className="report-outlined-shell">
+            <span id="transaction-maint-search-legend" className="report-outlined-label">
+              {m.search}
+            </span>
+            <div className="report-outlined-inner">
+              <div className="search-container maintenance-search-container">
+                <svg className="search-icon" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                </svg>
+                <input
+                  type="text"
+                  id="filter_transaction_search"
+                  placeholder={m.transactionSearchPlaceholder}
+                  className="search-input maintenance-search-input"
+                  autoComplete="off"
+                  value={query}
+                  aria-labelledby="transaction-maint-search-legend"
+                  onChange={(e) => setQuery(normalizeMaintenanceSearchInput(e.target.value))}
+                  style={{ textTransform: "uppercase" }}
+                />
+              </div>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { getMemberText, translateMemberApiMessage } from "../../translateFile/pages/memberTranslate.js";
 import {
@@ -14,6 +14,7 @@ import {
   listMiniGridBalanceFetchPairs,
   applyDefaultWLGridSelection,
   getWlGridIncludedAccountIds,
+  hasWlGridSelectedAccounts,
   saveWLGridSelection,
   sanitizeCurrencySelection,
 } from "./memberPageHelpers.js";
@@ -105,7 +106,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
     try {
       const res = await fetch(
         buildApiUrl(
-          `api/accounts/account_currency_api.php?action=get_account_currencies&account_id=${accountId}&company_id=${compId}`,
+          `api/accounts/account_currency_api.php?action=get_account_currencies&account_id=${accountId}&tenant_id=${compId}`,
         ),
         { credentials: "include", cache: "no-store" },
       );
@@ -169,7 +170,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
     if (!accountId || !compId) return [];
     const res = await fetch(
       buildApiUrl(
-        `api/account/link/all?account_id=${accountId}&tenant_id=${compId}`,
+        `api/accounts/account_link_api.php?action=get_all_linked_accounts&account_id=${accountId}&tenant_id=${compId}`,
       ),
       { credentials: "include", cache: "no-store" },
     );
@@ -267,6 +268,11 @@ export function useMemberWinLoss({ showNotification, lang }) {
     ],
   );
 
+  const miniGridHasSelection = useMemo(
+    () => hasWlGridSelectedAccounts(linkedAccounts, wlGridSelectedIds),
+    [linkedAccounts, wlGridSelectedIds],
+  );
+
   const groupedRows = useMemo(
     () =>
       groupHistoryForDisplay(
@@ -301,6 +307,11 @@ export function useMemberWinLoss({ showNotification, lang }) {
     (gridCurrencies) => {
       const orderUpper = (gridCurrencies || []).map((c) => String(c || "").trim().toUpperCase()).filter(Boolean);
       if (!linkedAccounts.length || !orderUpper.length) {
+        setMiniGridTotals(new Map());
+        setMiniGridHint("");
+        return;
+      }
+      if (!hasWlGridSelectedAccounts(linkedAccounts, wlGridSelectedIdsRef.current)) {
         setMiniGridTotals(new Map());
         setMiniGridHint("");
         return;
@@ -409,6 +420,14 @@ export function useMemberWinLoss({ showNotification, lang }) {
           setMiniGridHint("");
           return;
         }
+        if (!hasWlGridSelectedAccounts(linkedAccounts, wlGridSelectedIdsRef.current)) {
+          setMiniGridBalances(new Map());
+          miniGridBalancesRef.current = new Map();
+          setMiniGridTotals(new Map());
+          setMiniGridHint("");
+          setMiniGridShell(false);
+          return;
+        }
         const orderedAccounts = getOrderedMiniGridAccounts(
           linkedAccounts,
           wlGridSelectedIdsRef.current,
@@ -495,9 +514,13 @@ export function useMemberWinLoss({ showNotification, lang }) {
 
       let useAll = selectionOverride?.isAllSelected ?? isAllSelected;
       let useSelected = selectionOverride?.selectedCurrencies ?? selectedCurrencies;
-      if (!useAll && (!useSelected?.length) && availableCurrencies.length > 0) {
-        useAll = true;
-        useSelected = [];
+      if (!useAll && (!useSelected?.length)) {
+        setHistoryRows([]);
+        commitTableDisplayContext(false, [], [], availableCurrencies);
+        finishHistoryFetch(seq);
+        const gridCur = getMemberMiniGridCurrencies(availableCurrencies, false, []);
+        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId);
+        return;
       }
       const cacheKey = buildViewCacheKey(viewAccountId, companyId, dateFrom, dateTo, useAll, useSelected);
       const targetCurrencies = useAll ? availableCurrencies : [...useSelected];
@@ -549,14 +572,61 @@ export function useMemberWinLoss({ showNotification, lang }) {
         return;
       }
 
-      const singleRequest = targetCurrencies.length > 1;
+      if (targetCurrencies.length > 1) {
+        try {
+          const histories = await Promise.all(
+            targetCurrencies.map(async (cu) => {
+              const params = new URLSearchParams({
+                account_id: String(viewAccountId),
+                date_from: dateFrom,
+                date_to: dateTo,
+                company_id: String(companyId),
+                currency: String(cu || "").trim().toUpperCase(),
+              });
+              const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params}&_t=${Date.now()}`), {
+                credentials: "include",
+                cache: "no-store",
+                signal,
+              });
+              const json = await parseJsonResponse(await res.text());
+              if (!json?.success) throw new Error(json?.error || t("queryFailed"));
+              return Array.isArray(json.data?.history) ? json.data.history : [];
+            }),
+          );
+          if (seq !== searchSeqRef.current) return;
+          const history = histories.flat();
+          setHistoryRows(history);
+          commitTableDisplayContext(useAll, useSelected, history, availableCurrencies);
+          viewCacheRef.current.set(cacheKey, {
+            historyRows: history,
+            tableDisplayContext: {
+              isAllSelected: useAll,
+              selectedCurrencies: [...(useSelected || [])],
+              currencyOrder: (Array.isArray(availableCurrencies) && availableCurrencies.length ? availableCurrencies : []).slice(),
+            },
+          });
+          finishHistoryFetch(seq);
+          showNotification(t("queryCompleted"), "success");
+        } catch (e) {
+          if (e?.name === "AbortError") return;
+          if (seq !== searchSeqRef.current) return;
+          setHistoryRows([]);
+          commitTableDisplayContext(useAll, useSelected, [], availableCurrencies);
+          notifyApi(e?.message, "error", "queryFailed");
+          finishHistoryFetch(seq);
+        }
+        const gridCur = getMemberMiniGridCurrencies(availableCurrencies, useAll, useSelected);
+        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId);
+        return;
+      }
+
       const params = new URLSearchParams({
         account_id: String(viewAccountId),
         date_from: dateFrom,
         date_to: dateTo,
         company_id: String(companyId),
       });
-      if (!singleRequest && targetCurrencies[0]) params.append("currency", targetCurrencies[0]);
+      if (targetCurrencies[0]) params.append("currency", targetCurrencies[0]);
 
       try {
         const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params}&_t=${Date.now()}`), {
@@ -758,7 +828,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
     async (nextCompanyId, companyLabel) => {
       if (!nextCompanyId || Number(nextCompanyId) === Number(companyId)) return;
       try {
-        const res = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${nextCompanyId}`), {
+        const res = await fetch(buildApiUrl(`auth/switch-tenant?tenant_id=${nextCompanyId}`), {
           credentials: "include",
         });
         const json = await parseJsonResponse(await res.text());
@@ -830,6 +900,13 @@ export function useMemberWinLoss({ showNotification, lang }) {
       wlGridSelectedIdsRef.current = ids;
       setWlGridSelectedIds(ids);
       saveWLGridSelection(ids, companyId, loginRootAccountId);
+      if (!ids.length) {
+        setMiniGridBalances(new Map());
+        miniGridBalancesRef.current = new Map();
+        setMiniGridTotals(new Map());
+        setMiniGridHint("");
+        setMiniGridShell(false);
+      }
       const pool = linkedAccountsRef.current;
       const nextAvailable = getAvailableCurrencies({
         linkedCurrenciesLoaded,
@@ -978,6 +1055,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
     miniGridTotals,
     miniGridHint,
     miniGridAccounts,
+    miniGridHasSelection,
     showMiniRail,
     groupedRows,
     loadingTable,

@@ -2,6 +2,7 @@ import { createFormulaDisplayFromExpression } from "../../../shared/formula/inde
 import {
   calculateFormulaResultFromExpression,
   evaluateFormulaExpression,
+  normalizeFormulaBeforeReferenceExpand,
   parseReferenceFormula,
 } from "./summaryFormulaReference.js";
 import {
@@ -10,6 +11,7 @@ import {
 } from "../table/summaryRowAmount.js";
 import { formatNegativeNumbersInFormula, parseIdProductColumnRef } from "./summaryFormulaParseUtils.js";
 import { normalizeSummaryIdProductText } from "../lib/summaryIdProductUtils.js";
+import { getProcessValueFromSummaryRow } from "../lib/summaryIdProductDisplay.js";
 
 function normalizeSpaces(text) {
   return String(text || "").trim().replace(/\s+/g, "");
@@ -17,15 +19,20 @@ function normalizeSpaces(text) {
 
 /**
  * Account label for Summary UI — matches backend template display:
- * `CODE [Name]` when both exist (see resolveAccountDisplayInTemplates in summary_api.php).
+ * `CODE [Name]` when both exist; role=profit shows CODE only.
  */
 export function formatSummaryAccountDisplay(acc, fallbackId = "") {
-  const existing = String(acc?.account_display || acc?.account || "").trim();
-  if (existing) return existing;
-
   const code = String(acc?.account_id ?? acc?.code ?? "").trim();
   const name = String(acc?.name ?? "").trim();
   const id = String(acc?.id ?? fallbackId ?? "").trim();
+  const role = String(acc?.role ?? "").trim().toLowerCase();
+
+  if (role === "profit") {
+    return code || id;
+  }
+
+  const existing = String(acc?.account_display || acc?.account || "").trim();
+  if (existing) return existing;
 
   if (code && name) return `${code} [${name}]`;
   if (code) return code;
@@ -189,7 +196,9 @@ export function rowToEditFormulaForm(row) {
   const formulaText =
     row.formulaOperators || row.formula || row.formulaDisplay || "";
   return {
-    processValue: row.idProduct || "",
+    // Id Product shows the base id only; the description (e.g. COMM) is a
+    // separate field and must not be appended here.
+    processValue: getProcessValueFromSummaryRow(row) || row.idProduct || "",
     accountId: row.accountId ? String(row.accountId) : "",
     accountText: row.account || "",
     sourcePercent: row.sourcePercent || "1",
@@ -206,7 +215,7 @@ export function rowToEditFormulaForm(row) {
 }
 
 export function createBlankEditFormulaForm(row) {
-  return createEmptyEditFormulaForm(row?.idProduct || "");
+  return createEmptyEditFormulaForm(getProcessValueFromSummaryRow(row) || row?.idProduct || "");
 }
 
 /** Parse descriptionSelect1 value — id_product or id_product:row_label (legacy updateIdProductRowData). */
@@ -389,11 +398,32 @@ function buildSourceColumnsFromFormula(formulaValue, clickedRefs) {
   return out.length ? out.join(" ") : refs.join(" ");
 }
 
+/**
+ * Process value for `$N` / cell reference resolution.
+ *
+ * The Id Product shown in the form carries the description suffix (e.g.
+ * `*E198P2 (COMM)`), but captured rows are keyed by the base id (`*E198P2`).
+ * Resolve to the base id so `$N` references match the captured row instead of
+ * failing lookup and collapsing to 0.
+ */
+function resolveReferenceProcessValue(form, rowContext = {}) {
+  const fromRow = getProcessValueFromSummaryRow(rowContext);
+  if (fromRow) return fromRow;
+
+  const base = String(form?.processValue || rowContext?.idProduct || "").trim();
+  const desc = String(form?.description || rowContext?.originalDescription || "").trim();
+  if (base && desc) {
+    const suffix = ` (${desc})`;
+    if (base.endsWith(suffix)) return base.slice(0, -suffix.length).trim();
+  }
+  return base;
+}
+
 export function computeFormulaDisplayPreview(form, rowContext = {}) {
   const formulaValue = String(form.formula || "").trim();
   const sourcePercent = String(form.sourcePercent || "1").trim() || "1";
   const enableSourcePercent = resolveEnableSourcePercent(sourcePercent);
-  const processValue = form.processValue || rowContext.idProduct || "";
+  const processValue = resolveReferenceProcessValue(form, rowContext);
   const clickedRefs = form.clickedColumns || rowContext.clickedColumns || "";
   const rowIndex = rowContext.rowIndex ?? null;
 
@@ -525,11 +555,17 @@ export function buildFormulaSavePatchFromForm(form, row) {
   const enableInputMethod = Boolean(inputMethodValue);
   const enableSourcePercent = resolveEnableSourcePercent(sourcePercentValue);
   const clickedRefs = form.clickedColumns || "";
-  const processValue = row?.idProduct || form.processValue || "";
-  const hasDollarSign = formulaValue.includes("$");
+  const processValue = resolveReferenceProcessValue(form, row);
+  const normalizedFormula = normalizeFormulaBeforeReferenceExpand(
+    formulaValue,
+    processValue,
+    clickedRefs,
+    row?.rowIndex ?? null
+  );
+  const hasDollarSign = normalizedFormula.includes("$");
 
   const expanded = buildExpandedFormulaDisplay(
-    formulaValue,
+    normalizedFormula,
     processValue,
     clickedRefs,
     row?.rowIndex ?? null
@@ -542,7 +578,7 @@ export function buildFormulaSavePatchFromForm(form, row) {
 
   const processedAmount = roundProcessedAmountTo2Decimals(
     calculateFormulaResultFromExpression(
-      formulaValue,
+      normalizedFormula,
       sourcePercentValue,
       inputMethodValue,
       enableInputMethod,
@@ -554,7 +590,7 @@ export function buildFormulaSavePatchFromForm(form, row) {
   );
 
   const sourceColumns = hasDollarSign
-    ? buildSourceColumnsFromFormula(formulaValue, clickedRefs)
+    ? buildSourceColumnsFromFormula(normalizedFormula, clickedRefs)
     : "";
 
   return {
@@ -568,9 +604,9 @@ export function buildFormulaSavePatchFromForm(form, row) {
           : `(${form.currencyLabel})`
         : "",
       currencyId,
-      formula: formulaValue,
+      formula: normalizedFormula,
       formulaDisplay,
-      formulaOperators: formulaValue,
+      formulaOperators: normalizedFormula,
       sourceColumns,
       sourcePercent: sourcePercentValue,
       enableSourcePercent,

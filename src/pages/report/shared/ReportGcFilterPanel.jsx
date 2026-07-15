@@ -1,4 +1,7 @@
+import { useMemo } from "react";
+
 import GcInlineFilterPanel from "../../../components/GcInlineFilterPanel.jsx";
+import { resolveGcPickerHighlightId } from "../../../utils/company/sharedCompanyFilter.js";
 
 /**
  * Process List（user-gc-inline-panel）同款：GroupID / Company / Currency 分段控件。
@@ -14,10 +17,13 @@ export default function ReportGcFilterPanel({
   companyId,
   /** 乐观高亮：切换会话未返回前显示为已选 */
   highlightCompanyId,
+  /** Match pill highlight when session pk differs from visible picker row (owner duplicates). */
+  highlightCompanyCode = null,
   onSwitchCompany,
   onClearCompany,
   /** When false (company login), clicking the active company pill does not clear selection. */
   allowClearCompany = true,
+  switchingCompany = false,
   /** "dashboard" = embedded GcInlineFilterPanel layout (not the Home dashboard route). */
   layout = "legacy",
   /** Group/Company "All" pills — only the Home dashboard enables this. */
@@ -32,7 +38,12 @@ export default function ReportGcFilterPanel({
   toggleCurrency,
   t,
 }) {
-  const activeCompanyId = highlightCompanyId != null ? highlightCompanyId : companyId;
+  const rawActiveCompanyId = highlightCompanyId != null ? highlightCompanyId : companyId;
+  const activeCompanyId = useMemo(
+    () =>
+      resolveGcPickerHighlightId(companyButtons, rawActiveCompanyId, highlightCompanyCode),
+    [companyButtons, rawActiveCompanyId, highlightCompanyCode],
+  );
   const isDashboardLayout = layout === "dashboard";
   const hasGroup = Array.isArray(groupIds) && groupIds.length > 0;
   const hasCompanies = Array.isArray(companyButtons) && companyButtons.length > 0;
@@ -55,9 +66,13 @@ export default function ReportGcFilterPanel({
             companiesForPicker={companyButtons}
             groupAllMode={groupAllMode}
             pickerCompanyId={activeCompanyId}
+            // 关键：直接传原始值用于高亮！
+            rawPickerCompanyId={rawActiveCompanyId}
+            pickerCompanyCode={highlightCompanyCode}
             onPickAllInGroup={onPickAllInGroup}
             onPickCompany={onSwitchCompany}
             allowCompanyDeselect={allowClearCompany}
+            switchingCompany={switchingCompany}
             onClearCompanyPill={
               allowClearCompany
                 ? (c) => {
@@ -153,7 +168,8 @@ export default function ReportGcFilterPanel({
           <div className="user-gc-inline-pills user-gc-inline-pills--segment-scroll">
             <div className="user-gc-segment-group" role="group" aria-label={t("company")}>
               {companyButtons.map((c) => {
-                const active = Number(c.id) === Number(activeCompanyId);
+                const active =
+                  activeCompanyId != null && Number(c.id) === Number(activeCompanyId);
                 return (
                   <button
                     key={c.id}

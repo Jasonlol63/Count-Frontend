@@ -173,11 +173,31 @@ function showOnlyContextMenu(menu, e, anchorElement, beforeShow) {
   positionContextMenu(menu, e, anchorElement);
 }
 
+function readCellGridIndices(cell) {
+  if (!cell?.dataset) return { row: null, col: null };
+  const row = Number.parseInt(cell.dataset.row, 10);
+  const col = Number.parseInt(cell.dataset.col, 10);
+  return {
+    row: Number.isFinite(row) ? row : null,
+    col: Number.isFinite(col) ? col : null,
+  };
+}
+
 export function showContextMenu(e, cell) {
   const contextMenu = document.getElementById("contextMenu");
   if (!contextMenu || !cell) return;
 
   showOnlyContextMenu(contextMenu, e, cell, () => {
+    const { row, col } = readCellGridIndices(cell);
+    if (row !== null) {
+      setContextMenuRow(row);
+      gridSetContextMenuRow(row);
+    }
+    if (col !== null) {
+      setContextMenuColumn(col);
+      gridSetContextMenuColumn(col);
+    }
+
     const count = getSelectedCellCount();
     if (count > 1) {
       // preserve multi-select

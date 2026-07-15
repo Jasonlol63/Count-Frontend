@@ -1,4 +1,4 @@
-import { formatDmy } from "../../../utils/date/dateUtils.js";
+import { formatDmy, formatDmyDash } from "../../../utils/date/dateUtils.js";
 
 export function formatYmd(d) {
   const y = d.getFullYear();
@@ -53,8 +53,12 @@ export function formatChartMonthLabel(year, month, locale = "en-US") {
 }
 
 export function formatDisplayDate(ymd) {
-  const d = parseYmd(ymd);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  return formatDmyDash(ymd);
+}
+
+/** Trend chart header: DD-MM-YYYY to DD-MM-YYYY (always from filter range, not API payload). */
+export function formatChartDateRangeText(fromYmd, toYmd, toWord = "to") {
+  return `${formatDisplayDate(fromYmd)} ${toWord} ${formatDisplayDate(toYmd)}`;
 }
 
 export function formatChartTooltipLabel(dateKey, locale = "en-US") {

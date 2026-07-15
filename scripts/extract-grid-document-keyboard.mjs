@@ -3,9 +3,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, "..");
+const root = path.resolve(__dirname, "../..");
 const srcPath = path.join(root, "js/datacapture.js");
-const outPath = path.join(root, "src/pages/datacapture/dataCaptureGridDocumentKeyboard.js");
+const outPath = path.join(root, "frontend/src/pages/datacapture/dataCaptureGridDocumentKeyboard.js");
 const lines = fs.readFileSync(srcPath, "utf8").split("\n");
 
 /** __dcHandleDocumentGridKeydown body in js/datacapture.js (skip function declaration line). */

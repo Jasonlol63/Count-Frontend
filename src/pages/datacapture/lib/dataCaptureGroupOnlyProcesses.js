@@ -1,18 +1,37 @@
-/** Fixed process choices when Group is selected without Company (Data Capture group-only mode). */
+/** Group payroll UI process choices (Data Capture group-only / company payroll channel). */
 
-export const GROUP_ONLY_PROCESS_CODES = ["SALARY", "COMMISSION", "BONUS"];
+export const GROUP_PAYROLL_PROCESS_CODES = ["PROFIT", "SALARY", "COMMISSION", "BONUS"];
 
-export const GROUP_ONLY_PROCESS_IDS = new Set(
-  GROUP_ONLY_PROCESS_CODES.map((code) => code.toLowerCase()),
-);
+/** Table edits for these codes auto-save to group payroll draft storage (not PROFIT). */
+export const GROUP_PAYROLL_DRAFT_PROCESS_CODES = ["SALARY", "COMMISSION", "BONUS"];
 
-export function isGroupOnlyProcessId(id) {
-  return GROUP_ONLY_PROCESS_IDS.has(String(id || "").toLowerCase());
+/** @deprecated alias — use GROUP_PAYROLL_PROCESS_CODES */
+export const GROUP_ONLY_PROCESS_CODES = GROUP_PAYROLL_PROCESS_CODES;
+
+const toIdSet = (codes) => new Set(codes.map((code) => code.toLowerCase()));
+
+export const GROUP_PAYROLL_PROCESS_IDS = toIdSet(GROUP_PAYROLL_PROCESS_CODES);
+export const GROUP_PAYROLL_DRAFT_PROCESS_IDS = toIdSet(GROUP_PAYROLL_DRAFT_PROCESS_CODES);
+
+/** @deprecated alias */
+export const GROUP_ONLY_PROCESS_IDS = GROUP_PAYROLL_PROCESS_IDS;
+
+export function isGroupPayrollProcessId(id) {
+  return GROUP_PAYROLL_PROCESS_IDS.has(String(id || "").toLowerCase());
 }
 
-/** Group-only Process dropdown labels: uppercase codes only (no "1." / "2." prefix). */
+/** @deprecated alias */
+export function isGroupOnlyProcessId(id) {
+  return isGroupPayrollProcessId(id);
+}
+
+export function isGroupPayrollDraftProcessId(id) {
+  return GROUP_PAYROLL_DRAFT_PROCESS_IDS.has(String(id || "").toLowerCase());
+}
+
+/** Group payroll Process dropdown labels: uppercase codes only (no "1." / "2." prefix). */
 export function getGroupOnlyProcessOptions() {
-  return GROUP_ONLY_PROCESS_CODES.map((code) => ({
+  return GROUP_PAYROLL_PROCESS_CODES.map((code) => ({
     id: code.toLowerCase(),
     process_id: code,
     displayText: code,
@@ -20,8 +39,8 @@ export function getGroupOnlyProcessOptions() {
 }
 
 /**
- * Map saved capture session process fields to dropdown shape (salary/commission/bonus ids).
- * Submit stores API numeric process id; dropdown uses salary/commission/bonus.
+ * Map saved capture session process fields to dropdown shape (salary/commission/bonus/profit ids).
+ * Submit stores API numeric process id; dropdown uses lowercase code ids.
  */
 export function selectedProcessFromGroupOnlySession(processData) {
   if (!processData) return null;
@@ -41,7 +60,7 @@ export function selectedProcessFromGroupOnlySession(processData) {
     }
   }
   const rawPid = processData.process != null ? String(processData.process) : "";
-  if (isGroupOnlyProcessId(rawPid)) {
+  if (isGroupPayrollProcessId(rawPid)) {
     const byId = options.find((o) => o.id === rawPid.toLowerCase());
     if (byId) {
       return {

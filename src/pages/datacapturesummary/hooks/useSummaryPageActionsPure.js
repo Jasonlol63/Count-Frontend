@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { loadActiveCaptureSession } from "../../datacapture/lib/dataCaptureStorage.js";
+import { loadActiveCaptureSession, markCaptureRestorePending } from "../../datacapture/lib/dataCaptureStorage.js";
 import { saveGroupOnlyProcessPrefsFromProcessData } from "../../datacapture/lib/dataCaptureGroupOnlyProcessPersistence.js";
 import { isGroupLedgerCapture } from "../../../utils/company/c168CaptureChannel.js";
 import { clearSummaryCaptureRoundStorage } from "../lib/summaryStorage.js";
 import { saveSummaryRefreshStatePure } from "../lib/summaryRefreshStatePure.js";
+import { mergeRowsWithSummaryDomDraft } from "../lib/summaryRefreshDomSync.js";
 import { deleteSummaryTemplate } from "../lib/summaryApi.js";
 import { useSummaryContext } from "../context/SummaryContext.jsx";
 import { useSummarySubmitPure } from "./useSummarySubmitPure.js";
@@ -27,6 +28,10 @@ function buildSummaryRestoreCapturePath(companyId, options = {}) {
   } else if (companyId != null && String(companyId).trim() !== "") {
     params.set("company_id", String(companyId));
   }
+  const groupId = options.groupId ? String(options.groupId).trim().toUpperCase() : "";
+  if (groupId) {
+    params.set("group_id", groupId);
+  }
   return `/datacapture?${params.toString()}`;
 }
 
@@ -37,6 +42,10 @@ function buildSummarySubmittedCapturePath(companyId, options = {}) {
     params.set("group_only", "1");
   } else if (companyId != null && String(companyId).trim() !== "") {
     params.set("company_id", String(companyId));
+  }
+  const groupId = options.groupId ? String(options.groupId).trim().toUpperCase() : "";
+  if (groupId) {
+    params.set("group_id", groupId);
   }
   return `/datacapture?${params.toString()}`;
 }
@@ -153,10 +162,15 @@ export function useSummaryPageActionsPure({
       const session = loadActiveCaptureSession();
 
       const groupOnly = isGroupLedgerCapture(captureScope, session?.processData);
+      const groupId =
+        captureScope?.groupId ||
+        captureScope?.viewGroup ||
+        session?.processData?.captureSelectedGroup ||
+        null;
 
       clearSummarySessionAfterSubmit({ groupOnly });
 
-      navigate(buildSummarySubmittedCapturePath(companyId, { groupOnly }), { replace: true });
+      navigate(buildSummarySubmittedCapturePath(companyId, { groupOnly, groupId }), { replace: true });
 
     },
 
@@ -183,8 +197,9 @@ export function useSummaryPageActionsPure({
 
 
   const navigateBack = useCallback(() => {
-
-    saveSummaryRefreshStatePure(rows, { processId, processCode }, captureScope);
+    const { rows: syncedRows } = mergeRowsWithSummaryDomDraft(rows);
+    replaceRows?.(syncedRows);
+    saveSummaryRefreshStatePure(syncedRows, { processId, processCode }, captureScope);
 
     window.isNavigatingAwayByBackOrSubmit = true;
 
@@ -192,29 +207,33 @@ export function useSummaryPageActionsPure({
 
     const groupOnly = isGroupLedgerCapture(captureScope, session?.processData);
 
-    navigate(buildSummaryRestoreCapturePath(companyId, { groupOnly }), { replace: true });
+    const groupId =
+      session?.processData?.captureSelectedGroup ||
+      captureScope?.groupId ||
+      captureScope?.viewGroup;
 
-  }, [navigate, companyId, rows, processId, processCode, captureScope]);
+    markCaptureRestorePending({
+      companyId: groupOnly ? null : companyId,
+      groupId,
+      groupOnly,
+    });
+
+    navigate(buildSummaryRestoreCapturePath(companyId, { groupOnly, groupId }), { replace: true });
+  }, [navigate, companyId, rows, processId, processCode, captureScope, replaceRows]);
 
 
 
   const handleRefresh = useCallback(async () => {
-
     setRefreshing(true);
-
     try {
-
-      saveSummaryRefreshStatePure(rows, { processId, processCode }, captureScope);
-
+      const { rows: syncedRows } = mergeRowsWithSummaryDomDraft(rows);
+      replaceRows?.(syncedRows);
+      saveSummaryRefreshStatePure(syncedRows, { processId, processCode }, captureScope);
       await runPopulate?.();
-
     } finally {
-
       setRefreshing(false);
-
     }
-
-  }, [rows, processId, processCode, runPopulate, captureScope]);
+  }, [rows, processId, processCode, runPopulate, captureScope, replaceRows]);
 
 
 

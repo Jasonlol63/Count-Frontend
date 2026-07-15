@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { createDomain, updateDomain } from "../domainApi.js";
+import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { notifySessionRefreshRequested } from "../../../utils/company/companySessionEvents.js";
 import { showDomainAlert } from "./DomainNotification.jsx";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
@@ -9,15 +9,12 @@ import {
   calculateExpirationDate,
   formatDate,
   defaultFeeShareAllocations,
+  normalizeFeeShareFromServer,
   ensureCompanyFeeShare,
   companyToDomainPayloadEntry,
   createEmptyGroup,
-  groupFromListItem,
-  companyFromListItem,
+  groupFromApiRow,
   groupToDomainPayloadEntry,
-  groupToTenantSaveEntry,
-  companyToTenantSaveEntry,
-  buildDomainListEntryFromForm,
   tempGroupCode,
   forceUppercaseValue,
   forceNumericValue,
@@ -26,6 +23,26 @@ import { sanitizeEmailInput, validateEmail } from "../../../utils/input/emailVal
 import { getDomainText } from "../../../translateFile/pages/domainTranslate.js";
 import DomainModalPortal from "./DomainModalPortal.jsx";
 import ConfirmDeleteModal, { CONFIRM_DELETE_NESTED_Z_INDEX } from "../../../components/ConfirmDeleteModal.jsx";
+
+/** 平板 / laptop 全屏外壳；表单布局与 desktop 一致 */
+const DFM_COMPACT_LAYOUT_MQ = "(max-width: 1366px)";
+
+function useDomainFormCompactLayout() {
+  const [compact, setCompact] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(DFM_COMPACT_LAYOUT_MQ).matches;
+  });
+
+  useEffect(() => {
+    const mq = window.matchMedia(DFM_COMPACT_LAYOUT_MQ);
+    const onChange = (event) => setCompact(event.matches);
+    mq.addEventListener("change", onChange);
+    setCompact(mq.matches);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  return compact;
+}
 
 function normalizeDomainCode(value) {
   return String(value ?? "").trim().toUpperCase();
@@ -85,7 +102,6 @@ export default function DomainFormModal({
   lang = "en",
   isEditMode, editingDomain, hasC168Context, isOwnerOrAdmin,
   sessionCompanyId, sessionCompanyCode, domainPeriodPrices,
-  domains = [],
   onClose, onSaved,
 }) {
   const isZh = lang === "zh";
@@ -99,6 +115,7 @@ export default function DomainFormModal({
   const [showPassword, setShowPassword] = useState(false);
   const [showSecondaryPassword, setShowSecondaryPassword] = useState(false);
   const { submitting, guardSubmit } = useSubmitGuard(true);
+  const compactLayout = useDomainFormCompactLayout();
 
   // Company / Group management
   const [tempCompanies, setTempCompanies] = useState([]);
@@ -111,40 +128,39 @@ export default function DomainFormModal({
   const [csModalCompanyId, setCsModalCompanyId] = useState(null);
   const [gsModalGroupCode, setGsModalGroupCode] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [editingOwnerId, setEditingOwnerId] = useState(null);
 
   function toastDanger(message) {
     showDomainAlert(message, "danger");
   }
 
-  /** Local duplicate check against all other owners in memory */
-  function validateCodeGlobally(code) {
-    const trimmed = String(code ?? "").trim().toUpperCase();
+  /** 与库中任一 owner 的 company_id / group_id 冲突则失败；编辑时可排除当前 owner 已有行（见 domain_api validate_domain_code） */
+  async function validateCodeGlobally(code) {
+    const trimmed = String(code ?? "").trim();
     if (!trimmed) return false;
-
-    const isTaken = domains.some((d) => {
-      // If editing, skip the owner currently being edited
-      if (isEditMode && d.id === editingOwnerId) {
+    try {
+      const payload = {
+        action: "validate_domain_code",
+        code: trimmed,
+      };
+      if (isEditMode && editingDomain?.id !== undefined && editingDomain?.id !== null && editingDomain?.id !== "") {
+        payload.exclude_owner_id = Number(editingDomain.id);
+      }
+      const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        toastDanger(json.message || t("operationFailed"));
         return false;
       }
-
-      // Check for conflict in groups
-      const groupConflict = (d.groups || []).some(
-        (g) => String(g.code || "").toUpperCase() === trimmed
-      );
-      // Check for conflict in companies
-      const companyConflict = (d.companies || []).some(
-        (c) => String(c.code || "").toUpperCase() === trimmed
-      );
-
-      return groupConflict || companyConflict;
-    });
-
-    if (isTaken) {
-      toastDanger(t("groupIdAlreadyExists") || "ID already exists!");
+      return true;
+    } catch {
+      toastDanger(t("validateDomainCodeUnavailable"));
       return false;
     }
-    return true;
   }
 
   const showSecondaryPwd =
@@ -152,44 +168,58 @@ export default function DomainFormModal({
 
   // On mount, load data if editing
   useEffect(() => {
-    if (!isEditMode || !editingDomain) return;
+    if (isEditMode && editingDomain) {
+      setOwnerCode(editingDomain.owner_code || "");
+      setName(editingDomain.name || "");
+      setEmail(editingDomain.email || "");
+      const ownerId = editingDomain.id;
+      const req = (action) =>
+        fetch(buildApiUrl("api/domain/domain_api.php"), {
+          cache: "no-cache",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, owner_id: ownerId }),
+        }).then((r) => r.json());
 
-    setOwnerCode(editingDomain.owner_code || "");
-    setName(editingDomain.name || "");
-    setEmail(editingDomain.email || "");
+      Promise.all([req("get_companies"), req("get_groups")])
+        .then(([coData, grData]) => {
+          const validCompanies = [];
+          if (coData.success && Array.isArray(coData.data?.companies)) {
+            coData.data.companies.forEach((c) => {
+              if (!c.company_id) return;
+              const co = {
+                company_id: c.company_id,
+                expiration_date: c.expiration_date || null,
+                permissions: Array.isArray(c.permissions) ? c.permissions : [],
+                group_id: c.group_id ? normalizeDomainCode(c.group_id) : null,
+                fee_share_allocations: normalizeFeeShareFromServer(c.fee_share_allocations),
+              };
+              ensureCompanyFeeShare(co);
+              co.originalExpirationDate = co.expiration_date || null;
+              co.selectedPeriod = null;
+              co.startDate = new Date().toISOString().split("T")[0];
+              co.isExtending = false;
+              validCompanies.push(co);
+            });
+          }
+          setTempCompanies(validCompanies);
 
-    const parsedOwnerId = Number(editingDomain.id);
-    setEditingOwnerId(Number.isFinite(parsedOwnerId) && parsedOwnerId > 0 ? parsedOwnerId : null);
-
-    const listGroups = Array.isArray(editingDomain.groups) ? editingDomain.groups : [];
-    const listCompanies = Array.isArray(editingDomain.companies) ? editingDomain.companies : [];
-
-    const validCompanies = listCompanies
-      .filter((c) => c?.code)
-      .map(companyFromListItem);
-    setTempCompanies(validCompanies);
-
-    let groups = listGroups
-      .filter((g) => g?.code)
-      .map(groupFromListItem);
-
-    if (groups.length === 0) {
-      const legacy = new Set();
-      validCompanies.forEach((c) => {
-        if (c.group_id) legacy.add(c.group_id);
-      });
-      groups = [...legacy].sort().map((code) => createEmptyGroup(code));
+          const groups = [];
+          if (grData.success && Array.isArray(grData.data?.groups) && grData.data.groups.length > 0) {
+            grData.data.groups.forEach((row) => groups.push(groupFromApiRow(row)));
+          } else {
+            const legacy = new Set();
+            validCompanies.forEach((c) => {
+              if (c.group_id) legacy.add(c.group_id);
+            });
+            [...legacy].sort().forEach((code) => groups.push(createEmptyGroup(code)));
+          }
+          groups.sort((a, b) => tempGroupCode(a).localeCompare(tempGroupCode(b)));
+          setTempGroups(groups);
+        })
+        .catch(() => {});
     }
-    groups.sort((a, b) => tempGroupCode(a).localeCompare(tempGroupCode(b)));
-    setTempGroups(groups);
-
-    const initialGroupId =
-      groups.length > 0 && validCompanies.some((c) => c.group_id)
-        ? tempGroupCode(groups[0])
-        : null;
-    setSelectedGroupId(initialGroupId);
-    setIsMultipleChoiceMode(false);
-  }, [isEditMode, editingDomain]);
+  }, []);
 
   // ── Company helpers ────────────────────────────────────────────────────────
 
@@ -204,7 +234,7 @@ export default function DomainFormModal({
       toastDanger(t("companyIdAlreadyAdded"));
       return;
     }
-    if (!validateCodeGlobally(cid)) return;
+    if (!(await validateCodeGlobally(cid))) return;
     const isC168 = cid === "C168";
     const today = new Date().toISOString().split("T")[0];
     const newExpDate = isC168 ? null : calculateExpirationDate("1month", today);
@@ -250,7 +280,7 @@ export default function DomainFormModal({
       toastDanger(t("groupIdAlreadyExists"));
       return;
     }
-    if (!validateCodeGlobally(gid)) return;
+    if (!(await validateCodeGlobally(gid))) return;
     setTempGroups((prev) => [...prev, createEmptyGroup(gid)]);
     setGroupInput("");
     showDomainAlert(t("groupAdded", { gid }));
@@ -379,52 +409,36 @@ export default function DomainFormModal({
       toastDanger(t("groupCompanyIdOverlapSave", { id: overlap }));
       return;
     }
-
-    if (isEditMode && (editingOwnerId == null || editingOwnerId <= 0)) {
-      toastDanger(t("operationFailed"));
-      return;
+    const data = {
+      action: isEditMode ? "update" : "create",
+      owner_code: ownerCode,
+      name,
+      email: emailCheck.normalized,
+      companies: JSON.stringify(buildCompaniesPayload()),
+      groups: JSON.stringify(buildGroupsPayload()),
+    };
+    if (!isEditMode || password) data.password = password;
+    if (!isEditMode) {
+      data.secondary_password = secondaryPassword;
+      data.id = "";
+    } else {
+      data.id = editingDomain.id;
+      if (secondaryPassword) data.secondary_password = secondaryPassword;
     }
 
+    console.log("[Domain Save] companies data:", data.companies);
+
     try {
-      let json;
-
-      if (isEditMode) {
-        json = await updateDomain({
-          id: editingOwnerId,
-          ownerCode,
-          name,
-          email: emailCheck.normalized,
-          password: password || undefined,
-          secondaryPassword: secondaryPassword || undefined,
-          groups: buildGroupsPayload().map(groupToTenantSaveEntry),
-          companies: buildCompaniesPayload().map(companyToTenantSaveEntry),
-        });
-      } else {
-        json = await createDomain({
-          ownerCode,
-          name,
-          email: emailCheck.normalized,
-          password,
-          secondaryPassword,
-          groups: buildGroupsPayload().map(groupToTenantSaveEntry),
-          companies: buildCompaniesPayload().map(companyToTenantSaveEntry),
-        });
-      }
-
+      const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
       if (json.success) {
         showDomainAlert(isEditMode ? t("ownerUpdated") : t("ownerCreated"));
-        const savedId = json.data?.id ?? editingOwnerId;
-        onSaved(
-          buildDomainListEntryFromForm({
-            id: savedId,
-            ownerCode,
-            name,
-            email: emailCheck.normalized,
-            createdBy: isEditMode ? (editingDomain?.created_by ?? "") : "",
-            groups: tempGroups,
-            companies: tempCompanies,
-          })
-        );
+        onSaved(json.data);
         notifySessionRefreshRequested();
         onClose();
       } else {
@@ -441,6 +455,8 @@ export default function DomainFormModal({
     let filtered;
     if (selectedGroupId) {
       filtered = tempCompanies.filter((c) => c.group_id === selectedGroupId);
+    } else if (tempGroups.length > 0) {
+      filtered = tempCompanies.filter((c) => !c.group_id);
     } else {
       filtered = [...tempCompanies];
     }
@@ -610,26 +626,26 @@ export default function DomainFormModal({
     <DomainModalPortal>
       {/* z-index fixed inline: production Tailwind 若未抽出 arbitrary z-[50001]，弹窗可能在 #root/sidebar 下不可见 */}
       <div
-        className="domain-form-modal-backdrop"
+        className={`domain-form-modal-backdrop${compactLayout ? " domain-form-modal-backdrop--compact" : ""}`}
         style={{
           display: "block",
           position: "fixed",
           inset: 0,
           zIndex: 2147483000,
-          overflowY: "auto",
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          backdropFilter: "blur(4px)",
-          WebkitBackdropFilter: "blur(4px)",
+          overflowY: compactLayout ? "hidden" : "auto",
+          backgroundColor: compactLayout ? "#ffffff" : "rgba(0, 0, 0, 0.5)",
+          backdropFilter: compactLayout ? "none" : "blur(4px)",
+          WebkitBackdropFilter: compactLayout ? "none" : "blur(4px)",
         }}
       >
-        <div className="domain-form-modal-panel relative mx-auto my-[1vh] flex w-[98%] max-w-[1400px] flex-col overflow-hidden rounded-[14px] bg-white shadow-[0_20px_50px_rgba(0,0,0,0.18)]">
-          <div className="dfm-header flex items-center justify-between border-b border-gray-300 bg-[#f4f5f7] px-9 py-[18px]">
+        <div className="domain-form-modal-panel relative flex flex-col overflow-hidden">
+          <div className="dfm-header flex items-center justify-between">
             <h2 className="m-0 bg-transparent p-0 text-xl font-bold text-black">{isEditMode ? t("editDomain") : t("addDomain")}</h2>
             <button type="button" className="account-close" onClick={onClose} aria-label="Close" />
           </div>
           <form className="domain-form-modal-form flex flex-col bg-white" onSubmit={guardSubmit(handleSubmit)}>
-            <input type="hidden" value={isEditMode ? (editingOwnerId ?? "") : ""} />
-            <div className="domain-form-modal-body px-9 py-6">
+            <input type="hidden" value={isEditMode ? editingDomain?.id : ""} />
+            <div className="domain-form-modal-body dfm-main-split">
               {/* DOMAIN INFORMATION — 全宽上下布局（对齐设计图） */}
               <section className="dfm-section-block">
                 <div className="dfm-section-heading">{t("domainInformation")}</div>
@@ -864,12 +880,11 @@ export default function DomainFormModal({
           domainPeriodPrices={domainPeriodPrices}
           sessionCompanyId={sessionCompanyId}
           sessionCompanyCode={sessionCompanyCode}
-          excludeOwnerId={isEditMode ? editingOwnerId : null}
+          excludeOwnerId={isEditMode ? editingDomain?.id : null}
           siblingGroupCodes={tempGroups.map(tempGroupCode)}
           siblingCompanyCodes={tempCompanies
             .filter((c) => normalizeDomainCode(c.company_id) !== normalizeDomainCode(csModalCompanyId))
             .map((c) => normalizeDomainCode(c.company_id))}
-          persistImmediately={isEditMode}
           onSave={handleCompanySettingsSaved}
           onClose={() => setCsModalCompanyId(null)}
         />
@@ -881,12 +896,11 @@ export default function DomainFormModal({
           domainPeriodPrices={domainPeriodPrices}
           sessionCompanyId={sessionCompanyId}
           sessionCompanyCode={sessionCompanyCode}
-          excludeOwnerId={isEditMode ? editingOwnerId : null}
+          excludeOwnerId={isEditMode ? editingDomain?.id : null}
           siblingGroupCodes={tempGroups
             .filter((g) => tempGroupCode(g) !== gsModalGroupCode)
             .map(tempGroupCode)}
           siblingCompanyCodes={tempCompanies.map((c) => normalizeDomainCode(c.company_id))}
-          persistImmediately={isEditMode}
           onSave={handleGroupSettingsSaved}
           onClose={() => setGsModalGroupCode(null)}
         />

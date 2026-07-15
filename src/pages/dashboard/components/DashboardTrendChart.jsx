@@ -17,6 +17,7 @@ import {
   resolveTrendAreaFill,
   zeroTrendChartRows,
 } from "../lib/dashboardChartFx.jsx";
+import { DASHBOARD_PANEL_ANIM_BEGIN_MS, DASHBOARD_PANEL_ANIM_EASING } from "../lib/dashboardConstants.js";
 import { formatChartTooltipLabel } from "../lib/dashboardDateUtils.js";
 import { formatCurrency } from "../lib/dashboardFormat.js";
 
@@ -28,8 +29,10 @@ export function DashboardTrendChart({
   onToggleSeries,
   chartDateRangeText,
   chartXAxisLayout,
-  chartDataStable = false,
   chartScopeKey = "",
+  panelAnimActive = false,
+  panelAnimEpoch = 0,
+  panelAnimDuration = DASHBOARD_TREND_DRAW_DURATION_MS,
 }) {
   const [chartVisitKey] = useState(() => Date.now());
   const [chartReady, setChartReady] = useState(false);
@@ -39,7 +42,17 @@ export function DashboardTrendChart({
   chartRowsRef.current = chartRows;
 
   const hasChartData = chartRows.length > 0;
-  const chartSessionKey = `${chartVisitKey}-${chartScopeKey || "scope"}-${chartDateRangeText}`;
+  const chartSessionKey = `${chartVisitKey}-${chartScopeKey || "scope"}-${chartDateRangeText}-${panelAnimEpoch}`;
+  const chartRowsDigest = useMemo(
+    () =>
+      chartRows
+        .map(
+          (row) =>
+            `${row.date}|${row.profit}|${row.expenses}|${row.netProfit}|${row.earnings ?? 0}`
+        )
+        .join(";"),
+    [chartRows]
+  );
 
   const activeDataKeys = useMemo(
     () => chartSeries.filter((s) => chartVisible[s.idx]).map((s) => s.dataKey),
@@ -58,7 +71,7 @@ export function DashboardTrendChart({
   }, [chartSessionKey]);
 
   useEffect(() => {
-    if (!hasChartData || !chartDataStable) {
+    if (!hasChartData || !panelAnimActive) {
       setChartReady(false);
       setDisplayRows(null);
       setDrawAnimate(false);
@@ -90,7 +103,7 @@ export function DashboardTrendChart({
       setDisplayRows(null);
       setDrawAnimate(false);
     };
-  }, [chartSessionKey, chartScopeKey, hasChartData, chartDataStable]);
+  }, [chartSessionKey, chartScopeKey, hasChartData, panelAnimActive, chartRowsDigest]);
 
   return (
     <div className="dashboard-panel-card dashboard-panel-card--chart">
@@ -166,9 +179,9 @@ export function DashboardTrendChart({
                     dot={false}
                     activeDot={{ r: 8, strokeWidth: 2, stroke: s.color, fill: "#fff" }}
                     isAnimationActive={drawAnimate}
-                    animationBegin={0}
-                    animationDuration={DASHBOARD_TREND_DRAW_DURATION_MS}
-                    animationEasing="ease-out"
+                    animationBegin={DASHBOARD_PANEL_ANIM_BEGIN_MS}
+                    animationDuration={panelAnimDuration}
+                    animationEasing={DASHBOARD_PANEL_ANIM_EASING}
                     className="dashboard-trend-area"
                   />
                 );

@@ -7,13 +7,15 @@
     "dev": "vite",
     "prebuild": "node ./scripts/warn-dist-css-edits.mjs",
     "build": "vite build",
-    "postbuild": "node ./scripts/cleanup-dist-css.mjs",
+    "postbuild": "node ./scripts/cleanup-dist-css.mjs && node ./scripts/patch-index-sidebar-css.mjs",
+    "build:deploy": "vite build && node ./scripts/cleanup-dist-css.mjs && node ./scripts/patch-index-sidebar-css.mjs",
     "prebuild:site": "node ./scripts/warn-dist-css-edits.mjs",
     "build:site": "vite build",
-    "postbuild:site": "node ./scripts/cleanup-dist-css.mjs",
+    "postbuild:site": "node ./scripts/cleanup-dist-css.mjs && node ./scripts/patch-index-sidebar-css.mjs",
     "prebuild:watch": "node ./scripts/warn-dist-css-edits.mjs",
     "build:watch": "vite build --watch",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:sync-git": "node ./scripts/git-sync-after-build.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.6",
@@ -23,9 +25,12 @@
     "clsx": "^2.1.1",
     "decimal.js": "^10.4.3",
     "flatpickr": "^4.6.13",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.14.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-quill": "^2.0.0",
     "react-router-dom": "^6.28.0",
     "recharts": "^2.15.0",
     "tailwind-merge": "^3.5.0"

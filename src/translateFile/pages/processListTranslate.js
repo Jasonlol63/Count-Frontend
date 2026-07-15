@@ -38,6 +38,9 @@ export const PROCESS_LIST_I18N = {
     copySyncNotSet: "Sync not set: source process not found for this company",
     processSkippedConflicts: "{count} process(es) were skipped due to conflicts.",
     deleteFailed: "Delete failed",
+    errProcessLinkedToFormula: "Cannot delete: this process is linked to formula(s). Remove them in Formula Maintenance first.",
+    errProcessHasTransactions: "Cannot delete: this process has linked transactions.",
+    errNoInactiveToDelete: "Only inactive processes can be deleted.",
     processDeletedOne: "1 process deleted successfully",
     processDeletedMany: "{count} processes deleted successfully",
     statusUpdateFailed: "Status update failed",
@@ -49,6 +52,9 @@ export const PROCESS_LIST_I18N = {
     noColumn: "No",
     description: "Description",
     status: "Status",
+    statusActive: "ACTIVE",
+    statusInactive: "INACTIVE",
+    statusWaiting: "WAITING",
     currencyColumn: "Currency",
     dayUse: "Day Use",
     action: "Action",
@@ -95,10 +101,11 @@ export const PROCESS_LIST_I18N = {
     selectCurrency: "Select Currency",
     dtsModified: "DTS Modified:",
     dtsCreated: "DTS Created:",
-    removeWords: "Remove Words",
-    enterWordsToRemove: "Enter words to remove",
-    removeWordsHelp: "(Use semicolon to separate multiple words, e.g. abc;cde;efg)",
-    allDay: "All Day",
+    removeWords: "Remove Word",
+    enterWordsToRemove: "",
+    removeWordsHelp: "Separate words with commas (example: FREE,BONUS). Select all to copy. Saved for this process.",
+    removeWordChipRemove: "Remove",
+    allDay: "ALL DAY",
     replaceFrom: "Replace From",
     oldWord: "Old word",
     wordToBeReplaced: "(Word to be replaced)",
@@ -158,6 +165,9 @@ export const PROCESS_LIST_I18N = {
     copySyncNotSet: "未设置同步：当前公司找不到源流程",
     processSkippedConflicts: "有 {count} 个流程因冲突被跳过。",
     deleteFailed: "删除失败",
+    errProcessLinkedToFormula: "无法删除：该流程已关联公式，请先在 Formula Maintenance 中删除相关公式。",
+    errProcessHasTransactions: "无法删除：该流程已有关联交易记录。",
+    errNoInactiveToDelete: "只能删除已停用的流程。",
     processDeletedOne: "已成功删除 1 个流程",
     processDeletedMany: "已成功删除 {count} 个流程",
     statusUpdateFailed: "状态更新失败",
@@ -169,6 +179,9 @@ export const PROCESS_LIST_I18N = {
     noColumn: "序号",
     description: "描述",
     status: "状态",
+    statusActive: "启用",
+    statusInactive: "停用",
+    statusWaiting: "等待",
     currencyColumn: "货币",
     dayUse: "使用日期",
     action: "操作",
@@ -216,8 +229,9 @@ export const PROCESS_LIST_I18N = {
     dtsModified: "修改时间：",
     dtsCreated: "创建时间：",
     removeWords: "移除词",
-    enterWordsToRemove: "输入要移除的词",
-    removeWordsHelp: "（使用分号分隔多个词，例如 abc;cde;efg）",
+    enterWordsToRemove: "",
+    removeWordsHelp: "多个词用逗号隔开（例如：FREE,BONUS），可全选复制；会保存在当前 Process。",
+    removeWordChipRemove: "移除",
     allDay: "全天",
     replaceFrom: "替换来源",
     oldWord: "旧词",
@@ -243,4 +257,81 @@ export const PROCESS_LIST_I18N = {
   },
 };
 
+const PROCESS_DAY_NAME_KEYS = {
+  MON: "dayMonday",
+  TUE: "dayTuesday",
+  WED: "dayWednesday",
+  THU: "dayThursday",
+  FRI: "dayFriday",
+  SAT: "daySaturday",
+  SUN: "daySunday",
+  MONDAY: "dayMonday",
+  TUESDAY: "dayTuesday",
+  WEDNESDAY: "dayWednesday",
+  THURSDAY: "dayThursday",
+  FRIDAY: "dayFriday",
+  SATURDAY: "daySaturday",
+  SUNDAY: "daySunday",
+};
+
+/** Process list table: localized status badge */
+export function formatProcessStatusDisplay(t, status) {
+  const s = String(status || "").trim().toLowerCase();
+  if (s === "active") return t("statusActive");
+  if (s === "inactive") return t("statusInactive");
+  if (s === "waiting") return t("statusWaiting");
+  return String(status || "").toUpperCase();
+}
+
+/** Process list table: localized day-use column (MON,TUE → 周一,周二) */
+export function formatProcessDayUseDisplay(t, dayUse) {
+  const raw = String(dayUse || "").trim();
+  if (!raw) return "";
+  return raw
+    .split(/[,，]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const key = PROCESS_DAY_NAME_KEYS[part.toUpperCase()];
+      return key ? t(key) : part.toUpperCase();
+    })
+    .join(",");
+}
+
 export const getProcessListText = createGetText(PROCESS_LIST_I18N);
+
+const PROCESS_LIST_API_ERROR_CODE_KEYS = {
+  process_linked_to_formula: "errProcessLinkedToFormula",
+  process_has_transactions: "errProcessHasTransactions",
+  no_inactive_processes: "errNoInactiveToDelete",
+};
+
+function normProcessListApiMessage(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[.!?]+$/g, "");
+}
+
+const PROCESS_LIST_API_MESSAGE_KEYS = {
+  [normProcessListApiMessage("Process linked to formula")]: "errProcessLinkedToFormula",
+  [normProcessListApiMessage("Process has transactions")]: "errProcessHasTransactions",
+  [normProcessListApiMessage("No inactive processes to delete")]: "errNoInactiveToDelete",
+};
+
+/** Map delete/update API payload to localized process-list message. */
+export function translateProcessListApiMessage(lang, payload, fallback = "") {
+  const message = String(payload?.message ?? payload ?? "").trim();
+  const errorCode = payload?.data?.error ?? payload?.error ?? payload?.error_code ?? payload?.errorCode;
+  const locale = lang === "zh" ? "zh" : "en";
+
+  if (errorCode && PROCESS_LIST_API_ERROR_CODE_KEYS[errorCode]) {
+    return getProcessListText(locale, PROCESS_LIST_API_ERROR_CODE_KEYS[errorCode]);
+  }
+
+  const key = PROCESS_LIST_API_MESSAGE_KEYS[normProcessListApiMessage(message)];
+  if (key) return getProcessListText(locale, key);
+
+  return message || fallback;
+}

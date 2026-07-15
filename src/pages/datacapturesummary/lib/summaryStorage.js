@@ -6,6 +6,7 @@ import {
 } from "../../datacapture/lib/dataCaptureStorage.js";
 import { resolveDataCaptureScopeFromSessionMeta } from "../../datacapture/lib/dataCaptureScope.js";
 import { dataCaptureScopeCacheCompanyKey } from "../../datacapture/lib/dataCaptureScope.js";
+import { replaceBrowserPathOnly } from "../../../utils/routing/privateBrowserUrl.js";
 export const SUMMARY_CAPTURE_STORAGE_KEYS = [
   "capturedTableData",
   "capturedProcessData",
@@ -37,6 +38,34 @@ export function summaryRefreshStorageKeys(captureScope) {
     formulaSource: scopedRefreshStorageKey(SUMMARY_FORMULA_SOURCE_KEY, captureScope),
     rateValues: scopedRefreshStorageKey(SUMMARY_RATE_VALUES_KEY, captureScope),
     rateByProduct: scopedRefreshStorageKey(RATE_BY_PRODUCT_KEY, captureScope),
+  };
+}
+
+function readJsonStorageObject(key) {
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/** Read scoped rate maps from localStorage (falls back to legacy global keys). */
+export function loadSummaryRateMapsFromStorage(captureScope) {
+  const keys = summaryRefreshStorageKeys(captureScope);
+  const byKey =
+    readJsonStorageObject(keys.rateValues) ?? readJsonStorageObject(SUMMARY_RATE_VALUES_KEY);
+  const byProduct =
+    readJsonStorageObject(keys.rateByProduct) ?? readJsonStorageObject(RATE_BY_PRODUCT_KEY);
+  return {
+    byKey: byKey && typeof byKey === "object" ? { ...byKey } : {},
+    byProduct: byProduct && typeof byProduct === "object" ? { ...byProduct } : {},
   };
 }
 
@@ -92,20 +121,12 @@ export function clearSummaryCaptureRoundStorage() {
 }
 
 export function isSummaryFreshFromCapture(searchParams) {
+  if (consumeSummaryFreshNavigation()) return true;
   return searchParams?.get("success") === "1";
 }
 
 export function stripSummarySuccessParamFromUrl() {
-  try {
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has("success") && !url.searchParams.has("error")) return;
-    url.searchParams.delete("success");
-    url.searchParams.delete("error");
-    const qs = url.searchParams.toString();
-    window.history.replaceState({}, "", `${url.pathname}${qs ? `?${qs}` : ""}${url.hash}`);
-  } catch {
-    /* ignore */
-  }
+  replaceBrowserPathOnly();
 }
 
 /**

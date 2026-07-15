@@ -21,7 +21,6 @@ export default function SummaryTable({
   globalRateInput = "",
 }) {
   if (!visible || !tableData) return null;
-
   const total = computeSummaryTotal(rows, globalRateInput);
   const totalDisplay = formatSummaryTotalDisplay(total);
   const totalColor = getSummaryTotalColor(total);

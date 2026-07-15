@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
+import { safeLocal } from "../storage/safeStorage.js";
 
 /** Persist language and notify listeners (sidebar toggle, maintenance pages, etc.). */
 export function applyLoginLang(nextLang) {
   const normalized = nextLang === "zh" ? "zh" : "en";
-  localStorage.setItem("login_lang", normalized);
+  safeLocal.setItem("login_lang", normalized);
   window.dispatchEvent(new CustomEvent("eazycount:language-updated", { detail: { lang: normalized } }));
 }
 
 /** Syncs with sidebar EN/中 toggle (`login_lang` + `eazycount:language-updated`). */
 export function useLoginLang() {
-  const [lang, setLang] = useState(() => (localStorage.getItem("login_lang") === "zh" ? "zh" : "en"));
+  const [lang, setLang] = useState(() => (safeLocal.getItem("login_lang") === "zh" ? "zh" : "en"));
 
   useEffect(() => {
     const onStorage = (e) => {

@@ -1,4 +1,17 @@
+import { useMemo } from "react";
+import SimpleSelect from "../../../components/SimpleSelect.jsx";
 import AccountSelect from "./AccountSelect.jsx";
+import { assetUrl } from "../../../utils/core/apiUrl.js";
+
+const TX_TYPE_OPTIONS = [
+  "CONTRA",
+  "PAYMENT",
+  "CLAIM",
+  "PROFIT",
+  "RATE",
+  "ADJUSTMENT",
+  "CLEAR",
+];
 
 export default function TransactionAddSection({
   txType,
@@ -42,13 +55,17 @@ export default function TransactionAddSection({
   rateMiddlemanRate,
   setRateMiddlemanRate,
   rateMiddlemanAmount,
+  rateMiddlemanInputAmount,
+  setRateMiddlemanInputAmount,
   txRemark,
   setTxRemark,
   txConfirm,
   setTxConfirm,
   submitting,
   onSubmitTx,
-  onSearch,
+  onTypeSearch,
+  onExitTypeSearch,
+  typeSearchActive = false,
   searchLoading,
   mutationsBlocked = false,
   m,
@@ -57,6 +74,11 @@ export default function TransactionAddSection({
   const standardHidden = txType === "RATE";
   const dateDisplayStandard = txDate?.trim() || todayDmy;
   const dateDisplayRate = rateDate?.trim() || todayDmy;
+  const txTypeOptions = useMemo(() => TX_TYPE_OPTIONS.map((v) => ({ value: v, label: v })), []);
+  const currencySelectOptions = useMemo(
+    () => (currencyOptions || []).map((c) => ({ value: c, label: c })),
+    [currencyOptions],
+  );
 
   return (
     <div className={`transaction-add-section${mutationsBlocked ? " transaction-add-section--read-only" : ""}`}>
@@ -64,21 +86,16 @@ export default function TransactionAddSection({
         <label className="transaction-label" htmlFor="transaction_type">
           {m.type}
         </label>
-        <select
+        <SimpleSelect
           id="transaction_type"
           className="transaction-select"
           value={txType}
           disabled={mutationsBlocked}
-          onChange={(e) => setTxType(e.target.value)}
-        >
-          <option value="CONTRA">CONTRA</option>
-          <option value="PAYMENT">PAYMENT</option>
-          <option value="CLAIM">CLAIM</option>
-          <option value="PROFIT">PROFIT</option>
-          <option value="RATE">RATE</option>
-          <option value="ADJUSTMENT">ADJUSTMENT</option>
-          <option value="CLEAR">CLEAR</option>
-        </select>
+          onChange={setTxType}
+          options={txTypeOptions}
+          placeholder={m.type}
+          includeEmptyOption={false}
+        />
       </div>
 
       <div id="standard-transaction-fields" style={{ display: standardHidden ? "none" : "block" }}>
@@ -108,7 +125,6 @@ export default function TransactionAddSection({
               data-drp-from="add_tx_date_from"
               data-drp-to="add_tx_date_to"
               data-drp-display="add-tx-date-range-display"
-              data-drp-hide-presets="true"
               data-drp-collapse-single="true"
             >
               <span id="add-tx-date-range-display" className="transaction-add-datepicker-sr-span" aria-hidden="true" />
@@ -127,6 +143,7 @@ export default function TransactionAddSection({
               onChange={setTxToAccount}
               disabled={mutationsBlocked}
               selectedCategories={selectedCategories.length === 0 ? [] : selectedCategories}
+              searchPlaceholder={m.searchAccount}
             />
             {showStandardFromAndReverse ? (
               <>
@@ -138,6 +155,7 @@ export default function TransactionAddSection({
                   onChange={setTxFromAccount}
                   disabled={mutationsBlocked}
                   selectedCategories={selectedCategories.length === 0 ? [] : selectedCategories}
+                  searchPlaceholder={m.searchAccount}
                 />
                 <button
                   type="button"
@@ -159,20 +177,15 @@ export default function TransactionAddSection({
           <label className="transaction-label" htmlFor="transaction_currency">
             {m.currency}
           </label>
-          <select
+          <SimpleSelect
             id="transaction_currency"
             className="transaction-select"
             value={txCurrency}
             disabled={mutationsBlocked}
-            onChange={(e) => setTxCurrency(e.target.value)}
-          >
-            <option value="">{m.selectCurrency}</option>
-            {currencyOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+            onChange={setTxCurrency}
+            options={currencySelectOptions}
+            placeholder={m.selectCurrency}
+          />
         </div>
 
         <div className="transaction-form-group">
@@ -180,8 +193,8 @@ export default function TransactionAddSection({
             {m.amount}
           </label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             id="action_amount"
             className="transaction-input"
             value={txAmount}
@@ -218,7 +231,6 @@ export default function TransactionAddSection({
               data-drp-from="rate_tx_date_from"
               data-drp-to="rate_tx_date_to"
               data-drp-display="rate-tx-date-range-display"
-              data-drp-hide-presets="true"
               data-drp-collapse-single="true"
             >
               <span id="rate-tx-date-range-display" className="transaction-add-datepicker-sr-span" aria-hidden="true" />
@@ -237,6 +249,7 @@ export default function TransactionAddSection({
               onChange={setRateToAccount}
               disabled={mutationsBlocked}
               selectedCategories={selectedCategories.length === 0 ? [] : selectedCategories}
+              searchPlaceholder={m.searchAccount}
             />
             <AccountSelect
               ariaLabel={m.fromAccount}
@@ -246,6 +259,7 @@ export default function TransactionAddSection({
               onChange={setRateFromAccount}
               disabled={mutationsBlocked}
               selectedCategories={selectedCategories.length === 0 ? [] : selectedCategories}
+              searchPlaceholder={m.searchAccount}
             />
             <button
               type="button"
@@ -268,21 +282,15 @@ export default function TransactionAddSection({
         <div className="transaction-form-group transaction-inline-row">
           <label className="transaction-label">{m.currency}</label>
           <div className="rate-row rate-row-five-cols">
-            <select
+            <SimpleSelect
               id="rate_currency_from"
               className="transaction-select"
               value={rateCurrencyFrom}
               disabled={mutationsBlocked}
-              onChange={(e) => setRateCurrencyFrom(e.target.value)}
-              aria-label={m.fromAccount}
-            >
-              <option value="">{m.currency}</option>
-              {currencyOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+              onChange={setRateCurrencyFrom}
+              options={currencySelectOptions}
+              placeholder={m.currency}
+            />
             <input
               type="number"
               step="0.01"
@@ -305,21 +313,15 @@ export default function TransactionAddSection({
               onChange={(e) => setRateExchangeRateRaw(e.target.value)}
               aria-label={m.rate}
             />
-            <select
+            <SimpleSelect
               id="rate_currency_to"
               className="transaction-select"
               value={rateCurrencyTo}
               disabled={mutationsBlocked}
-              onChange={(e) => setRateCurrencyTo(e.target.value)}
-              aria-label={m.toAccount}
-            >
-              <option value="">{m.currency}</option>
-              {currencyOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+              onChange={setRateCurrencyTo}
+              options={currencySelectOptions}
+              placeholder={m.currency}
+            />
             <input
               type="number"
               step="0.01"
@@ -345,6 +347,7 @@ export default function TransactionAddSection({
               onChange={setRateTransferToAccount}
               disabled={mutationsBlocked}
               selectedCategories={selectedCategories.length === 0 ? [] : selectedCategories}
+              searchPlaceholder={m.searchAccount}
             />
             <AccountSelect
               ariaLabel={m.fromAccount}
@@ -354,6 +357,7 @@ export default function TransactionAddSection({
               onChange={setRateTransferFromAccount}
               disabled={mutationsBlocked}
               selectedCategories={selectedCategories.length === 0 ? [] : selectedCategories}
+              searchPlaceholder={m.searchAccount}
             />
             <button
               type="button"
@@ -384,6 +388,7 @@ export default function TransactionAddSection({
                 onChange={setRateMiddlemanAccount}
                 disabled={mutationsBlocked}
                 selectedCategories={selectedCategories.length === 0 ? [] : selectedCategories}
+              searchPlaceholder={m.searchAccount}
               />
             </div>
             <input
@@ -396,6 +401,17 @@ export default function TransactionAddSection({
               disabled={mutationsBlocked}
               onChange={(e) => setRateMiddlemanRate(e.target.value)}
               aria-label={m.rateMultiplier}
+            />
+            <input
+              type="number"
+              step="0.01"
+              id="rate_middleman_input_amount"
+              className="transaction-input"
+              placeholder={m.fee}
+              disabled={mutationsBlocked}
+              value={rateMiddlemanInputAmount}
+              onChange={(e) => setRateMiddlemanInputAmount(e.target.value)}
+              aria-label={m.fee}
             />
             <input
               type="number"
@@ -459,9 +475,28 @@ export default function TransactionAddSection({
           >
             {submitting ? m.submitting : m.submit}
           </button>
-          <button type="button" id="action_search_btn" className="transaction-search-btn" onClick={onSearch} disabled={searchLoading}>
+          <button type="button" id="action_search_btn" className="transaction-search-btn" onClick={onTypeSearch} disabled={searchLoading}>
             {m.search}
           </button>
+          {typeSearchActive ? (
+            <button
+              type="button"
+              id="action_refresh_btn"
+              className="transaction-refresh-btn"
+              onClick={onExitTypeSearch}
+              disabled={searchLoading}
+              title={m.exitTypeSearchAndRefreshTitle}
+              aria-label={m.exitTypeSearchAndRefreshTitle}
+              aria-busy={searchLoading || undefined}
+            >
+              <img
+                src={assetUrl("images/refresh.svg")}
+                alt=""
+                aria-hidden="true"
+                style={{ width: "clamp(23px, 1.8vw, 35px)", height: "clamp(23px, 1.8vw, 35px)" }}
+              />
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

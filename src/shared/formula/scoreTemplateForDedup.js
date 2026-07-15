@@ -14,22 +14,29 @@ export function scoreTemplateRowForMaintenanceDedup(row) {
     score += 100;
   }
 
+  const formulaBody =
+    String(row?.formula_operators ?? "").trim() ||
+    String(row?.last_source_value ?? "").trim();
+
   const sourceNum = Number(String(source).trim());
   if (
     String(source).trim() !== "" &&
     String(source).trim() !== "1" &&
-    !isMisplacedCommission(sourceNum)
+    !isMisplacedCommission(sourceNum, formulaBody)
   ) {
     score += 200;
   }
 
   const displayMisplaced = parseTrailingSourceParenValue(row?.formula_display);
-  if (displayMisplaced != null && isMisplacedCommission(displayMisplaced)) {
+  if (
+    displayMisplaced != null &&
+    isMisplacedCommission(displayMisplaced, row?.formula_display)
+  ) {
     score -= 200;
   }
 
   const dbPct = String(row?.source_percent ?? "").trim();
-  if (dbPct !== "" && isMisplacedCommission(dbPct)) {
+  if (dbPct !== "" && isMisplacedCommission(dbPct, formulaBody)) {
     score -= 150;
   }
 

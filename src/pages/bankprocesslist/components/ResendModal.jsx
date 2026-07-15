@@ -7,11 +7,13 @@ export default function ResendModal({
   resendTarget,
   resendDayStart,
   resendDayEnd,
+  setResendDayEnd,
   resendFrequency,
   setResendFrequency,
   resendInlineError,
   setResendInlineError,
   resendConfirmDisabled = false,
+  resendConfirmBlockReason = "",
   resendLockChecking = false,
   onResend,
   onClose,
@@ -22,7 +24,15 @@ export default function ResendModal({
   const isMonthly = fq === "monthly";
   const isWeek = fq === "week";
   const isDay = fq === "day";
+  const isFirstOfMonth = fq === "1st_of_every_month";
   const dayEndDisabled = isOnce || isMonthly || isWeek || isDay;
+  const resendConfirmTitle = resendLockChecking
+    ? t("resendLockChecking")
+    : resendConfirmBlockReason === "duplicate"
+      ? t("resendDuplicateOpenAnchor")
+      : resendConfirmDisabled
+        ? t("resendLockedPostedToday")
+        : "";
   return (
     <ProcessModalPortal>
     <div id="confirmBankResendModal" className="process-modal process-modal--bank-resend" style={processModalBackdropStyle}>
@@ -62,9 +72,10 @@ export default function ResendModal({
               label={t("dayEnd")}
               value={resendDayEnd}
               disabled={dayEndDisabled}
-              minYmd={dayEndDisabled ? undefined : (resendDayStart || undefined)}
+              minYmd={isFirstOfMonth ? (resendDayStart || undefined) : (dayEndDisabled ? undefined : (resendDayStart || undefined))}
               placeholder={t("pickDate")}
               clearLabel={t("clearDate")}
+              onValueChange={(iso) => setResendDayEnd(iso || "")}
               className={dayEndDisabled ? "bank-resend-day-end-field--muted" : ""}
             />
             <div className="bank-resend-field bank-resend-field--full">
@@ -108,7 +119,7 @@ export default function ResendModal({
             className="process-btn process-btn-resend confirm-bank-resend-confirm"
             id="confirmBankResendBtn"
             disabled={resendConfirmDisabled || resendLockChecking}
-            title={resendConfirmDisabled ? t("resendLockedPostedToday") : (resendLockChecking ? t("resendLockChecking") : "")}
+            title={resendConfirmTitle}
             onClick={onResend}
           >
             {resendLockChecking ? t("resendLockChecking") : t("resendAction")}

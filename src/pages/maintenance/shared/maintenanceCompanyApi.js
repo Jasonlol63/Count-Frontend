@@ -1,7 +1,7 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 
 const DEFAULT_PERMISSIONS_FULL = ["Games", "Bank", "Loan", "Rate", "Money"];
-const DEFAULT_PERMISSIONS_FORMULA = ["Games", "Loan", "Rate", "Money"];
+const DEFAULT_PERMISSIONS_FORMULA = ["Games", "Bank", "Loan", "Rate", "Money"];
 const DEFAULT_PERMISSIONS_BANKPROCESS = ["Bank", "Loan", "Rate", "Money"];
 
 async function fetchPermissionsFromApi(companyCode, { credentials = false } = {}) {
@@ -51,7 +51,7 @@ export async function fetchDomainCompanyPermissions(companyCode, options = {}) {
   return [...defaultPermissions];
 }
 
-/** Raw permissions for formula (default list omits Bank). */
+/** Raw permissions for formula (Bank and Games both supported). */
 export async function fetchFormulaCompanyPermissionsRaw(companyCode) {
   return fetchDomainCompanyPermissions(companyCode, {
     defaultPermissions: DEFAULT_PERMISSIONS_FORMULA,
@@ -63,6 +63,14 @@ export function isBankOnlyCategoryCompany(permissions) {
   const hasBank = permissions.includes("Bank");
   const hasGames = permissions.includes("Games") || permissions.includes("Gambling");
   return hasBank && !hasGames;
+}
+
+/** Capture / Transaction maintenance: company has Games/Gambling or Bank category. */
+export function companyPermsAllowDataCaptureMaintenance(permissions) {
+  if (!Array.isArray(permissions) || permissions.length === 0) return true;
+  const hasGames = permissions.includes("Games") || permissions.includes("Gambling");
+  const hasBank = permissions.includes("Bank");
+  return hasGames || hasBank;
 }
 
 /**

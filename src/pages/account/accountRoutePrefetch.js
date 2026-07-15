@@ -1,5 +1,5 @@
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
-import { fetchAccountsForCompany } from "./accountLogic.js";
+import { buildAccountsUrl } from "./accountLogic.js";
 
 const accountListRouteWarmCache = new Map();
 const accountListRouteWarmInflight = new Map();
@@ -42,15 +42,10 @@ async function fetchAccountListSlice({
   const gid = groupId ? String(groupId).trim().toUpperCase() : "";
   const url =
     cid != null && Number.isFinite(cid) && cid > 0
-      ? null
+      ? buildAccountsUrl(cid, search, showInactive, showAll, { groupId: gid || null })
       : gid
         ? buildGroupAccountsUrl(gid, search, showInactive, showAll)
         : null;
-  if (cid != null && Number.isFinite(cid) && cid > 0) {
-    const json = await fetchAccountsForCompany(cid, { searchTerm: search, allStatuses: true, signal });
-    if (!json?.success) return null;
-    return Array.isArray(json?.data?.accounts) ? json.data.accounts : [];
-  }
   if (!url) return null;
 
   const res = await fetch(url.toString(), { credentials: "include", signal });

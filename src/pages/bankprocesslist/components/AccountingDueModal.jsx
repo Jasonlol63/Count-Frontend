@@ -3,9 +3,11 @@ import ProcessModalPortal, { processModalBackdropStyle } from "../../../componen
 import {
   formatBankProcessContractLabel,
   formatAccountingDueBillingPeriod,
+  formatAccountingDueFrequency,
   formatAccountingDueProcessDayStart,
   accountingDueRowKey,
 } from "../lib/bankProcessHelpers.js";
+import MaintenanceEllipsisText from "../../maintenance/shared/MaintenanceEllipsisText.jsx";
 
 export default function AccountingDueModal({
   isOpen,
@@ -105,6 +107,9 @@ export default function AccountingDueModal({
             <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--head accounting-due-inbox-grid-cell--period" role="columnheader">
               {t("billingDate")}
             </div>
+            <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--head accounting-due-inbox-grid-cell--frequency" role="columnheader">
+              {t("frequency")}
+            </div>
             <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--head accounting-due-inbox-grid-cell--owner" role="columnheader">
               {t("cardOwner")}
             </div>
@@ -178,8 +183,14 @@ export default function AccountingDueModal({
                 <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--period" role="cell" title={formatAccountingDueBillingPeriod(r)}>
                   {formatAccountingDueBillingPeriod(r)}
                 </div>
-                <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--owner" role="cell" title={r.card_owner || r.name || r.supplier || "-"}>
-                  {r.card_owner || r.name || r.supplier || "-"}
+                <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--frequency" role="cell" title={formatAccountingDueFrequency(r, t)}>
+                  {formatAccountingDueFrequency(r, t)}
+                </div>
+                <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--owner" role="cell">
+                  <MaintenanceEllipsisText
+                    value={r.card_owner || r.name || r.supplier || "-"}
+                    className="accounting-due-owner-text"
+                  />
                 </div>
                 <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--bank" role="cell">
                   {r.bank || "-"}
@@ -249,7 +260,7 @@ export default function AccountingDueModal({
                   <button
                     type="button"
                     className="accounting-due-inbox-btn accounting-due-inbox-refresh"
-                    onClick={() => refreshRef.current?.()}
+                    onClick={() => refreshRef.current?.({ restoreDismissed: true })}
                     disabled={accountingLoading}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

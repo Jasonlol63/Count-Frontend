@@ -25,19 +25,23 @@ export const DATA_CAPTURE_I18N = {
     newWord: "New word",
     removeWord: "Remove Word",
     remark: "Remark",
-    enterWordsToRemove: "Enter words to remove",
+    enterWordsToRemove: "",
     enterRemark: "Enter remark",
-    removeWordHelp: "Press Enter to add a word chip; saved for this process for next time.",
+    removeWordHelp: "Separate words with commas (example: FREE,BONUS). Select all to copy. Saved for this process.",
     removeWordChipRemove: "Remove",
     submittedProcesses: "Submitted Processes",
     noProcessesSubmitted: "No processes submitted for this date",
+    failedLoadSubmittedProcesses: "Could not load submitted processes",
+    retry: "Retry",
     dataCaptureTable: "Data Capture Table",
     tableSize: "Add Row",
-    tableSizeResetTitle: "Reset to default size (11×11)",
+    tableSizeResetTitle: "Reset to default size (A–Z × 11 cols)",
     tableSizeAddRows: "Add Rows",
     tableSizeAddColumns: "Add Columns",
     tableSizeAddSummary:
       "Rows: {currentRows} + {addRows} = {totalRows} · Cols: {currentCols} + {addCols} = {totalCols}",
+    tableExpand: "Expand table",
+    tableCollapse: "Exit expanded view",
     deleteRowData: "Delete Row Data",
     selectRowToDeleteData: "Select a row header to delete its data",
     pasteFormattedTableHint: "Paste a formatted table below",
@@ -111,6 +115,7 @@ export const DATA_CAPTURE_I18N = {
     pasteSuccessPrefixRows:
       "{prefix}: successfully pasted {rows} rows × {cols} columns.",
     pasteFailedClipboard: "Failed to access clipboard",
+    weekdayLabels: ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"],
   },
   zh: {
     pageTitle: "数据采集",
@@ -136,19 +141,23 @@ export const DATA_CAPTURE_I18N = {
     newWord: "新词",
     removeWord: "移除词",
     remark: "备注",
-    enterWordsToRemove: "输入要移除的词",
+    enterWordsToRemove: "",
     enterRemark: "输入备注",
-    removeWordHelp: "输入词语后按 Enter 添加为标签；会保存在当前 Process，下次可继续使用。",
+    removeWordHelp: "多个词用逗号隔开（例如：FREE,BONUS），可全选复制；会保存在当前 Process。",
     removeWordChipRemove: "移除",
     submittedProcesses: "已提交流程",
     noProcessesSubmitted: "该日期暂无已提交流程",
+    failedLoadSubmittedProcesses: "无法加载已提交流程",
+    retry: "重试",
     dataCaptureTable: "数据采集表",
     tableSize: "新增行",
-    tableSizeResetTitle: "重置为默认大小（11×11）",
+    tableSizeResetTitle: "重置为默认大小（A–Z × 11 列）",
     tableSizeAddRows: "新增行数",
     tableSizeAddColumns: "新增列数",
     tableSizeAddSummary:
       "行：{currentRows} + {addRows} = {totalRows} · 列：{currentCols} + {addCols} = {totalCols}",
+    tableExpand: "展开表格",
+    tableCollapse: "退出展开",
     deleteRowData: "删除行数据",
     selectRowToDeleteData: "请先选择行标题以删除该行数据",
     pasteFormattedTableHint: "请在下方粘贴格式化表格",
@@ -222,10 +231,16 @@ export const DATA_CAPTURE_I18N = {
     pasteSuccessPrefixRows:
       "{prefix}：成功粘贴 {rows} 行 x {cols} 列数据!",
     pasteFailedClipboard: "无法访问剪贴板",
+    weekdayLabels: ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"],
   },
 };
 
 export const getDataCaptureText = createGetText(DATA_CAPTURE_I18N);
+
+export function getDataCaptureWeekdayLabels(lang) {
+  const locale = lang === "zh" ? "zh" : "en";
+  return DATA_CAPTURE_I18N[locale].weekdayLabels;
+}
 
 /** Map validation / API message keys used in hooks. */
 export function translateDataCaptureMessage(lang, message) {

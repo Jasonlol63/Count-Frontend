@@ -55,8 +55,8 @@ export default class AppErrorBoundary extends Component {
             </p>
             <p style={{ margin: 0, color: "#64748b", fontSize: 14, lineHeight: 1.5 }}>
               {chunkError
-                ? "前端资源版本不一致（常见于部署后浏览器缓存旧 index.js）。请 Ctrl+F5 强制刷新；若仍失败，请重新部署完整的 dist（含 index.html 与 assets/ 全部文件）。"
-                : "请按 F12 打开开发者工具，查看 Console 里的红色报错。若刚部署过前端，请确认已上传完整的 dist 文件夹（含 index.html 与 assets/ 里全部 JS）。"}
+                ? "前端资源版本不一致（常见于部署后浏览器缓存旧 index.js）。请 Ctrl+F5 强制刷新；若仍失败，请重新部署完整的 frontend/dist（含 index.html 与 assets/ 全部文件）。"
+                : "请按 F12 打开开发者工具，查看 Console 里的红色报错。若刚部署过前端，请确认已上传完整的 frontend/dist 文件夹（含 index.html 与 assets/ 里全部 JS）。"}
             </p>
             <button
               type="button"

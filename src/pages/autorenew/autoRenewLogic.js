@@ -1,8 +1,5 @@
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
-import {
-  TX_DATA_CHANGED_EVENT,
-  TX_LIST_INVALIDATE_LS_KEY,
-} from "../transaction/lib/transactionPaymentLogic.js";
+import { notifyTransactionListInvalidated } from "../transaction/lib/transactionPaymentLogic.js";
 
 export const AUTO_RENEW_PERIODS = [
   { value: "7days", labelKey: "period7days" },
@@ -33,7 +30,7 @@ export async function fetchAutoRenewApprovals(
   status = "pending",
   { dateFrom, dateTo, entityType = "company", signal } = {},
 ) {
-  const body = { status, entity_type: entityType };
+  const body = { action: "list", status, entity_type: entityType === "group" ? "group" : "company" };
   if (dateFrom) body.date_from = dateFrom;
   if (dateTo) body.date_to = dateTo;
   return postAutoRenew(body, { signal });
@@ -64,33 +61,21 @@ export async function approveAutoRenew({ requestId, period, fromAccountId, toAcc
 }
 
 export async function rejectAutoRenew({ requestId }) {
-  const res = await fetch(buildApiUrl("api/auto-renew/reject"), {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ request_id: requestId }),
+  return postAutoRenew({
+    action: "reject",
+    request_id: requestId,
   });
-  const json = await res.json();
-  if (!json.success) {
-    throw new Error(json.message || "Reject request failed");
-  }
-  return json.data;
 }
 
-export async function deleteAutoRenew({ requestId, transactionId }) {
+export async function deleteAutoRenew({ requestId, transactionId, entityType }) {
   return postAutoRenew({
     action: "delete",
     request_id: requestId,
     transaction_id: transactionId || null,
+    entity_type: entityType === "group" ? "group" : "company",
   });
 }
 
 export function invalidateTransactionListCache(source = "auto_renew") {
-  const ts = Date.now();
-  try {
-    localStorage.setItem(TX_LIST_INVALIDATE_LS_KEY, String(ts));
-  } catch {
-    // ignore
-  }
-  window.dispatchEvent(new CustomEvent(TX_DATA_CHANGED_EVENT, { detail: { ts, source } }));
+  return notifyTransactionListInvalidated(source);
 }

@@ -1,8 +1,43 @@
 /**
- * Obfuscated SPA routes: /p/{uuid} per page (anti-enumeration).
- * Use spaPath(pageKey) for links/navigation; pathnameToPageKey() for active-state checks.
+ * Readable SPA routes with fixed UUID suffix: /dashboard/{uuid}, /login/{uuid}, …
+ * Use spaPath(pageKey) for navigation; pathnameToPageKey() for active-state checks.
  */
 
+export const PAGE_PATHS = {
+  login: "/login",
+  member: "/member",
+  "reset-password": "/reset-password",
+  "owner-secondary-password": "/owner-secondary-password",
+  "user-secondary-password": "/user-secondary-password",
+  dashboard: "/dashboard",
+  domain: "/domain",
+  announcement: "/announcement",
+  "account-list": "/account-list",
+  "add-account": "/add-account",
+  "process-list": "/process-list",
+  "games-process-list": "/games-process-list",
+  "bank-process-list": "/bank-process-list",
+  userlist: "/userlist",
+  ownership: "/ownership",
+  datacapture: "/datacapture",
+  datacapturesummary: "/datacapturesummary",
+  transaction: "/transaction",
+  "transaction-payment-history": "/transaction/payment-history",
+  "customer-report": "/customer-report",
+  "domain-report": "/domain-report",
+  "capture-maintenance": "/capture-maintenance",
+  "transaction-maintenance": "/transaction-maintenance",
+  "formula-maintenance": "/formula-maintenance",
+  "bankprocess-maintenance": "/bankprocess-maintenance",
+  "payment-maintenance": "/payment-maintenance",
+  useraccess: "/useraccess",
+  "deleted-log": "/deleted-log",
+  "auto-renew": "/auto-renew",
+};
+
+/** @typedef {keyof typeof PAGE_PATHS} PageKey */
+
+/** Fixed UUID per page (anti-guess; paired with readable path). */
 export const PAGE_ROUTE_UUIDS = {
   login: "05659e0a-5121-427b-b5f2-7bbc43e14b23",
   member: "45793aa9-4637-452e-8820-2f4611d8b6f6",
@@ -35,43 +70,12 @@ export const PAGE_ROUTE_UUIDS = {
   "auto-renew": "148b6740-9f41-47e8-b8ca-e52db63cd4b2",
 };
 
-/** @typedef {keyof typeof PAGE_ROUTE_UUIDS} PageKey */
-
 const UUID_TO_PAGE_KEY = Object.fromEntries(
   Object.entries(PAGE_ROUTE_UUIDS).map(([key, uuid]) => [uuid.toLowerCase(), key]),
 );
 
-/** Legacy readable paths → page key (302 to UUID in router / Apache). */
-export const LEGACY_PATH_TO_PAGE_KEY = {
-  "/login": "login",
-  "/member": "member",
-  "/reset-password": "reset-password",
-  "/owner-secondary-password": "owner-secondary-password",
-  "/user-secondary-password": "user-secondary-password",
-  "/dashboard": "dashboard",
-  "/domain": "domain",
-  "/announcement": "announcement",
-  "/account-list": "account-list",
-  "/add-account": "add-account",
-  "/process-list": "process-list",
-  "/games-process-list": "games-process-list",
-  "/bank-process-list": "bank-process-list",
-  "/userlist": "userlist",
-  "/ownership": "ownership",
-  "/datacapture": "datacapture",
-  "/datacapturesummary": "datacapturesummary",
-  "/transaction": "transaction",
-  "/transaction/payment-history": "transaction-payment-history",
-  "/customer-report": "customer-report",
-  "/domain-report": "domain-report",
-  "/capture-maintenance": "capture-maintenance",
-  "/transaction-maintenance": "transaction-maintenance",
-  "/formula-maintenance": "formula-maintenance",
-  "/bankprocess-maintenance": "bankprocess-maintenance",
-  "/payment-maintenance": "payment-maintenance",
-  "/useraccess": "useraccess",
-  "/deleted-log": "deleted-log",
-  "/auto-renew": "auto-renew",
+/** Alternate paths (underscore URLs, typos) → page key. */
+export const PATH_ALIASES_TO_PAGE_KEY = {
   "/transcation": "transaction",
   "/customer_report": "customer-report",
   "/domain_report": "domain-report",
@@ -83,7 +87,23 @@ export const LEGACY_PATH_TO_PAGE_KEY = {
   "/auto_renew": "auto-renew",
 };
 
-const UUID_PATH_RE = /^\/p\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
+/** @deprecated Use PATH_ALIASES_TO_PAGE_KEY */
+export const LEGACY_PATH_TO_PAGE_KEY = PATH_ALIASES_TO_PAGE_KEY;
+
+const PATH_TO_PAGE_KEY = Object.fromEntries(
+  Object.entries(PAGE_PATHS).map(([key, path]) => [path, key]),
+);
+
+const FULL_PATH_TO_PAGE_KEY = Object.fromEntries(
+  Object.entries(PAGE_PATHS).map(([key, path]) => [`${path}/${PAGE_ROUTE_UUIDS[key]}`.toLowerCase(), key]),
+);
+
+/** Match UUID segment (case-insensitive). */
+export const UUID_SEGMENT_RE =
+  "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+
+const UUID_SEGMENT_PATH_RE = new RegExp(`^/(${UUID_SEGMENT_RE})$`, "i");
+const LEGACY_P_UUID_PATH_RE = new RegExp(`^/p/(${UUID_SEGMENT_RE})$`, "i");
 
 export function normalizePathname(pathname) {
   const raw = String(pathname || "/").split("?")[0].split("#")[0];
@@ -91,41 +111,63 @@ export function normalizePathname(pathname) {
   return raw.length > 1 && raw.endsWith("/") ? raw.slice(0, -1) : raw;
 }
 
-/** SPA path for a page key, e.g. spaPath('dashboard') → /p/f758d9be-... */
+/** Canonical route: /dashboard/f758d9be-... */
 export function spaPath(pageKey, { search = "", hash = "" } = {}) {
+  const path = PAGE_PATHS[pageKey];
   const uuid = PAGE_ROUTE_UUIDS[pageKey];
-  if (!uuid) {
+  if (!path || !uuid) {
     throw new Error(`Unknown page key: ${pageKey}`);
   }
-  let path = `/p/${uuid}`;
+  let result = `${path}/${uuid}`;
   const q = String(search || "");
   if (q) {
-    path += q.startsWith("?") ? q : `?${q}`;
+    result += q.startsWith("?") ? q : `?${q}`;
   }
   const h = String(hash || "");
   if (h) {
-    path += h.startsWith("#") ? h : `#${h}`;
+    result += h.startsWith("#") ? h : `#${h}`;
   }
-  return path;
+  return result;
+}
+
+function matchReadablePlusUuid(pathname) {
+  const uuidMatch = pathname.match(UUID_SEGMENT_PATH_RE);
+  if (!uuidMatch) return null;
+  const uuid = uuidMatch[1].toLowerCase();
+  const basePath = pathname.slice(0, -uuidMatch[0].length);
+  const pageKey = UUID_TO_PAGE_KEY[uuid];
+  if (!pageKey || PAGE_PATHS[pageKey] !== basePath) return null;
+  return pageKey;
 }
 
 export function pathnameToPageKey(pathname) {
   const clean = normalizePathname(pathname);
-  const uuidMatch = clean.match(UUID_PATH_RE);
-  if (uuidMatch) {
-    return UUID_TO_PAGE_KEY[uuidMatch[1].toLowerCase()] ?? null;
+
+  const full = FULL_PATH_TO_PAGE_KEY[clean.toLowerCase()];
+  if (full) return full;
+
+  const fromReadableUuid = matchReadablePlusUuid(clean);
+  if (fromReadableUuid) return fromReadableUuid;
+
+  if (PATH_TO_PAGE_KEY[clean]) return PATH_TO_PAGE_KEY[clean];
+  if (PATH_ALIASES_TO_PAGE_KEY[clean]) return PATH_ALIASES_TO_PAGE_KEY[clean];
+
+  const legacyP = clean.match(LEGACY_P_UUID_PATH_RE);
+  if (legacyP) {
+    return UUID_TO_PAGE_KEY[legacyP[1].toLowerCase()] ?? null;
   }
-  return LEGACY_PATH_TO_PAGE_KEY[clean] ?? null;
+
+  return null;
 }
 
 export function pathnameIs(pageKey, pathname) {
   return pathnameToPageKey(pathname) === pageKey;
 }
 
-/** Site root for API / absolute paths — UUID routes live under /p/{uuid}, not /p/ subfolder. */
+/** Site root for API / absolute paths on known SPA routes. */
 export function getSiteBasePath() {
   const pathname = normalizePathname(window.location.pathname || "/");
-  if (UUID_PATH_RE.test(pathname)) {
+  if (pathnameToPageKey(pathname)) {
     return "/";
   }
   const parent = pathname.replace(/[^/]*$/, "") || "/";
@@ -133,18 +175,30 @@ export function getSiteBasePath() {
   return parent.endsWith("/") ? parent : `${parent}/`;
 }
 
-/** Resolve legacy or UUID pathname to canonical UUID SPA path. */
+/** Resolve any known pathname to canonical /{page}/{uuid}. */
 export function resolveCanonicalSpaPath(pathname, { search = "", hash = "" } = {}) {
   const key = pathnameToPageKey(pathname);
   if (!key) return null;
   return spaPath(key, { search, hash });
 }
 
-/** All UUID route pathnames (for server SPA fallback). */
-export function allUuidRoutePathnames() {
-  return Object.values(PAGE_ROUTE_UUIDS).map((uuid) => `/p/${uuid}`);
+/** All canonical /{page}/{uuid} pathnames (for server SPA fallback). */
+export function allSpaRoutePathnames() {
+  return Object.keys(PAGE_PATHS).map((pageKey) => spaPath(pageKey));
 }
 
-/** Apache/Nginx: match /p/{uuid} */
-export const SPA_UUID_PATH_PATTERN =
-  "^p/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$";
+/** @deprecated Use allSpaRoutePathnames */
+export function allUuidRoutePathnames() {
+  return allSpaRoutePathnames();
+}
+
+/** Nginx/Apache: readable route names (optional /{uuid} suffix). */
+export const SPA_READABLE_ROUTE_PATTERN =
+  "login|member|reset-password|owner-secondary-password|user-secondary-password|dashboard|domain|announcement|auto-renew|account-list|add-account|process-list|games-process-list|bank-process-list|userlist|useraccess|deleted-log|ownership|datacapture|datacapturesummary|transaction|customer-report|domain-report|capture-maintenance|transaction-maintenance|formula-maintenance|bankprocess-maintenance|payment-maintenance|transcation|customer_report|domain_report|capture_maintenance|transaction_maintenance|formula_maintenance|bankprocess_maintenance|payment_maintenance|auto_renew";
+
+/** Nginx: UUID suffix in /{page}/{uuid}. */
+export const SPA_UUID_SUFFIX_PATTERN =
+  "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}";
+
+/** @deprecated Old /p/{uuid} only pattern */
+export const SPA_UUID_PATH_PATTERN = `^p/${UUID_SEGMENT_RE}$`;

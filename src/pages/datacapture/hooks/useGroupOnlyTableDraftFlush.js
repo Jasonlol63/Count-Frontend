@@ -5,7 +5,7 @@ import {
   normalizeGroupOnlyDraftCurrencyId,
   saveGroupOnlyTableDraft,
 } from "../lib/dataCaptureGroupOnlyTableDraft.js";
-import { isGroupOnlyProcessId } from "../lib/dataCaptureGroupOnlyProcesses.js";
+import { isGroupPayrollDraftProcessId } from "../lib/dataCaptureGroupOnlyProcesses.js";
 import { captureTableSnapshot, tableSnapshotHasData } from "../lib/dataCaptureTableSnapshot.js";
 import { registerDataCaptureRuntime, unregisterDataCaptureRuntime } from "../lib/dataCaptureRuntime.js";
 
@@ -15,7 +15,8 @@ import { registerDataCaptureRuntime, unregisterDataCaptureRuntime } from "../lib
 export function useGroupOnlyTableDraftFlush({
   enabled,
   captureScope,
-  selectedGroup,
+  draftBucket,
+  payrollDraftServerSync = true,
   selectedProcessId,
   currencyId,
   captureType,
@@ -23,7 +24,8 @@ export function useGroupOnlyTableDraftFlush({
   const stateRef = useRef({
     enabled,
     captureScope,
-    selectedGroup,
+    draftBucket,
+    payrollDraftServerSync,
     selectedProcessId,
     currencyId,
     captureType,
@@ -31,7 +33,8 @@ export function useGroupOnlyTableDraftFlush({
   stateRef.current = {
     enabled,
     captureScope,
-    selectedGroup,
+    draftBucket,
+    payrollDraftServerSync,
     selectedProcessId,
     currencyId,
     captureType,
@@ -42,26 +45,25 @@ export function useGroupOnlyTableDraftFlush({
       const {
         enabled: on,
         captureScope: scope,
-        selectedGroup: groupId,
+        draftBucket: bucket,
+        payrollDraftServerSync: serverSync,
         selectedProcessId: processId,
         currencyId: cid,
         captureType: type,
       } = stateRef.current;
-      if (!on || !groupId || !isGroupOnlyProcessId(processId)) return false;
+      if (!on || !bucket || !isGroupPayrollDraftProcessId(processId)) return false;
       const currencyKey = normalizeGroupOnlyDraftCurrencyId(cid);
       if (!currencyKey) return false;
 
       const activeCaptureType = getBridgeCaptureType(type || "1.Text");
       const tableData = captureTableSnapshot(activeCaptureType, gridOverride ?? undefined);
       const payload = { tableData, captureType: activeCaptureType };
+      const draftOptions = { captureScope: scope, flush: true, serverSync };
 
       if (tableSnapshotHasData(tableData)) {
-        await saveGroupOnlyTableDraft(groupId, processId, currencyKey, payload, {
-          captureScope: scope,
-          flush: true,
-        });
+        await saveGroupOnlyTableDraft(bucket, processId, currencyKey, payload, draftOptions);
       } else {
-        await clearGroupOnlyTableDraft(groupId, processId, currencyKey, { captureScope: scope });
+        await clearGroupOnlyTableDraft(bucket, processId, currencyKey, { captureScope: scope });
       }
       return true;
     };

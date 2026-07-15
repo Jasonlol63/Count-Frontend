@@ -21,13 +21,12 @@ import {
   readPersistedDashboardGcFilter,
   resolveBootCompanyId,
   resolveInitialSelectedGroupFromSession,
-  filterCompaniesForLoginScope,
   fetchOwnerCompaniesAll,
 } from "../../utils/company/sharedCompanyFilter.js";
 import { syncCompanySessionApi } from "../../utils/company/companySessionSync.js";
 import { canUseGroupOnlyMode, isGroupLogin } from "../../utils/company/loginScope.js";
 import {
-  isC168GroupCaptureChannel,
+  isCompanyPayrollCaptureChannel,
   isGroupPayrollUi,
   resolvePayrollDraftBucket,
 } from "../../utils/company/c168CaptureChannel.js";
@@ -37,9 +36,11 @@ import GcInlineFilterPanel from "../../components/GcInlineFilterPanel.jsx";
 import "../../../public/css/userlist.css";
 import "../../../public/css/global-13inch.css";
 import "../../../public/css/datacapture.css";
+import "../../../public/css/remove-word-chip.css";
+import "../../../public/css/description-input.css";
 
 import { formatSubmittedProcessDateTime } from "./lib/dataCaptureApi.js";
-import { readCaptureSessionMeta, shouldRestoreFromUrl, loadCaptureSession, captureSessionMatchesScope } from "./lib/dataCaptureStorage.js";
+import { readCaptureSessionMeta, shouldRestoreFromUrl, loadCaptureSession, captureSessionMatchesScope, loadActiveCaptureSession, readCaptureRestoreBoot } from "./lib/dataCaptureStorage.js";
 import { callDataCaptureRuntime, getDataCaptureState } from "./lib/dataCaptureRuntime.js";
 import {
   dataCaptureScopeCacheKey,
@@ -52,7 +53,9 @@ import {
   DATA_CAPTURE_HOME_PATH,
   resolveCompanyGamesAccess,
   sessionUserHasCompanyCategoryAccess,
+  sessionUserHasDataCapturePageAccess,
   sessionUserHasGamblingAccess,
+  syncDataAllowsDataCaptureAccess,
   syncDataCaptureCompanySession,
 } from "./lib/dataCaptureCompanyAccess.js";
 import {
@@ -62,6 +65,7 @@ import {
 import { toDataCaptureWordFieldCase } from "./lib/dataCaptureFormRules.js";
 import { resolveDataCaptureGridDimensions } from "./grid/dataCaptureGridMeta.js";
 import DataCaptureProcessSelect from "./components/DataCaptureProcessSelect.jsx";
+import SimpleSelect from "../../components/SimpleSelect.jsx";
 import DataCaptureContextMenus from "./components/DataCaptureContextMenus.jsx";
 import DataCaptureDeleteDialog from "./components/DataCaptureDeleteDialog.jsx";
 import DataCaptureTableSection from "./components/DataCaptureTableSection.jsx";
@@ -78,6 +82,8 @@ import { useDataCaptureGlobalShims } from "./hooks/useDataCaptureGlobalShims.js"
 import { useDataCaptureDeleteDialog } from "./hooks/useDataCaptureDeleteDialog.js";
 import { useDataCaptureSubmitReset } from "./hooks/useDataCaptureSubmitReset.js";
 import { useDataCapturePageLifecycle } from "./hooks/useDataCapturePageLifecycle.js";
+import { useGroupOnlyTableDraftAutosave } from "./hooks/useGroupOnlyTableDraftAutosave.js";
+import { useGroupOnlyTableDraftFlush } from "./hooks/useGroupOnlyTableDraftFlush.js";
 import { usePartnershipAuditReadOnlyLocked } from "../../utils/audit/partnershipAuditReadOnly.js";
 import { useDataCaptureSubmittedList } from "./hooks/useDataCaptureSubmittedList.js";
 import { useAuthSession } from "../../context/AuthSessionContext.jsx";
@@ -134,7 +140,10 @@ function DataCapturePageContent() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { me, sessionReady } = useAuthSession();
-  const companyIdFromUrl = searchParams.get("company_id");
+  const restoreBootOnMount = useMemo(() => readCaptureRestoreBoot(), []);
+  const companyIdFromUrl =
+    searchParams.get("company_id") ||
+    (restoreBootOnMount?.companyId != null ? String(restoreBootOnMount.companyId) : null);
   const [lang, setLang] = useState(() => (localStorage.getItem("login_lang") === "zh" ? "zh" : "en"));
   const t = useCallback((key, params) => getDataCaptureText(lang, key, params), [lang]);
 
@@ -155,6 +164,7 @@ function DataCapturePageContent() {
   }, []);
 
   const [bootLoading, setBootLoading] = useState(true);
+  const [companySwitchInFlight, setCompanySwitchInFlight] = useState(false);
   const [engineError, setEngineError] = useState("");
   const [scriptsReady, setScriptsReady] = useState(false);
   const [companies, setCompanies] = useState([]);
@@ -172,6 +182,9 @@ function DataCapturePageContent() {
   useLayoutEffect(() => {
     window.__DATA_CAPTURE_SPA_BOOTSTRAP__ = true;
     window.isNavigatingAwayByBackOrSubmit = false;
+    if (readCaptureRestoreBoot()) {
+      getDataCaptureState().isRestoring = true;
+    }
     return () => {
       try {
         delete window.__DATA_CAPTURE_SPA_BOOTSTRAP__;
@@ -205,23 +218,23 @@ function DataCapturePageContent() {
     return inGroup[0] ?? null;
   }, [isCompanySelected, currentCompanyRow, companiesDeduped, selectedGroup]);
 
-  const c168Channel = useMemo(
-    () => isCompanySelected && isC168GroupCaptureChannel(me, currentCompanyRow),
+  const companyPayrollChannel = useMemo(
+    () => isCompanySelected && isCompanyPayrollCaptureChannel(me, currentCompanyRow),
     [isCompanySelected, me, currentCompanyRow],
   );
 
   const groupLedgerScope = !isCompanySelected && canUseGroupOnlyMode(me);
-  const groupPayrollUi = isGroupPayrollUi(groupLedgerScope, c168Channel);
+  const groupPayrollUi = isGroupPayrollUi(groupLedgerScope, companyPayrollChannel);
   const payrollDraft = useMemo(
     () =>
       resolvePayrollDraftBucket({
-        c168Channel,
+        companyPayrollChannel,
         companyId,
         selectedGroup,
       }),
-    [c168Channel, companyId, selectedGroup],
+    [companyPayrollChannel, companyId, selectedGroup],
   );
-  const showCompanyProcessUi = isCompanySelected && !c168Channel;
+  const showCompanyProcessUi = isCompanySelected && !companyPayrollChannel;
 
   const groupOnlyTable = groupPayrollUi;
 
@@ -310,24 +323,44 @@ function DataCapturePageContent() {
     return "";
   }, [isCompanySelected, currentCompanyRow, groupOnlyTable, selectedGroup, anchorCompanyRow, scopeCompanyId]);
 
+  const { permissions, selectedPermission, selectPermission, showPermissionFilter } =
+    useDataCaptureCategoryPermissions(companyCode);
+
   const form = useDataCaptureFormEngine(captureScope, {
     applyCompanyOnlyFields: showCompanyProcessUi,
-    companyPayrollUi: c168Channel,
+    companyPayrollUi: companyPayrollChannel,
+    lang,
     payrollPrefsKey: payrollDraft.prefsKey,
     payrollDraftServerSync: payrollDraft.serverSync,
     selectedGroup,
     scriptsReady,
+    selectedPermission,
   });
 
   const groupOnlyProcessOptions = useMemo(() => getGroupOnlyProcessOptions(t), [t]);
 
-  const { submittedItems } = useDataCaptureSubmittedList(captureScope, form.captureDate);
+  const currencySelectOptions = useMemo(
+    () => form.currencies.map((c) => ({ value: String(c.id), label: c.code })),
+    [form.currencies],
+  );
+
+  const groupOnlyProcessSelectOptions = useMemo(
+    () => groupOnlyProcessOptions.map((o) => ({ value: o.id, label: o.displayText })),
+    [groupOnlyProcessOptions],
+  );
+
+  const dcFormSelectPortalProps = {
+    forcePortal: true,
+    portalDropdownClassName: "dc-process-select-portal",
+  };
+
+  const { submittedItems, submissionsError, refreshSubmitted } = useDataCaptureSubmittedList(
+    captureScope,
+    form.captureDate,
+  );
 
   const topSectionRef = useRef(null);
   const formColumnRef = useRef(null);
-
-  const { permissions, selectedPermission, selectPermission, showPermissionFilter } =
-    useDataCaptureCategoryPermissions(companyCode);
 
   const {
     captureType,
@@ -347,6 +380,7 @@ function DataCapturePageContent() {
   const mutationsBlocked = usePartnershipAuditReadOnlyLocked(me);
   const submitReset = useDataCaptureSubmitReset({
     captureScope,
+    companies: companiesDeduped,
     form,
     captureType,
     mutationsBlocked,
@@ -355,12 +389,31 @@ function DataCapturePageContent() {
     requireDescriptions: showCompanyProcessUi,
     groupPayrollUi,
     groupLedgerCapture: groupLedgerScope,
-    groupPayrollCapture: c168Channel,
+    groupPayrollCapture: companyPayrollChannel,
     payrollDraftBucket: payrollDraft.bucket,
     payrollDraftServerSync: payrollDraft.serverSync,
     selectedGroup,
+    selectedPermission,
   });
   useDataCaptureGrid(scriptsReady, groupOnlyTable);
+  useGroupOnlyTableDraftFlush({
+    enabled: groupPayrollUi,
+    captureScope,
+    draftBucket: payrollDraft.bucket,
+    payrollDraftServerSync: payrollDraft.serverSync,
+    selectedProcessId: form.selectedProcess?.id,
+    currencyId: form.currencyId,
+    captureType,
+  });
+  useGroupOnlyTableDraftAutosave({
+    enabled: groupPayrollUi,
+    captureScope,
+    draftBucket: payrollDraft.bucket,
+    payrollDraftServerSync: payrollDraft.serverSync,
+    selectedProcessId: form.selectedProcess?.id,
+    currencyId: form.currencyId,
+    captureType,
+  });
   useDataCapturePaste();
   useDataCaptureFormat();
   useDataCaptureGlobalShims();
@@ -456,13 +509,19 @@ function DataCapturePageContent() {
       }
       try {
         const u = me;
-        const raw = filterCompaniesForLoginScope(await fetchOwnerCompaniesAll(), u);
+        const raw = await fetchOwnerCompaniesAll({ me: u });
 
         const url = new URL(window.location.href);
-        const queryCompany = url.searchParams.get("company_id");
-        const restoreFromUrl = url.searchParams.get("restore") === "1";
+        const restoreBoot = readCaptureRestoreBoot();
+        const queryCompany =
+          url.searchParams.get("company_id") ||
+          (restoreBoot?.companyId != null ? String(restoreBoot.companyId) : null);
+        const restoreFromUrl =
+          url.searchParams.get("restore") === "1" || restoreBoot?.restore === true;
         const submittedFromUrl = url.searchParams.get("submitted") === "1";
-        const queryGroupOnly = url.searchParams.get("group_only") === "1";
+        const queryGroupOnly =
+          url.searchParams.get("group_only") === "1" || restoreBoot?.groupOnly === true;
+        const queryGroup = url.searchParams.get("group_id") || restoreBoot?.groupId || null;
         const sessionMeta = restoreFromUrl ? readCaptureSessionMeta() : null;
         const allowGroupOnly = canUseGroupOnlyMode(u);
         const persistedGc = readPersistedDashboardGcFilter();
@@ -483,7 +542,7 @@ function DataCapturePageContent() {
         if (cancelled) return;
 
         if (groupOnlyBoot) {
-          if (!sessionUserHasGamblingAccess(u)) {
+          if (!sessionUserHasDataCapturePageAccess(u)) {
             navigate(DATA_CAPTURE_HOME_PATH, { replace: true });
             return;
           }
@@ -503,7 +562,7 @@ function DataCapturePageContent() {
         }
 
         if (!sessionUserHasCompanyCategoryAccess(u)) {
-          navigate(spaPath("process-list", { search: "?error=no_permission" }), { replace: true });
+          navigate(spaPath("process-list"), { replace: true });
           return;
         }
 
@@ -536,6 +595,7 @@ function DataCapturePageContent() {
           companyId: effectiveCompany,
           companyCode: pickCode,
           sessionUser: u,
+          companyRow: rowForPick,
         });
         if (cancelled) return;
         if (!hasGamesAccess) {
@@ -543,7 +603,20 @@ function DataCapturePageContent() {
           return;
         }
 
-        const initialGroup = resolveInitialSelectedGroupFromSession(raw, rowForPick);
+        const initialGroup = (() => {
+          if (restoreFromUrl) {
+            const savedGroup =
+              queryGroup ||
+              sessionMeta?.captureSelectedGroup ||
+              loadActiveCaptureSession(raw)?.processData?.captureSelectedGroup;
+            if (savedGroup) {
+              const normalized = String(savedGroup).trim().toUpperCase();
+              persistDashboardGroupFilter(normalized);
+              return normalized;
+            }
+          }
+          return resolveInitialSelectedGroupFromSession(raw, rowForPick);
+        })();
 
         setCompanies(raw);
         setCompanyId(effectiveCompany);
@@ -574,10 +647,7 @@ function DataCapturePageContent() {
     if (bootLoading || companies.length === 0) return;
     if (isDashboardGroupOnlyMode()) {
       if (companyIdFromUrl) {
-        const params = new URLSearchParams(searchParams);
-        params.delete("company_id");
-        const qs = params.toString();
-        navigate(`/datacapture${qs ? `?${qs}` : ""}`, { replace: true });
+        navigate(spaPath("datacapture"), { replace: true });
       }
       return;
     }
@@ -604,7 +674,7 @@ function DataCapturePageContent() {
       try {
         const syncJson = await syncDataCaptureCompanySession(id);
         if (!syncJson.success) return;
-        if (syncJson.data?.has_gambling === false) {
+        if (syncJson.data?.has_gambling === false && !syncDataAllowsDataCaptureAccess(syncJson.data)) {
           navigate(DATA_CAPTURE_HOME_PATH, { replace: true });
           return;
         }
@@ -667,7 +737,8 @@ function DataCapturePageContent() {
         if (!syncJson.success || cancelled) return;
         if (
           syncJson.data?.has_gambling === false &&
-          !sessionUserHasGamblingAccess(me)
+          !sessionUserHasDataCapturePageAccess(me) &&
+          !syncDataAllowsDataCaptureAccess(syncJson.data)
         ) {
           navigate(DATA_CAPTURE_HOME_PATH, { replace: true });
           return;
@@ -710,7 +781,10 @@ function DataCapturePageContent() {
 
   const switchCompanySessionAndNavigate = useCallback(async (nextCompanyId) => {
     const id = Number(nextCompanyId);
-    if (!id) return;
+    if (!id) {
+      setCompanySwitchInFlight(false);
+      return;
+    }
 
     try {
       const syncJson = await syncDataCaptureCompanySession(id);
@@ -718,13 +792,15 @@ function DataCapturePageContent() {
 
       notifyCompanySessionUpdated(syncJson.data ?? null);
 
-      if (syncJson.data?.has_gambling === false) {
+      if (syncJson.data?.has_gambling === false && !syncDataAllowsDataCaptureAccess(syncJson.data)) {
         navigate(DATA_CAPTURE_HOME_PATH, { replace: true });
         return;
       }
     } catch {
       navigate(DATA_CAPTURE_HOME_PATH, { replace: true });
       return;
+    } finally {
+      setCompanySwitchInFlight(false);
     }
 
     persistDashboardGroupOnlyMode(false);
@@ -734,10 +810,13 @@ function DataCapturePageContent() {
       companyId: id,
     };
     setCompanyId(id);
-    navigate(`/datacapture?company_id=${encodeURIComponent(id)}`, { replace: true });
-  }, [navigate, selectedGroup]);
+    if (searchParams.toString()) {
+      navigate(spaPath("datacapture"), { replace: true });
+    }
+  }, [navigate, selectedGroup, searchParams]);
 
   const handleClearCompany = useCallback(() => {
+    setCompanySwitchInFlight(false);
     setCompanyId(null);
     groupAnchorSessionRef.current = { group: null, companyId: null };
     navigate(spaPath("datacapture"), { replace: true });
@@ -751,6 +830,7 @@ function DataCapturePageContent() {
       if (!id) return;
       const gid = comp.group_id ? String(comp.group_id).toUpperCase().trim() : null;
       form.clearProcessSelection?.();
+      setCompanySwitchInFlight(true);
       flushSync(() => {
         setCompanyId(id);
         if (gid) setSelectedGroup(gid);
@@ -772,10 +852,10 @@ function DataCapturePageContent() {
 
   useEffect(() => {
     if (getDataCaptureState().isRestoring) return;
-    if (new URLSearchParams(window.location.search).get("restore") === "1") return;
+    if (shouldRestoreFromUrl()) return;
     const id = form.selectedProcess?.id;
     if (!id) return;
-    if (!isCompanySelected && !c168Channel && !isGroupOnlyProcessId(id)) {
+    if (!isCompanySelected && !companyPayrollChannel && !isGroupOnlyProcessId(id)) {
       form.clearProcessSelection();
     } else if (showCompanyProcessUi && isGroupOnlyProcessId(id)) {
       form.clearProcessSelection();
@@ -896,9 +976,9 @@ function DataCapturePageContent() {
   }, [bootLoading, me, captureScope, effectiveCompanyId, companyCode, groupPayrollUi]);
 
   useEffect(() => {
-    if (!scriptsReady || !dataCaptureScopeIsReady(captureScope)) return;
+    if (bootLoading || !scriptsReady || !dataCaptureScopeIsReady(captureScope)) return;
     submitReset.restoreFromStorage();
-  }, [scriptsReady, captureScope, submitReset.restoreFromStorage]);
+  }, [bootLoading, scriptsReady, captureScope, submitReset.restoreFromStorage]);
 
   useEffect(() => {
     if (!scriptsReady) return;
@@ -906,11 +986,10 @@ function DataCapturePageContent() {
   }, [scriptsReady]);
 
   const list = filterCompaniesWithDisplayId(companiesForPicker);
-  const pageShellKey = dataCaptureScopeCacheKey(captureScope) || "pending";
 
   return (
-    <DataCaptureErrorBoundary key={pageShellKey}>
-      <div className="container" key={pageShellKey}>
+    <DataCaptureErrorBoundary>
+      <div className="container">
       <div className="dc-page-toolbar">
 
         <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
@@ -970,6 +1049,7 @@ function DataCapturePageContent() {
                     pickerCompanyId={companyId}
                     onPickAllInGroup={handlePickAllInGroup}
                     onPickCompany={handlePickCompany}
+                    switchingCompany={companySwitchInFlight}
                   />
                 </div>
               )}
@@ -978,13 +1058,16 @@ function DataCapturePageContent() {
                 <div className="dc-form-company-layout">
                   <div className="form-group dc-form-company-layout__date">
                     <label htmlFor="capture_date">{t("date")}</label>
-                    <select id="capture_date" name="capture_date" required value={form.captureDate} onChange={(e) => void form.onDateChange(e)}>
-                      {form.dateOptions.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
+                    <input type="hidden" name="capture_date" value={form.captureDate} />
+                    <SimpleSelect
+                      id="capture_date"
+                      value={form.captureDate}
+                      onChange={(v) => void form.onDateChange(v)}
+                      options={form.dateOptions}
+                      required
+                      includeEmptyOption={false}
+                      {...dcFormSelectPortalProps}
+                    />
                   </div>
 
                   <div className="form-group dc-form-company-layout__process">
@@ -1011,28 +1094,24 @@ function DataCapturePageContent() {
 
                   <div className="form-group dc-form-company-layout__currency">
                     <label htmlFor="capture_currency">{t("currency")}</label>
-                    <select
+                    <input type="hidden" name="currency" value={form.currencyId} />
+                    <SimpleSelect
                       id="capture_currency"
-                      name="currency"
                       value={form.currencyId}
-                      onChange={(e) => {
-                        form.setCurrencyId(e.target.value);
+                      onChange={(v) => {
+                        form.setCurrencyId(v);
                         setTimeout(() => callDataCaptureRuntime("recomputeSubmitState"), 0);
                       }}
-                    >
-                      <option value="">{t("selectCurrency")}</option>
-                      {form.currencies.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.code}
-                        </option>
-                      ))}
-                    </select>
+                      options={currencySelectOptions}
+                      placeholder={t("selectCurrency")}
+                      {...dcFormSelectPortalProps}
+                    />
                   </div>
 
                   <div className="form-group dc-form-company-layout__description">
                     <label htmlFor="capture_description">{t("description")}</label>
                     <div
-                      className="input-with-icon dc-description-input-wrap"
+                      className="description-input-wrap dc-description-input-wrap description-input-wrap--interactive"
                       role="button"
                       tabIndex={0}
                       title={t("selectDescriptions")}
@@ -1056,7 +1135,7 @@ function DataCapturePageContent() {
                       />
                       <button
                         type="button"
-                        className="dc-description-add-tile"
+                        className="description-add-tile dc-description-add-tile"
                         title={t("selectDescriptions")}
                         aria-label={t("selectDescriptions")}
                         onClick={(e) => {
@@ -1108,7 +1187,6 @@ function DataCapturePageContent() {
                       processId={form.selectedProcess?.id}
                       scopeCompanyId={captureScope?.scopeCompanyId ?? companyId}
                       placeholder={t("enterWordsToRemove")}
-                      removeChipAriaLabel={t("removeWordChipRemove")}
                     />
                     <small className="field-help dc-form-company-layout__remove-help" style={{ display: "block", marginTop: 0, fontStyle: "italic", color: "#666" }}>
                       {t("removeWordHelp")}
@@ -1132,56 +1210,51 @@ function DataCapturePageContent() {
                   <div className="dc-form-row dc-form-row--2col dc-form-row--stacked">
                     <div className="form-group">
                       <label htmlFor="capture_date">{t("date")}</label>
-                      <select id="capture_date" name="capture_date" required value={form.captureDate} onChange={(e) => void form.onDateChange(e)}>
-                        {form.dateOptions.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
+                      <input type="hidden" name="capture_date" value={form.captureDate} />
+                      <SimpleSelect
+                        id="capture_date"
+                        value={form.captureDate}
+                        onChange={(v) => void form.onDateChange(v)}
+                        options={form.dateOptions}
+                        required
+                        includeEmptyOption={false}
+                        {...dcFormSelectPortalProps}
+                      />
                     </div>
 
                     <div className="form-group">
                       <label htmlFor="capture_process">{t("process")}</label>
-                      <select
+                      <input type="hidden" name="process" value={form.selectedProcess?.id || ""} />
+                      <SimpleSelect
                         id="capture_process"
-                        name="process"
                         value={form.selectedProcess?.id || ""}
-                        onChange={(e) => {
-                          const opt = groupOnlyProcessOptions.find((o) => o.id === e.target.value);
+                        onChange={(v) => {
+                          const opt = groupOnlyProcessOptions.find((o) => o.id === v);
                           if (opt) form.selectGroupOnlyProcess(opt);
                           else form.clearProcessSelection();
                         }}
-                      >
-                        <option value="">{t("selectProcess")}</option>
-                        {groupOnlyProcessOptions.map((o) => (
-                          <option key={o.id} value={o.id}>
-                            {o.displayText}
-                          </option>
-                        ))}
-                      </select>
+                        options={groupOnlyProcessSelectOptions}
+                        placeholder={t("selectProcess")}
+                        {...dcFormSelectPortalProps}
+                      />
                     </div>
                   </div>
 
                   <div className="dc-form-row dc-form-row--2col dc-form-row--stacked">
                     <div className="form-group">
                       <label htmlFor="capture_currency">{t("currency")}</label>
-                      <select
+                      <input type="hidden" name="currency" value={form.currencyId} />
+                      <SimpleSelect
                         id="capture_currency"
-                        name="currency"
                         value={form.currencyId}
-                        onChange={(e) => {
-                          form.setCurrencyId(e.target.value);
+                        onChange={(v) => {
+                          form.setCurrencyId(v);
                           setTimeout(() => callDataCaptureRuntime("recomputeSubmitState"), 0);
                         }}
-                      >
-                        <option value="">{t("selectCurrency")}</option>
-                        {form.currencies.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.code}
-                          </option>
-                        ))}
-                      </select>
+                        options={currencySelectOptions}
+                        placeholder={t("selectCurrency")}
+                        {...dcFormSelectPortalProps}
+                      />
                     </div>
 
                     <div className="form-group">
@@ -1209,7 +1282,18 @@ function DataCapturePageContent() {
               {/* Legacy `renderSubmittedProcesses` sets innerHTML on `#submittedProcessesList` — decoy only. */}
               <div id="submittedProcessesList" className="dc-legacy-submitted-host" aria-hidden="true" style={{ display: "none" }} />
               <div className="dc-react-submitted-list">
-              {submittedItems.length === 0 ? (
+              {submissionsError ? (
+                <div className="no-data" role="alert">
+                  {t("failedLoadSubmittedProcesses") || submissionsError.message}
+                  <button
+                    type="button"
+                    className="dc-submitted-retry"
+                    onClick={() => void refreshSubmitted()}
+                  >
+                    {t("retry") || "Retry"}
+                  </button>
+                </div>
+              ) : submittedItems.length === 0 ? (
                 <div className="no-data">{t("noProcessesSubmitted")}</div>
               ) : (
                 submittedItems.map((process, index) => (
@@ -1224,7 +1308,7 @@ function DataCapturePageContent() {
                     <div className="submitted-details">
                       <div className="detail-row">
                         <strong>
-                          {captureScope?.mode === "group" || c168Channel
+                          {captureScope?.mode === "group" || companyPayrollChannel
                             ? process.process_code
                             : `${process.process_code}${process.description_name ? ` (${process.description_name})` : ""}`}
                         </strong>

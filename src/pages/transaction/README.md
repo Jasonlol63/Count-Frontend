@@ -15,6 +15,7 @@ Route: `/transaction` (see `App.jsx`). Entry: `TransactionPaymentPage.jsx`.
 | Account dropdown (from/to) | `components/AccountSelect.jsx` |
 | Permissions, categories, accounts, currencies | `hooks/useTransactionData.js` |
 | List search, filters, grid state | `hooks/useTransactionSearch.js` |
+| Right-side type search (all-time transaction rows) | `api/transactions/type_transaction_search_api.php` + `runTypeSearch` in `useTransactionSearch.js` |
 | Submit payment / rate / invalidate cache | `hooks/useTransactionForm.js` |
 | Toast, history query, contra inbox | `hooks/useTransactionUI.js` |
 | Date range picker init | `hooks/useTransactionDateRange.js` |

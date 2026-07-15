@@ -5,6 +5,8 @@ import {
   SUMMARY_FORMULA_SOURCE_KEY,
   SUMMARY_RATE_VALUES_KEY,
 } from "./summaryStorage.js";
+import { mergeRowsWithSummaryDomDraft } from "./summaryRefreshDomSync.js";
+import { loadSummaryRateMapsFromStorage } from "./summaryStorage.js";
 
 const SNAPSHOT_PREFIX = "summaryRowsSnapshot";
 
@@ -165,7 +167,8 @@ export function clearSummarySessionSnapshot(captureScope, processMeta = null) {
   }
 }
 
-function serializeRowForRefresh(row) {  return {
+function serializeRowForRefresh(row) {
+  return {
     rowKey: row.key,
     stableKey: buildSummaryRowStableKey(row),
     idProduct: row.idProduct,
@@ -197,38 +200,63 @@ function serializeRowForRefresh(row) {  return {
   };
 }
 
+function applyRowRateToPersistMaps(row, rateMap, rateByProduct, domSyncedKeys) {
+  const key = row.key;
+  const hasRateValue = String(row.rateValue || "").trim() !== "";
+  const hasRate = !!row.rateChecked || hasRateValue;
+  const domSynced = domSyncedKeys.has(key);
+
+  if (!hasRate) {
+    if (!domSynced) return;
+    delete rateMap[key];
+    const stableKey = buildSummaryRowStableKey(row);
+    if (stableKey) delete rateMap[stableKey];
+    if (row.idProduct) delete rateByProduct[row.idProduct];
+    return;
+  }
+
+  const entry = { checked: !!row.rateChecked, value: row.rateValue || "" };
+  rateMap[key] = entry;
+  const stableKey = buildSummaryRowStableKey(row);
+  if (stableKey) {
+    rateMap[stableKey] = entry;
+  }
+  if (row.idProduct) {
+    rateByProduct[row.idProduct] = entry;
+  }
+}
+
 /** Persist formula/rate draft before refresh or back (pure React, scoped by capture ledger). */
 export function saveSummaryRefreshStatePure(rows, processMeta, captureScope = null) {
   try {
+    const { rows: syncedRows, domSyncedKeys } = mergeRowsWithSummaryDomDraft(rows);
+    const hasPopulatedRows = summaryRowsLookPopulated(syncedRows);
     const keys = summaryRefreshStorageKeys(captureScope);
     const payload = {
       processId: processMeta?.processId ?? null,
       processCode: processMeta?.processCode ?? "",
-      rowOrder: rows.map((r) => r.key),
-      rows: rows
+      rowOrder: syncedRows.map((r) => r.key),
+      rows: syncedRows
         .filter((r) => r.account?.trim() || r.formulaOperators || r.formulaDisplay)
         .map(serializeRowForRefresh),
     };
     localStorage.setItem(keys.formulaSource, JSON.stringify(payload));
 
-    const rateMap = {};
-    const rateByProduct = {};
-    for (const row of rows) {
-      if (!row.rateChecked && !row.rateValue) continue;
-      const key = row.key;
-      rateMap[key] = { checked: row.rateChecked, value: row.rateValue || "" };
-      const stableKey = buildSummaryRowStableKey(row);
-      if (stableKey) {
-        rateMap[stableKey] = rateMap[key];
-      }
-      if (row.idProduct) {
-        rateByProduct[row.idProduct] = { checked: row.rateChecked, value: row.rateValue || "" };
-      }
+    const existing = loadSummaryRateMapsFromStorage(captureScope);
+    const rateMap = { ...existing.byKey };
+    const rateByProduct = { ...existing.byProduct };
+    for (const row of syncedRows) {
+      applyRowRateToPersistMaps(row, rateMap, rateByProduct, domSyncedKeys);
     }
     localStorage.setItem(keys.rateValues, JSON.stringify(rateMap));
     localStorage.setItem(keys.rateByProduct, JSON.stringify(rateByProduct));
 
-    saveSummarySessionSnapshot(rows, processMeta, captureScope);
+    if (hasPopulatedRows) {
+      saveSummarySessionSnapshot(syncedRows, processMeta, captureScope);
+    } else {
+      // Prevent stale pre-delete snapshot from being restored on in-page refresh.
+      clearSummarySessionSnapshot(captureScope, processMeta);
+    }
   } catch {
     /* ignore */
   }

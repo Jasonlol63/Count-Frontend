@@ -11,8 +11,8 @@ import {
   reorderOwnershipRows,
   validateOwnershipRowsForSave,
   mapOwnerApiRows,
+  accountsFromOwnerRows,
   mergeEditorAccounts,
-  normalizeOwnershipAccounts,
   rowsToSavePayload,
   allocationRowsForSave,
 } from "../shared/ownershipRowHelpers.js";
@@ -45,6 +45,32 @@ export function useCompanyOwnership(shell) {
   const [bulkGroupSelect, setBulkGroupSelect] = useState("");
   const [openGroupForCompanyId, setOpenGroupForCompanyId] = useState(null);
   const dragRef = useRef({ companyId: null, idx: null });
+
+  const patchCompaniesGroup = useCallback(
+    (patches) => {
+      setAllCompanies((prev) =>
+        prev.map((c) => {
+          const id = Number(c.id);
+          if (!patches.has(id)) return c;
+          const gid = patches.get(id);
+          return { ...c, group_id: gid || null };
+        }),
+      );
+    },
+    [setAllCompanies],
+  );
+
+  const clearCompanyEditorState = useCallback((companyIds) => {
+    const idSet = new Set((companyIds || []).map((id) => Number(id)));
+    setCompanyStates((prev) => {
+      const next = { ...prev };
+      idSet.forEach((id) => {
+        delete next[id];
+      });
+      return next;
+    });
+    setExpandedCompanyId((cur) => (cur != null && idSet.has(Number(cur)) ? null : cur));
+  }, []);
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -99,7 +125,7 @@ export function useCompanyOwnership(shell) {
         for (const { cid, oRes } of pairs) {
           if (!isApiSuccess(oRes)) continue;
           const rows = mapOwnerApiRows(oRes.data);
-          next[cid] = { accounts: mergeEditorAccounts([], rows), rows };
+          next[cid] = { accounts: accountsFromOwnerRows(rows), rows };
           if (!bannerSet) {
             const meta = oRes.meta || {};
             setHistoryBanner({
@@ -126,6 +152,12 @@ export function useCompanyOwnership(shell) {
     setGroupFilter(allGroupIds[0]);
   }, [groupFilter, allCompanies, allGroupIds]);
 
+  // After ungroup empties a group, groupFilter may point at a removed group id → blank list
+  useEffect(() => {
+    if (groupFilter === null || allGroupIds.includes(groupFilter)) return;
+    setGroupFilter(allGroupIds.length > 0 ? allGroupIds[0] : null);
+  }, [groupFilter, allGroupIds]);
+
   const loadCompanyState = useCallback(
     async (cid, { force = false } = {}) => {
       if (!force) {
@@ -139,6 +171,8 @@ export function useCompanyOwnership(shell) {
 
       setLoadingCompanyId(cid);
       try {
+        const compData = allCompanies.find((c) => Number(c.id) === cid);
+        const compGid = compData?.group_id || "";
         const ownersUrl = isHistoricalView
           ? `api/ownership/get_owners_api.php?company_id=${cid}&month=${encodeURIComponent(selectedMonth)}`
           : `api/ownership/get_owners_api.php?company_id=${cid}`;
@@ -150,7 +184,17 @@ export function useCompanyOwnership(shell) {
             credentials: "include",
           }).then((r) => r.json()),
         ]);
-        const accounts = normalizeOwnershipAccounts(aRes.status === "success" ? aRes.data : []);
+        const accounts = aRes.status === "success" ? aRes.data : [];
+        if (compGid && !accounts.some((a) => String(a.id) === `G_${compGid}`)) {
+          accounts.push({
+            id: `G_${compGid}`,
+            account_name: `Group: ${compGid}`,
+            name: `Group Equity`,
+            role: "GROUP",
+            type: "group",
+            is_main_owner: 0,
+          });
+        }
         const rows = mapOwnerApiRows(oRes.status === "success" ? oRes.data : []);
         const stateAccounts = mergeEditorAccounts(accounts, rows);
         const meta = oRes.meta || {};
@@ -175,7 +219,7 @@ export function useCompanyOwnership(shell) {
         setLoadingCompanyId(null);
       }
     },
-    [isHistoricalView, selectedMonth, setHistoryBanner, lang, showToast],
+    [allCompanies, isHistoricalView, selectedMonth, setHistoryBanner, lang, showToast],
   );
 
   const toggleCard = useCallback(
@@ -217,8 +261,30 @@ export function useCompanyOwnership(shell) {
   );
 
   const removeRow = useCallback(
-    (cid, idx) => {
+    async (cid, idx) => {
       if (readOnlyMode) return showToast("Read-only: only owner can modify ownership", "error");
+      const st = companyStates[cid];
+      if (!st) return;
+      const row = st.rows[idx];
+      if (row?.ownership_id && !isHistoricalView) {
+        try {
+          const body = new FormData();
+          body.append("ownership_id", String(row.ownership_id));
+          const res = await fetch(buildApiUrl("api/ownership/remove_owner_api.php"), {
+            method: "POST",
+            credentials: "include",
+            body,
+          });
+          const json = await res.json();
+          if (!isApiSuccess(json)) {
+            showToast(getApiMessage(json, "Remove failed"), "error");
+            return;
+          }
+        } catch {
+          showToast("Server error", "error");
+          return;
+        }
+      }
       setCompanyStates((prev) => {
         const cur = prev[cid];
         if (!cur) return prev;
@@ -227,7 +293,7 @@ export function useCompanyOwnership(shell) {
         return { ...prev, [cid]: { ...cur, rows } };
       });
     },
-    [readOnlyMode, showToast],
+    [companyStates, readOnlyMode, isHistoricalView, showToast],
   );
 
   const reorderRows = useCallback((cid, from, to, insertAfter) => {
@@ -245,11 +311,11 @@ export function useCompanyOwnership(shell) {
         return false;
       }
       try {
-        const res = await fetch(buildApiUrl("api/ownership/link-partner"), {
+        const res = await fetch(buildApiUrl("api/ownership/add_external_partner_api.php"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ tenant_id: cid, login_id: loginId, force_type: forceType }),
+          body: JSON.stringify({ company_id: cid, login_id: loginId, force_type: forceType }),
         });
         const json = await res.json();
         if (isApiSuccess(json)) {
@@ -258,7 +324,7 @@ export function useCompanyOwnership(shell) {
           return true;
         }
         if (isApiConflict(json)) {
-          setConflict({ companyId: cid, loginId, data: json.data });
+          setConflict({ scope: "company", companyId: cid, loginId, data: json.data });
           return false;
         }
         showToast(getApiMessage(json, "Link partner failed"), "error");
@@ -290,11 +356,11 @@ export function useCompanyOwnership(shell) {
       setSavingCompanyId(cid);
       try {
         const payload = {
-          tenant_id: cid,
+          company_id: cid,
           owners: rowsToSavePayload(rows),
         };
         if (isHistoricalView) payload.month = selectedMonth;
-        const res = await fetch(buildApiUrl("api/ownership/batch-save-ownership"), {
+        const res = await fetch(buildApiUrl("api/ownership/batch_save_owners_api.php"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -324,44 +390,58 @@ export function useCompanyOwnership(shell) {
     async (cid, gid, companyName) => {
       if (adminLocked) return showToast("Read-only: only owner can modify ownership", "error");
       try {
-        const res = await fetch(buildApiUrl("api/ownership/update-parent-tenant"), {
+        const res = await fetch(buildApiUrl("api/ownership/update_company_group_api.php"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ tenant_id: cid, parent_code: gid }),
+          body: JSON.stringify({ company_id: cid, group_id: gid }),
         });
         const json = await res.json();
         if (isApiSuccess(json)) {
           showToast(`"${companyName}" joined group "${gid}"`, "success");
-          void fetchCompanies();
+          patchCompaniesGroup(new Map([[Number(cid), gid]]));
+          clearCompanyEditorState([cid]);
+          setOpenGroupForCompanyId(null);
+          if (groupFilter === null) setGroupFilter(gid);
+          await fetchCompanies(selectedMonth, { force: true });
         } else showToast(getApiMessage(json, "Join group failed"), "error");
       } catch {
         showToast("Server error", "error");
       }
     },
-    [fetchCompanies, adminLocked, showToast],
+    [
+      fetchCompanies,
+      adminLocked,
+      selectedMonth,
+      groupFilter,
+      patchCompaniesGroup,
+      clearCompanyEditorState,
+      showToast,
+    ],
   );
 
   const ungroupCompany = useCallback(
     async (cid, companyName) => {
       if (adminLocked) return showToast("Read-only: only owner can modify ownership", "error");
       try {
-        const res = await fetch(buildApiUrl("api/ownership/update-parent-tenant"), {
+        const res = await fetch(buildApiUrl("api/ownership/update_company_group_api.php"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ tenant_id: cid, parent_code: null }),
+          body: JSON.stringify({ company_id: cid, group_id: null }),
         });
         const json = await res.json();
         if (isApiSuccess(json)) {
           showToast(`"${companyName}" removed from group`, "success");
-          void fetchCompanies();
+          patchCompaniesGroup(new Map([[Number(cid), null]]));
+          clearCompanyEditorState([cid]);
+          await fetchCompanies(selectedMonth, { force: true });
         } else showToast(getApiMessage(json, "Ungroup failed"), "error");
       } catch {
         showToast("Server error", "error");
       }
     },
-    [fetchCompanies, adminLocked, showToast],
+    [fetchCompanies, adminLocked, selectedMonth, patchCompaniesGroup, clearCompanyEditorState, showToast],
   );
 
   const toggleSelectionMode = useCallback(() => {
@@ -400,26 +480,39 @@ export function useCompanyOwnership(shell) {
         const ids = Array.from(selectedCompanyIds);
         const results = await Promise.all(
           ids.map((cid) =>
-            fetch(buildApiUrl("api/ownership/update-parent-tenant"), {
+            fetch(buildApiUrl("api/ownership/update_company_group_api.php"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               credentials: "include",
-              body: JSON.stringify({ tenant_id: cid, parent_code: gid }),
+              body: JSON.stringify({ company_id: cid, group_id: gid }),
             }).then((r) => r.json()),
           ),
         );
         const failed = results.filter((r) => !isApiSuccess(r));
         if (failed.length === 0) {
           showToast(`Added ${selectedCompanyIds.size} companies to ${gid}`, "success");
+          const patches = new Map(ids.map((cid) => [Number(cid), gid]));
+          patchCompaniesGroup(patches);
+          clearCompanyEditorState(ids);
           setSelectedCompanyIds(new Set());
           setSelectionMode(false);
-          void fetchCompanies();
+          if (groupFilter === null) setGroupFilter(gid);
+          await fetchCompanies(selectedMonth, { force: true });
         } else showToast(`${ids.length - failed.length} succeeded, ${failed.length} failed`, "error");
       } catch {
         showToast("Server error", "error");
       }
     },
-    [fetchCompanies, adminLocked, selectedCompanyIds, showToast],
+    [
+      fetchCompanies,
+      adminLocked,
+      selectedCompanyIds,
+      selectedMonth,
+      groupFilter,
+      patchCompaniesGroup,
+      clearCompanyEditorState,
+      showToast,
+    ],
   );
 
   const bulkUngroup = useCallback(async () => {
@@ -428,25 +521,36 @@ export function useCompanyOwnership(shell) {
       const ids = Array.from(selectedCompanyIds);
       const results = await Promise.all(
         ids.map((cid) =>
-          fetch(buildApiUrl("api/ownership/update-parent-tenant"), {
+          fetch(buildApiUrl("api/ownership/update_company_group_api.php"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            body: JSON.stringify({ tenant_id: cid, parent_code: null }),
+            body: JSON.stringify({ company_id: cid, group_id: null }),
           }).then((r) => r.json()),
         ),
       );
       const failed = results.filter((r) => !isApiSuccess(r));
       if (failed.length === 0) {
         showToast(`Removed ${selectedCompanyIds.size} companies from group`, "success");
+        const patches = new Map(ids.map((cid) => [Number(cid), null]));
+        patchCompaniesGroup(patches);
+        clearCompanyEditorState(ids);
         setSelectedCompanyIds(new Set());
         setSelectionMode(false);
-        void fetchCompanies();
+        await fetchCompanies(selectedMonth, { force: true });
       } else showToast(`${ids.length - failed.length} succeeded, ${failed.length} failed`, "error");
     } catch {
       showToast("Server error", "error");
     }
-  }, [fetchCompanies, adminLocked, selectedCompanyIds, showToast]);
+  }, [
+    fetchCompanies,
+    adminLocked,
+    selectedCompanyIds,
+    selectedMonth,
+    patchCompaniesGroup,
+    clearCompanyEditorState,
+    showToast,
+  ]);
 
   return {
     groupFilter,

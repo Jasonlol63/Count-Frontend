@@ -49,6 +49,17 @@ export function DashboardChartBaseline({ offset, width, yAxisMap }) {
   );
 }
 
+function buildZeroChartMetricRow(date, label) {
+  return {
+    date,
+    label,
+    profit: 0,
+    expenses: 0,
+    netProfit: 0,
+    earnings: 0,
+  };
+}
+
 function buildChartMetricRow(date, label, dailyData, earningsMultiplier) {
   const profitDelta = parseFloat(dailyData.profit?.[date] || 0) || 0;
   const expensesDelta = parseFloat(dailyData.expenses?.[date] || 0) || 0;
@@ -66,6 +77,32 @@ function buildChartMetricRow(date, label, dailyData, earningsMultiplier) {
   };
 }
 
+/** Zero-valued rows for the selected range — keeps axes/grid visible when there is no activity. */
+export function buildSkeletonChartRows(startYmd, endYmd, locale = "en-US") {
+  const rangeStart = parseYmd(startYmd);
+  const rangeEnd = parseYmd(endYmd);
+  if (!rangeStart || !rangeEnd) return [];
+
+  if (shouldAggregateChartByMonth(startYmd, endYmd)) {
+    return eachMonthInRange(startYmd, endYmd).map(({ year, month }) => {
+      const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+      return buildZeroChartMetricRow(monthKey, formatChartMonthLabel(year, month, locale));
+    });
+  }
+
+  const dates = eachDateInRange(startYmd, endYmd);
+  const sameCalendarMonth =
+    rangeStart.getFullYear() === rangeEnd.getFullYear() &&
+    rangeStart.getMonth() === rangeEnd.getMonth();
+  return dates.map((date) => {
+    const d = parseYmd(date);
+    const label = sameCalendarMonth
+      ? String(d.getDate())
+      : `${d.getDate()}/${d.getMonth() + 1}`;
+    return buildZeroChartMetricRow(date, label);
+  });
+}
+
 export function buildChartRows(
   data,
   startYmd,
@@ -76,9 +113,9 @@ export function buildChartRows(
 ) {
   if (!data?.daily_data) return [];
   const dailyData = data.daily_data;
-  const earningsMultiplier = viewerHasEarningsConfig(data)
+  const earningsMultiplier = viewerHasEarningsConfig(data, options)
     ? resolvePanelEarningsPct(data, selectedGroup, options)
-    : 1;
+    : 0;
   const rangeStart = parseYmd(startYmd);
   const rangeEnd = parseYmd(endYmd);
 

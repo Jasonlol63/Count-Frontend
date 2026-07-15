@@ -8,12 +8,12 @@ const COMPANY_EXP_MODAL_OVERLAY_Z = 2147482998;
 /**
  * Company Expiration Status Modal (read-only view)
  * Props:
- *   companies: Array<{ code, expiration_date, parent_code? }>
+ *   companies: Array<{ company_id, expiration_date }>
  *   onClose()
  */
 export default function CompanyExpirationModal({ companies, onClose, lang = "en" }) {
   const t = (key, params) => getDomainText(lang, key, params);
-  const rows = (companies || []).filter((c) => String(c.code || "").trim());
+  const rows = (companies || []).filter((c) => String(c.company_id || "").trim());
 
   return (
     <DomainModalPortal>
@@ -64,9 +64,9 @@ export default function CompanyExpirationModal({ companies, onClose, lang = "en"
                   }
 
                   return (
-                    <div key={company.code} className="company-exp-item">
+                    <div key={company.company_id} className="company-exp-item">
                       <div className="company-exp-item-left">
-                        <div className="company-exp-id">{company.code}</div>
+                        <div className="company-exp-id">{company.company_id}</div>
                         <div className="company-exp-date">
                           {t("expirationPrefix")}
                           {formattedDate}

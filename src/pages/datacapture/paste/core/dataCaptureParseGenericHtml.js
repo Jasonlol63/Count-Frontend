@@ -5,7 +5,8 @@
 import { pushDataCaptureNotification } from "../../lib/dataCaptureNotify.js";
 import { formatMoneyDisplay } from "./dataCapturePasteMoneyUtils.js";
 import { applyParsedMatrixToGrid } from "./dataCapturePasteApply.js";
-import { getActiveCaptureType, runConvertTableOnSubmit } from "../../lib/dataCaptureBridge.js";
+import { finalizePasteWithOptionalConvert } from "../../grid/dataCaptureGridPasteHistory.js";
+import { getActiveCaptureType, notifyPasteUser, recomputeSubmitStateAfterPaste } from "../../lib/dataCaptureBridge.js";
 
 function getCaptureType() {
   return getActiveCaptureType();
@@ -417,9 +418,10 @@ export function parseAndFillHTMLTable(htmlString, startCell) {
             captureType === "ALIPAY" ||
             captureType === "1.Text";
 
-        applyParsedMatrixToGrid(dataMatrix, startCell, {
+        const { successCount } = applyParsedMatrixToGrid(dataMatrix, startCell, {
             startColOverride: forceColZero ? 0 : undefined,
             trimValues: true,
+            deferUndoCheckpoint: true,
             transformCell: (trimmedData, rowIndex, colIndex) => {
                 if (trimmedData === "") return "";
                 if (captureType === "VPOWER") {
@@ -441,10 +443,8 @@ export function parseAndFillHTMLTable(htmlString, startCell) {
             "success",
         );
 
-        // 粘贴完成后立即应用格式转换
-        setTimeout(() => {
-            runConvertTableOnSubmit();
-        }, 100);
+        // 粘贴完成后立即应用格式转换，再记录一步 undo
+        finalizePasteWithOptionalConvert(successCount, { runConvert: true });
 
         return true;
     } catch (error) {

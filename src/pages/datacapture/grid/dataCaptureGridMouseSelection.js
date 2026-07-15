@@ -19,6 +19,10 @@ let isSelectingRows = false;
 let startColumnIndex = null;
 let startRowIndex = null;
 
+function isEditingThisCell(cell) {
+    return Boolean(cell && document.activeElement === cell && cell.contentEditable === "true");
+}
+
 function forEachSelectedCell(fn) {
   selectedCells.forEach(fn);
 }
@@ -36,14 +40,24 @@ export function handleCellMouseDown(e) {
         return;
     }
 
+    const cell = (e.target && e.target.closest) ? e.target.closest('td[contenteditable="true"]') : e.target;
+    if (!cell || cell.contentEditable !== 'true') return;
+    const isCtrlPressed = e.ctrlKey || e.metaKey;
+    const allowNativeTextSelection = isEditingThisCell(cell) && !isCtrlPressed;
+
+    // When already editing the same cell, keep browser-native drag text selection
+    // (e.g. selecting "aa" from "aaaa") instead of starting grid range selection.
+    if (allowNativeTextSelection) {
+        setTableActive(true);
+        isSelecting = false;
+        startCell = null;
+        return;
+    }
+
     e.preventDefault();
 
     // Activate table when user clicks on it
     setTableActive(true);
-
-    const cell = (e.target && e.target.closest) ? e.target.closest('td[contenteditable="true"]') : e.target;
-    if (!cell || cell.contentEditable !== 'true') return;
-    const isCtrlPressed = e.ctrlKey || e.metaKey;
 
     // If Ctrl/Cmd is pressed, toggle cell selection (multi-select mode)
     if (isCtrlPressed) {

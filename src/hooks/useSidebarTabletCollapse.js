@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { bindMediaQueryChange } from "../utils/dom/bindMediaQueryChange.js";
+import { safeLocal } from "../utils/storage/safeStorage.js";
 
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = "ec_sidebar_collapsed";
 /** iPad / Galaxy Tab 横屏等平板视口 */
@@ -10,7 +12,7 @@ export function useSidebarTabletCollapse() {
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
-    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+    const stored = safeLocal.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
     if (stored === "1") return true;
     if (stored === "0") return false;
     return window.matchMedia(TABLET_MEDIA_QUERY).matches;
@@ -23,8 +25,7 @@ export function useSidebarTabletCollapse() {
     const mq = window.matchMedia(TABLET_MEDIA_QUERY);
     const onChange = () => setIsTabletViewport(mq.matches);
     onChange();
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
+    return bindMediaQueryChange(mq, onChange);
   }, []);
 
   useEffect(() => {
@@ -41,12 +42,12 @@ export function useSidebarTabletCollapse() {
 
   const collapseSidebar = useCallback(() => {
     setSidebarCollapsed(true);
-    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "1");
+    safeLocal.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "1");
   }, []);
 
   const expandSidebar = useCallback(() => {
     setSidebarCollapsed(false);
-    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "0");
+    safeLocal.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "0");
   }, []);
 
   const onHamburgerClick = useCallback(

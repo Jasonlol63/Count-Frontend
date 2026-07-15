@@ -1,7 +1,7 @@
 import { getProcessModalDropdownZIndex } from "./ProcessModalPortal.jsx";
 
 const PORTAL_EDGE_PAD = 16;
-const PORTAL_GAP = 2;
+const PORTAL_GAP = 1;
 
 /** Position a custom-select dropdown on document.body so modal overflow does not clip it. */
 export function layoutPortalCustomSelect(
@@ -19,6 +19,7 @@ export function layoutPortalCustomSelect(
   const optionsMaxHeight = Math.max(100, dropdownMaxHeight - searchReserve);
 
   return {
+    openBelow,
     optionsMaxHeight,
     menuStyle: {
       position: "fixed",

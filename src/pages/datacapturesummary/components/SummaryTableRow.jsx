@@ -16,10 +16,28 @@ function formatAmountColor(value) {
   return "#000000";
 }
 
+function focusRateValueCell(cell) {
+  if (!cell || typeof cell.focus !== "function") return;
+  cell.focus();
+  const range = document.createRange();
+  range.selectNodeContents(cell);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function focusNextRateValueCell(cell) {
+  const nextTr = cell?.closest("tr")?.nextElementSibling;
+  const nextCell = nextTr?.querySelector?.('[data-summary-field="rateValue"]');
+  if (!nextCell) return;
+  requestAnimationFrame(() => focusRateValueCell(nextCell));
+}
+
 function SummaryTableRowInner({ row, onRowChange, onNewFormula, onEditFormula, onInlineEditSave }) {
   const [editingField, setEditingField] = useState(null);
   const [draftValue, setDraftValue] = useState("");
   const editOriginalRef = useRef("");
+  const skipRateBlurRef = useRef(false);
 
   const handleField = useCallback(
     (patch) => {
@@ -62,6 +80,39 @@ function SummaryTableRowInner({ row, onRowChange, onNewFormula, onEditFormula, o
     if (!patch) return;
     onInlineEditSave?.(row, patch);
   }, [row, draftValue, onInlineEditSave]);
+
+  const saveRateValue = useCallback(
+    (cell) => {
+      if (!cell) return;
+      handleField({ rateValue: cell.textContent?.trim() || "" });
+    },
+    [handleField]
+  );
+
+  const handleRateValueBlur = useCallback(
+    (e) => {
+      if (skipRateBlurRef.current) {
+        skipRateBlurRef.current = false;
+        return;
+      }
+      saveRateValue(e.currentTarget);
+    },
+    [saveRateValue]
+  );
+
+  const handleRateValueKeyDown = useCallback(
+    (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+
+      const cell = e.currentTarget;
+      skipRateBlurRef.current = true;
+      saveRateValue(cell);
+      cell.blur();
+      focusNextRateValueCell(cell);
+    },
+    [saveRateValue]
+  );
 
   if (!row?.idProduct?.trim()) return null;
 
@@ -114,7 +165,13 @@ function SummaryTableRowInner({ row, onRowChange, onNewFormula, onEditFormula, o
         </button>
       </td>
       <td data-currency-id={row.currencyId || undefined}>{currencyDisplay}</td>
-      <td style={editingField === "formula" ? { overflow: "hidden", padding: 0 } : undefined}>
+      <td
+        style={
+          editingField === "formula"
+            ? { overflow: "hidden", padding: 0 }
+            : undefined
+        }
+      >
         <div
           className="formula-cell-content"
           style={
@@ -190,14 +247,20 @@ function SummaryTableRowInner({ row, onRowChange, onNewFormula, onEditFormula, o
       </td>
       <td
         className="editable-cell"
+        data-summary-field="rateValue"
         style={{ textAlign: "center", cursor: "text" }}
         contentEditable
         suppressContentEditableWarning
-        onBlur={(e) => handleField({ rateValue: e.currentTarget.textContent?.trim() || "" })}
+        onBlur={handleRateValueBlur}
+        onKeyDown={handleRateValueKeyDown}
       >
         {row.rateValue || ""}
       </td>
-      <td style={{ color: formatAmountColor(row.processedAmountDisplay || row.processedAmount) }}>
+      <td
+        style={{
+          color: formatAmountColor(row.processedAmountDisplay || row.processedAmount),
+        }}
+      >
         {row.processedAmountDisplay || row.processedAmount || ""}
       </td>
       <td style={{ textAlign: "center" }}>

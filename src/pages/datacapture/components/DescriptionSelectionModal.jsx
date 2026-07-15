@@ -168,7 +168,7 @@ export default function DescriptionSelectionModal({
       aria-labelledby="dc-desc-modal-title"
     >
       <div className="modal-content description-selection-modal">
-        <div className="modal-header">
+        <div className="modal-header account-form-modal-header description-selection-modal-header">
           <h2 id="dc-desc-modal-title">{t("selectOrAddDescription")}</h2>
           <span className="close" onClick={onClose} role="presentation">
             &times;

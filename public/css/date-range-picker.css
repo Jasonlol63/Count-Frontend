@@ -44,6 +44,24 @@
     font-weight: 500;
 }
 
+/* Outlined floating-label fields (Maintenance / Report only): border on .report-outlined-shell.
+   Do NOT apply on Dashboard home — dashboard date bar keeps its own picker border. */
+body.maintenance-page .report-outlined-inner .date-range-picker,
+body.maintenance-page .report-outlined-inner .date-range-picker:hover,
+body.maintenance-page .report-outlined-inner .date-range-picker:focus-visible,
+body.dashboard-page.report-page .report-outlined-inner .date-range-picker,
+body.dashboard-page.report-page .report-outlined-inner .date-range-picker:hover,
+body.dashboard-page.report-page .report-outlined-inner .date-range-picker:focus-visible {
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
+body.maintenance-page .report-outlined-inner .date-range-picker i.fa-calendar-alt,
+body.dashboard-page.report-page .report-outlined-inner .date-range-picker i.fa-calendar-alt {
+    margin: 0 !important;
+}
+
 /* Calendar popup - width set by JS to match date-range bar */
 .calendar-popup {
     position: fixed;
@@ -719,17 +737,61 @@ body.transaction-page .transaction-category-date-row .transaction-outlined-field
     box-sizing: border-box;
 }
 
-/* Centered Date Range Typography and Balanced Spacing */
+/* Open state: grid layout must not depend on inline display: block substring matching */
+#calendar-popup.calendar-popup--transaction-range[data-open="true"] {
+    display: grid !important;
+    pointer-events: auto;
+}
+
+#calendar-popup.calendar-popup--transaction-range .transaction-calendar-presets {
+    grid-column: 1;
+    grid-row: 1;
+    position: relative;
+    z-index: 2;
+    pointer-events: auto;
+}
+
+#calendar-popup.calendar-popup--transaction-range .transaction-calendar-panel {
+    grid-column: 2;
+    grid-row: 1;
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    pointer-events: auto;
+}
+
+#calendar-popup.calendar-popup--transaction-range .transaction-calendar-preset {
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* Calendar overlaps filter pills below the trigger — suspend their hit-testing while open */
+body[data-calendar-open="true"] .transaction-bottom-filters,
+body[data-calendar-open="true"] .member-dash-col-filters .user-gc-inline-pills,
+body[data-calendar-open="true"] .member-dash-col-filters .user-gc-segment-group {
+    pointer-events: none;
+}
+
+#calendar-popup.calendar-popup--above-export-modal {
+    z-index: 100001 !important;
+    pointer-events: auto;
+}
+
+/* Date Range trigger in outlined containers: left-aligned (not centered).
+   Keeps calendar flush to the left edge — avoids refresh “ghost” from left padding. */
 .report-date-range-picker-container .date-range-picker {
     display: flex !important;
-    justify-content: space-between !important;
+    justify-content: flex-start !important;
     align-items: center !important;
     width: 100% !important;
-    padding: 0 clamp(12px, 1vw, 18px) !important;
+    gap: 0 !important;
+    padding: 0 clamp(8px, 0.75vw, 12px) 0 0 !important;
     box-sizing: border-box !important;
 }
 
 .report-date-range-picker-container .date-range-picker span {
-    flex: 1 !important;
-    text-align: center !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    text-align: left !important;
+    padding-left: clamp(8px, 0.7vw, 12px) !important;
 }

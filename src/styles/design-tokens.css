@@ -108,6 +108,22 @@
   --account-select-label-checked: #0d60ff;
   --account-select-desc-checked: #797979;
 
+  /*
+   * Add User — Account / Process 选择网格（改此处即可；userlist.css 通过 var() 引用）
+   * 列数宽/紧凑切换：userlist.css @media (max-width: calc(var(--user-modal-access-grid-bp) - 1px))
+   */
+  --user-modal-access-grid-cols-wide: 4;
+  --user-modal-access-grid-cols-compact: 3;
+  --user-modal-access-grid-bp: 1700px;
+  --user-modal-access-card-min-height: 38px;
+  --user-modal-access-card-pad-y: 3px;
+  --user-modal-access-card-pad-x: 5px;
+  --user-modal-access-card-gap: 5px;
+  --user-modal-access-card-radius: 6px;
+  --user-modal-access-card-line-height: 1.12;
+  --user-modal-access-desc-gap: 0px;
+  --user-modal-access-grid-pad-y: 4px;
+
   /* --- 圆角 / 阴影 --- */
   --radius-panel: 1rem;
   --radius-card: 1.2rem;
@@ -127,6 +143,19 @@
   /* --- User List 工具栏按钮宽度（改此处即可；Delete 略宽于 Add）--- */
   --userlist-btn-add-width: clamp(80px, 7.25vw, 120px);
   --userlist-btn-delete-width: clamp(90px, 7.25vw, 120px);
+
+  /*
+   * User List — 表头/行/徽章字阶（desktop 与 tablet 共用；改 --text-* 阶梯即连带缩放）
+   */
+  --userlist-text-table-head: var(--text-base);
+  --userlist-text-table-cell: var(--text-medium);
+  --userlist-text-toolbar: var(--text-medium);
+  --userlist-text-badge: var(--text-tiny);
+  --userlist-weight-table-head: var(--font-weight-bold);
+  --userlist-weight-table-cell: var(--font-weight-bold);
+  --userlist-weight-badge: var(--font-weight-bold);
+  --userlist-weight-toolbar: var(--font-weight-semibold);
+  --userlist-line-height-cell: 1.1;
 
   /* --- 列表页主标题（对应 clamp(26px, 2.08vw, 40px)）--- */
   --text-page-title: clamp(2.6rem, 2.08vw, 4rem);
@@ -219,6 +248,8 @@
    * max 48rem：在 2vh 下常见分辨率几乎不会触发（2vh 远小于 48rem），仅作 clamp 上界与极端超高 vh 的保险。
    */
   --list-table-body-min-height: clamp(1rem, 2vh, 48rem);
+  /* 列表表格横向滚动安全网默认下限（各页 .X-list-table 可覆盖） */
+  --list-table-min-width: 980px;
 
   /* Account 表头蓝条 padding（accountCSS .account-table-header） */
   --table-header-height: 6px 22px;
@@ -257,8 +288,9 @@
   /*
    * Payment History（Transaction 账目历史表 — 全页 / popup 分屏共用；改 --text-* 阶梯即连带缩放）
    */
-  --txn-history-text-title: var(--text-h2);
-  --txn-history-text-close: var(--text-h2);
+  /* 介于 legacy modal(14–19px) 与 --text-h2(20–24px) 之间，对齐 org 视觉比例 */
+  --txn-history-text-title: clamp(17px, 0.45vw + 14px, 20px);
+  --txn-history-text-close: clamp(20px, 0.5vw + 15px, 24px);
   --txn-history-text-loading: var(--text-medium);
   --txn-history-text-table: var(--text-medium);
   --txn-history-text-table-head: var(--text-base);
@@ -274,9 +306,32 @@
   --txn-history-row-height-full: clamp(2.6rem, 2.4vw, 2.75rem);
 
   /*
+   * Auto Renew — 与 User List 表头/行字阶一致；控件与 badge 用 --text-small
+   */
+  --auto-renew-text-table-head: var(--text-base);
+  --auto-renew-text-table-cell: var(--text-medium);
+  --auto-renew-text-toolbar: var(--text-medium);
+  --auto-renew-text-control: var(--text-small);
+  --auto-renew-text-badge: var(--text-small);
+  --auto-renew-text-tab-badge: var(--text-tiny);
+  --auto-renew-text-empty-title: var(--text-h3);
+  --auto-renew-text-empty-hint: var(--text-medium);
+  --auto-renew-text-notice: var(--text-medium);
+  --auto-renew-text-toast: var(--text-medium);
+  --auto-renew-line-height: 1.35;
+  --auto-renew-weight-table-head: var(--font-weight-bold);
+  --auto-renew-weight-table-cell: var(--font-weight-bold);
+  --auto-renew-weight-table-cell-strong: var(--font-weight-bold);
+  --auto-renew-weight-control: var(--font-weight-semibold);
+  --auto-renew-weight-badge: var(--font-weight-bold);
+  --auto-renew-weight-muted: 500;
+  --auto-renew-weight-toolbar-date: 500;
+  --auto-renew-weight-toolbar-date-active: var(--font-weight-bold);
+
+  /*
    * Accounting Due inbox (Bank Process List) — grid + spacing aligned with Contra Inbox
    */
-  --accounting-due-grid-cols: 60px 56px minmax(0, 0.7fr) minmax(0, 1fr) minmax(0, 1.08fr) minmax(0, 0.56fr) minmax(0, 0.8fr) 60px;
+  --accounting-due-grid-cols: 60px 56px minmax(0, 0.7fr) minmax(0, 1fr) minmax(0, 0.72fr) minmax(0, 1.08fr) minmax(0, 0.56fr) minmax(0, 0.8fr) 60px;
   --accounting-due-grid-gap: 0;
   --accounting-due-cell-pad-y: clamp(0.58rem, 0.5vw, 0.75rem);
   --accounting-due-cell-pad-x: clamp(0.5rem, 0.42vw, 0.65rem);
@@ -499,12 +554,15 @@
   --login-danger: #dc3545;
   --login-radius-xl: 28px;
   --login-radius-pill: 999px;
+  /* 登录列宽：≥480px 固定宽度，避免中英切换 / 滚动条导致百分比抖动 */
+  --login-shell-width: 380px;
+  --login-shell-max-width: 388px;
   /* 主提交钮：固定为英文 Login 规格，中英 / 登录中 只换字、高度不变 */
-  --login-submit-height: 51px;
+  --login-submit-height: 46px;
   --login-submit-pad-x: 15px;
   /* 登录白卡最小高度：按中文版 Tab（--text-h2）+ 表单 + 语系条撑满；切 EN 时只换字、外框不降 */
-  --login-card-min-height: 414px;
-  --login-card-min-height-narrow: 528px;
+  --login-card-min-height: 378px;
+  --login-card-min-height-narrow: 460px;
 }
 
 /* Description picker / Process form：≥992px — 与 DevTools 调校一致（1120px / 95vh / 列表区更高） */

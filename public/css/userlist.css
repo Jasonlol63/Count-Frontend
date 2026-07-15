@@ -1,4 +1,4 @@
-﻿body.user-page {
+body.user-page {
     font-family: var(--font-ui) !important;
     font-size: var(--text-medium) !important;
     margin: 0;
@@ -16,15 +16,107 @@
     background-blend-mode: screen, screen, multiply, screen, normal;
     color: #334155;
     overflow-x: hidden;
-    overflow-y: hidden;
-    /* 添加这行，禁止垂直滚动 */
+    overflow-y: auto;
+    /* 允许整页纵向滚动 */
 }
 
-/* 矮屏下 global-13inch 会对 body.user-page 放开滚动，此处强制列表页保持一屏（Show All 时由 body.user-page--show-all 覆盖） */
+/* 非 Show All：允许整页纵向滚动 */
+html:has(body.user-page:not(.user-page--show-all)) {
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+/* JS fallback（保留同样滚动策略） */
+html.ec-user-page-scroll-lock {
+    height: 100%;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
 body.user-page:not(.user-page--show-all) {
     overflow-x: hidden !important;
-    overflow-y: hidden !important;
+    overflow-y: auto !important;
     height: 100vh !important;
+    max-height: 100vh !important;
+}
+
+body.user-page:not(.user-page--show-all) .container {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+}
+
+body.user-page:not(.user-page--show-all) .content {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+body.user-page:not(.user-page--show-all) .action-buttons-container {
+    flex-shrink: 0;
+    margin-top: clamp(12px, 1.04vw, 20px) !important;
+}
+
+body.user-page:not(.user-page--show-all) .action-buttons-container .user-gc-inline-panel {
+    padding: 12px 18px 14px 18px;
+}
+
+body.user-page:not(.user-page--show-all) .user-table-wrapper {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 52px;
+    box-sizing: border-box;
+}
+
+body.ec-auth-shell.user-page:not(.user-page--show-all) .user-table-wrapper.user-list-table {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+}
+
+body.ec-auth-shell.user-page .user-list-table .user-list-table-header,
+body.ec-auth-shell.user-page .user-list-table .user-cards {
+    min-width: max(100%, var(--list-table-min-width, 980px));
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* 工具栏字号 / 药丸内边距（User 页，覆盖小屏 list-badge-scale 缩放） */
+body.ec-auth-shell.user-page .action-buttons .btn {
+    font-size: 1.4rem !important;
+}
+
+body.ec-auth-shell.user-page .user-gc-segment {
+    padding: 4px 18px !important;
+    font-size: 1.4rem !important;
+}
+
+body.ec-auth-shell.user-page .user-filter-chip {
+    font-size: 1.2rem !important;
+}
+
+body.ec-auth-shell.user-page .search-container.userlist-search-bar .userlist-search-input,
+body.ec-auth-shell.user-page .search-container.userlist-search-bar .userlist-search-input.search-input {
+    font-size: 1.2rem !important;
+}
+
+body.user-page:not(.user-page--show-all) .user-list-table .user-list-table-header {
+    flex-shrink: 0;
+    margin-top: 12px;
 }
 
 .user-page .container {
@@ -66,7 +158,9 @@ body.user-page:not(.user-page--show-all) {
     flex: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
     padding-bottom: 52px;
     box-sizing: border-box;
 }
@@ -81,26 +175,29 @@ body.user-page:not(.user-page--show-all) {
  * 表头与数据行共用 grid 变量；完整显示 Action / Last Login / Created By 等标题
  */
 .user-list-table {
+    --list-table-min-width: 980px;
+    --user-list-row-min-height: 30px;
+    --user-list-pill-height: 20px;
     --user-list-grid-cols:
         38px
-        minmax(92px, 1fr)
-        minmax(80px, 1fr)
-        minmax(140px, 1.5fr)
-        minmax(88px, 0.9fr)
-        minmax(72px, 0.68fr)
-        minmax(128px, 1.3fr)
-        minmax(96px, 1fr)
-        minmax(72px, 0.5fr);
+        minmax(120px, 1.5fr)
+        minmax(120px, 1.5fr)
+        minmax(130px, 1.2fr)
+        minmax(84px, 0.7fr)
+        minmax(72px, 0.55fr)
+        minmax(131px, 1fr)
+        minmax(96px, 1.2fr)
+        minmax(64px, 0.25fr);
     --user-list-grid-cols-bulk:
         38px
-        minmax(92px, 1fr)
-        minmax(80px, 1fr)
-        minmax(140px, 1.5fr)
-        minmax(88px, 0.9fr)
-        minmax(72px, 0.68fr)
-        minmax(128px, 1.3fr)
-        minmax(96px, 1fr)
-        minmax(68px, 0.48fr)
+        minmax(120px, 1.5fr)
+        minmax(120px, 1.5fr)
+        minmax(130px, 1.2fr)
+        minmax(84px, 0.7fr)
+        minmax(72px, 0.55fr)
+        minmax(131px, 1fr)
+        minmax(96px, 1.2fr)
+        minmax(60px, 0.23fr)
         48px;
 }
 
@@ -108,24 +205,24 @@ body.user-page:not(.user-page--show-all) {
 body.lang-zh.user-page .user-list-table {
     --user-list-grid-cols:
         54px
-        minmax(100px, 1.05fr)
-        minmax(80px, 1fr)
-        minmax(140px, 1.5fr)
-        minmax(72px, 0.85fr)
-        minmax(64px, 0.65fr)
-        minmax(108px, 1.25fr)
-        minmax(88px, 0.95fr)
-        minmax(64px, 0.48fr);
+        minmax(120px, 1.5fr)
+        minmax(120px, 1.5fr)
+        minmax(130px, 1.2fr)
+        minmax(84px, 0.7fr)
+        minmax(72px, 0.55fr)
+        minmax(131px, 1fr)
+        minmax(96px, 1.2fr)
+        minmax(64px, 0.25fr);
     --user-list-grid-cols-bulk:
         54px
-        minmax(100px, 1.05fr)
-        minmax(80px, 1fr)
-        minmax(140px, 1.5fr)
-        minmax(72px, 0.85fr)
-        minmax(64px, 0.65fr)
-        minmax(108px, 1.25fr)
-        minmax(88px, 0.95fr)
-        minmax(60px, 0.46fr)
+        minmax(120px, 1.5fr)
+        minmax(120px, 1.5fr)
+        minmax(130px, 1.2fr)
+        minmax(84px, 0.7fr)
+        minmax(72px, 0.55fr)
+        minmax(131px, 1fr)
+        minmax(96px, 1.2fr)
+        minmax(60px, 0.23fr)
         48px;
 }
 
@@ -176,7 +273,7 @@ body.user-page .user-list-table .table-header.user-list-table-header {
     border-radius: 8px 8px 0 0;
     font-weight: bold;
     color: white;
-    font-size: var(--text-base);
+    font-size: 1.6rem;
     font-family: inherit;
     min-width: 0;
 }
@@ -252,9 +349,101 @@ body.user-page .user-list-table .user-card.user-list-row {
     justify-content: left;
 }
 
-.user-list-table .user-list-table-header .header-item:nth-child(9),
+.user-list-table .user-list-table-header .header-item--action,
 .user-list-table .user-list-row .card-item--action {
+    display: flex;
+    align-items: center;
     justify-content: flex-start;
+    text-align: left;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    overflow: visible;
+}
+
+.user-list-table .user-list-row .card-item--action .user-action-tools {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    vertical-align: middle;
+}
+
+/* Action 列：扁平图标 + hover 灰底方块 */
+.user-list-table .user-list-row .card-item--action .user-action-tools-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.user-list-table .user-list-row .card-item--action .user-action-tools-bar .user-edit-btn {
+    box-sizing: border-box;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: #374151;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none;
+    transition: background 0.12s ease;
+    flex-shrink: 0;
+}
+
+.user-list-table .user-list-row .card-item--action .user-action-tools-bar .user-edit-btn:hover:not(:disabled) {
+    background: #c5ccd6;
+    color: #1f2937;
+    box-shadow: none;
+    transform: none;
+}
+
+.user-list-table .user-list-row .card-item--action .user-action-tools-bar .user-edit-btn:active:not(:disabled) {
+    background: #b3bbc7;
+    transform: none;
+}
+
+.user-list-table .user-list-row .card-item--action .user-action-tools-bar .user-edit-btn:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+}
+
+body.ec-auth-shell.user-page .user-list-table .user-list-row .card-item--action .user-action-tools-bar .user-edit-btn img {
+    width: 16px !important;
+    height: 16px !important;
+    display: block;
+    object-fit: contain;
+    flex-shrink: 0;
+    filter: none;
+}
+
+.user-list-table .user-list-row .card-item--action .btn.btn-edit {
+    background: transparent;
+    border: transparent;
+    box-shadow: none;
+}
+
+.user-list-table .user-list-row .card-item--action .btn.btn-edit:hover {
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+}
+
+.user-list-table .user-list-row .card-item:has(.role-badge) {
+    overflow: visible;
+    text-overflow: clip;
+    flex-shrink: 0;
+    min-width: min-content;
+}
+
+.user-list-table .user-list-row .role-badge {
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 body.user-page.user-page--show-all {
@@ -456,7 +645,7 @@ body.ec-auth-shell .user-gc-segment {
     border-right: 1px solid var(--color-border, #e5e7eb);
     background: var(--color-surface, #ffffff);
     color: #1f2937;
-    font-size: var(--text-medium) !important;
+    font-size: 1.4rem !important;
     font-weight: var(--font-weight-semibold) !important;
     font-family: inherit;
     cursor: pointer;
@@ -474,7 +663,10 @@ body.process-page .user-gc-segment:not(:disabled):active {
 }
 
 body.user-page .user-gc-segment.is-on.is-pending,
-body.account-page .user-gc-segment.is-on.is-pending {
+body.account-page .user-gc-segment.is-on.is-pending,
+body.datacapture-page .user-gc-segment.is-on.is-pending,
+body.maintenance-page .user-gc-segment.is-on.is-pending,
+body.dashboard-page .user-gc-segment.is-on.is-pending {
     opacity: 0.88;
 }
 
@@ -1053,8 +1245,8 @@ body.datacapture-summary-page .btn-cancel:hover {
     align-items: center;
     padding: clamp(0px, 0.1vw, 2px) clamp(4px, 0.42vw, 8px);
     border-radius: 20px;
-    font-size: var(--text-tiny);
-    font-weight: bold;
+    font-size: var(--userlist-text-badge);
+    font-weight: var(--userlist-weight-badge);
     text-transform: capitalize;
 }
 
@@ -1361,13 +1553,13 @@ label.user-modal-col-title.acc-proc-label {
 
 /* User modal — 基本信息：Login 独占一行，Name|Role 两列 */
 #userModal .user-info-field-row {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
     width: 100%;
     min-width: 0;
     margin: 0 0 12px 0;
-    align-items: flex-start;
+    align-items: end;
 }
 
 #userModal .user-info-field-row > .form-group.user-info-field,
@@ -1378,6 +1570,10 @@ label.user-modal-col-title.acc-proc-label {
 }
 
 @media (max-width: 440px) {
+    #userModal .user-info-field-row {
+        grid-template-columns: 1fr;
+    }
+
     #userModal .user-info-field-row > .form-group.user-info-field,
     #userModal .user-info-field-row > .form-group.password-row-container {
         flex-basis: 100%;
@@ -1776,7 +1972,7 @@ label.user-modal-col-title.acc-proc-label {
     transform: scale(0.99);
 }
 
-/* ── Permission compact (≤1200px): same layout + summary box as Company field ── */
+/* ── Permission compact (≤1440px): same layout + summary box as Company field ── */
 #userModal .permission-field-group .permission-field-label {
     display: flex;
     flex-wrap: wrap;
@@ -1797,24 +1993,10 @@ label.user-modal-col-title.acc-proc-label {
     overflow-wrap: break-word;
 }
 
-@media (max-width: 1200px) {
-    #userModal .sidebar-permissions-section {
-        display: none;
-    }
-
-    #userModal .user-modal-permissions-compact {
-        display: block;
-        width: 100%;
-    }
+#userModal .sidebar-permissions-section {
+    display: none;
 }
 
-@media (min-width: 1201px) {
-    #userModal .user-modal-permissions-compact {
-        display: none !important;
-    }
-}
-
-/* ≥1201px: inline permission list; ≤1200px: Choose permissions + modal */
 .user-modal-permissions-inline {
     display: none;
     flex: 1 1 0;
@@ -1824,26 +2006,8 @@ label.user-modal-col-title.acc-proc-label {
 }
 
 .user-modal-permissions-compact {
-    display: none;
-}
-
-@media (min-width: 1201px) {
-    .user-modal-permissions-inline {
-        display: flex;
-    }
-
-    #userModal .sidebar-permissions-section .user-modal-permissions-inline .sidebar-permissions-title.user-modal-permissions-title {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin: 0;
-        padding: 0 19.968px 9.984px;
-        color: #1e293b;
-        border-bottom: 2px solid #cbd5e1;
-        font-size: 18px;
-        font-weight: 700;
-        flex-shrink: 0;
-    }
+    display: block;
+    width: 100%;
 }
 
 .user-modal-permission-picker-root {
@@ -2071,17 +2235,16 @@ label.user-modal-col-title.acc-proc-label {
     }
 }
 
-/* Account / Process：四欄格線（對齊原版） */
+/* Account / Process 格线 — 列数/间距见 design-tokens.css --user-modal-access-* */
 .account-grid--four {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     display: grid !important;
-    /* Keep items readable inside 1/3-width modal columns */
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-    gap: 8px;
+    grid-template-columns: repeat(var(--user-modal-access-grid-cols, var(--user-modal-access-grid-cols-wide, 4)), minmax(0, 1fr)) !important;
+    gap: var(--user-modal-access-card-gap, 5px);
     align-content: start;
-    padding: 8px 0;
+    padding: var(--user-modal-access-grid-pad-y, 4px) 0;
 }
 
 .user-modal-col--account .account-control-buttons,
@@ -2182,9 +2345,9 @@ label.user-modal-col-title.acc-proc-label {
     font-size: 14px;
 }
 
-/* Add/Edit User — Login ID 字段标题 */
+/* Add/Edit User — Login ID 标签与其它字段一致 */
 #userModal label[for="login_id"] {
-    font-size: var(--text-medium);
+    font-size: 14px;
 }
 
 .user-page .form-group input,
@@ -2355,16 +2518,16 @@ label.user-modal-col-title.acc-proc-label {
     flex-shrink: 0;
 }
 
-/* Scrollable grid */
+/* Scrollable grid — 列数/间距见 design-tokens.css --user-modal-access-* */
 .account-process-col .account-grid {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     background: transparent;
-    padding: clamp(6px, 0.52vw, 10px);
+    padding: var(--user-modal-access-grid-pad-y, 4px) clamp(6px, 0.52vw, 10px);
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: clamp(4px, 0.42vw, 8px);
+    grid-template-columns: repeat(var(--user-modal-access-grid-cols, var(--user-modal-access-grid-cols-wide, 4)), minmax(0, 1fr));
+    gap: var(--user-modal-access-card-gap, 5px);
     align-content: start;
 }
 
@@ -3207,14 +3370,92 @@ body.user-page .user-table-wrapper.user-table-wrapper--bulk-delete-col .user-car
     justify-content: flex-start;
 }
 
-/* 分页模式：表格体区域最小高度（与 Account List 共用 token） */
 body.user-page:not(.user-page--show-all) .user-cards {
-    min-height: var(--list-table-body-min-height);
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    max-height: none;
+    overflow-x: visible;
+    overflow-y: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
 }
 
-/* 非 Show All：行高随内容；仅当行数多、总高度超过列表区时在父级内被压缩（勿用 flex-grow，否则条数少时会把每行撑满半屏） */
+body.user-page:not(.user-page--show-all) .user-cards.user-cards--paged-fill {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(var(--user-list-page-size, 15), minmax(0, 1fr));
+    flex: 1 1 0;
+    min-height: 0;
+    align-content: stretch;
+    align-self: stretch;
+}
+
+body.user-page:not(.user-page--show-all) .user-cards.user-cards--paged-fill .user-list-row {
+    flex: unset;
+    min-height: 0;
+    height: 100%;
+    align-items: center;
+    align-self: stretch;
+}
+
+body.user-page:not(.user-page--show-all) .user-list-table .user-list-row {
+    flex: 0 0 auto;
+    width: 100%;
+    height: auto;
+    min-height: var(--user-list-row-min-height, 30px);
+    box-sizing: border-box;
+    align-items: center;
+}
+
+body.user-page:not(.user-page--show-all) .user-list-row .card-item,
+body.ec-auth-shell.user-page:not(.user-page--show-all) .user-list-row .card-item {
+    font-size: 1.4rem !important;
+    font-weight: bold !important;
+    line-height: 1.3 !important;
+    letter-spacing: 0 !important;
+}
+
+/* 末页不足一页：保持与 Account 一致的最小行高，避免数据上下密度不一致 */
+body.user-page:not(.user-page--show-all) .user-list-table .user-cards:not(.user-cards--paged-fill) .user-list-row,
+body.ec-auth-shell.user-page:not(.user-page--show-all) .user-list-table .user-cards:not(.user-cards--paged-fill) .user-list-row {
+    flex: 0 0 auto;
+    min-height: var(--user-list-row-min-height, 30px) !important;
+    height: auto;
+}
+
+/* 排序图标仅出现在表头 */
+.user-list-table .user-list-row .account-sort-icon {
+    display: none !important;
+}
+
+body.user-page:not(.user-page--show-all) .user-list-row .role-badge,
+body.ec-auth-shell.user-page:not(.user-page--show-all) .user-list-row .role-badge {
+    box-sizing: border-box;
+    height: var(--user-list-pill-height, 20px);
+    padding: 0 8px !important;
+    line-height: 1.1 !important;
+    font-size: 1.1rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em !important;
+    border-radius: 6px !important;
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-width: max-content !important;
+    border-width: 1px !important;
+}
+
+body.user-page:not(.user-page--show-all) .user-list-row .card-item:has(.role-badge) {
+    overflow: visible;
+    text-overflow: clip;
+    flex-shrink: 0;
+    min-width: min-content;
+}
+
+/* 非 Show All：行高随内容；勿用 flex-grow 撑满半屏 */
 body.user-page:not(.user-page--show-all) .user-card.show-card {
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
 }
 
@@ -3254,8 +3495,8 @@ body.user-page:not(.user-page--show-all) .user-card.show-card {
 }
 
 .card-item {
-    font-size: var(--text-medium);
-    font-weight: bold;
+    font-size: var(--userlist-text-table-cell);
+    font-weight: var(--userlist-weight-table-cell);
     color: #374151;
     display: flex;
     align-items: center;
@@ -3309,6 +3550,9 @@ body.user-page .pagination-container {
     position: fixed;
     bottom: max(20px, env(safe-area-inset-bottom, 0px));
     right: max(40px, env(safe-area-inset-right, 0px));
+    left: auto;
+    top: auto;
+    margin: 0 !important;
     display: flex;
     align-items: center;
     gap: 0;
@@ -3318,8 +3562,10 @@ body.user-page .pagination-container {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     backdrop-filter: blur(8px);
     border: 1px solid rgba(148, 163, 184, 0.2);
-    z-index: 100;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    z-index: 120;
+    width: fit-content;
+    flex-shrink: 0;
+    font-family: inherit;
 }
 
 .pagination-btn {
@@ -3553,27 +3799,34 @@ body.user-page .pagination-container {
     font-weight: bold;
 }
 
-/* User modal — Account / Process：未选中灰底灰边；选中时底/边/字色为你指定（checkbox 仅逻辑用） */
-#userModal .account-grid--four {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-    grid-auto-rows: minmax(48px, auto);
-    gap: 8px;
+/* User modal — Account / Process：布局令牌见 design-tokens.css --user-modal-access-* */
+#userModal {
+    --user-modal-access-grid-cols: var(--user-modal-access-grid-cols-wide, 4);
+}
+
+#userModal .account-grid--four,
+#userModal .account-grid.account-grid--four,
+#userModal .account-process-col .account-grid {
+    grid-template-columns: repeat(var(--user-modal-access-grid-cols), minmax(0, 1fr)) !important;
+    grid-auto-rows: minmax(var(--user-modal-access-card-min-height, 38px), auto);
+    gap: var(--user-modal-access-card-gap, 5px);
+    padding: var(--user-modal-access-grid-pad-y, 4px) 0;
 }
 
 #userModal .user-modal-select-card {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    justify-content: flex-start;
+    justify-content: center;
     position: relative;
     box-sizing: border-box;
     width: 100%;
     min-width: 0;
-    min-height: 48px;
+    min-height: var(--user-modal-access-card-min-height, 38px);
     margin: 0;
     overflow: hidden;
-    border-radius: 8px;
-    padding: 6px 8px;
+    border-radius: var(--user-modal-access-card-radius, 6px);
+    padding: var(--user-modal-access-card-pad-y, 3px) var(--user-modal-access-card-pad-x, 5px);
     background: var(--account-select-card-bg);
     border: 1.5px solid var(--account-select-card-border);
     box-shadow: none;
@@ -3581,6 +3834,12 @@ body.user-page .pagination-container {
     transition:
         background-color 0.2s ease,
         border-color 0.2s ease;
+}
+
+/* 覆盖 .account-item-compact 默认 60px 行高 */
+#userModal .user-modal-select-card.account-item-compact {
+    gap: 0;
+    align-items: stretch;
 }
 
 #userModal .account-grid--bulk-settling .user-modal-select-card {
@@ -3612,7 +3871,7 @@ body.user-page .pagination-container {
     text-overflow: ellipsis;
     overflow-wrap: anywhere;
     word-break: break-word;
-    line-height: 1.25;
+    line-height: var(--user-modal-access-card-line-height, 1.12);
     color: var(--color-page-fg);
     font-family: inherit;
     font-size: var(--text-small);
@@ -3622,7 +3881,7 @@ body.user-page .pagination-container {
 
 #userModal .user-modal-select-card .account-label-desc {
     display: block;
-    margin-top: 2px;
+    margin-top: var(--user-modal-access-desc-gap, 0px);
     white-space: normal;
     overflow: hidden;
     overflow-wrap: anywhere;
@@ -3631,7 +3890,7 @@ body.user-page .pagination-container {
     font-family: inherit;
     font-size: var(--text-tiny);
     font-weight: var(--font-weight-semibold);
-    line-height: 1.25;
+    line-height: var(--user-modal-access-card-line-height, 1.12);
     color: var(--color-muted-fg);
     letter-spacing: 0;
 }
@@ -3778,19 +4037,6 @@ body.user-page .pagination-container {
         flex: 0 0 auto;
     }
 
-    /* Tablet：Account / Process 两栏格，卡片更易读 */
-    #userModal .account-grid--four {
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-        grid-auto-rows: minmax(46px, auto);
-        gap: 6px;
-        padding: 4px 0;
-    }
-
-    #userModal .user-modal-select-card {
-        min-height: 46px;
-        padding: 6px 8px;
-    }
-
     #userModal .user-modal-col--account,
     #userModal .user-modal-col--process {
         padding: 8px 6px !important;
@@ -3808,22 +4054,8 @@ body.user-page .pagination-container {
     }
 }
 
-/* Tablet / 13-inch (≤1440px): Account & Process 两栏格；Select All · Clear All 并排紧凑 */
+/* Tablet / 13-inch (≤1440px): Select All · Clear All 并排紧凑 */
 @media screen and (max-width: 1440px) {
-    #userModal .account-grid--four,
-    #userModal .account-grid.account-grid--four,
-    body.user-page #userModal .account-grid.account-grid--four {
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-        grid-auto-rows: minmax(46px, auto);
-        gap: 6px;
-        padding: 4px 0;
-    }
-
-    #userModal .user-modal-select-card {
-        min-height: 46px;
-        padding: 6px 8px;
-    }
-
     #userModal .account-control-buttons,
     #userModal .account-process-col .account-control-buttons {
         display: flex;
@@ -3856,6 +4088,13 @@ body.user-page .pagination-container {
     body.ec-auth-shell.user-page #userModal .btn-clearall {
         width: auto !important;
         min-width: clamp(68px, 12vw, 88px) !important;
+    }
+}
+
+/* <16-inch：列数切换为 compact（断点与 design-tokens --user-modal-access-grid-bp 同步：1700px） */
+@media screen and (max-width: 1699px) {
+    #userModal {
+        --user-modal-access-grid-cols: var(--user-modal-access-grid-cols-compact, 3);
     }
 }
 
@@ -3953,4 +4192,55 @@ body.datacapture-summary-page .btn-delete:disabled:hover {
     transform: none !important;
     cursor: not-allowed;
     opacity: 0.9;
+}
+
+/* User modal — Name / Role 同行：控件等高、底边对齐 */
+#userModal .user-info-field-row > .form-group.user-info-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 0;
+    margin-bottom: 0;
+}
+
+#userModal .user-info-field-row > .form-group.user-info-field label {
+    margin-bottom: 0;
+    line-height: 1.25;
+}
+
+/* Login ID / Password / Name / Role — 输入框与下拉统一高度 */
+#userModal .user-info-grid > .form-group.user-info-field input#login_id,
+#userModal .user-info-grid > .form-group.user-info-field input#password,
+#userModal .password-row-container .password-field-wrapper input,
+#userModal .user-info-field-row input#name,
+#userModal .user-info-field-row .custom-select-button#role {
+    min-height: 3.55rem !important;
+    height: 3.55rem !important;
+    padding: 0 12px !important;
+    font-size: 14px !important;
+    line-height: 1.25 !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    box-sizing: border-box !important;
+    background-color: #fff !important;
+    color: #0f172a !important;
+}
+
+#userModal .user-info-field-row .custom-select-button#role {
+    padding-right: 30px !important;
+}
+
+#userModal .user-info-field-row input#name:focus,
+#userModal .user-info-field-row input#name:focus-visible,
+#userModal .user-info-grid > .form-group.user-info-field input#login_id:focus,
+#userModal .user-info-grid > .form-group.user-info-field input#login_id:focus-visible,
+#userModal .user-info-grid > .form-group.user-info-field input#password:focus,
+#userModal .user-info-grid > .form-group.user-info-field input#password:focus-visible,
+#userModal .password-row-container .password-field-wrapper input:focus,
+#userModal .password-row-container .password-field-wrapper input:focus-visible,
+#userModal .user-info-field-row .custom-select-button#role:focus-visible,
+#userModal .user-info-field-row .custom-select-button#role.open {
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12) !important;
 }

@@ -6,7 +6,7 @@ import { isDashboardGroupOnlyMode } from "../../../utils/company/sharedCompanyFi
 import { spaPath } from "../../../utils/routing/pageRoutes.js";
 
 /**
- * Games maintenance pages (capture / transaction / formula): redirect when active company is bank-only.
+ * Formula maintenance: redirect when active company is bank-only.
  */
 export function useMaintenanceBankOnlyGuard(companyId) {
   const navigate = useNavigate();

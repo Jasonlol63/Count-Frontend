@@ -1,6 +1,15 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { appendDataCaptureScopeParams } from "../../datacapture/lib/dataCaptureApi.js";
 
+/** Canonical Summary submit endpoint. Legacy: summary_api.php?action=submit */
+const SUMMARY_SUBMIT_API = "api/datacapture_summary/summary_submit_api.php";
+/** Templates CRUD. Legacy: summary_api.php?action=save_template|delete_template|templates */
+const SUMMARY_TEMPLATES_API = "api/datacapture_summary/summary_templates_api.php";
+/** Server row/formula state. Legacy: summary_api.php?action=get_summary_state|save_summary_state */
+const SUMMARY_STATE_API = "api/datacapture_summary/summary_state_api.php";
+/** Form catalog (currencies + accounts). Legacy: summary_api.php (default load) */
+const SUMMARY_CATALOG_API = "api/datacapture_summary/summary_catalog_api.php";
+
 function withCaptureScope(url, captureScope) {
   if (!captureScope) return url;
   const sep = url.includes("?") ? "&" : "?";
@@ -27,7 +36,7 @@ async function parseJsonResponse(response) {
 
 /** Default load: currencies + accounts for Edit Formula / Add Account */
 export async function fetchSummaryFormCatalog(captureScope) {
-  const url = withCaptureScope(buildApiUrl("api/datacapture_summary/summary_api.php"), captureScope);
+  const url = withCaptureScope(buildApiUrl(SUMMARY_CATALOG_API), captureScope);
   const response = await fetch(url, { credentials: "include" });
   const json = await parseJsonResponse(response);
   if (!json.success) {
@@ -45,7 +54,7 @@ export async function fetchSummaryServerState({ captureScope, processId, process
   if (processId != null && processId !== "") params.set("process_id", String(processId));
   if (processCode != null && processCode !== "") params.set("process_code", String(processCode));
   appendDataCaptureScopeParams(params, captureScope);
-  const url = buildApiUrl(`api/datacapture_summary/summary_api.php?${params.toString()}`);
+  const url = buildApiUrl(`${SUMMARY_STATE_API}?${params.toString()}`);
   const response = await fetch(url, { credentials: "include", signal });
   const json = await response.json();
   if (json?.success === true && json.data && typeof json.data === "object") {
@@ -56,10 +65,7 @@ export async function fetchSummaryServerState({ captureScope, processId, process
 
 /** POST ?action=submit — returns parsed JSON or throws with { status, message, isSizeError }. */
 export async function submitSummaryPayload(captureScope, payload) {
-  const url = withCaptureScope(
-    buildApiUrl("api/datacapture_summary/summary_api.php?action=submit"),
-    captureScope,
-  );
+  const url = withCaptureScope(buildApiUrl(SUMMARY_SUBMIT_API), captureScope);
   const response = await fetch(url, {
     method: "POST",
     credentials: "include",
@@ -123,7 +129,7 @@ export async function fetchSummaryTemplates({
 }) {
   const params = new URLSearchParams({ action: "templates" });
   const base = withCaptureScope(
-    withCompany(buildApiUrl("api/datacapture_summary/summary_api.php"), companyId),
+    withCompany(buildApiUrl(SUMMARY_TEMPLATES_API), companyId),
     captureScope,
   );
   const url = base.includes("?") ? `${base}&${params}` : `${base}?${params}`;
@@ -172,7 +178,7 @@ export async function deleteSummaryTemplate({
   }
 
   const url = withCaptureScope(
-    withCompany(buildApiUrl("api/datacapture_summary/summary_api.php?action=delete_template"), companyId),
+    withCompany(buildApiUrl(`${SUMMARY_TEMPLATES_API}?action=delete_template`), companyId),
     captureScope,
   );
 

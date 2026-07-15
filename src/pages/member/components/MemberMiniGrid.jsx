@@ -436,6 +436,19 @@ export default function MemberMiniGrid({
     );
   }
 
+  const hasRenderableAccounts =
+    shellMode || (listOrdered || []).some((a) => Number(a?.id) > 0);
+  if (!hasRenderableAccounts) {
+    if (hint) {
+      return (
+        <p id="member_balance_grid_hint" className="member-balance-mini-hint">
+          {hint}
+        </p>
+      );
+    }
+    return null;
+  }
+
   return (
     <>
       <div className={`member-dash-matrix-scroll${compactMode ? " member-dash-matrix-scroll--compact" : ""}`}>

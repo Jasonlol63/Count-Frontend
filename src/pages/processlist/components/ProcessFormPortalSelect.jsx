@@ -10,6 +10,7 @@ export default function ProcessFormPortalSelect({
   disabled = false,
   displayLabel,
   hasSearch = false,
+  onButtonKeyDown,
   children,
 }) {
   const wrapRef = useRef(null);
@@ -87,6 +88,7 @@ export default function ProcessFormPortalSelect({
         aria-expanded={open}
         aria-haspopup="listbox"
         onClick={toggle}
+        onKeyDown={onButtonKeyDown}
       >
         {displayLabel}
       </button>

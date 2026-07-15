@@ -1,4 +1,4 @@
-﻿/* Single scrollbar on body (Ownership-page pattern; all viewport widths) */
+/* Single scrollbar on body (Ownership-page pattern; all viewport widths) */
 html:has(body.datacapture-summary-page) {
     height: auto !important;
     overflow: visible !important;
@@ -884,6 +884,36 @@ body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
             }
         }
 
+        /* Final override: keep add button aligned with Account + enforce 1.4rem table font. */
+        body.dashboard-page.datacapture-summary-page #summaryTable th,
+        body.dashboard-page.datacapture-summary-page #summaryTable td {
+            font-size: 1.4rem !important;
+            font-weight: 700 !important;
+            line-height: 1.35 !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable tbody td:nth-child(2) {
+            padding-right: 2px !important;
+            border-right: none !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable tbody td:nth-child(3) {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            padding-left: 0 !important;
+            border-left: none !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable .add-account-btn {
+            float: none !important;
+            margin: 0 !important;
+            width: 1.8rem !important;
+            height: 1.8rem !important;
+            font-size: 1.3rem !important;
+            line-height: 1 !important;
+        }
+
 
         /* Empty State Styles */
         .empty-state {
@@ -1401,7 +1431,7 @@ body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
             background: none;
             border: none;
             cursor: pointer;
-            font-size: clamp(8px, 0.625vw, 12px);
+            font-size: 1.3rem;
             padding: 2px 4px;
             border-radius: 3px;
             transition: all 0.2s ease;
@@ -1547,6 +1577,101 @@ body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
             background: linear-gradient(180deg, #585858 0%, #bcbcbc 100%);
             box-shadow: 0 4px 8px rgba(84, 84, 84, 0.4);
             transform: translateY(-1px);
+        }
+
+        /* Summary table grid template layout (no horizontal scroll). */
+        .summary-table-x-scroll {
+            overflow-x: hidden !important;
+        }
+
+        #summaryTable {
+            display: block !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed !important;
+        }
+
+        #summaryTable thead,
+        #summaryTable tbody,
+        #summaryTable tfoot {
+            display: block;
+            width: 100%;
+        }
+
+        #summaryTable thead tr,
+        #summaryTable tbody tr,
+        #summaryTable tfoot tr {
+            display: grid;
+            /* Reference other pages' minmax grid pattern; keep all columns horizontal/readable. */
+            grid-template-columns:
+                minmax(0, 2.4fr)
+                minmax(0, 1.9fr)
+                minmax(0, 0.55fr)
+                minmax(0, 0.9fr)
+                minmax(0, 2.6fr)
+                minmax(0, 0.8fr)
+                minmax(0, 0.55fr)
+                minmax(0, 0.95fr)
+                minmax(0, 1.1fr)
+                minmax(0, 0.5fr)
+                minmax(0, 0.55fr);
+            width: 100%;
+            align-items: stretch;
+        }
+
+        #summaryTable th,
+        #summaryTable td {
+            display: block;
+            font-size: clamp(10px, 0.63vw, 12px) !important;
+            font-weight: 700 !important;
+            line-height: 1.3 !important;
+            padding: clamp(2px, 0.31vw, 6px) clamp(4px, 0.42vw, 8px) !important;
+            min-height: 28px;
+            height: auto !important;
+            width: auto !important;
+            min-width: 0 !important;
+            max-width: none !important;
+            border: 1px solid #d0d7de !important;
+            box-sizing: border-box;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            word-break: normal !important;
+            overflow-wrap: normal !important;
+            text-align: center !important;
+        }
+
+        /* Keep total row placement readable in grid mode. */
+        #summaryTable tfoot td.summary-total-label {
+            grid-column: 1 / span 8;
+            text-align: right !important;
+        }
+        #summaryTable tfoot td#summaryTotalAmount {
+            grid-column: 9;
+            text-align: center !important;
+        }
+
+        /* Cancel old fixed widths/min-widths + old wrap rules in legacy block above. */
+        #summaryTable th:nth-child(n),
+        #summaryTable td:nth-child(n),
+        #summaryTable td.id-product {
+            width: auto !important;
+            min-width: 0 !important;
+            max-width: none !important;
+            white-space: nowrap !important;
+            word-break: keep-all !important;
+            overflow-wrap: normal !important;
+        }
+
+        /* Left-align verbose text columns, keep short numeric/control columns centered. */
+        #summaryTable th:nth-child(1),
+        #summaryTable td:nth-child(1),
+        #summaryTable th:nth-child(2),
+        #summaryTable td:nth-child(2),
+        #summaryTable th:nth-child(5),
+        #summaryTable td:nth-child(5) {
+            text-align: left !important;
+            justify-content: flex-start;
         }
 
         /* Enhanced Table Styles for Captured Data - 与datacapture.php中的excel-table样式完全一致 */
@@ -1749,6 +1874,7 @@ body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
         /* Ensure account dropdown in edit formula modal has highest priority and can overflow */
         #editFormulaModal .custom-select-dropdown {
             z-index: 10002;
+            max-height: none;
         }
 
         .custom-select-dropdown.show {
@@ -1834,11 +1960,18 @@ body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
             min-height: 28px;
             width: 28px;
             height: 28px;
+            font-size: 1.4rem !important;
+            line-height: 1 !important;
         }
 
         .account-add-btn:hover {
             background: var(--btn-add-gradient-hover);
             transform: scale(1.05);
+        }
+
+        /* Keep add-account plus size consistent in Edit Formula modal. */
+        #editFormulaModal .account-add-btn:hover {
+            transform: scale(1) !important;
         }
 
         .account-add-btn:active {
@@ -1984,5 +2117,142 @@ body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
             margin-bottom: 0 !important;
             padding-top: clamp(6px, 0.52vw, 10px) !important;
             border-top: none !important;
+        }
+
+        /* Final final override: summary table button/account alignment + 1.4rem typography */
+        body.dashboard-page.datacapture-summary-page #summaryTable thead tr,
+        body.dashboard-page.datacapture-summary-page #summaryTable tbody tr,
+        body.dashboard-page.datacapture-summary-page #summaryTable tfoot tr {
+            grid-template-columns:
+                minmax(0, 2.0fr)
+                minmax(0, 1.5fr)
+                minmax(14px, .18fr)
+                minmax(0, .5fr)
+                minmax(0, 3.2fr)
+                minmax(0, .4fr)
+                minmax(0, .30fr)
+                minmax(0, .55fr)
+                minmax(0, 1.0fr)
+                minmax(0, .33fr)
+                minmax(0, .35fr) !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable th,
+        body.dashboard-page.datacapture-summary-page #summaryTable td {
+            font-size: 1.2rem !important;
+            font-weight: 700 !important;
+            line-height: 1.35 !important;
+            min-height: 30px !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable thead th:nth-child(2),
+        body.dashboard-page.datacapture-summary-page #summaryTable tbody td:nth-child(2) {
+            border-right: none !important;
+            padding-right: 2px !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable thead th:nth-child(3),
+        body.dashboard-page.datacapture-summary-page #summaryTable tbody td:nth-child(3) {
+            border-left: none !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable tbody td:nth-child(3) {
+            text-align: left !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable thead th {
+            text-align: center !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable tbody td:nth-child(3) {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+        }
+
+        /* Allow long account-like values to wrap to a second line. */
+        body.dashboard-page.datacapture-summary-page #summaryTable tbody td:nth-child(1),
+        body.dashboard-page.datacapture-summary-page #summaryTable tbody td:nth-child(2) {
+            white-space: normal !important;
+            overflow: hidden !important;
+            text-overflow: initial !important;
+            display: -webkit-box !important;
+            -webkit-box-orient: vertical !important;
+            -webkit-line-clamp: 2 !important;
+            line-clamp: 2;
+            word-break: break-word !important;
+            overflow-wrap: anywhere !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable .add-account-btn {
+            float: none !important;
+            margin: 0 !important;
+            width: 1.8rem !important;
+            height: 1.8rem !important;
+            font-size: 1.3rem !important;
+            line-height: 1 !important;
+        }
+
+        /* Save space on narrow columns and give Processed Amount more room. */
+        body.dashboard-page.datacapture-summary-page #summaryTable th:nth-child(4),
+        body.dashboard-page.datacapture-summary-page #summaryTable td:nth-child(4),
+        body.dashboard-page.datacapture-summary-page #summaryTable th:nth-child(6),
+        body.dashboard-page.datacapture-summary-page #summaryTable td:nth-child(6),
+        body.dashboard-page.datacapture-summary-page #summaryTable th:nth-child(7),
+        body.dashboard-page.datacapture-summary-page #summaryTable td:nth-child(7),
+        body.dashboard-page.datacapture-summary-page #summaryTable th:nth-child(8),
+        body.dashboard-page.datacapture-summary-page #summaryTable td:nth-child(8),
+        body.dashboard-page.datacapture-summary-page #summaryTable th:nth-child(10),
+        body.dashboard-page.datacapture-summary-page #summaryTable td:nth-child(10),
+        body.dashboard-page.datacapture-summary-page #summaryTable th:nth-child(11),
+        body.dashboard-page.datacapture-summary-page #summaryTable td:nth-child(11) {
+            padding-left: 2px !important;
+            padding-right: 2px !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable th:nth-child(9) {
+            white-space: normal !important;
+            line-height: 1.1 !important;
+        }
+
+        body.dashboard-page.datacapture-summary-page #summaryTable td:nth-child(9) {
+            text-overflow: clip !important;
+        }
+
+        /* Top process info row font size */
+        body.dashboard-page.datacapture-summary-page #processInfoContainer .process-info-label,
+        body.dashboard-page.datacapture-summary-page #processInfoContainer .process-info-value {
+            font-size: 1.4rem !important;
+            font-weight: 700 !important;
+            line-height: 1.35 !important;
+        }
+
+        /* ── Edit Formula modal: lock ALL font-sizes to 1.3rem (title excluded) ── */
+        #editFormulaModal .edit-formula-form-container label,
+        #editFormulaModal .edit-formula-form-container input,
+        #editFormulaModal .edit-formula-form-container select,
+        #editFormulaModal .edit-formula-form-container option,
+        #editFormulaModal .edit-formula-form-container button:not(.account-close),
+        #editFormulaModal .edit-formula-form-container span,
+        #editFormulaModal .edit-formula-form-container p,
+        #editFormulaModal .edit-formula-form-container div,
+        #editFormulaModal .edit-formula-form-container .checkbox-label,
+        #editFormulaModal .edit-formula-form-container .calc-btn,
+        #editFormulaModal .edit-formula-form-container .btn-save,
+        #editFormulaModal .edit-formula-form-container .btn-cancel,
+        #editFormulaModal .edit-formula-form-container .custom-select-button,
+        #editFormulaModal .edit-formula-form-container .custom-select-option,
+        #editFormulaModal .edit-formula-form-container .custom-select-search input,
+        #editFormulaModal .edit-formula-form-container .custom-select-no-results,
+        #editFormulaModal .edit-formula-form-container .formula-data-grid-item,
+        #editFormulaModal .edit-formula-form-container .account-add-btn {
+            font-size: 1.4rem !important;
+        }
+
+        /* Keep the modal title at its original size */
+        #editFormulaModal .edit-formula-form-container .form-header h3 {
+            font-size: clamp(12px, 0.94vw, 18px) !important;
         }
 

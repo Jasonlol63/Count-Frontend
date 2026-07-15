@@ -1,6 +1,7 @@
-import { useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DataCaptureGrid from "./DataCaptureGrid.jsx";
 import GroupOnlyTableSizeControl from "./GroupOnlyTableSizeControl.jsx";
+import SimpleSelect from "../../../components/SimpleSelect.jsx";
 import { CAPTURE_TYPE_OPTIONS } from "../lib/dataCaptureFormRules.js";
 import { callDataCaptureRuntime } from "../lib/dataCaptureRuntime.js";
 import { useDataCaptureGridViewportFit } from "../hooks/useDataCaptureGridViewportFit.js";
@@ -11,6 +12,27 @@ function captureTypeLabel(opt, t) {
   if (opt === "CITIBET") return t("captureTypeCitibet");
   if (opt === "4.RETURN") return t("captureTypeReturn");
   return opt;
+}
+
+function TableExpandIcon({ expanded }) {
+  if (expanded) {
+    return (
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"
+      />
+    </svg>
+  );
 }
 
 /**
@@ -31,7 +53,55 @@ export default function DataCaptureTableSection({
   engineReady = false,
 }) {
   const tableAreaRef = useRef(null);
+  const [tableExpanded, setTableExpanded] = useState(false);
   useDataCaptureGridViewportFit(groupOnlyTable, engineReady, tableAreaRef);
+
+  const toggleTableExpanded = useCallback(() => {
+    setTableExpanded((prev) => !prev);
+  }, []);
+
+  // Toggle on pointerdown (not click): clicking this button blurs the active
+  // grid cell, which can reflow the grid between mousedown/mouseup and swallow
+  // the click. Reacting on pointerdown makes a single tap/click reliable.
+  const handleExpandPointerDown = useCallback(
+    (event) => {
+      if (event.button != null && event.button !== 0) return;
+      event.preventDefault();
+      toggleTableExpanded();
+    },
+    [toggleTableExpanded],
+  );
+
+  const handleExpandKeyDown = useCallback(
+    (event) => {
+      if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
+        event.preventDefault();
+        toggleTableExpanded();
+      }
+    },
+    [toggleTableExpanded],
+  );
+
+  useEffect(() => {
+    document.body.classList.toggle("datacapture-table-expanded", tableExpanded);
+    return () => document.body.classList.remove("datacapture-table-expanded");
+  }, [tableExpanded]);
+
+  useEffect(() => {
+    if (!tableExpanded) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setTableExpanded(false);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [tableExpanded]);
+
+  const captureTypeOptions = useMemo(
+    () => CAPTURE_TYPE_OPTIONS.map((opt) => ({ value: opt, label: captureTypeLabel(opt, t) })),
+    [t],
+  );
 
   const formatPasteMode = captureType === "2.Format" && !formatGridReady;
   const containerClass = [
@@ -97,19 +167,17 @@ export default function DataCaptureTableSection({
           </div>
           {!hideCaptureTypeSelector ? (
             <div className="dc-table-header-controls">
-              <select
+              <SimpleSelect
                 id="dataCaptureTypeSelector"
                 className="data-capture-type-selector"
                 value={captureType}
-                onChange={onCaptureTypeChange}
-                aria-label={t("captureFormatAria")}
-              >
-                {CAPTURE_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {captureTypeLabel(opt, t)}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => onCaptureTypeChange(v)}
+                options={captureTypeOptions}
+                includeEmptyOption={false}
+                forcePortal
+                portalDropdownClassName="dc-process-select-portal"
+                ariaLabel={t("captureFormatAria")}
+              />
               <button type="button" className="btn btn-cancel" onClick={() => onReset?.()}>
                 {t("reset")}
               </button>
@@ -118,6 +186,17 @@ export default function DataCaptureTableSection({
           {hideCaptureTypeSelector ? (
             <GroupOnlyTableSizeControl t={t} engineReady={engineReady} />
           ) : null}
+          <button
+            type="button"
+            className="dc-table-expand-btn"
+            aria-pressed={tableExpanded}
+            title={tableExpanded ? t("tableCollapse") : t("tableExpand")}
+            aria-label={tableExpanded ? t("tableCollapse") : t("tableExpand")}
+            onPointerDown={handleExpandPointerDown}
+            onKeyDown={handleExpandKeyDown}
+          >
+            <TableExpandIcon expanded={tableExpanded} />
+          </button>
         </div>
         <div className="excel-table-scroll-body" ref={tableAreaRef}>
           {gridBody}

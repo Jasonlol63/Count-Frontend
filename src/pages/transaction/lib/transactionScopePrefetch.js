@@ -35,6 +35,9 @@ export function buildTransactionSearchRequestKey({
   showInactive = false,
   showCaptureOnly = false,
   hideZeroBalance = true,
+  typeSearch = false,
+  typeAccountIds = [],
+  typeSearchFormType = "",
 }) {
   const cur =
     !showAllCurrencies && selectedCurrencies?.length
@@ -50,10 +53,16 @@ export function buildTransactionSearchRequestKey({
     categoryParam,
     showInactive: showInactive ? "1" : "0",
     showCaptureOnly: showCaptureOnly ? "1" : "0",
-    hideZero: hideZeroBalance ? "0" : "1",
+    // Align with search_api.php hide_zero_balance (1=hide, 0=show all 0 balance).
+    hide_zero_balance: hideZeroBalance ? "1" : "0",
     companyId: String(scopeCacheCompanyKey || ""),
     showAllCurrencies: !!showAllCurrencies,
     currencies: cur,
+    type_search: typeSearch ? "1" : "0",
+    type_account_ids: Array.isArray(typeAccountIds)
+      ? [...typeAccountIds].map((id) => Number(id)).filter((id) => id > 0).sort((a, b) => a - b).join(",")
+      : "",
+    type_search_form_type: String(typeSearchFormType || "").toUpperCase().trim(),
   });
 }
 
@@ -80,6 +89,10 @@ function resolveDefaultSearchCurrencies(scopeCacheCompanyKey) {
   if (prefs.showAll) return { showAll: true, currencies: [] };
   if (prefs.currencies.length > 0) {
     return { showAll: false, currencies: prefs.currencies };
+  }
+  // Group-only: never pre-select MYR — wait for scoped account currencies from API.
+  if (String(scopeCacheCompanyKey || "").startsWith("group:")) {
+    return { showAll: false, currencies: [] };
   }
   const code = pickTransactionDefaultCurrency(["MYR"]);
   return { showAll: false, currencies: code ? [code] : ["MYR"] };

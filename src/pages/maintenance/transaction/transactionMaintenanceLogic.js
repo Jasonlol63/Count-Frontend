@@ -1,4 +1,4 @@
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+﻿import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { formatDmy, parseDdMmYyyyToYmd, parseYmd } from "../../../utils/date/dateUtils.js";
 import {
   companiesInGroupList,
@@ -14,16 +14,17 @@ import {
 } from "../shared/maintenanceCompanyApi.js";
 import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
 import { mapDomainGroupProcesses } from "../../report/domain/domainReportGroupProcesses.js";
+import { GROUP_ONLY_PROCESS_CODES } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
 import {
   transactionMaintenanceScopeApiParams,
   transactionMaintenanceScopeCacheKey,
   transactionMaintenanceUsesGroupProcesses,
 } from "./transactionMaintenanceScope.js";
 
-/** 宽日期兜底分片（游标分页下通常整段一次查完；仅超范围或失败再分片）。 */
+/** å®½æ—¥æœŸå…œåº•åˆ†ç‰‡ï¼ˆæ¸¸æ ‡åˆ†é¡µä¸‹é€šå¸¸æ•´æ®µä¸€æ¬¡æŸ¥å®Œï¼›ä»…è¶…èŒƒå›´æˆ–å¤±è´¥å†åˆ†ç‰‡ï¼‰ã€‚ */
 const MAINTENANCE_CHUNK_DAYS = 90;
 const MAINTENANCE_CHUNK_THRESHOLD_DAYS = 400;
-/** 首屏尽快出表；后续大批量游标拉取（后端 UNION 单查询，每页只扫 page_size 行）。 */
+/** é¦–å±å°½å¿«å‡ºè¡¨ï¼›åŽç»­å¤§æ‰¹é‡æ¸¸æ ‡æ‹‰å–ï¼ˆåŽç«¯ UNION å•æŸ¥è¯¢ï¼Œæ¯é¡µåªæ‰« page_size è¡Œï¼‰ã€‚ */
 const MAINTENANCE_FIRST_PAGE_SIZE = 800;
 const MAINTENANCE_PAGE_SIZES = [5000, 3500, 2000, 1000, 500];
 const MAINTENANCE_MAX_PAGES = 100;
@@ -129,21 +130,39 @@ export async function fetchProcessesForPermission(companyId, permission, scope =
 }
 
 export async function fetchProcessesForMaintenance(companyId, permission, scope = null) {
-  if (scope && transactionMaintenanceUsesGroupProcesses(scope)) {
+  const payrollChannel = Boolean(scope?.c168Channel || scope?.companyPayrollChannel);
+  if (String(permission).toLowerCase() === "bank" || payrollChannel) {
+    return [
+      { id: "PROFIT", process_name: "PROFIT", description: null },
+      { id: "SALARY", process_name: "SALARY", description: null },
+      { id: "COMMISSION", process_name: "COMMISSION", description: null },
+      { id: "BONUS", process_name: "BONUS", description: null },
+    ];
+  }
+  if (scope && transactionMaintenanceUsesGroupProcesses(scope) && !payrollChannel) {
     const apiList = await fetchDomainReportProcesses(scope, { credentials: "include" });
     return mapProcessesForMaintenanceSelect(mapDomainGroupProcesses(apiList));
   }
   const effectiveId = scope?.scopeCompanyId ?? companyId;
+  const permForApi =
+    payrollChannel && String(permission).toLowerCase() === "bank" ? "" : permission;
   const rows = await fetchMaintenanceProcesses(effectiveId, {
     credentials: true,
-    permission,
+    permission: permForApi,
   });
-  return mapProcessesForMaintenanceSelect(rows);
+  let mapped = mapProcessesForMaintenanceSelect(rows);
+  if (payrollChannel) {
+    const payrollCodes = new Set(GROUP_ONLY_PROCESS_CODES);
+    mapped = mapped.filter((p) =>
+      payrollCodes.has(String(p.process_name ?? "").trim().toUpperCase()),
+    );
+  }
+  return mapped;
 }
 
 /**
  * Load permission/category + process list when Company is cleared (group-only).
- * Uses a group anchor company for permissions UI only — does not select that company.
+ * Uses a group anchor company for permissions UI only â€” does not select that company.
  */
 export async function bootstrapTransactionMaintenanceMeta({
   companies,
@@ -164,13 +183,13 @@ export async function bootstrapTransactionMaintenanceMeta({
   return { permissions: companyPerms, activePermission };
 }
 
-/** Transaction Maintenance 仅 Games/Gambling/Bank 有数据；Loan/Rate/Money 与其它维护页共用 localStorage 时会误传。 */
+/** Transaction Maintenance ä»… Games/Gambling/Bank æœ‰æ•°æ®ï¼›Loan/Rate/Money ä¸Žå…¶å®ƒç»´æŠ¤é¡µå…±ç”¨ localStorage æ—¶ä¼šè¯¯ä¼ ã€‚ */
 const TXN_MAINTENANCE_SEARCH_CATEGORIES = new Set(["games", "gambling", "bank"]);
 const TXN_MAINTENANCE_EMPTY_CATEGORIES = new Set(["loan", "rate", "money"]);
-/** 与 Payment 等页共用 localStorage；Bank 在本页会跳过 Data Capture，默认不恢复 saved Bank。 */
+/** ä¸Ž Payment ç­‰é¡µå…±ç”¨ localStorageï¼›Bank åœ¨æœ¬é¡µä¼šè·³è¿‡ Data Captureï¼Œé»˜è®¤ä¸æ¢å¤ saved Bankã€‚ */
 const TXN_MAINTENANCE_IGNORE_SAVED_CATEGORIES = new Set(["loan", "rate", "money", "bank"]);
 
-/** 本页可选的 Category 按钮（过滤 Loan/Rate/Money）。 */
+/** æœ¬é¡µå¯é€‰çš„ Category æŒ‰é’®ï¼ˆè¿‡æ»¤ Loan/Rate/Moneyï¼‰ã€‚ */
 export function filterTransactionMaintenancePermissions(permissions) {
   const perms = Array.isArray(permissions) ? permissions : [];
   const filtered = perms.filter((p) =>
@@ -179,7 +198,7 @@ export function filterTransactionMaintenancePermissions(permissions) {
   return filtered.length > 0 ? filtered : perms;
 }
 
-/** 选择默认 Category：优先 Games/Gambling，忽略 Loan/Rate/Money/Bank 的 localStorage。 */
+/** é€‰æ‹©é»˜è®¤ Categoryï¼šä¼˜å…ˆ Games/Gamblingï¼Œå¿½ç•¥ Loan/Rate/Money/Bank çš„ localStorageã€‚ */
 export function pickTransactionMaintenancePermission(permissions, saved) {
   const perms = filterTransactionMaintenancePermissions(permissions);
   const savedLower = String(saved ?? "").toLowerCase();
@@ -201,17 +220,21 @@ export function pickTransactionMaintenancePermission(permissions, saved) {
   );
 }
 
-/** 传给 maintenance_search_api 的 category（Loan/Rate/Money → Games）。 */
-export function resolveTransactionMaintenanceCategory(permission) {
+/** ä¼ ç»™ maintenance_search_api çš„ categoryï¼ˆLoan/Rate/Money â†’ Gamesï¼‰ã€‚ */
+export function resolveTransactionMaintenanceCategory(permission, scope = null) {
   const raw = String(permission ?? "").trim();
   if (!raw) return "";
   const lower = raw.toLowerCase();
   if (TXN_MAINTENANCE_EMPTY_CATEGORIES.has(lower)) return "Games";
   if (lower === "gambling") return "Games";
+  // Bank-only payroll subsidiaries (e.g. CX): Data Capture uses Games semantics, not Bank ledger.
+  if (lower === "bank" && (scope?.companyPayrollChannel || scope?.c168Channel)) {
+    return "Games";
+  }
   return raw;
 }
 
-/** Select All 误传占位文案时视为未选 Process。 */
+/** Select All è¯¯ä¼ å ä½æ–‡æ¡ˆæ—¶è§†ä¸ºæœªé€‰ Processã€‚ */
 export function normalizeMaintenanceProcessFilter(process) {
   const raw = String(process ?? "").trim();
   if (!raw) return "";
@@ -219,8 +242,8 @@ export function normalizeMaintenanceProcessFilter(process) {
   if (
     lower === "select all" ||
     lower === "--select all--" ||
-    raw === "全部" ||
-    raw === "--全部--"
+    raw === "å…¨éƒ¨" ||
+    raw === "--å…¨éƒ¨--"
   ) {
     return "";
   }
@@ -234,13 +257,46 @@ function renumberMaintenanceRows(rows) {
   return rows;
 }
 
+/** Client-side text filter across visible columns (API is paginated â€” avoid post-filter in PHP). */
+export function filterTransactionMaintenanceRowsBySearch(rows, searchTerm) {
+  const q = String(searchTerm || "").trim().toUpperCase();
+  const list = Array.isArray(rows) ? rows : [];
+  if (!q) return list;
+  const fields = [
+    "process",
+    "id_product",
+    "account",
+    "from_account",
+    "description",
+    "remark",
+    "currency",
+    "rate",
+    "cr",
+    "dr",
+    "percent",
+    "created_by",
+    "deleted_by",
+    "dts_created",
+    "dts_deleted",
+  ];
+  const filtered = list
+    .filter((row) =>
+      fields.some((field) => {
+        const value = String(row?.[field] ?? "").toUpperCase();
+        return value !== "" && value.includes(q);
+      }),
+    )
+    .map((row) => ({ ...row }));
+  return renumberMaintenanceRows(filtered);
+}
+
 function finalizeMaintenanceRows(rows) {
   const merged = [...rows];
   merged.sort(compareMaintenanceRows);
   return renumberMaintenanceRows(merged);
 }
 
-/** 两段均已按 compareMaintenanceRows 降序时 O(n) 归并。 */
+/** ä¸¤æ®µå‡å·²æŒ‰ compareMaintenanceRows é™åºæ—¶ O(n) å½’å¹¶ã€‚ */
 function mergeSortedMaintenanceRows(left, right) {
   if (!left.length) return renumberMaintenanceRows([...right]);
   if (!right.length) return renumberMaintenanceRows([...left]);
@@ -259,7 +315,7 @@ function mergeSortedMaintenanceRows(left, right) {
   return renumberMaintenanceRows(out);
 }
 
-/** 同日期段内分页结果可直接追加（API 已全局降序）。 */
+/** åŒæ—¥æœŸæ®µå†…åˆ†é¡µç»“æžœå¯ç›´æŽ¥è¿½åŠ ï¼ˆAPI å·²å…¨å±€é™åºï¼‰ã€‚ */
 function appendMaintenancePageRows(existing, pageRows) {
   if (!pageRows.length) return existing;
   if (!existing.length) return renumberMaintenanceRows([...pageRows]);
@@ -268,7 +324,7 @@ function appendMaintenancePageRows(existing, pageRows) {
 
 /**
  * Search transaction maintenance data.
- * Automatically: splits wide date ranges → paginates each slice → retries → splits again on failure.
+ * Automatically: splits wide date ranges â†’ paginates each slice â†’ retries â†’ splits again on failure.
  */
 export async function searchTransactionData({
   dateFrom,
@@ -281,7 +337,7 @@ export async function searchTransactionData({
   onProgress,
 }) {
   const processFilter = normalizeMaintenanceProcessFilter(process);
-  const categoryFilter = resolveTransactionMaintenanceCategory(category);
+  const categoryFilter = resolveTransactionMaintenanceCategory(category, scope);
   const emitProgress = (rows) => {
     if (!rows.length) return;
     const snapshot = renumberMaintenanceRows([...rows]);
@@ -645,7 +701,7 @@ async function searchTransactionMaintenanceOnce({
 }
 
 export async function updateSessionCompany(companyId) {
-  const response = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`), {
+  const response = await fetch(buildApiUrl(`auth/switch-tenant?tenant_id=${companyId}`), {
     credentials: "include",
   });
   const result = await response.json();
@@ -683,7 +739,7 @@ export function isMaintenanceRecoverableError(err) {
 
 export function getMaintenanceSearchUserMessage(
   err,
-  { loadingMessage = "Loading data…", narrowRangeMessage = "Loading is taking longer. Try a shorter date range or select a Process." } = {},
+  { loadingMessage = "Loading dataâ€¦", narrowRangeMessage = "Loading is taking longer. Try a shorter date range or select a Process." } = {},
 ) {
   if (!err || isMaintenanceRecoverableError(err)) {
     return loadingMessage;
@@ -702,7 +758,7 @@ export function formatAmount(value) {
   });
 }
 
-/** React Query 缓存：区分「加载完成」与「中途切换公司被中断的半成品」。 */
+/** React Query ç¼“å­˜ï¼šåŒºåˆ†ã€ŒåŠ è½½å®Œæˆã€ä¸Žã€Œä¸­é€”åˆ‡æ¢å…¬å¸è¢«ä¸­æ–­çš„åŠæˆå“ã€ã€‚ */
 export function packMaintenanceCache(rows, complete = false) {
   return { rows: Array.isArray(rows) ? rows : [], complete: Boolean(complete) };
 }
@@ -713,14 +769,14 @@ export function getMaintenanceCacheRows(data) {
   return Array.isArray(data.rows) ? data.rows : [];
 }
 
-/** 仅 complete===true 视为可长期复用的完整结果；无缓存/数组旧缓存视为未完成。 */
+/** ä»… complete===true è§†ä¸ºå¯é•¿æœŸå¤ç”¨çš„å®Œæ•´ç»“æžœï¼›æ— ç¼“å­˜/æ•°ç»„æ—§ç¼“å­˜è§†ä¸ºæœªå®Œæˆã€‚ */
 export function isMaintenanceCacheComplete(data) {
   if (!data) return false;
   if (Array.isArray(data)) return false;
   return data.complete === true;
 }
 
-/** React Query queryKey（与 TransactionMaintenancePage 一致）。 */
+/** React Query queryKeyï¼ˆä¸Ž TransactionMaintenancePage ä¸€è‡´ï¼‰ã€‚ */
 export function buildTransactionMaintenanceQueryKey({
   scope,
   dateFrom,

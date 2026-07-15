@@ -1,0 +1,18 @@
+/*
+ * Sidebar shell size lock — scroll rail lives in sidebar-scroll.css (imported after this file).
+ */
+body.ec-auth-shell .informationmenu {
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  min-height: 0 !important;
+}
+
+body.ec-auth-shell .informationmenu-header {
+  flex-shrink: 0 !important;
+}
+
+body.ec-auth-shell .informationmenu-footer {
+  flex-shrink: 0 !important;
+  background: var(--sidebar-shell-bg, #002d49) !important;
+}

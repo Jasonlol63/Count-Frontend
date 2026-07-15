@@ -68,11 +68,11 @@ export default function DomainNotification() {
   }, []);
 
   const layer = (
-    <div id="domainNotificationContainer" className="notification-container">
+    <div id="accountNotificationContainer" className="account-notification-container">
       {notes.map((n) => (
         <div
           key={n.id}
-          className={`notification notification-${toastVariant(n.type)} ${
+          className={`account-notification account-notification-${toastVariant(n.type)} ${
             n.visible ? "show" : ""
           }`.trim()}
         >

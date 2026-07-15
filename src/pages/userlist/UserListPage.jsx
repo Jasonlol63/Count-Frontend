@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { notifyCompanySessionUpdated } from "../../utils/company/companySessionEvents.js";
@@ -36,6 +36,8 @@ import {
   fetchOwnerCompaniesAll,
 } from "../../utils/company/sharedCompanyFilter.js";
 import { pathnameIs, spaPath } from "../../utils/routing/pageRoutes.js";
+import { resolveDefaultLandingPath } from "../../utils/auth/sidebarPermissions.js";
+import { replaceBrowserPathOnly } from "../../utils/routing/privateBrowserUrl.js";
 import {
   canClearCompanySelection,
   canUseGroupOnlyMode,
@@ -48,31 +50,33 @@ import {
 } from "../../utils/company/loginScope.js";
 import { useGcFilterWithAllModes } from "../../utils/company/useGcFilterWithAllModes.js";
 import GcInlineFilterPanel from "../../components/GcInlineFilterPanel.jsx";
-import { isPartnershipAuditReadOnlyLocked } from "../../utils/audit/partnershipAuditReadOnly.js";
+import { isPartnershipAuditReadOnlyLocked, isPartnershipAuditReadOnlyBlockingUserEdit } from "../../utils/audit/partnershipAuditReadOnly.js";
 import { assetUrl, buildApiUrl } from "../../utils/core/apiUrl.js";
 import { useAuthSession } from "../../context/AuthSessionContext.jsx";
 import "../../../public/css/accountCSS.css";
 import "../../../public/css/userlist.css";
 import "../../../public/css/admin-responsive.css";
+import "../../../public/css/select-unified.css";
+import "../../../public/css/list-badge-scale.css";
+import { useAutoListPageSize } from "../../hooks/useAutoListPageSize.js";
+import { PAGE_SIZE_MAX, PAGE_SIZE_MIN } from "../../constants/listPageSize.js";
 import {
   ALL_ROLE_OPTIONS,
-  PAGE_SIZE,
   PERMISSION_KEYS,
   applyUserFilters,
   computeRowCapabilities,
-  formatLastLogin,
+  formatUserLastLoginDate,
+  formatUserLastLoginTimeTitle,
   getAvailableRolesForCreation,
   getAvailableRolesForEdit,
   getCurrentUserRolePermissions,
   getDeleteCheckboxState,
   getFinalPermissionsForCreation,
   getRoleTemplateSidebarList,
-  formatRoleLabel,
+  getVisiblePermissionKeys,
+  sanitizeSidebarPermissionsForRole,
+  roleSupportsOwnershipPermission,
   normRole,
-  rowCreatedBy,
-  rowIsOwnerShadow,
-  rowLoginId,
-  rowLastLogin,
   sortUsers,
   roleHasReadOnlyToggle,
   canInteractWithReadOnlyToggle,
@@ -86,93 +90,24 @@ import {
   shouldLoadUserListData,
   userListHasMutationScope,
 } from "./userListLogic.js";
-import {
-  buildAdminCreateRequest,
-  buildAdminOwnerProfileUpdateRequest,
-  buildAdminUpdateRequest,
-  createAdminUser,
-  deleteAdminUser,
-  fetchAdminDetailByUserId,
-  fetchAdminListByTenantId,
-  normalizeOwnerShadowRow,
-  resolveAdminCreateTenantIds,
-  resolveAdminTenantIds,
-  resolveListTenantId,
-  toggleAdminUserStatus,
-  updateAdminOwnerProfile,
-  updateAdminUser,
-} from "./userListApi.js";
 
 // Components
 import UserModal from "./components/UserModal.jsx";
 import UserConfirmModal from "./components/UserConfirmModal.jsx";
 import { processNotificationAboveAccountZIndex, processNotificationZIndex } from "../../components/ProcessModalPortal.jsx";
-import { getUserListText, translateUserListApiMessage } from "../../translateFile/pages/userListTranslate.js";
+import { formatUserRoleDisplay, formatUserStatusDisplay, getUserListText, translateUserListApiMessage } from "../../translateFile/pages/userListTranslate.js";
 import { validateEmail } from "../../utils/input/emailValidation.js";
-import { getSessionTenantId } from "../../utils/auth/sessionTenant.js";
-import { resolveCompanyDisplayCode } from "../../utils/company/sharedCompanyFilter.js";
-
-function tenantIdsFromDetail(detail) {
-  const raw = detail?.tenantIds ?? detail?.tenant_ids ?? [];
-  return (Array.isArray(raw) ? raw : [])
-    .map(Number)
-    .filter((id) => Number.isFinite(id) && id > 0);
-}
-
-function applyTenantIdsToPickerSelection(detail, {
-  useDualTenantUserPicker,
-  modalGroupCompanies,
-  modalSubsidiaryCompanies,
-  modalPickerCompanies,
-  groupOnlyUserList,
-  selectedGroup,
-  scopeCompanyId,
-}) {
-  const tenantIds = tenantIdsFromDetail(detail);
-  if (useDualTenantUserPicker) {
-    const groupIdSet = new Set(modalGroupCompanies.map((c) => Number(c.id)));
-    const companyIdSet = new Set(modalSubsidiaryCompanies.map((c) => Number(c.id)));
-    return {
-      groupIds: tenantIds.filter((id) => groupIdSet.has(id)),
-      companyIds: tenantIds.filter((id) => companyIdSet.has(id)),
-    };
-  }
-
-  const allowed = new Set(modalPickerCompanies.map((c) => Number(c.id)));
-  const ids = tenantIds.filter((id) => allowed.has(id));
-  if (groupOnlyUserList) {
-    const defaultPick = modalPickerCompanies.find(
-      (c) => String(c.group_id || "").toUpperCase() === String(selectedGroup || "").toUpperCase(),
-    );
-    const companyIds =
-      ids.length > 0
-        ? ids
-        : defaultPick?.id != null
-          ? [Number(defaultPick.id)]
-          : modalPickerCompanies[0]
-            ? [Number(modalPickerCompanies[0].id)]
-            : [];
-    return { groupIds: [], companyIds };
-  }
-
-  return {
-    groupIds: [],
-    companyIds: ids.length ? ids : modalPickerCompanies.map((c) => Number(c.id)),
-  };
-}
 
 function roleBadgeClass(role) {
-  return `role-${normRole(role).replace(/\s+/g, "-")}`;
+  return `role-${String(role || "").toLowerCase().replace(/\s+/g, "-")}`;
 }
 
 function normalizeCompanyRow(row) {
   if (!row || typeof row !== "object") return row;
-  const company_id = resolveCompanyDisplayCode(row);
   return {
     ...row,
-    group_id: row.group_id ?? row.groupId ?? row.group ?? row.parent_tenant_code ?? null,
-    company_id,
-    tenant_code: row.tenant_code ?? company_id,
+    group_id: row.group_id ?? row.groupId ?? row.group ?? null,
+    company_id: row.company_id ?? row.companyId ?? row.code ?? "",
   };
 }
 
@@ -320,6 +255,7 @@ export default function UserListPage() {
   const modalLoadSeqRef = useRef(0);
   const editUserDetailCacheRef = useRef(new Map());
   const editUserDetailPendingRef = useRef(new Map());
+  const listRegionRef = useRef(null);
   const bootInitializedRef = useRef(false);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -389,23 +325,71 @@ export default function UserListPage() {
   );
   const pickerCompanyId = companyId;
   const filteredSorted = useMemo(() => {
-    const f = applyUserFilters(usersRaw, { search, showInactive, showAll, viewerRole: currentUserRole });
+    const f = applyUserFilters(usersRaw, {
+      search,
+      showInactive,
+      showAll,
+      viewerRole: currentUserRole,
+      viewerUserId: currentUserId,
+    });
     return sortUsers(f, sortColumn, sortDirection);
-  }, [usersRaw, search, showInactive, showAll, currentUserRole, sortColumn, sortDirection]);
+  }, [usersRaw, search, showInactive, showAll, currentUserRole, currentUserId, sortColumn, sortDirection]);
 
   const canCreateUser = useMemo(() => getAvailableRolesForCreation(currentUserRole).length > 0, [currentUserRole]);
   const userMutationsBlocked = useMemo(() => isPartnershipAuditReadOnlyLocked(me), [me]);
+  const isUserEditBlockedByReadOnly = useCallback(
+    (row) => isPartnershipAuditReadOnlyBlockingUserEdit(me, row?.id, currentUserId),
+    [me, currentUserId],
+  );
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredSorted.length / PAGE_SIZE)), [filteredSorted.length]);
+  /** ä»…ã€Œæ˜¾ç¤ºåœç”¨ã€æ¨¡å¼å±•ç¤ºæ‰¹é‡åˆ é™¤å‹¾é€‰åˆ—ï¼›Show All ä¿æŒåˆ—ç»“æž„ç¨³å®šä¸è·³å˜ */
+  const showBulkDeleteColumn = showInactive;
 
-  /** 与顶部 chip 一致：仅「显示停用」或「显示全部」时展示批量删除勾选列（默认活跃分页不展示） */
-  const showBulkDeleteColumn = showInactive || showAll;
+  const pageSize = useAutoListPageSize({
+    listRegionRef,
+    enabled: !showAll,
+    rowSelector: ".user-list-row",
+    headerSelector: ".user-list-table-header",
+    paginationSelector: ".pagination-container",
+    minRows: PAGE_SIZE_MIN,
+    maxRows: PAGE_SIZE_MAX,
+    stableRowHeight: true,
+    remeasureDeps: [
+      filteredSorted.length,
+      showAll,
+      showInactive,
+      search,
+      lang,
+      currentPage,
+      bootLoading,
+      companyId,
+      selectedGroup,
+      showBulkDeleteColumn,
+    ],
+  });
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredSorted.length / pageSize)),
+    [filteredSorted.length, pageSize],
+  );
+  const effectivePage = useMemo(
+    () => Math.min(Math.max(1, currentPage), totalPages),
+    [currentPage, totalPages],
+  );
+
+  useEffect(() => {
+    if (showAll) return;
+    setCurrentPage((p) => Math.min(p, totalPages));
+  }, [showAll, totalPages, pageSize]);
 
   const pageRows = useMemo(() => {
     if (showAll) return filteredSorted;
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredSorted.slice(start, start + PAGE_SIZE);
-  }, [filteredSorted, currentPage, showAll]);
+    const start = (effectivePage - 1) * pageSize;
+    return filteredSorted.slice(start, start + pageSize);
+  }, [filteredSorted, effectivePage, pageSize, showAll]);
+
+  /** ä»…æ»¡é¡µæ—¶ grid å‡åˆ†é«˜åº¦ï¼›æœ«é¡µä¸è¶³ä¸€é¡µæ—¶ç”¨ç´§å‡‘è¡Œé«˜ï¼Œé¿å… 3 æ¡æ•°æ®æ’‘æ»¡æ•´å± */
+  const usePagedFill = !showAll && pageRows.length > 0 && pageRows.length >= pageSize;
 
   const permDisabledMap = useMemo(() => {
     const allowed = new Set(getCurrentUserRolePermissions(currentUserRole));
@@ -414,26 +398,30 @@ export default function UserListPage() {
     return m;
   }, [currentUserRole]);
 
+  const visiblePermissionKeys = useMemo(() => getVisiblePermissionKeys(form.role), [form.role]);
+
+  useEffect(() => {
+    if (roleSupportsOwnershipPermission(form.role)) return;
+    setPermSelected((prev) => {
+      if (!prev.has("ownership")) return prev;
+      const next = new Set(prev);
+      next.delete("ownership");
+      return next;
+    });
+  }, [form.role]);
+
   const syncUrl = useCallback(() => {
-    const url = new URL(window.location.href);
-    if (companyId) url.searchParams.set("company_id", String(companyId));
-    else url.searchParams.delete("company_id");
-    if (search.trim()) url.searchParams.set("search", search.trim()); else url.searchParams.delete("search");
-    if (showInactive) url.searchParams.set("showInactive", "1");
-    else url.searchParams.delete("showInactive");
-    if (showAll) url.searchParams.set("showAll", "1");
-    else url.searchParams.delete("showAll");
-    window.history.replaceState(null, "", url.pathname + url.search);
-  }, [companyId, search, showInactive, showAll]);
+    replaceBrowserPathOnly();
+  }, []);
 
   useEffect(() => { if (!bootLoading) syncUrl(); }, [bootLoading, syncUrl]);
 
   useEffect(() => {
-    if (!showInactive && !showAll) {
+    if (!showInactive) {
       setSelectedDeleteIds(new Set());
       setSelectAllUsers(false);
     }
-  }, [showInactive, showAll]);
+  }, [showInactive]);
 
   useEffect(() => {
     const onStorage = (e) => {
@@ -451,7 +439,7 @@ export default function UserListPage() {
     };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.body.classList.remove("bg");
     document.body.classList.add("user-page");
     return () => {
@@ -461,7 +449,7 @@ export default function UserListPage() {
     };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (showAll) document.body.classList.add("user-page--show-all");
     else document.body.classList.remove("user-page--show-all");
     return () => document.body.classList.remove("user-page--show-all");
@@ -476,10 +464,11 @@ export default function UserListPage() {
       try {
         const perms = Array.isArray(me.permissions) ? me.permissions : [];
         if (perms.length > 0 && !perms.includes("admin")) {
-          navigate(spaPath("dashboard"), { replace: true });
+          const landing = resolveDefaultLandingPath(me);
+          navigate(landing || spaPath("login"), { replace: true });
           return;
         }
-        const rows = (await fetchOwnerCompaniesAll()).map(normalizeCompanyRow);
+        const rows = (await fetchOwnerCompaniesAll({ me })).map(normalizeCompanyRow);
         if (cancelled) return;
         setCompanies(rows);
         applyLoginScopeToSessionStorageIfNeeded(me, rows);
@@ -503,7 +492,7 @@ export default function UserListPage() {
         ) {
           effectiveNum = resolveBootCompanyId({
             urlCompanyId,
-            sessionCompanyId: getSessionTenantId(me),
+            sessionCompanyId: me.company_id,
             defaultRowId: rows[0]?.id,
           });
         }
@@ -571,7 +560,7 @@ export default function UserListPage() {
           if (needsSubsidiary && targetGroup) {
             const pick = pickDefaultSubsidiaryForGroup(rows, targetGroup, {
               me,
-              preferredCompanyId: getSessionTenantId(me) ?? effectiveNum,
+              preferredCompanyId: me?.company_id ?? effectiveNum,
             });
             if (pick?.id != null) {
               effectiveNum = Number(pick.id);
@@ -606,7 +595,7 @@ export default function UserListPage() {
               if (!isSubsidiaryCompanyRow(bootRow, groupIds)) {
                 const pick = pickDefaultSubsidiaryForGroup(rows, bootGroup || bootRow?.group_id, {
                   me,
-                  preferredCompanyId: getSessionTenantId(me),
+                  preferredCompanyId: me.company_id,
                 });
                 effectiveNum = pick?.id != null ? Number(pick.id) : null;
               }
@@ -614,10 +603,10 @@ export default function UserListPage() {
             if (effectiveNum == null || !Number.isFinite(Number(effectiveNum))) {
               const pick = pickDefaultSubsidiaryForGroup(rows, bootGroup, {
                 me,
-                preferredCompanyId: getSessionTenantId(me),
+                preferredCompanyId: me.company_id,
               });
               if (pick?.id != null) effectiveNum = Number(pick.id);
-              else if (getSessionTenantId(me) != null) effectiveNum = Number(getSessionTenantId(me));
+              else if (me.company_id != null) effectiveNum = Number(me.company_id);
             }
             persistDashboardGroupOnlyMode(false);
           }
@@ -639,7 +628,7 @@ export default function UserListPage() {
             if (!isSubsidiaryCompanyRow(bootRow, groupIds)) {
               const pick = pickDefaultSubsidiaryForGroup(rows, bootGroup || bootRow?.group_id, {
                 me,
-                preferredCompanyId: getSessionTenantId(me),
+                preferredCompanyId: me.company_id,
               });
               effectiveNum = pick?.id != null ? Number(pick.id) : null;
             }
@@ -647,10 +636,10 @@ export default function UserListPage() {
           if (effectiveNum == null || !Number.isFinite(Number(effectiveNum))) {
             const pick = pickDefaultSubsidiaryForGroup(rows, bootGroup, {
               me,
-              preferredCompanyId: getSessionTenantId(me),
+              preferredCompanyId: me.company_id,
             });
             if (pick?.id != null) effectiveNum = Number(pick.id);
-            else if (getSessionTenantId(me) != null) effectiveNum = Number(getSessionTenantId(me));
+            else if (me.company_id != null) effectiveNum = Number(me.company_id);
           }
           persistDashboardGroupOnlyMode(false);
           const groupFilterOptOutBoot =
@@ -703,11 +692,15 @@ export default function UserListPage() {
 
         const syncCompanyId =
           effectiveNum != null && Number.isFinite(Number(effectiveNum)) ? Number(effectiveNum) : null;
-        if (syncCompanyId != null && syncCompanyId !== getSessionTenantId(me)) {
+        if (syncCompanyId != null && syncCompanyId !== Number(me.company_id)) {
           void (async () => {
             try {
-              const syncJson = await syncCompanySessionApi(syncCompanyId);
-              if (syncJson?.success) notifyCompanySessionUpdated(syncJson.data ?? null);
+              const syncRes = await fetch(
+                buildApiUrl(`auth/switch-tenant?tenant_id=${syncCompanyId}`),
+                { credentials: "include" },
+              );
+              const syncJson = await syncRes.json();
+              if (syncJson.success) notifyCompanySessionUpdated();
             } catch {
               /* boot session sync is best-effort */
             }
@@ -773,7 +766,7 @@ export default function UserListPage() {
     broadcastFilterToLayout: false,
   });
 
-  /** When no Group is selected, the shared picker only lists “ungrouped” rows — often empty for AP/IG-only tenants. */
+  /** When no Group is selected, the shared picker only lists â€œungroupedâ€ rows â€” often empty for AP/IG-only tenants. */
   const inlineCompaniesForPicker = useMemo(
     () =>
       resolveUserListInlinePickerCompanies({
@@ -796,7 +789,7 @@ export default function UserListPage() {
     if (!groupOnlyUserList || !selectedGroup) return null;
     const entityPick = pickDefaultCompanyForGroup(companies, selectedGroup, {
       me,
-      preferredCompanyId: getSessionTenantId(me),
+      preferredCompanyId: me?.company_id,
       groupEntityOnly: true,
     });
     if (entityPick?.id != null) {
@@ -805,7 +798,7 @@ export default function UserListPage() {
     }
     const fallback = pickDefaultCompanyForGroup(companies, selectedGroup, {
       me,
-      preferredCompanyId: getSessionTenantId(me),
+      preferredCompanyId: me?.company_id,
     });
     const id = fallback?.id != null ? Number(fallback.id) : Number.NaN;
     return Number.isFinite(id) && id > 0 ? id : null;
@@ -821,16 +814,16 @@ export default function UserListPage() {
     if (selectedGroup) {
       const pick = pickDefaultCompanyForGroup(companies, selectedGroup, {
         me,
-        preferredCompanyId: getSessionTenantId(me) ?? companyId,
+        preferredCompanyId: me?.company_id ?? companyId,
       });
       const pid = pick?.id != null ? Number(pick.id) : Number.NaN;
       if (Number.isFinite(pid) && pid > 0) return pid;
     }
-    const sessionId = getSessionTenantId(me) != null ? Number(getSessionTenantId(me)) : Number.NaN;
+    const sessionId = me?.company_id != null ? Number(me.company_id) : Number.NaN;
     return Number.isFinite(sessionId) && sessionId > 0 ? sessionId : null;
   }, [companyId, groupOnlyUserList, anchorCompanyId, selectedGroup, companies, me]);
 
-  /** Add User: active group ledger or company pill in picker — no session-only fallback. */
+  /** Add User: active group ledger or company pill in picker â€” no session-only fallback. */
   const mutationScopeCompanyId = useMemo(
     () =>
       resolveUserListMutationScopeCompanyId({
@@ -941,26 +934,53 @@ export default function UserListPage() {
     [isUserListScopeKeyActive],
   );
 
-  const loadUsersListFromApi = useCallback(async (activeCompanyId, signal, {
-    groupOnly = null,
-    selectedGroup: groupOverride = null,
-    scopeCompanyId: scopeCompanyIdOverride = null,
-    anchorCompanyId: anchorCompanyIdOverride = null,
-  } = {}) => {
+  const loadUsersListFromApi = useCallback(async (activeCompanyId, signal, { groupOnly = null, selectedGroup: groupOverride = null } = {}) => {
     const useGroupOnly = groupOnly ?? groupOnlyUserList;
-    const tenantId = resolveListTenantId({
-      companyId: activeCompanyId,
-      groupOnly: useGroupOnly,
-      anchorCompanyId: anchorCompanyIdOverride,
-      scopeCompanyId: scopeCompanyIdOverride,
-    });
-    if (tenantId == null) {
-      throw new Error("tenantIdRequired");
+    const activeGroup = groupOverride ?? selectedGroup;
+    const body = { action: "get" };
+    if (aggregateUserList) {
+      if (groupsAllMode) body.groups_all = 1;
+      if (groupAllMode || groupsAllMode) body.group_all = 1;
+      if (activeGroup && !groupsAllMode) body.group_id = activeGroup;
+    } else if (useGroupOnly && activeGroup) {
+      body.group_id = activeGroup;
+      body.group_only = 1;
+      body.group_aggregate = 1;
+    } else if (activeCompanyId != null) {
+      body.company_id = Number(activeCompanyId);
     }
-
-    let list = await fetchAdminListByTenantId(tenantId, signal);
+    const res = await fetch(buildApiUrl("api/users/userlist_api.php"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(body),
+      signal,
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json?.message || "failedToLoadUsers");
+    }
+    let list = Array.isArray(json.data) ? json.data.map((u) => ({ ...u, is_owner_shadow: false })) : [];
+    if (normRole(me.role) === "owner" && me.user_id) {
+      try {
+        const r2 = await fetch(buildApiUrl("api/users/userlist_api.php"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ action: "get", id: me.user_id }),
+          signal,
+        });
+        const j2 = await r2.json();
+        if (j2.success && j2.data && normRole(j2.data.role) === "owner") {
+          const shadow = { ...j2.data, is_owner_shadow: true };
+          if (!list.some((u) => Number(u.id) === Number(shadow.id))) list = [shadow, ...list];
+        }
+      } catch {
+        /* owner shadow optional */
+      }
+    }
     return list;
-  }, [groupOnlyUserList]);
+  }, [aggregateUserList, groupOnlyUserList, groupsAllMode, groupAllMode, me, selectedGroup]);
 
   const applyUserListCache = useCallback((activeCompanyId, { groupOnly = null, selectedGroup: groupOverride = null } = {}) => {
     const useGroupOnly = groupOnly ?? groupOnlyUserList;
@@ -1022,8 +1042,6 @@ export default function UserListPage() {
     const loadPromise = loadUsersListFromApi(activeCompanyId, ac.signal, {
       groupOnly: useGroupOnly,
       selectedGroup: activeGroup,
-      scopeCompanyId,
-      anchorCompanyId,
     });
     userListFetchPendingRef.current.set(cacheKey, loadPromise);
 
@@ -1033,7 +1051,7 @@ export default function UserListPage() {
       applyUserListResult(cacheKey, list, { silent });
     } catch (e) {
       if (ac.signal.aborted || fetchGen !== listFetchGenRef.current) return;
-      if (!silent) notifyApi(e?.message, "companyScopeRequired", "danger");
+      if (!silent) notifyApi(null, "failedToLoadUsers", "danger");
     } finally {
       if (userListFetchPendingRef.current.get(cacheKey) === loadPromise) {
         userListFetchPendingRef.current.delete(cacheKey);
@@ -1049,8 +1067,6 @@ export default function UserListPage() {
     selectedGroup,
     groupsAllMode,
     groupAllMode,
-    scopeCompanyId,
-    anchorCompanyId,
     applyUserListResult,
   ]);
 
@@ -1078,17 +1094,17 @@ export default function UserListPage() {
       selectedGroup: vg ?? selectedGroup,
     });
 
-    const sessionTenantId = getSessionTenantId(me);
-    if (sessionTenantId === nextCompanyId) return;
+    const sessionCompanyId = me?.company_id != null ? Number(me.company_id) : null;
+    if (sessionCompanyId === nextCompanyId) return;
 
-    const previousCompanyId = Number(companyId) === nextCompanyId ? sessionTenantId : companyId;
+    const previousCompanyId = Number(companyId) === nextCompanyId ? sessionCompanyId : companyId;
     const switchGen = ++companySwitchGenRef.current;
 
     try {
       const json = await syncCompanySessionApi(nextCompanyId, vg);
       if (switchGen !== companySwitchGenRef.current) return;
       if (!json?.success) {
-        if (previousCompanyId != null && Number(previousCompanyId) !== nextCompanyId) {
+        if (Number(previousCompanyId) !== nextCompanyId) {
           const revertGroupOnly = previousCompanyId == null;
           skipCompanyFetchEffectRef.current = true;
           flushSync(() => {
@@ -1111,7 +1127,7 @@ export default function UserListPage() {
       notifyCompanySessionUpdated(json.data ?? null);
     } catch {
       if (switchGen !== companySwitchGenRef.current) return;
-      if (previousCompanyId != null && Number(previousCompanyId) !== nextCompanyId) {
+      if (Number(previousCompanyId) !== nextCompanyId) {
         const revertGroupOnly = previousCompanyId == null;
         skipCompanyFetchEffectRef.current = true;
         flushSync(() => {
@@ -1270,7 +1286,7 @@ export default function UserListPage() {
     }
     const pick = pickDefaultSubsidiaryForGroup(companies, selectedGroup, {
       me,
-      preferredCompanyId: getSessionTenantId(me) ?? companyId,
+      preferredCompanyId: me?.company_id ?? companyId,
     });
     if (!pick?.id) {
       if (isCompanyLogin(me) && !canUseGroupOnlyMode(me, selectedGroup)) {
@@ -1424,7 +1440,7 @@ export default function UserListPage() {
         resolveCompanyPickWhenSwitchingGroup(companies, g, companyId) ??
         pickDefaultSubsidiaryForGroup(companies, g, {
           me,
-          preferredCompanyId: companyId ?? getSessionTenantId(me),
+          preferredCompanyId: companyId ?? me?.company_id,
         });
       if (!pick?.id) return;
 
@@ -1705,15 +1721,18 @@ export default function UserListPage() {
       } catch { setModalAccounts([]); setModalProcesses([]); return { accounts: [], processes: [] }; }
     }
     try {
-      const tenantId = useGroupScopedAccounts ? normalizedGroupId : cid;
+      const accountQuery = useGroupScopedAccounts
+        ? `group_id=${encodeURIComponent(normalizedGroupId)}`
+        : `tenant_id=${cid}`;
       const request = Promise.all([
-        fetch(buildApiUrl(`api/account/list?tenant_id=${tenantId}`), { method: "POST", credentials: "include" })
-          .then(async (r) => { const j = await r.json(); return (j?.data || []).filter((a) => String(a.status || "").toLowerCase() === "active").map((a) => ({ id: a.id, account_id: a.accountId, name: String(a.name || "").trim() })); })
-          .catch(() => []),
-        fetch(buildApiUrl(`api/processes/processlist_api.php?company_id=${cid}&showAll=1`), { credentials: "include" })
-          .then(async (r) => { const j = await r.json(); return (Array.isArray(j?.data) ? j.data : []).filter((p) => String(p.status || "").toLowerCase() === "active").map((p) => ({ id: p.id, process_id: p.process_name || p.process_id || "", description: p.description_name || p.description || "" })); })
-          .catch(() => []),
-      ]).then(([accs, procs]) => ({ accounts: accs, processes: procs }));
+        fetch(buildApiUrl(`api/accounts/accountlistapi.php?${accountQuery}`), { credentials: "include" }),
+        fetch(buildApiUrl(`api/processes/processlist_api.php?tenant_id=${cid}&showAll=1`), { credentials: "include" }),
+      ]).then(async ([accRes, procRes]) => {
+        const accJ = await accRes.json(); const procJ = await procRes.json();
+        const accs = (accJ?.data?.accounts || []).filter((a) => String(a.status || "").toLowerCase() === "active").map((a) => ({ id: a.id, account_id: a.account_id, name: String(a.name || "").trim() }));
+        const procs = (Array.isArray(procJ?.data) ? procJ.data : []).filter((p) => String(p.status || "").toLowerCase() === "active").map((p) => ({ id: p.id, process_id: p.process_name || p.process_id || "", description: p.description_name || p.description || "" }));
+        return { accounts: accs, processes: procs };
+      });
       modalAccessPendingRef.current.set(cacheKey, request);
       const next = await request;
       modalAccessCacheRef.current.set(cacheKey, next);
@@ -1738,7 +1757,7 @@ export default function UserListPage() {
 
   const loadCompaniesForModal = async () => {
     try {
-      const rows = (await fetchOwnerCompaniesAll()).map(normalizeCompanyRow);
+      const rows = (await fetchOwnerCompaniesAll({ me })).map(normalizeCompanyRow);
       // Group-only mode => choose group list.
       // Company-selected mode => choose companies visible under selected group, including linked groups (AP<->IG).
       if (groupOnlyUserList) {
@@ -1776,7 +1795,7 @@ export default function UserListPage() {
     });
   }, []);
 
-  const fetchEditUserDetail = useCallback(async (id, scopeTenantId, force = false) => {
+  const fetchEditUserDetail = useCallback(async (id, force = false) => {
     const cacheKey = String(id || "");
     if (!cacheKey) return null;
     const cached = editUserDetailCacheRef.current.get(cacheKey);
@@ -1790,13 +1809,17 @@ export default function UserListPage() {
         const next = await pending;
         markEditReady(id);
         return next;
-      } catch {
-        return cached || null;
-      }
+      } catch { return cached || null; }
     }
-    const request = fetchAdminDetailByUserId(id, scopeTenantId).then((detail) => {
-      if (!detail) throw new Error("Load user failed");
-      return detail;
+    const request = fetch(buildApiUrl("api/users/userlist_api.php"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "get", id }),
+    }).then(async (res) => {
+      const json = await res.json();
+      if (!json.success || !json.data) throw new Error(json.message || "Load user failed");
+      return json.data;
     });
     editUserDetailPendingRef.current.set(cacheKey, request);
     try {
@@ -1812,66 +1835,54 @@ export default function UserListPage() {
   }, [markEditReady]);
 
   const applyEditDetail = useCallback((row, detail, accList, procList) => {
-    let perms = [];
-    try {
-      if (detail.permissions) {
-        perms =
-          typeof detail.permissions === "string" ? JSON.parse(detail.permissions) : detail.permissions;
-      }
-    } catch {
-      perms = [];
-    }
-    if (!Array.isArray(perms)) perms = [];
-    setPermSelected(new Set(perms.map((p) => String(p).toLowerCase())));
-    const readOnlyVal =
-      detail.readOnly != null
-        ? !!detail.readOnly
-        : detail.read_only !== undefined
-          ? parseInt(detail.read_only, 10) === 1
-          : true;
-    setForm((f) => ({ ...f, read_only: readOnlyVal }));
-    let ap = null;
-    let pp = null;
-    try {
-      const apRaw = detail.accountPermissions ?? detail.account_permissions;
-      if (apRaw != null) ap = typeof apRaw === "string" ? JSON.parse(apRaw) : apRaw;
-    } catch {
-      ap = [];
-    }
-    try {
-      const ppRaw = detail.processPermissions ?? detail.process_permissions;
-      if (ppRaw != null) pp = typeof ppRaw === "string" ? JSON.parse(ppRaw) : ppRaw;
-    } catch {
-      pp = [];
-    }
-    setSelectedAccountIds(
-      ap === null
-        ? new Set(accList.map((a) => Number(a.id)))
-        : new Set((Array.isArray(ap) ? ap : []).map((x) => Number(x.id || x))),
-    );
-    setSelectedProcessIds(
-      pp === null
-        ? new Set(procList.map((p) => Number(p.id)))
-        : new Set((Array.isArray(pp) ? pp : []).map((x) => Number(x.id || x))),
-    );
+    let perms = []; try { perms = detail.permissions ? JSON.parse(detail.permissions) : []; } catch { perms = []; }
+    perms = sanitizeSidebarPermissionsForRole(normRole(row.role), perms.map((p) => String(p).toLowerCase()));
+    setPermSelected(new Set(perms));
+    setForm((f) => ({ ...f, read_only: detail.read_only !== undefined ? parseInt(detail.read_only, 10) === 1 : true }));
+    let ap = null, pp = null; try { if (detail.account_permissions != null) ap = typeof detail.account_permissions === "string" ? JSON.parse(detail.account_permissions) : detail.account_permissions; } catch { ap = []; }
+    try { if (detail.process_permissions != null) pp = typeof detail.process_permissions === "string" ? JSON.parse(detail.process_permissions) : detail.process_permissions; } catch { pp = []; }
+    setSelectedAccountIds(ap === null ? new Set(accList.map(a => Number(a.id))) : new Set((Array.isArray(ap) ? ap : []).map(x => Number(x.id || x))));
+    setSelectedProcessIds(pp === null ? new Set(procList.map(p => Number(p.id))) : new Set((Array.isArray(pp) ? pp : []).map(x => Number(x.id || x))));
     if (currentUserRole === "admin" || currentUserRole === "owner") {
-      const { groupIds, companyIds } = applyTenantIdsToPickerSelection(detail, {
-        useDualTenantUserPicker,
-        modalGroupCompanies,
-        modalSubsidiaryCompanies,
-        modalPickerCompanies,
-        groupOnlyUserList,
-        selectedGroup,
-        scopeCompanyId,
-      });
-      setSelectedGroupIds(groupIds);
-      setSelectedCompanyIds(companyIds);
+      if (useDualTenantUserPicker) {
+        const groupCodes = Array.isArray(detail.group_codes) ? detail.group_codes : [];
+        const groupIds = resolveGroupEntityIdsFromCodes(modalGroupCompanies, groupCodes);
+        setSelectedGroupIds(groupIds);
+        const allowedCompanies = new Set(modalSubsidiaryCompanies.map((c) => Number(c.id)));
+        const companyIds = Array.isArray(detail.company_ids)
+          ? detail.company_ids.map(Number).filter((id) => allowedCompanies.has(id))
+          : [];
+        setSelectedCompanyIds(companyIds);
+      } else if (Array.isArray(detail.company_ids)) {
+        const allowed = new Set(modalPickerCompanies.map((c) => Number(c.id)));
+        const ids = detail.company_ids.map(Number).filter((id) => allowed.has(id));
+        if (groupOnlyUserList) {
+          const defaultPick = modalPickerCompanies.find(
+            (c) => String(c.group_id || "").toUpperCase() === String(selectedGroup || "").toUpperCase()
+          );
+          setSelectedCompanyIds(
+            ids.length
+              ? ids
+              : defaultPick?.id != null
+                ? [Number(defaultPick.id)]
+                : modalPickerCompanies[0]
+                  ? [Number(modalPickerCompanies[0].id)]
+                  : []
+          );
+        } else {
+          setSelectedCompanyIds(ids.length ? ids : modalPickerCompanies.map((c) => Number(c.id)));
+        }
+        setSelectedGroupIds([]);
+      } else {
+        setSelectedCompanyIds(scopeCompanyId ? [Number(scopeCompanyId)] : []);
+        setSelectedGroupIds([]);
+      }
     } else {
       setSelectedCompanyIds(scopeCompanyId ? [Number(scopeCompanyId)] : []);
       setSelectedGroupIds([]);
     }
-    if (rowIsOwnerShadow(row)) {
-      setPermSelected(new Set(PERMISSION_KEYS));
+    if (row.is_owner_shadow) {
+      setPermSelected(new Set(getVisiblePermissionKeys("owner")));
       setSelectedAccountIds(new Set(accList.map((a) => Number(a.id))));
       setSelectedProcessIds(new Set(procList.map((p) => Number(p.id))));
       setSelectedCompanyIds([]);
@@ -1905,7 +1916,7 @@ export default function UserListPage() {
     setForm({ id: "", login_id: "", name: "", email: "", role: "", password: "", secondary_password: "", status: "active", read_only: true });
     setRoleSelectDisabled(false); setLoginDisabled(false);
     setFieldLocks({ name: false, email: false, role: false, password: false, sidebar: false, company: false });
-    const allP = new Set(PERMISSION_KEYS.filter((k) => !permDisabledMap[k])); setPermSelected(allP);
+    const allP = new Set(getVisiblePermissionKeys("").filter((k) => !permDisabledMap[k])); setPermSelected(allP);
     void loadCompaniesForModal();
     const cachedAccess = modalAccessCacheRef.current.get(modalCacheKey);
     const currentAccess =
@@ -1937,7 +1948,7 @@ export default function UserListPage() {
         // not whichever subsidiary company chip is currently active (e.g. 95).
         const entityPick = pickDefaultCompanyForGroup(companies, selectedGroup, {
           me,
-          preferredCompanyId: getSessionTenantId(me) ?? companyId,
+          preferredCompanyId: me?.company_id ?? companyId,
           groupEntityOnly: true,
         });
         const entityId = entityPick?.id != null ? Number(entityPick.id) : Number.NaN;
@@ -1960,7 +1971,9 @@ export default function UserListPage() {
   const applyPermTemplate = (role, force) => {
     if (isEditMode && !force) return;
     const next = new Set();
-    getRoleTemplateSidebarList(role).forEach((k) => next.add(k));
+    getRoleTemplateSidebarList(role).forEach((k) => {
+      if (getVisiblePermissionKeys(role).includes(k)) next.add(k);
+    });
     setPermSelected(next);
     if (roleHasReadOnlyToggle(role)) {
       setForm((f) => ({ ...f, read_only: true }));
@@ -1968,30 +1981,26 @@ export default function UserListPage() {
   };
 
   const openEdit = async (row) => {
-    if (userMutationsBlocked) {
+    if (isUserEditBlockedByReadOnly(row)) {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
     if (!scopeCompanyId) return;
-    if (rowIsOwnerShadow(row) && currentUserRole !== "owner") { notify(t("onlyOwnerCanEditOwner"), "danger"); return; }
-    editUserDetailCacheRef.current.delete(String(row.id));
+    if (row.is_owner_shadow && currentUserRole !== "owner") { notify(t("onlyOwnerCanEditOwner"), "danger"); return; }
+    const modalCacheKey = resolveModalAccessCacheKey(scopeCompanyId, groupOnlyUserList, selectedGroup);
+    const cachedDetail = editUserDetailCacheRef.current.get(String(row.id));
     const loadSeq = ++modalLoadSeqRef.current;
+    const cachedAccess = modalAccessCacheRef.current.get(modalCacheKey) || { accounts: modalAccounts, processes: modalProcesses };
     setIsEditMode(true); setEditingRow(row);
-    setForm({ id: String(row.id), login_id: rowLoginId(row), name: row.name || "", email: row.email || "", role: normRole(row.role), password: "", secondary_password: "", status: normRole(row.status) || "active", read_only: true });
-    setRoleSelectDisabled(rowIsOwnerShadow(row)); setLoginDisabled(true);
+    setForm({ id: String(row.id), login_id: row.login_id || "", name: row.name || "", email: row.email || "", role: normRole(row.role), password: "", secondary_password: "", status: normRole(row.status) || "active", read_only: true });
+    setRoleSelectDisabled(!!row.is_owner_shadow); setLoginDisabled(true);
     setFieldLocks(getUserEditFieldLocks(row, currentUserId, currentUserRole));
     void loadCompaniesForModal();
+    if (cachedDetail) {
+      applyEditDetail(row, cachedDetail, cachedAccess.accounts, cachedAccess.processes);
+    }
     setModalOpen(true);
-    const editScopeTenantId = resolveListTenantId({
-      companyId,
-      groupOnly: groupOnlyUserList,
-      anchorCompanyId,
-      scopeCompanyId,
-    });
-    void Promise.all([
-      fetchModalAccountsProcesses(scopeCompanyId, true),
-      editScopeTenantId != null ? fetchEditUserDetail(row.id, editScopeTenantId, true) : Promise.resolve(null),
-    ]).then(([access, detail]) => {
+    void Promise.all([fetchModalAccountsProcesses(scopeCompanyId, true), fetchEditUserDetail(row.id, true)]).then(([access, detail]) => {
       if (loadSeq !== modalLoadSeqRef.current || !detail) return;
       applyEditDetail(row, detail, access.accounts, access.processes);
     });
@@ -2006,31 +2015,21 @@ export default function UserListPage() {
     }
     const caps = computeRowCapabilities(row, currentUserId, currentUserRole);
     if (!caps.canToggleStatus) return;
-    if (rowIsOwnerShadow(row)) {
-      notify(t("toggleFailed"), "danger");
-      return;
-    }
-
-    const scopeTenantId = resolveListTenantId({
-      companyId,
-      groupOnly: groupOnlyUserList,
-      anchorCompanyId,
-      scopeCompanyId,
-    });
-    if (scopeTenantId == null) return;
-
     try {
-      const updated = await toggleAdminUserStatus({ id: row.id, scopeTenantId });
-      const newStatus = updated?.status;
-      if (!newStatus) {
-        notify(t("toggleFailed"), "danger");
-        return;
+      const fd = new FormData();
+      fd.append("id", String(row.id));
+      const useGroupScopeForToggle = groupOnlyUserList && !!selectedGroup;
+      const toggleCompanyId = useGroupScopeForToggle ? scopeCompanyId : (groupOnlyUserList ? scopeCompanyId : companyId);
+      if (toggleCompanyId != null) fd.append("company_id", String(toggleCompanyId));
+      if (useGroupScopeForToggle) {
+        fd.append("group_id", selectedGroup);
+        fd.append("group_only", "1");
       }
-
+      const res = await fetch(buildApiUrl("api/users/toggle_status_api.php"), { method: "POST", body: fd, credentials: "include" });
+      const json = await res.json(); const newStatus = json?.data?.newStatus || json?.newStatus;
+      if (!json.success || !newStatus) { notifyApi(json.message, "toggleFailed", "danger"); return; }
       setUsersRaw((prev) => {
-        const next = prev.map((u) =>
-          Number(u.id) === Number(row.id) ? { ...u, ...updated, status: newStatus } : u,
-        );
+        const next = prev.map((u) => (Number(u.id) === Number(row.id) ? { ...u, status: newStatus } : u));
         const s = userListScopeRef.current;
         const cacheKey = resolveUserListCacheKey(
           s.companyId,
@@ -2051,9 +2050,7 @@ export default function UserListPage() {
         });
       }
       notify(t("statusUpdated"), "success");
-    } catch (e) {
-      notifyApi(e?.message, "toggleFailed", "danger");
-    }
+    } catch { notify(t("toggleFailed"), "danger"); }
   };
 
   const confirmDelete = async () => {
@@ -2065,35 +2062,32 @@ export default function UserListPage() {
     const ids = pendingDeleteRef.current || []; pendingDeleteRef.current = []; setConfirmOpen(false);
     if (!ids.length) return;
 
-    const scopeTenantId = resolveListTenantId({
-      companyId,
-      groupOnly: groupOnlyUserList,
-      anchorCompanyId,
-      scopeCompanyId,
-    });
-    if (scopeTenantId == null) return;
-
-    const eligibleIds = ids.filter((id) => {
-      const row = usersRaw.find((u) => Number(u.id) === Number(id));
-      return row && !rowIsOwnerShadow(row);
-    });
-    if (!eligibleIds.length) {
-      notify(t("apiDeleteUserFailed"), "danger");
-      return;
-    }
+    const buildDeleteBody = (id) => {
+      const body = { action: "delete", id };
+      if (groupOnlyUserList && selectedGroup) {
+        body.group_id = selectedGroup;
+        body.group_only = 1;
+      } else if (companyId != null) {
+        body.company_id = Number(companyId);
+      }
+      return body;
+    };
 
     const results = await Promise.all(
-      eligibleIds.map((id) =>
-        deleteAdminUser({ id, scopeTenantId })
-          .then(() => ({ success: true }))
-          .catch((e) => ({ success: false, message: e?.message })),
+      ids.map((id) =>
+        fetch(buildApiUrl("api/users/userlist_api.php"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(buildDeleteBody(id)),
+        }).then((r) => r.json().catch(() => ({ success: false }))),
       ),
     );
 
-    const succeededIds = eligibleIds.filter((_, index) => results[index]?.success);
-    const failCount = eligibleIds.length - succeededIds.length;
+    const succeededIds = ids.filter((_, index) => results[index]?.success);
+    const failCount = ids.length - succeededIds.length;
 
-    if (succeededIds.length === eligibleIds.length) {
+    if (succeededIds.length === ids.length) {
       notify(t("deletedUsersSuccess", { count: succeededIds.length }), "success");
     } else if (succeededIds.length > 0) {
       notify(t("deletionResult", { ok: succeededIds.length, fail: failCount }), "danger");
@@ -2104,24 +2098,6 @@ export default function UserListPage() {
     if (succeededIds.length > 0) {
       const succeededSet = new Set(succeededIds.map(Number));
       setUsersRaw((prev) => prev.filter((u) => !succeededSet.has(Number(u.id))));
-      const s = userListScopeRef.current;
-      const cacheKey = resolveUserListCacheKey(
-        s.companyId,
-        s.groupOnlyUserList,
-        s.selectedGroup,
-        s.aggregateUserList,
-        s.groupsAllMode,
-        s.groupAllMode,
-      );
-      if (cacheKey) {
-        const cached = userListCacheRef.current.get(cacheKey);
-        if (cached) {
-          userListCacheRef.current.set(
-            cacheKey,
-            cached.filter((u) => !succeededSet.has(Number(u.id))),
-          );
-        }
-      }
     }
     setSelectedDeleteIds(new Set());
     setSelectAllUsers(false);
@@ -2130,7 +2106,7 @@ export default function UserListPage() {
 
   const saveUser = async (e) => {
     e.preventDefault();
-    if (userMutationsBlocked) {
+    if (isUserEditBlockedByReadOnly(editingRow)) {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
@@ -2138,6 +2114,7 @@ export default function UserListPage() {
     if (!isEditMode && !form.password.trim()) { notify(t("passwordRequired"), "danger"); return; }
     if (
       useDualTenantUserPicker &&
+      !editingRow?.is_owner_shadow &&
       selectedGroupIds.length === 0 &&
       selectedCompanyIds.length === 0
     ) {
@@ -2148,6 +2125,7 @@ export default function UserListPage() {
       !useDualTenantUserPicker &&
       groupOnlyUserList &&
       (currentUserRole === "admin" || currentUserRole === "owner") &&
+      !editingRow?.is_owner_shadow &&
       selectedCompanyIds.length === 0
     ) {
       notify(t("groupNoneSelected"), "danger");
@@ -2165,7 +2143,7 @@ export default function UserListPage() {
     let saveCompanyIds = selectedCompanyIds;
     let saveGroupCodes = [];
     const shouldForceGroupScope = !useDualTenantUserPicker && groupOnlyUserList;
-    if (useDualTenantUserPicker) {
+    if (useDualTenantUserPicker && !editingRow?.is_owner_shadow) {
       saveGroupCodes = resolveSelectedGroupCodesFromPicker(modalGroupCompanies, selectedGroupIds);
       saveCompanyIds = selectedCompanyIds;
       payload.mixed_tenant_assign = 1;
@@ -2195,7 +2173,7 @@ export default function UserListPage() {
         payload.company_id = Number(companyId);
         const entityPick = pickDefaultCompanyForGroup(companies, saveGroupId, {
           me,
-          preferredCompanyId: getSessionTenantId(me) ?? companyId,
+          preferredCompanyId: me?.company_id ?? companyId,
           groupEntityOnly: true,
         });
         const entityId = entityPick?.id != null ? Number(entityPick.id) : Number.NaN;
@@ -2203,7 +2181,7 @@ export default function UserListPage() {
       }
     }
     if (form.password.trim()) payload.password = form.password;
-    const allowSecondaryPassword = isC168Company || rowIsOwnerShadow(editingRow);
+    const allowSecondaryPassword = isC168Company || !!editingRow?.is_owner_shadow;
     if (allowSecondaryPassword && form.secondary_password.trim()) {
       if (!/^\d{6}$/.test(form.secondary_password.trim())) {
         notify(t("secondaryPasswordMustBe6Digits"), "danger");
@@ -2215,7 +2193,7 @@ export default function UserListPage() {
     if (roleForReadOnly && roleHasReadOnlyToggle(roleForReadOnly) && canInteractWithReadOnlyToggle(currentUserRole, roleForReadOnly)) {
       payload.read_only = form.read_only ? 1 : 0;
     }
-    if (rowIsOwnerShadow(editingRow)) {
+    if (editingRow?.is_owner_shadow) {
       payload.role = "owner";
     } else if (!isEditMode) {
       payload.permissions = getFinalPermissionsForCreation(form.role, Array.from(permSelected), currentUserRole);
@@ -2244,156 +2222,9 @@ export default function UserListPage() {
       }
     }
     try {
-      if (!isEditMode) {
-        const tenantIds = resolveAdminTenantIds({
-          useDualTenantUserPicker,
-          selectedGroupIds,
-          selectedCompanyIds,
-          saveCompanyIds,
-          shouldForceGroupScope,
-          currentUserRole,
-          companyId,
-          mutationScopeCompanyId,
-        });
-        if (!tenantIds.length) {
-          notify(t("companyNoneSelected"), "danger");
-          return;
-        }
-        const readOnlyForCreate =
-          roleForReadOnly &&
-          roleHasReadOnlyToggle(roleForReadOnly) &&
-          canInteractWithReadOnlyToggle(currentUserRole, roleForReadOnly)
-            ? form.read_only
-            : true;
-        const createRequest = buildAdminCreateRequest({
-          loginId: payload.login_id,
-          name: payload.name,
-          email: payload.email,
-          password: payload.password,
-          secondaryPassword: payload.secondary_password,
-          role: payload.role,
-          status: payload.status,
-          readOnly: readOnlyForCreate,
-          permissions: payload.permissions,
-          tenantIds,
-          accountPermissions: payload.account_permissions,
-          processPermissions: shouldSendProcessPermissions ? payload.process_permissions : undefined,
-        });
-        const created = await createAdminUser(createRequest);
-        notifyApi("User created successfully", "saved", "success");
-        closeModal();
-        if (Array.isArray(saveGroupCodes) && saveGroupCodes.length > 0) {
-          for (const code of saveGroupCodes) {
-            userListCacheRef.current.delete(
-              resolveUserListCacheKey(null, true, code, false, false, false),
-            );
-          }
-        }
-        if (!groupOnlyUserList) {
-          setUsersRaw((prev) => [...prev, created]);
-        }
-        void fetchUsers();
-        return;
-      }
-
-      if (rowIsOwnerShadow(editingRow)) {
-        const ownerRequest = buildAdminOwnerProfileUpdateRequest({
-          id: Number(form.id),
-          name: form.name.trim(),
-          email: emailCheck.normalized,
-          password: form.password.trim() || undefined,
-          secondaryPassword: payload.secondary_password,
-        });
-        const updated = await updateAdminOwnerProfile(ownerRequest);
-        if (form.id) {
-          editUserDetailCacheRef.current.delete(String(form.id));
-          setEditReadyIds((prev) => {
-            const next = new Set(prev);
-            next.delete(Number(form.id));
-            return next;
-          });
-        }
-        notify(t("saved"), "success");
-        closeModal();
-        if (Array.isArray(saveGroupCodes) && saveGroupCodes.length > 0) {
-          for (const code of saveGroupCodes) {
-            userListCacheRef.current.delete(
-              resolveUserListCacheKey(null, true, code, false, false, false),
-            );
-          }
-        }
-        if (updated && !groupOnlyUserList) {
-          setUsersRaw((prev) =>
-            prev.map((u) =>
-              Number(u.id) === Number(updated.id)
-                ? { ...u, ...updated, isOwnerShadow: true }
-                : u,
-            ),
-          );
-        }
-        void fetchUsers();
-        return;
-      }
-
-      const scopeTenantId = resolveListTenantId({
-        companyId,
-        groupOnly: groupOnlyUserList,
-        anchorCompanyId: mutationScopeCompanyId,
-        scopeCompanyId: mutationScopeCompanyId,
-      });
-      if (scopeTenantId == null) {
-        notify(t("companyNoneSelected"), "danger");
-        return;
-      }
-
-      const caps = computeRowCapabilities(editingRow, currentUserId, currentUserRole);
-      const permissionsForUpdate =
-        caps.isSelf || caps.isHigherLevel || caps.isSameLevel
-          ? undefined
-          : Array.from(permSelected);
-
-      let tenantIds;
-      if (!fieldLocks.company) {
-        tenantIds = resolveAdminTenantIds({
-          useDualTenantUserPicker,
-          selectedGroupIds,
-          selectedCompanyIds,
-          saveCompanyIds,
-          shouldForceGroupScope,
-          currentUserRole,
-          companyId,
-          mutationScopeCompanyId,
-        });
-        if (!tenantIds.length) {
-          notify(t("companyNoneSelected"), "danger");
-          return;
-        }
-      }
-
-      const updateRequest = buildAdminUpdateRequest({
-        id: Number(form.id),
-        tenantAccessId: editingRow?.tenantAccess?.id ?? null,
-        scopeTenantId,
-        name: form.name.trim(),
-        email: emailCheck.normalized,
-        password: form.password.trim() || undefined,
-        secondaryPassword: payload.secondary_password,
-        role: payload.role,
-        status: payload.status,
-        readOnly:
-          roleForReadOnly &&
-          roleHasReadOnlyToggle(roleForReadOnly) &&
-          canInteractWithReadOnlyToggle(currentUserRole, roleForReadOnly)
-            ? form.read_only
-            : undefined,
-        permissions: permissionsForUpdate,
-        tenantIds: tenantIds?.length ? tenantIds : undefined,
-        accountPermissions: accountPerms,
-        processPermissions: shouldSendProcessPermissions ? processPerms : undefined,
-      });
-
-      const updated = await updateAdminUser(updateRequest);
-      if (form.id) {
+      const res = await fetch(buildApiUrl("api/users/userlist_api.php"), { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(payload) });
+      const json = await res.json(); if (!json.success) { notifyApi(json.message, "saveFailed", "danger"); return; }
+      if (isEditMode && form.id) {
         editUserDetailCacheRef.current.delete(String(form.id));
         setEditReadyIds((prev) => {
           const next = new Set(prev);
@@ -2401,7 +2232,7 @@ export default function UserListPage() {
           return next;
         });
       }
-      notifyApi("User updated successfully", "saved", "success");
+      notifyApi(json.message, "saved", "success");
       closeModal();
       if (Array.isArray(saveGroupCodes) && saveGroupCodes.length > 0) {
         for (const code of saveGroupCodes) {
@@ -2410,16 +2241,17 @@ export default function UserListPage() {
           );
         }
       }
-      const lostAccess = tenantIds?.length && !tenantIds.includes(scopeTenantId);
-      if (lostAccess) {
+      if (isEditMode && json.data?.will_lose_access) {
         setUsersRaw((prev) => prev.filter((u) => Number(u.id) !== Number(form.id)));
-      } else if (!groupOnlyUserList) {
+      } else if (json.data && !groupOnlyUserList) {
         setUsersRaw((prev) =>
-          prev.map((u) =>
-            Number(u.id) === Number(updated.id)
-              ? { ...u, ...updated, isOwnerShadow: false }
-              : u
-          )
+          isEditMode
+            ? prev.map((u) =>
+                Number(u.id) === Number(json.data.id)
+                  ? { ...u, ...json.data, is_owner_shadow: u.is_owner_shadow }
+                  : u
+              )
+            : [...prev, { ...json.data, is_owner_shadow: false }]
         );
       }
       void fetchUsers();
@@ -2508,7 +2340,7 @@ export default function UserListPage() {
                     pendingDeleteRef.current = ids;
                     const selectedUserNames = usersRaw
                       .filter((u) => ids.includes(Number(u.id)))
-                      .map((u) => String(rowLoginId(u) || u.name || u.email || u.id || "").trim())
+                      .map((u) => String(u.login_id || u.name || u.email || u.id || "").trim())
                       .filter(Boolean);
                     const details = selectedUserNames.length ? `\n\n${selectedUserNames.join("\n")}` : "";
                     setConfirmMessage(`${t("deleteConfirmWithCount", { count: ids.length })}${details}`);
@@ -2537,8 +2369,10 @@ export default function UserListPage() {
               showAllOption={false}
             />
           </div>
-          <div className={`user-table-wrapper user-list-table${showBulkDeleteColumn ? " user-table-wrapper--bulk-delete-col" : ""}`}>
-            <div className="user-list-table-inner">
+          <div
+            ref={listRegionRef}
+            className={`user-table-wrapper user-list-table${showBulkDeleteColumn ? " user-table-wrapper--bulk-delete-col" : ""}`}
+          >
             <div className="table-header user-list-table-header">
               <div
                 className="header-item header-item--with-sort-icon header-sortable"
@@ -2660,7 +2494,7 @@ export default function UserListPage() {
                 <span className="header-item__label">{t("createdBy")}</span>
                 {renderUserListHeaderSortIcon("createdBy")}
               </div>
-              <div className="header-item">
+              <div className="header-item header-item--action">
                 <span className="header-item__label">{t("action")}</span>
               </div>
               {showBulkDeleteColumn && (
@@ -2685,23 +2519,44 @@ export default function UserListPage() {
                 </div>
               )}
             </div>
-            <div className="user-cards">
+            <div
+              className={`user-cards${usePagedFill ? " user-cards--paged-fill" : ""}`}
+              style={usePagedFill ? { "--user-list-page-size": pageSize } : undefined}
+            >
               {pageRows.map((r, idx) => {
                 const caps = computeRowCapabilities(r, currentUserId, currentUserRole);
                 const del = getDeleteCheckboxState(r, caps);
                 const editReady = caps.canEditDelete;
                 return (
-                  <div key={`${r.id}-${rowIsOwnerShadow(r) ? "o" : "u"}`} className={`user-card user-list-row show-card ${idx % 2 === 0 ? "row-even" : "row-odd"}`}>
-                    <div className="card-item">{showAll ? idx + 1 : (currentPage - 1) * PAGE_SIZE + idx + 1}</div>
-                    <div className="card-item">{rowLoginId(r)}</div>
+                  <div key={`${r.id}-${r.is_owner_shadow ? "o" : "u"}`} className={`user-card user-list-row show-card ${idx % 2 === 0 ? "row-even" : "row-odd"}`}>
+                    <div className="card-item">{showAll ? idx + 1 : (effectivePage - 1) * pageSize + idx + 1}</div>
+                    <div className="card-item">{r.login_id}</div>
                     <div className="card-item">{r.name}</div>
                     <div className="card-item">{r.email || "-"}</div>
-                    <div className="card-item"><span className={`role-badge ${roleBadgeClass(r.role)}`}>{formatRoleLabel(r.role)}</span></div>
-                    <div className="card-item"><span className={`role-badge ${normRole(r.status) === "active" ? "status-active" : "status-inactive"} ${caps.canToggleStatus && !userMutationsBlocked ? "status-clickable" : ""}`} onClick={() => !userMutationsBlocked && caps.canToggleStatus && toggleUserStatus(r)}>{String(r.status || "").toUpperCase()}</span></div>
-                    <div className="card-item">{formatLastLogin(rowLastLogin(r))}</div>
-                    <div className="card-item">{String(rowCreatedBy(r) || "-").toUpperCase()}</div>
+                    <div className="card-item"><span className={`role-badge ${roleBadgeClass(r.role)}`}>{String(formatUserRoleDisplay(t, r.role)).toUpperCase()}</span></div>
+                    <div className="card-item"><span className={`role-badge ${normRole(r.status) === "active" ? "status-active" : "status-inactive"} ${caps.canToggleStatus && !userMutationsBlocked ? "status-clickable" : ""}`} onClick={() => !userMutationsBlocked && caps.canToggleStatus && toggleUserStatus(r)}>{formatUserStatusDisplay(t, r.status)}</span></div>
+                    <div
+                      className="card-item"
+                      title={formatUserLastLoginTimeTitle(r.last_login) || undefined}
+                    >
+                      {formatUserLastLoginDate(r.last_login)}
+                    </div>
+                    <div className="card-item">{String(r.created_by || "-").toUpperCase()}</div>
                     <div className="card-item card-item--action">
-                      <button className="btn btn-edit" onClick={() => openEdit(r)} disabled={!editReady || userMutationsBlocked} style={{ opacity: editReady && !userMutationsBlocked ? 1 : 0.3 }}><img src={assetUrl("images/edit.svg")} alt="Edit" /></button>
+                      <div className="user-action-tools">
+                        <div className="user-action-tools-bar">
+                          <button
+                            type="button"
+                            className="btn btn-edit user-edit-btn"
+                            onClick={() => openEdit(r)}
+                            disabled={!editReady || isUserEditBlockedByReadOnly(r)}
+                            aria-label={t("edit")}
+                            title={t("edit")}
+                          >
+                            <img src={assetUrl("images/edit.svg")} alt={t("edit")} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                     {showBulkDeleteColumn && (
                       <div className="card-item card-item--select">
@@ -2728,13 +2583,12 @@ export default function UserListPage() {
                 );
               })}
             </div>
-            </div>
           </div>
           {!showAll && (
             <div className="pagination-container">
-              <button className="pagination-btn" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>◀</button>
-            <span className="pagination-info">{t("paginationOf", { page: currentPage, total: totalPages })}</span>
-              <button className="pagination-btn" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>▶</button>
+              <button className="pagination-btn" disabled={effectivePage <= 1} onClick={() => setCurrentPage(p => p - 1)}>â—€</button>
+            <span className="pagination-info">{t("paginationOf", { page: effectivePage, total: totalPages })}</span>
+              <button className="pagination-btn" disabled={effectivePage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>â–¶</button>
             </div>
           )}
         </div>
@@ -2753,7 +2607,7 @@ export default function UserListPage() {
             document.body
           )
         : null}
-      <UserModal open={modalOpen} onClose={closeModal} isEditMode={isEditMode} editingRow={editingRow} form={form} setForm={setForm} isC168Company={isC168Company} currentUserRole={currentUserRole} currentUserId={currentUserId} roleSelectDisabled={roleSelectDisabled} loginDisabled={loginDisabled} fieldLocks={fieldLocks} permDisabledMap={permDisabledMap} permSelected={permSelected} setPermSelected={setPermSelected} modalCompanies={modalCompanies} selectedCompanyIds={selectedCompanyIds} setSelectedCompanyIds={setSelectedCompanyIds} groupPickerMode={!useDualTenantUserPicker && groupOnlyUserList} dualTenantPicker={useDualTenantUserPicker} modalGroupCompanies={modalGroupCompanies} modalSubsidiaryCompanies={modalSubsidiaryCompanies} selectedGroupIds={selectedGroupIds} setSelectedGroupIds={setSelectedGroupIds} modalAccounts={modalAccounts} selectedAccountIds={selectedAccountIds} setSelectedAccountIds={setSelectedAccountIds} modalProcesses={modalProcesses} selectedProcessIds={selectedProcessIds} setSelectedProcessIds={setSelectedProcessIds} applyPermTemplate={applyPermTemplate} onSave={saveUser} sessionMutationsBlocked={userMutationsBlocked} t={t} />
+      <UserModal open={modalOpen} onClose={closeModal} isEditMode={isEditMode} editingRow={editingRow} form={form} setForm={setForm} isC168Company={isC168Company} currentUserRole={currentUserRole} currentUserId={currentUserId} roleSelectDisabled={roleSelectDisabled} loginDisabled={loginDisabled} fieldLocks={fieldLocks} permDisabledMap={permDisabledMap} visiblePermissionKeys={visiblePermissionKeys} permSelected={permSelected} setPermSelected={setPermSelected} modalCompanies={modalCompanies} selectedCompanyIds={selectedCompanyIds} setSelectedCompanyIds={setSelectedCompanyIds} groupPickerMode={!useDualTenantUserPicker && groupOnlyUserList} dualTenantPicker={useDualTenantUserPicker} modalGroupCompanies={modalGroupCompanies} modalSubsidiaryCompanies={modalSubsidiaryCompanies} selectedGroupIds={selectedGroupIds} setSelectedGroupIds={setSelectedGroupIds} modalAccounts={modalAccounts} selectedAccountIds={selectedAccountIds} setSelectedAccountIds={setSelectedAccountIds} modalProcesses={modalProcesses} selectedProcessIds={selectedProcessIds} setSelectedProcessIds={setSelectedProcessIds} applyPermTemplate={applyPermTemplate} onSave={saveUser} sessionMutationsBlocked={isUserEditBlockedByReadOnly(editingRow)} t={t} />
       <UserConfirmModal open={confirmOpen} message={confirmMessage} onConfirm={confirmDelete} onClose={() => setConfirmOpen(false)} confirmDisabled={userMutationsBlocked} t={t} />
     </>
   );

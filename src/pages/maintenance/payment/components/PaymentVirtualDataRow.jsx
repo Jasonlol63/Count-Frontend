@@ -5,6 +5,7 @@ import {
   isPaymentMaintenanceRowSelectable,
 } from "../paymentMaintenanceLogic.js";
 import MaintenanceCreatedAtDisplay from "../../shared/MaintenanceCreatedAtDisplay.jsx";
+import MaintenanceEllipsisText from "../../shared/MaintenanceEllipsisText.jsx";
 
 const PaymentVirtualDataRow = memo(function PaymentVirtualDataRow({
   row,
@@ -24,6 +25,8 @@ const PaymentVirtualDataRow = memo(function PaymentVirtualDataRow({
 
   const rawDescription = row.description || "";
   const displayDescription = stripBankProcessDescriptionPrefix(rawDescription);
+  const fromDisplay =
+    row.from_account && row.from_account !== "-" ? row.from_account : "-";
   const tid = row.transaction_id;
   const canSelect = isPaymentMaintenanceRowSelectable(row);
   const stripe = index % 2 === 1 ? "maintenance-virtual-data-row--stripe" : "";
@@ -38,7 +41,6 @@ const PaymentVirtualDataRow = memo(function PaymentVirtualDataRow({
       <div
         role="cell"
         className="maintenance-virtual-cell maintenance-virtual-cell--left payment-virtual-cell--no"
-        title={String(index + 1)}
       >
         <span className="payment-cell-text">{index + 1}</span>
       </div>
@@ -51,55 +53,46 @@ const PaymentVirtualDataRow = memo(function PaymentVirtualDataRow({
       <div
         role="cell"
         className="maintenance-virtual-cell maintenance-virtual-cell--left"
-        title={row.account || "-"}
       >
-        <span className="payment-cell-text">{row.account || "-"}</span>
+        <MaintenanceEllipsisText value={row.account} />
       </div>
       <div
         role="cell"
         className="maintenance-virtual-cell maintenance-virtual-cell--left"
-        title={row.from_account && row.from_account !== "-" ? row.from_account : "-"}
       >
-        <span className="payment-cell-text">
-          {row.from_account && row.from_account !== "-" ? row.from_account : "-"}
-        </span>
+        <MaintenanceEllipsisText value={fromDisplay} />
       </div>
       <div
         role="cell"
         className="maintenance-virtual-cell maintenance-virtual-cell--left maintenance-cell-amount"
-        title={row.currency && row.amount ? `${row.currency} ${formatAmount(row.amount)}` : "-"}
       >
-        <span className="payment-cell-text">
-          {row.currency || ""} {formatAmount(row.amount)}
-        </span>
+        <MaintenanceEllipsisText
+          value={`${row.currency || ""} ${formatAmount(row.amount)}`.trim()}
+        />
       </div>
       <div
         role="cell"
         className="maintenance-virtual-cell maintenance-virtual-cell--left payment-virtual-cell--description"
-        title={displayDescription || "-"}
       >
-        <span className="payment-cell-text">{displayDescription || "-"}</span>
+        <MaintenanceEllipsisText value={displayDescription} />
       </div>
       <div
         role="cell"
         className="maintenance-virtual-cell maintenance-virtual-cell--left"
-        title={row.remark || "-"}
       >
-        <span className="payment-cell-text">{row.remark || "-"}</span>
+        <MaintenanceEllipsisText value={row.remark} />
       </div>
       <div
         role="cell"
         className="maintenance-virtual-cell maintenance-virtual-cell--left"
-        title={row.created_by || "-"}
       >
-        <span className="payment-cell-text">{row.created_by || "-"}</span>
+        <MaintenanceEllipsisText value={row.created_by} />
       </div>
       <div
         role="cell"
         className="maintenance-virtual-cell maintenance-virtual-cell--left"
-        title={deletedDisplay || "-"}
       >
-        <span className="payment-cell-text">{deletedDisplay}</span>
+        <MaintenanceEllipsisText value={deletedDisplay} />
       </div>
       <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left payment-virtual-cell-checkbox">
         <span className="maintenance-checkbox-cell-inner">

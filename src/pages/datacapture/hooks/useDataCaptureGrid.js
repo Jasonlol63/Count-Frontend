@@ -18,8 +18,15 @@ import {
   restoreCaptureTableFromData,
 } from "../grid/dataCaptureGridClearRestore.js";
 import { toggleBridgeFormatDisplay } from "../lib/dataCaptureBridge.js";
-import { callDataCaptureRuntime, getDataCaptureState, registerDataCaptureRuntime, unregisterDataCaptureRuntime } from "../lib/dataCaptureRuntime.js";
+import { shouldRestoreFromUrl } from "../lib/dataCaptureStorage.js";
+import {
+  callDataCaptureRuntime,
+  getDataCaptureState,
+  registerDataCaptureRuntime,
+  unregisterDataCaptureRuntime,
+} from "../lib/dataCaptureRuntime.js";
 import { useDataCaptureGridWindowBridges } from "./useDataCaptureGridWindowBridges.js";
+import { commitGridUndoCheckpoint, resetPasteUndoCheckpoints } from "../grid/dataCaptureGridPasteHistory.js";
 
 /** Minimum rows/cols to consider the grid already built. */
 function gridLooksInitialized(dims) {
@@ -41,6 +48,7 @@ export function useDataCaptureGrid(engineReady, groupOnly = false) {
   const dimensionsRef = useRef(resolveDataCaptureGridDimensions(groupOnly));
   const groupOnlyRef = useRef(groupOnly);
   groupOnlyRef.current = groupOnly;
+  const didGridUndoInitRef = useRef(false);
 
   const initializeGrid = useCallback(
     (rows = DEFAULT_GRID_ROWS, cols = DEFAULT_GRID_COLS) => {
@@ -48,6 +56,7 @@ export function useDataCaptureGrid(engineReady, groupOnly = false) {
       const c = Math.max(1, Number(cols) || DEFAULT_GRID_COLS);
       dimensionsRef.current = { rows: r, cols: c };
       replaceGrid(createEmptyGrid(r, c));
+      resetPasteUndoCheckpoints(gridRef.current, { recordBaseline: false });
       toggleBridgeFormatDisplay();
       callDataCaptureRuntime("recomputeSubmitState");
       return dimensionsRef.current;
@@ -86,6 +95,7 @@ export function useDataCaptureGrid(engineReady, groupOnly = false) {
         tableData,
       );
       replaceGrid(snapshotToGrid(tableData, requiredRows, requiredCols));
+      resetPasteUndoCheckpoints(gridRef.current);
       return true;
     },
     [replaceGrid],
@@ -95,6 +105,7 @@ export function useDataCaptureGrid(engineReady, groupOnly = false) {
     const current = gridRef.current;
     if (!current) return;
     replaceGrid(clearGridCells(current));
+    resetPasteUndoCheckpoints(gridRef.current, { recordBaseline: false });
   }, [gridRef, replaceGrid]);
 
   const readGridDimensionsBridge = useCallback(() => {
@@ -105,7 +116,9 @@ export function useDataCaptureGrid(engineReady, groupOnly = false) {
     (positions) => {
       const current = gridRef.current;
       if (!current || !positions?.length) return;
-      replaceGrid(clearCellsInGrid(current, positions));
+      const next = clearCellsInGrid(current, positions);
+      replaceGrid(next);
+      commitGridUndoCheckpoint(next);
     },
     [gridRef, replaceGrid],
   );
@@ -157,8 +170,22 @@ export function useDataCaptureGrid(engineReady, groupOnly = false) {
 
   useEffect(() => {
     if (!engineReady) return;
+    if (shouldRestoreFromUrl() || getDataCaptureState().isRestoring) return;
+
     const { rows, cols } = resolveDataCaptureGridDimensions(groupOnly);
-    handlersRef.current.initializeGrid(rows, cols);
+
+    if (!didGridUndoInitRef.current) {
+      didGridUndoInitRef.current = true;
+      const current = handlersRef.current.gridRef.current;
+      if (current && gridLooksInitialized(gridDimsFromModel(current))) {
+        resetPasteUndoCheckpoints(current);
+      } else {
+        handlersRef.current.initializeGrid(rows, cols);
+      }
+      return;
+    }
+
+    handlersRef.current.ensureGridReady(rows, cols);
   }, [engineReady, groupOnly]);
 
   return {

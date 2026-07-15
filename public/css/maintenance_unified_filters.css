@@ -43,8 +43,10 @@ body.maintenance-page .maintenance-outlined-field .date-range-picker {
     min-width: 0;
 }
 
-/* captureDateStyle trigger text — match transaction date bar (700) */
-body.dashboard-page.maintenance-page .customer-report-filters .report-outlined-inner .transaction-date-range-group #date-range-display {
+/* captureDateStyle trigger text — match transaction / maintenance date bar */
+body.dashboard-page.maintenance-page .customer-report-filters .report-outlined-inner .transaction-date-range-group #date-range-display,
+body.dashboard-page.report-page .customer-report-filters .report-outlined-inner .transaction-date-range-group #date-range-display,
+body.dashboard-page.report-page .domain-report-filters .report-outlined-inner .transaction-date-range-group #date-range-display {
     font-weight: 700;
     font-family: var(--font-heading-page);
     color: #1f2937;
@@ -398,6 +400,14 @@ body.maintenance-page .transaction-cell-clamp-2,
 body.maintenance-page .bankprocess-cell-clamp-2,
 body.maintenance-page .formula-cell-clamp-2 {
     text-align: left !important;
+}
+
+body.maintenance-page .maintenance-virtual-cell .portal-tooltip-anchor {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    flex: 1 1 auto;
 }
 
 body.maintenance-page .maintenance-cell-currency,

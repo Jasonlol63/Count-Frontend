@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
   bindMaintenanceCalendarDismissListeners,
+  closeMaintenanceCalendarPopup,
   ensureMaintenanceDateRangePicker,
+  resetMaintenanceCalendarPopupOnNavigation,
 } from "../../../utils/date/dateRangePicker.js";
 import { formatDmy, parseYmd } from "../../../utils/date/dateUtils.js";
 
@@ -39,8 +41,22 @@ export default function ReportDatePicker({
   periodShortcutsAria = "Period shortcuts",
   monthLabels = MONTH_LABELS,
   weekdaysShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+  /** Unique suffix for DOM ids when multiple pickers coexist (e.g. Member page + export modal). */
+  instanceId = "",
+  /** Reuse the page's single #calendar-popup instead of rendering another copy. */
+  shareCalendarPopup = false,
 }) {
-  const anchorLabelId = "report-date-range-outlined-label";
+  const ids = useMemo(() => {
+    const suffix = instanceId ? `_${instanceId}` : "";
+    return {
+      picker: `date-range-picker${suffix}`,
+      display: `date-range-display${suffix}`,
+      dateFrom: `date_from${suffix}`,
+      dateTo: `date_to${suffix}`,
+      anchorLabel: `report-date-range-outlined-label${suffix}`,
+    };
+  }, [instanceId]);
+  const anchorLabelId = ids.anchorLabel;
   const onRangeChangeRef = useRef(onRangeChange);
   onRangeChangeRef.current = onRangeChange;
 
@@ -50,11 +66,11 @@ export default function ReportDatePicker({
   const initialMonthValue = parsedFrom ? String(parsedFrom.getMonth()) : String(new Date().getMonth());
 
   useEffect(() => {
-    const fromEl = document.getElementById("date_from");
-    const toEl = document.getElementById("date_to");
+    const fromEl = document.getElementById(ids.dateFrom);
+    const toEl = document.getElementById(ids.dateTo);
     if (fromEl) fromEl.value = ymdToDmy(dateFrom);
     if (toEl) toEl.value = ymdToDmy(dateTo);
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, ids.dateFrom, ids.dateTo]);
 
   useEffect(() => {
     if (!window.MaintenanceDateRangePicker?.setLocaleStrings) return;
@@ -67,24 +83,24 @@ export default function ReportDatePicker({
 
   useEffect(() => {
     bindMaintenanceCalendarDismissListeners();
-  }, []);
+    return () => {
+      closeMaintenanceCalendarPopup();
+      if (!shareCalendarPopup) {
+        resetMaintenanceCalendarPopupOnNavigation();
+      }
+    };
+  }, [shareCalendarPopup]);
 
   useEffect(() => {
-    let disposed = false;
+    if (instanceId) return undefined;
 
+    let disposed = false;
     const initPicker = () => {
       if (disposed || !window?.MaintenanceDateRangePicker?.init) return;
       window.MaintenanceDateRangePicker.init({
         allowEmpty: false,
         placeholder,
         selectEndDateHint,
-        onChange: () => {
-          const nextFromDmy = window.MaintenanceDateRangePicker.getDateFrom?.() || "";
-          const nextToDmy = window.MaintenanceDateRangePicker.getDateTo?.() || "";
-          const nextFrom = dmyToYmd(nextFromDmy);
-          const nextTo = dmyToYmd(nextToDmy);
-          if (nextFrom && nextTo) onRangeChangeRef.current?.(nextFrom, nextTo);
-        },
       });
     };
 
@@ -94,36 +110,85 @@ export default function ReportDatePicker({
     return () => {
       disposed = true;
     };
-  }, [placeholder, selectEndDateHint]);
+  }, [placeholder, selectEndDateHint, instanceId]);
+
+  useLayoutEffect(() => {
+    ensureMaintenanceDateRangePicker();
+    window.MaintenanceDateRangePicker?.bindPickers?.();
+  }, [ids.picker]);
+
+  useEffect(() => {
+    const picker = document.getElementById(ids.picker);
+    if (!picker) return undefined;
+
+    const onChanged = () => {
+      const fromEl = document.getElementById(ids.dateFrom);
+      const toEl = document.getElementById(ids.dateTo);
+      const nextFrom = dmyToYmd(fromEl?.value || "");
+      const nextTo = dmyToYmd(toEl?.value || "");
+      if (nextFrom && nextTo) onRangeChangeRef.current?.(nextFrom, nextTo);
+    };
+
+    picker.addEventListener("ec:date-changed", onChanged);
+    return () => picker.removeEventListener("ec:date-changed", onChanged);
+  }, [ids.picker, ids.dateFrom, ids.dateTo]);
+
+  const openCalendar = useCallback((event) => {
+    event.stopPropagation();
+    ensureMaintenanceDateRangePicker();
+    window.MaintenanceDateRangePicker?.togglePicker?.(event.currentTarget);
+  }, []);
+
+  const onPickerKeyDown = useCallback(
+    (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openCalendar(event);
+      }
+    },
+    [openCalendar],
+  );
+
+  const pickerDataAttrs = {
+    "data-drp-from": ids.dateFrom,
+    "data-drp-to": ids.dateTo,
+    "data-drp-display": ids.display,
+  };
 
   const dateBar = captureDateStyle ? (
     <div className="transaction-date-range-group">
       <div
         className="date-range-picker"
-        id="date-range-picker"
+        id={ids.picker}
         role="button"
         tabIndex={0}
         aria-labelledby={outlinedFloatingLabel ? anchorLabelId : undefined}
+        onClick={openCalendar}
+        onKeyDown={onPickerKeyDown}
+        {...pickerDataAttrs}
       >
         <i className="fas fa-calendar-alt" />
-        <span id="date-range-display">
+        <span id={ids.display}>
           {ymdToDmy(dateFrom)} - {ymdToDmy(dateTo)}
         </span>
         <i className="fas fa-chevron-down transaction-date-range-chevron" aria-hidden="true" />
       </div>
-      <input type="hidden" id="date_from" readOnly aria-hidden="true" defaultValue={ymdToDmy(dateFrom)} />
-      <input type="hidden" id="date_to" readOnly aria-hidden="true" defaultValue={ymdToDmy(dateTo)} />
+      <input type="hidden" id={ids.dateFrom} readOnly aria-hidden="true" defaultValue={ymdToDmy(dateFrom)} />
+      <input type="hidden" id={ids.dateTo} readOnly aria-hidden="true" defaultValue={ymdToDmy(dateTo)} />
     </div>
   ) : (
     <div
       className="date-range-picker"
-      id="date-range-picker"
+      id={ids.picker}
+      onClick={openCalendar}
+      onKeyDown={onPickerKeyDown}
+      {...pickerDataAttrs}
       {...(outlinedFloatingLabel
         ? { role: "button", tabIndex: 0, "aria-labelledby": anchorLabelId }
         : {})}
     >
       <i className="fas fa-calendar-alt" />
-      <span className="report-date-range-input" id="date-range-display">
+      <span className="report-date-range-input" id={ids.display}>
         {ymdToDmy(dateFrom)} - {ymdToDmy(dateTo)}
       </span>
     </div>
@@ -131,12 +196,12 @@ export default function ReportDatePicker({
 
   const hiddenInputsLegacy = !captureDateStyle ? (
     <>
-      <input type="hidden" id="date_from" defaultValue={ymdToDmy(dateFrom)} />
-      <input type="hidden" id="date_to" defaultValue={ymdToDmy(dateTo)} />
+      <input type="hidden" id={ids.dateFrom} defaultValue={ymdToDmy(dateFrom)} />
+      <input type="hidden" id={ids.dateTo} defaultValue={ymdToDmy(dateTo)} />
     </>
   ) : null;
 
-  const calendarPopup = captureDateStyle ? (
+  const calendarPopup = !shareCalendarPopup && captureDateStyle ? (
     <div className="calendar-popup calendar-popup--transaction-range" id="calendar-popup" style={{ display: "none" }}>
       <div className="transaction-calendar-presets" aria-label={periodShortcutsAria}>
         {periodPresets.map(({ key, label: plabel }) => (
@@ -186,7 +251,7 @@ export default function ReportDatePicker({
         <div className="calendar-days" id="calendar-days" />
       </div>
     </div>
-  ) : (
+  ) : !shareCalendarPopup ? (
     <div className="calendar-popup" id="calendar-popup" style={{ display: "none" }}>
       <div className="calendar-header">
         <button type="button" className="calendar-nav-btn" onClick={(e) => { e.stopPropagation(); window.changeMonth?.(-1); }}>
@@ -209,7 +274,7 @@ export default function ReportDatePicker({
       </div>
       <div className="calendar-days" id="calendar-days" />
     </div>
-  );
+  ) : null;
 
   const labelClassName = captureDateStyle
     ? "report-outlined-label report-outlined-label--txn-capture-date"

@@ -20,7 +20,13 @@ export default function DataCaptureDeleteDialog({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="delete-dialog-content" role="dialog" aria-modal="true" aria-labelledby="dc-delete-dialog-title">
+      <div
+        className="delete-dialog-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dc-delete-dialog-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="delete-dialog-header">
           <span id="dc-delete-dialog-title">{t("delete")}</span>
           <span className="delete-dialog-close" role="presentation" onClick={onClose}>

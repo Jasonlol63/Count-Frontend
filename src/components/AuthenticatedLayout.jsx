@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
+﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { isPaymentHistoryChromelessPath } from "../pages/transaction/lib/transactionPaymentHistoryUrl.js";
 import { assetUrl, buildApiUrl, buildSpaPath } from "../utils/core/apiUrl.js";
+import { fetchCurrentUser, logoutSession } from "../utils/auth/authApi.js";
+import { bindMediaQueryChange } from "../utils/dom/bindMediaQueryChange.js";
+import { safeLocal, safeSession } from "../utils/storage/safeStorage.js";
 import { clearDataCaptureRoundLocalStorage } from "../utils/capture/dataCaptureRoundStorage.js";
 import AppBootLoading from "./AppBootLoading.jsx";
 import AvatarPickerModal from "./AvatarPickerModal.jsx";
@@ -9,7 +12,10 @@ import ConfirmLogoutModal from "./ConfirmLogoutModal.jsx";
 import ExpirationReminderModal from "./ExpirationReminderModal.jsx";
 import { AuthSessionProvider } from "../context/AuthSessionContext.jsx";
 import SidebarLangSwitch from "./SidebarLangSwitch.jsx";
+import SidebarFlyoutSubmenu from "./SidebarFlyoutSubmenu.jsx";
+import { dismissAllPortalTooltips } from "./PortalTooltip.jsx";
 import { DASHBOARD_I18N } from "../translateFile/shell/dashboardTranslate.js";
+import { formatUserRoleDisplay, getUserListText } from "../translateFile/pages/userListTranslate.js";
 import { getExpirationReminderText } from "../translateFile/shell/expirationReminderTranslate.js";
 import { getAutoRenewText } from "../translateFile/pages/autoRenewTranslate.js";
 import {
@@ -19,11 +25,13 @@ import {
 import { useExpirationReminder } from "../hooks/useExpirationReminder.js";
 import { applyLoginLang } from "../utils/i18n/useLoginLang.js";
 import {
+  canAccessDashboard,
+  canAccessCaptureMaintenance,
   canAccessFullMaintenance,
   canAccessLimitedMaintenance,
   canAccessPermission,
+  resolveDefaultLandingPath,
   showMaintenanceInSidebar,
-  formatRoleLabel,
 } from "../utils/auth/sidebarPermissions.js";
 import {
   applyLoginScopeToSessionStorageIfNeeded,
@@ -47,6 +55,7 @@ import {
   findOwnerCompanyById,
   resolveSidebarExpirationForFilter,
   resolveGroupCategoryFlagsForSidebar,
+  resolveGroupOnlySidebarGambling,
   stashDashboardFilterForNewTab,
 } from "../utils/company/sharedCompanyFilter.js";
 import { rememberCompanySessionFlags } from "../utils/company/companySessionFlagsCache.js";
@@ -70,8 +79,16 @@ import {
   patchMeFromCompanyContext,
 } from "../utils/company/loginScope.js";
 import { pathnameIs, pathnameToPageKey, spaPath } from "../utils/routing/pageRoutes.js";
+import { stripPrivateQueryFromBrowserUrl } from "../utils/routing/privateBrowserUrl.js";
 import { resetDashboardSessionCaches } from "../utils/dashboard/dashboardCache.js";
+import { resetMaintenanceCalendarPopupOnNavigation } from "../utils/date/dateRangePicker.js";
+import AnnouncementUpdateCard from "./announcements/AnnouncementUpdateCard.jsx";
+import {
+  publishMaintenanceModeEvent,
+  subscribeMaintenanceModeEvent,
+} from "../utils/maintenance/maintenanceRealtimeBus.js";
 import "../../public/css/modal-close-unified.css";
+import "../../public/css/select-unified.css";
 
 function formatSidebarExpirationHint(hint, i18n) {
   if (!hint || hint === "-") return "-";
@@ -85,9 +102,10 @@ function readCookie(name) {
 }
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "ec_sidebar_collapsed";
-/** iPad Air 11" (M2) landscape Safari ≈ 1180px; use 1200px to include that viewport. */
-/** Galaxy Tab S7 横屏约 1280px，需纳入平板侧栏逻辑 */
+/** iPad Air 11" (M2) landscape Safari â‰ˆ 1180px; use 1200px to include that viewport. */
+/** Galaxy Tab S7 æ¨ªå±çº¦ 1280pxï¼Œéœ€çº³å…¥å¹³æ¿ä¾§æ é€»è¾‘ */
 const TABLET_MEDIA_QUERY = "(max-width: 1280px)";
+
 /** Icon-only sidebar: portal tooltip to the right of each nav item. */
 function SidebarNavTip({ label, enabled, children, placement = "right" }) {
   return (
@@ -110,7 +128,7 @@ function sidebarOpensNewTab(event) {
   );
 }
 
-/** Plain left-click → SPA navigate; middle / modified click → new tab at the route href. */
+/** Plain left-click â†’ SPA navigate; middle / modified click â†’ new tab at the route href. */
 function handleSidebarSpaLinkClick(event, path, onNavigate) {
   if (event.defaultPrevented) return;
   if (sidebarOpensNewTab(event)) {
@@ -120,6 +138,7 @@ function handleSidebarSpaLinkClick(event, path, onNavigate) {
   }
   if (event.button !== 0) return;
   event.preventDefault();
+  resetMaintenanceCalendarPopupOnNavigation();
   onNavigate?.();
 }
 
@@ -188,6 +207,7 @@ export default function AuthenticatedLayout() {
   const navigate = useNavigate();
   const goTo = useCallback(
     (path) => {
+      resetMaintenanceCalendarPopupOnNavigation();
       startTransition(() => {
         navigate(buildSpaPath(path));
       });
@@ -198,18 +218,24 @@ export default function AuthenticatedLayout() {
   const [searchParams] = useSearchParams();
   const path = location.pathname;
   const pageKey = pathnameToPageKey(path);
+  const isDataCaptureSidebarActive =
+    pageKey === "datacapture" || pageKey === "datacapturesummary";
   const chromelessPaymentHistory = isPaymentHistoryChromelessPath(path, searchParams);
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [hoverSection, setHoverSection] = useState(null);
-  const [submenuPos, setSubmenuPos] = useState({ report: { top: 0, left: 0 }, maintenance: { top: 0, left: 0 } });
   const reportTitleRef = useRef(null);
   const maintenanceTitleRef = useRef(null);
+  const submenuCloseTimerRef = useRef(null);
   const menuContentRef = useRef(null);
 
   useLayoutEffect(() => {
     consumeDashboardFilterNewTabBootstrap();
   }, []);
+
+  useLayoutEffect(() => {
+    stripPrivateQueryFromBrowserUrl();
+  }, [location.pathname, location.search]);
 
   // --- Notification Panel State ---
   const [showNotifications, setShowNotifications] = useState(false);
@@ -224,12 +250,12 @@ export default function AuthenticatedLayout() {
   const [selectedGender, setSelectedGender] = useState(initialAvatarId.startsWith("female") ? "female" : "male");
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
-  const [lang, setLang] = useState(() => (localStorage.getItem("login_lang") === "zh" ? "zh" : "en"));
+  const [lang, setLang] = useState(() => (safeLocal.getItem("login_lang") === "zh" ? "zh" : "en"));
   const [isTabletViewport, setIsTabletViewport] = useState(() =>
     typeof window !== "undefined" ? window.matchMedia(TABLET_MEDIA_QUERY).matches : false
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1"
+    () => typeof window !== "undefined" && safeLocal.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1"
   );
   /** Bumps when group/company filter changes so sidebar re-reads sessionStorage (no stale React state). */
   const [sidebarGcTick, setSidebarGcTick] = useState(0);
@@ -276,7 +302,27 @@ export default function AuthenticatedLayout() {
     };
   }, []);
 
-  /* Process 路由：父级 layout 阶段即挂上 body class，避免 SPA 切入时 Global Unlock 先撑出双 scrollbar */
+  /*
+   * Route-level body class pre-toggle:
+   * keep overflow policy stable while lazy route chunks are still loading.
+   */
+  useLayoutEffect(() => {
+    const onAccountLike = pathnameIs("account-list", location.pathname) || pathnameIs("deleted-log", location.pathname);
+    const onUserLike = pathnameIs("userlist", location.pathname);
+    const onAutoRenew = pathnameIs("auto-renew", location.pathname);
+    const onAnnouncement = pathnameIs("announcement", location.pathname);
+
+    document.body.classList.toggle("account-page", onAccountLike);
+    document.body.classList.toggle("user-page", onUserLike || onAutoRenew);
+    document.body.classList.toggle("auto-renew-page-body", onAutoRenew);
+    document.body.classList.toggle("announcement-page", onAnnouncement);
+
+    if (onAccountLike || onUserLike || onAutoRenew || onAnnouncement) {
+      document.body.classList.remove("bg");
+    }
+  }, [location.pathname, searchParams]);
+
+  /* Process è·¯ç”±ï¼šçˆ¶çº§ layout é˜¶æ®µå³æŒ‚ä¸Š body classï¼Œé¿å… SPA åˆ‡å…¥æ—¶ Global Unlock å…ˆæ’‘å‡ºåŒ scrollbar */
   useLayoutEffect(() => {
     if (pathnameIs("bank-process-list", location.pathname)) {
       document.body.classList.remove("dashboard-page");
@@ -286,6 +332,16 @@ export default function AuthenticatedLayout() {
       document.body.classList.add("process-page");
     }
   }, [location.pathname]);
+
+  /* Transaction Payment / Dashboardï¼šlayout é˜¶æ®µæŒ‚ transaction-pageï¼Œé¿å… lazy chunk åŠ è½½å‰æ ·å¼é”™ä½ */
+  useLayoutEffect(() => {
+    const onDashboard = pathnameIs("dashboard", location.pathname);
+    const onTransactionPayment =
+      pathnameIs("transaction", location.pathname) && !chromelessPaymentHistory;
+    document.body.classList.toggle("transaction-page", onTransactionPayment || onDashboard);
+    document.body.classList.toggle("dashboard-home-page", onDashboard);
+    resetMaintenanceCalendarPopupOnNavigation();
+  }, [location.pathname, chromelessPaymentHistory]);
 
   useLayoutEffect(() => {
     document.body.classList.toggle("ec-payment-history-chromeless", chromelessPaymentHistory);
@@ -325,8 +381,7 @@ export default function AuthenticatedLayout() {
     const mq = window.matchMedia(TABLET_MEDIA_QUERY);
     const onChange = () => setIsTabletViewport(mq.matches);
     onChange();
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
+    return bindMediaQueryChange(mq, onChange);
   }, []);
 
   useEffect(() => {
@@ -343,12 +398,12 @@ export default function AuthenticatedLayout() {
 
   const collapseSidebar = useCallback(() => {
     setSidebarCollapsed(true);
-    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "1");
+    safeLocal.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "1");
   }, []);
 
   const expandSidebar = useCallback(() => {
     setSidebarCollapsed(false);
-    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "0");
+    safeLocal.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "0");
   }, []);
 
   const onHamburgerClick = (e) => {
@@ -375,15 +430,15 @@ export default function AuthenticatedLayout() {
     let cancelled = false;
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 25000);
+    const initialPathname = typeof window !== "undefined" ? window.location.pathname : "";
+    if (pathnameToPageKey(initialPathname) === "dashboard") {
+      prefetchRouteModule(initialPathname);
+    }
     (async () => {
       try {
-        const res = await fetch(buildApiUrl("auth/current-user"), {
-          credentials: "include",
-          signal: controller.signal,
-        });
-        const json = await res.json();
+        const { ok, json } = await fetchCurrentUser({ signal: controller.signal });
         if (cancelled) return;
-        if (!res.ok || !json.success || !json.data) {
+        if (!ok || !json.success || !json.data) {
           navigate(spaPath("login"), { replace: true });
           return;
         }
@@ -403,8 +458,11 @@ export default function AuthenticatedLayout() {
         applyLoginScopeToSessionStorageIfNeeded(u);
         rememberCompanySessionFlags({
           tenant_id: u.tenant_id,
+          company_id: u.tenant_id,
           tenant_code: u.tenant_code,
+          company_code: u.tenant_code,
           has_game: u.tenant_has_game,
+          has_gambling: u.tenant_has_game,
           has_bank: u.tenant_has_bank,
         });
         setMe(u);
@@ -426,13 +484,65 @@ export default function AuthenticatedLayout() {
     };
   }, [navigate]);
 
+  useEffect(() => {
+    if (loading || !me) return undefined;
+
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const { ok, json } = await fetchCurrentUser({ cache: "no-store" });
+        if (!ok && !stopped && (json?.maintenance_mode === true || json?.data?.maintenance_mode === true)) {
+          if (typeof json?.message === "string" && json.message.trim() !== "") {
+            safeSession.setItem("ec_maintenance_notice", json.message.trim());
+          }
+          // Tell sibling tabs in the same browser profile to logout immediately.
+          publishMaintenanceModeEvent({
+            enabled: true,
+            message: typeof json?.message === "string" ? json.message : "",
+          });
+          resetDashboardSessionCaches();
+          clearDashboardFilterSession();
+          clearOwnerCompaniesCache();
+          window.location.assign(new URL(spaPath("login"), window.location.origin).href);
+        }
+      } catch {
+        // silent: next tick retries
+      }
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 2000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [loading, me]);
+
+  useEffect(() => {
+    if (loading || !me) return undefined;
+
+    const isItAllowlisted = ["IT_JK", "IT_JS", "IT_MS"].includes(String(me?.login_id || "").trim().toUpperCase());
+    if (isItAllowlisted) return undefined;
+
+    return subscribeMaintenanceModeEvent((event) => {
+      if (!event?.enabled) return;
+      if (typeof event.message === "string" && event.message.trim() !== "") {
+        safeSession.setItem("ec_maintenance_notice", event.message.trim());
+      }
+      resetDashboardSessionCaches();
+      clearDashboardFilterSession();
+      clearOwnerCompaniesCache();
+      window.location.assign(new URL(spaPath("login"), window.location.origin).href);
+    });
+  }, [loading, me]);
+
   const refreshSessionDebouncedRef = useRef(null);
 
   const refreshSession = useCallback(async () => {
     const filterAtStart = readPersistedDashboardGcFilter();
     try {
-      const res = await fetch(buildApiUrl("auth/current-user"), { credentials: "include" });
-      const json = await res.json();
+      const res = await fetchCurrentUser();
+      const json = res.json;
       if (res.ok && json.success && json.data) {
         const filterNow = readPersistedDashboardGcFilter();
         if (!dashboardGcFiltersEqual(filterAtStart, filterNow)) return null;
@@ -440,8 +550,11 @@ export default function AuthenticatedLayout() {
         applyLoginScopeToSessionStorageIfNeeded(json.data);
         rememberCompanySessionFlags({
           tenant_id: json.data.tenant_id,
+          company_id: json.data.tenant_id,
           tenant_code: json.data.tenant_code,
+          company_code: json.data.tenant_code,
           has_game: json.data.tenant_has_game,
+          has_gambling: json.data.tenant_has_game,
           has_bank: json.data.tenant_has_bank,
         });
         let appliedSessionToSidebar = false;
@@ -450,10 +563,16 @@ export default function AuthenticatedLayout() {
           if (shouldApplySessionToSidebar(json.data, filterNow)) {
             appliedSessionToSidebar = true;
             if (filterNow.groupOnly && filterNow.selectedGroup) {
-              return patchMeFromCompanyContext(json.data, {
-                tenantId: null,
-                tenantCode: filterNow.selectedGroup,
+              const groupGambling = resolveGroupOnlySidebarGambling(filterNow.selectedGroup);
+              return patchMeFromCompanyContext(prev, {
+                companyId: null,
+                companyCode: filterNow.selectedGroup,
                 hasBank: false,
+                ...(groupGambling != null
+                  ? { hasGambling: groupGambling }
+                  : prev.tenant_has_game != null
+                    ? { hasGambling: Boolean(prev.tenant_has_game) }
+                    : {}),
                 expirationDate: resolveSidebarExpirationForFilter({
                   selectedGroup: filterNow.selectedGroup,
                   companyId: null,
@@ -521,7 +640,29 @@ export default function AuthenticatedLayout() {
       }
       if (!options.force && !dashboardFilterEventMatchesPersisted(detail)) return;
 
-      const resolved = buildDashboardFilterEventDetailFromPersisted();
+      let resolved = buildDashboardFilterEventDetailFromPersisted();
+      const detailCompanyId =
+        detail?.companyId != null && detail.companyId !== ""
+          ? Number(detail.companyId)
+          : null;
+      if (Number.isFinite(detailCompanyId) && detailCompanyId > 0) {
+        resolved = {
+          ...resolved,
+          companyId: detailCompanyId,
+          groupAllMode: false,
+          companyCode:
+            detail.companyCode != null && String(detail.companyCode).trim() !== ""
+              ? String(detail.companyCode).trim().toUpperCase()
+              : resolved.companyCode,
+          ...(detail.hasGambling != null
+            ? { hasGambling: Boolean(detail.hasGambling) }
+            : {}),
+          ...(detail.hasBank != null ? { hasBank: Boolean(detail.hasBank) } : {}),
+          ...(detail.expirationDate !== undefined
+            ? { expirationDate: detail.expirationDate }
+            : {}),
+        };
+      }
       const sig = dashboardSidebarFilterSignature(resolved);
       if (sig === lastSidebarFilterSigRef.current) return;
       lastSidebarFilterSigRef.current = sig;
@@ -536,6 +677,14 @@ export default function AuthenticatedLayout() {
           : null;
         if (resolved.groupOnly) {
           patch.hasBank = false;
+          if (resolved.hasGambling != null) {
+            patch.hasGambling = Boolean(resolved.hasGambling);
+          } else if (groupFlags) {
+            patch.hasGambling = groupFlags.hasGambling;
+          } else if (resolved.selectedGroup) {
+            const groupGambling = resolveGroupOnlySidebarGambling(resolved.selectedGroup);
+            if (groupGambling != null) patch.hasGambling = groupGambling;
+          }
         } else {
           if (resolved.hasGambling != null) patch.hasGambling = Boolean(resolved.hasGambling);
           else if (groupFlags) patch.hasGambling = groupFlags.hasGambling;
@@ -552,7 +701,7 @@ export default function AuthenticatedLayout() {
       const row = findOwnerCompanyById(cid);
       const companyCode =
         resolved.companyCode ??
-        (row?.tenant_code ? String(row.tenant_code).trim().toUpperCase() : null);
+        (row?.company_id ? String(row.company_id).trim().toUpperCase() : null);
       const flags =
         resolved.hasGambling != null || resolved.hasBank != null
           ? {
@@ -615,10 +764,12 @@ export default function AuthenticatedLayout() {
             selectedGroup: filter.selectedGroup,
             companyId: null,
           });
+          const groupGambling = resolveGroupOnlySidebarGambling(filter.selectedGroup);
           applySidebarPatch({
             companyId: null,
             companyCode: filter.selectedGroup,
             hasBank: false,
+            ...(groupGambling != null ? { hasGambling: groupGambling } : {}),
             ...(groupOnlyExp !== undefined ? { expirationDate: groupOnlyExp } : {}),
           });
         }
@@ -626,13 +777,13 @@ export default function AuthenticatedLayout() {
       }
 
       if (data && typeof data === "object") {
-        const sid = Number(data.tenant_id);
+        const sid = Number(data.company_id);
         const row = Number.isFinite(sid) && sid > 0 ? findOwnerCompanyById(sid) : null;
         const expirationDate = row ? row.expiration_date ?? null : undefined;
         if (shouldApplySessionToSidebar(data, filter)) {
           applySidebarPatch({
-            tenantId: data.tenant_id,
-            tenantCode: data.tenant_code,
+            companyId: data.company_id,
+            companyCode: data.company_code,
             hasGambling: data.has_gambling,
             hasBank: data.has_bank,
             ...(expirationDate !== undefined ? { expirationDate } : {}),
@@ -794,7 +945,7 @@ export default function AuthenticatedLayout() {
     }
 
     const runCompanies = () => {
-      void fetchOwnerCompaniesAll();
+      void fetchOwnerCompaniesAll({ me });
       void fetchOwnerGroupsAll(me);
     };
 
@@ -827,6 +978,7 @@ export default function AuthenticatedLayout() {
     };
 
     const runIdleWarm = () => {
+      if (pageKey === "dashboard") return;
       runCompanies();
       runProcessListWarm();
       if (pathnameIs("dashboard", path) || pathnameIs("account-list", path)) {
@@ -838,23 +990,27 @@ export default function AuthenticatedLayout() {
     };
 
     if (typeof window.requestIdleCallback === "function") {
-      const idleId = window.requestIdleCallback(runIdleWarm, { timeout: 2500 });
+      const idleId = window.requestIdleCallback(runIdleWarm, { timeout: 5000 });
       return () => window.cancelIdleCallback(idleId);
     }
-    const timerId = window.setTimeout(runIdleWarm, 300);
+    const timerId = window.setTimeout(runIdleWarm, 2000);
     return () => window.clearTimeout(timerId);
-  }, [loading, me, path]);
+  }, [loading, me, pageKey, path]);
 
   useEffect(() => {
-    const root = menuContentRef.current;
-    if (!root) return;
     const warmRoute = (event) => {
       const target = event.target.closest("[data-prefetch-path]");
-      const routePath = target?.dataset?.prefetchPath;
+      if (!target) return;
+      const menuRoot = menuContentRef.current;
+      const inMenu = menuRoot?.contains(target);
+      const inFlyout = target.closest("#report-submenu, #maintenance-submenu");
+      if (!inMenu && !inFlyout) return;
+
+      const routePath = target.dataset.prefetchPath;
       const routePageKey = routePath ? pathnameToPageKey(routePath) : null;
       if (routePath) {
         prefetchRouteModule(routePath);
-        if (routePageKey === "auto-renew") prefetchAutoRenewList();
+        if (routePageKey === "auto-renew" && me?.has_c168_auto_renew_access) prefetchAutoRenewList();
         if (routePageKey === "ownership") prefetchOwnershipCompanies();
         if (
           (routePageKey === "process-list" || routePageKey === "games-process-list") &&
@@ -886,13 +1042,13 @@ export default function AuthenticatedLayout() {
         }
       }
     };
-    root.addEventListener("pointerdown", warmRoute, { capture: true });
-    root.addEventListener("mouseover", warmRoute);
-    root.addEventListener("focusin", warmRoute);
+    document.addEventListener("pointerdown", warmRoute, { capture: true });
+    document.addEventListener("mouseover", warmRoute);
+    document.addEventListener("focusin", warmRoute);
     return () => {
-      root.removeEventListener("pointerdown", warmRoute, { capture: true });
-      root.removeEventListener("mouseover", warmRoute);
-      root.removeEventListener("focusin", warmRoute);
+      document.removeEventListener("pointerdown", warmRoute, { capture: true });
+      document.removeEventListener("mouseover", warmRoute);
+      document.removeEventListener("focusin", warmRoute);
     };
   }, [me]);
 
@@ -937,7 +1093,7 @@ export default function AuthenticatedLayout() {
     setSelectedAvatarId(avatarId);
     setShowAvatarOptions(false);
     try {
-      localStorage.setItem("selectedAvatar", avatarId);
+      safeLocal.setItem("selectedAvatar", avatarId);
     } catch (e) {
       /* ignore */
     }
@@ -954,19 +1110,19 @@ export default function AuthenticatedLayout() {
   }, [me, sidebarGcTick]);
   
   const avatarSrc = useMemo(() => AVATAR_MAP[selectedAvatarId] || AVATAR_MAP.male1, [selectedAvatarId]);
-  const roleLabel = formatRoleLabel(me?.role);
+  const roleLabel = useMemo(() => {
+    if (!me?.role) return "";
+    const t = (key) => getUserListText(lang, key);
+    return formatUserRoleDisplay(t, me.role);
+  }, [lang, me?.role]);
   const processSpaPath =
     me?.tenant_has_bank && !me?.tenant_has_game ? spaPath("bank-process-list") : spaPath("process-list");
   const performLogout = async () => {
     if (logoutLoading) return;
     setLogoutLoading(true);
     try {
-      sessionStorage.setItem("ec_skip_session_bootstrap", "1");
-      await fetch(buildApiUrl("auth/logout"), {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-      });
+      safeSession.setItem("ec_skip_session_bootstrap", "1");
+      await logoutSession();
     } catch {
       // Even if request fails, clear client route to login.
     } finally {
@@ -984,18 +1140,29 @@ export default function AuthenticatedLayout() {
     setLang(normalized);
     applyLoginLang(normalized);
   };
-  const openHoverSubmenu = (section, el) => {
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setSubmenuPos((prev) => ({
-      ...prev,
-      [section]: {
-        top: Math.max(8, rect.top - 2),
-        left: rect.right,
-      },
-    }));
+  const openHoverSubmenu = (section) => {
+    if (submenuCloseTimerRef.current) {
+      clearTimeout(submenuCloseTimerRef.current);
+      submenuCloseTimerRef.current = null;
+    }
+    dismissAllPortalTooltips();
     setHoverSection(section);
   };
+
+  const scheduleCloseHoverSubmenu = useCallback(() => {
+    if (submenuCloseTimerRef.current) clearTimeout(submenuCloseTimerRef.current);
+    submenuCloseTimerRef.current = window.setTimeout(() => {
+      setHoverSection(null);
+      submenuCloseTimerRef.current = null;
+    }, 160);
+  }, []);
+
+  const cancelCloseHoverSubmenu = useCallback(() => {
+    if (submenuCloseTimerRef.current) {
+      clearTimeout(submenuCloseTimerRef.current);
+      submenuCloseTimerRef.current = null;
+    }
+  }, []);
 
   const sessionContextValue = useMemo(
     () => ({
@@ -1010,8 +1177,13 @@ export default function AuthenticatedLayout() {
     [me, loading, refreshSession, lang]
   );
 
-  if (loading) return <AppBootLoading label={lang === "zh" ? "正在加载…" : "Loading…"} />;
+  if (loading) return <AppBootLoading label={lang === "zh" ? "æ­£åœ¨åŠ è½½â€¦" : "Loadingâ€¦"} />;
   if (!me) return <Navigate to={spaPath("login")} replace />;
+
+  if (pageKey === "dashboard" && !canAccessDashboard(me)) {
+    const fallback = resolveDefaultLandingPath(me);
+    if (fallback) return <Navigate to={fallback} replace />;
+  }
 
   return (
     <AuthSessionProvider value={sessionContextValue}>
@@ -1070,7 +1242,9 @@ export default function AuthenticatedLayout() {
           <SidebarLangSwitch lang={lang} onLanguageChange={applyLanguage} ariaLabel={i18n.switchLanguage} />
         </div>
 
-        <div className="informationmenu-content" ref={menuContentRef}>
+        <div className="sidebar-scroll-clip">
+        <div className="sidebar-scroll" ref={menuContentRef}>
+        <div className="informationmenu-content">
           <div className="content-separator" />
           {canAccess("home") && (
             <div className="informationmenu-section">
@@ -1208,7 +1382,7 @@ export default function AuthenticatedLayout() {
               </SidebarNavTip>
             </div>
           )}
-          {canAccess("datacapture") && me?.tenant_has_game && (
+          {canAccess("datacapture") && (me?.tenant_has_game || me?.tenant_has_bank) && (
             <div className="informationmenu-section">
               <SidebarNavTip label={i18n.sidebarDataCapture} enabled={sidebarIconOnly}>
                 <SidebarSectionLink
@@ -1219,7 +1393,7 @@ export default function AuthenticatedLayout() {
                       clearDataCaptureRoundLocalStorage();
                     }
                   }}
-                  className={`informationmenu-section-title ${pageKey === "datacapture" ? "current-page" : "account-direct"}`}
+                  className={`informationmenu-section-title ${isDataCaptureSidebarActive ? "current-page" : "account-direct"}`}
                 >
                   <svg className="section-icon" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" />
@@ -1247,94 +1421,90 @@ export default function AuthenticatedLayout() {
           )}
           {canAccess("report") && me?.tenant_has_game && (
             <div className="informationmenu-section">
-              <div className="menu-item-wrapper" onMouseLeave={() => setHoverSection(null)}>
+              <div className="menu-item-wrapper" onMouseLeave={scheduleCloseHoverSubmenu}>
                 <SidebarNavTip label={i18n.sidebarReport} enabled={sidebarIconOnly} placement="top">
                   <div
                     ref={reportTitleRef}
                     className={`informationmenu-section-title ${pageKey === "customer-report" || pageKey === "domain-report" ? "active" : ""}`}
                     data-section="report"
-                    onMouseEnter={() => openHoverSubmenu("report", reportTitleRef.current)}
-                    role="presentation"
+                    aria-expanded={hoverSection === "report"}
+                    aria-controls="report-submenu"
+                    aria-haspopup="menu"
+                    onMouseEnter={() => {
+                      cancelCloseHoverSubmenu();
+                      openHoverSubmenu("report");
+                    }}
                   >
                     <svg className="section-icon" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h8c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
                     </svg>
                     <span className="sidebar-menu-label">{i18n.sidebarReport}</span>
-                    <span className="section-arrow">▶</span>
+                    <span className="section-arrow">â–¶</span>
                   </div>
                 </SidebarNavTip>
-                <div
-                  className="submenu"
+                <SidebarFlyoutSubmenu
                   id="report-submenu"
-                  style={{
-                    position: "fixed",
-                    top: submenuPos.report.top,
-                    left: submenuPos.report.left,
-                    opacity: hoverSection === "report" ? 1 : 0,
-                    transform: hoverSection === "report" ? "translateX(0)" : "translateX(-10px)",
-                    pointerEvents: hoverSection === "report" ? "auto" : "none",
-                    zIndex: 4000,
+                  open={hoverSection === "report"}
+                  anchorRef={reportTitleRef}
+                  onMouseEnter={() => {
+                    cancelCloseHoverSubmenu();
+                    setHoverSection("report");
                   }}
-                  aria-hidden={hoverSection !== "report"}
-                  onMouseEnter={() => setHoverSection("report")}
-                  onMouseLeave={() => setHoverSection(null)}
+                  onMouseLeave={scheduleCloseHoverSubmenu}
                 >
-                  <div className="submenu-content">
-                    <a
-                      {...sidebarSubmenuLinkProps("/customer-report", goTo)}
-                      className={`submenu-item ${pageKey === "customer-report" ? "current-page" : ""}`}
-                      data-prefetch-path="/customer-report"
-                    >
-                      <span>{i18n.sidebarCustomerReport}</span>
-                    </a>
-                    <a
-                      {...sidebarSubmenuLinkProps("/domain-report", goTo)}
-                      className={`submenu-item ${pageKey === "domain-report" ? "current-page" : ""}`}
-                      data-prefetch-path="/domain-report"
-                    >
-                      <span>{i18n.sidebarDomainReport}</span>
-                    </a>
-                  </div>
-                </div>
+                  <a
+                    {...sidebarSubmenuLinkProps("/customer-report", goTo)}
+                    className={`submenu-item ${pageKey === "customer-report" ? "current-page" : ""}`}
+                    data-prefetch-path="/customer-report"
+                  >
+                    <span>{i18n.sidebarCustomerReport}</span>
+                  </a>
+                  <a
+                    {...sidebarSubmenuLinkProps("/domain-report", goTo)}
+                    className={`submenu-item ${pageKey === "domain-report" ? "current-page" : ""}`}
+                    data-prefetch-path="/domain-report"
+                  >
+                    <span>{i18n.sidebarDomainReport}</span>
+                  </a>
+                </SidebarFlyoutSubmenu>
               </div>
             </div>
           )}
           {showMaintenanceMenu && (
             <div className="informationmenu-section">
-              <div className="menu-item-wrapper" onMouseLeave={() => setHoverSection(null)}>
+              <div className="menu-item-wrapper" onMouseLeave={scheduleCloseHoverSubmenu}>
                 <SidebarNavTip label={i18n.sidebarMaintenance} enabled={sidebarIconOnly} placement="top">
                   <div
                     ref={maintenanceTitleRef}
                     className={`informationmenu-section-title ${(["payment-maintenance", "capture-maintenance", "transaction-maintenance", "formula-maintenance", "bankprocess-maintenance"].includes(pageKey)) ? "active" : ""}`}
                     data-section="maintenance"
-                    onMouseEnter={() => openHoverSubmenu("maintenance", maintenanceTitleRef.current)}
-                    role="presentation"
+                    aria-expanded={hoverSection === "maintenance"}
+                    aria-controls="maintenance-submenu"
+                    aria-haspopup="menu"
+                    onMouseEnter={() => {
+                      cancelCloseHoverSubmenu();
+                      openHoverSubmenu("maintenance");
+                    }}
                   >
                     <svg className="section-icon" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" />
                     </svg>
                     <span className="sidebar-menu-label">{i18n.sidebarMaintenance}</span>
-                    <span className="section-arrow">▶</span>
+                    <span className="section-arrow">â–¶</span>
                   </div>
                 </SidebarNavTip>
-                <div
-                  className="submenu"
+                <SidebarFlyoutSubmenu
                   id="maintenance-submenu"
-                  style={{
-                    position: "fixed",
-                    top: submenuPos.maintenance.top,
-                    left: submenuPos.maintenance.left,
-                    opacity: hoverSection === "maintenance" ? 1 : 0,
-                    transform: hoverSection === "maintenance" ? "translateX(0)" : "translateX(-10px)",
-                    pointerEvents: hoverSection === "maintenance" ? "auto" : "none",
-                    zIndex: 4000,
+                  open={hoverSection === "maintenance"}
+                  anchorRef={maintenanceTitleRef}
+                  onMouseEnter={() => {
+                    cancelCloseHoverSubmenu();
+                    setHoverSection("maintenance");
                   }}
-                  aria-hidden={hoverSection !== "maintenance"}
-                  onMouseEnter={() => setHoverSection("maintenance")}
-                  onMouseLeave={() => setHoverSection(null)}
+                  onMouseLeave={scheduleCloseHoverSubmenu}
                 >
-                  <div className="submenu-content">
-                    {showFullMaintenanceMenu && me?.tenant_has_game && (
+                    {(showFullMaintenanceMenu || (showLimitedMaintenanceMenu && me?.tenant_has_bank)) &&
+                      (me?.tenant_has_game || me?.tenant_has_bank) && (
                       <a
                         {...sidebarSubmenuLinkProps("/capture-maintenance", goTo)}
                         className={`submenu-item ${pageKey === "capture-maintenance" ? "current-page" : ""}`}
@@ -1343,7 +1513,8 @@ export default function AuthenticatedLayout() {
                         <span>{i18n.sidebarDataCapture}</span>
                       </a>
                     )}
-                    {me?.tenant_has_game && (showFullMaintenanceMenu || showLimitedMaintenanceMenu) && (
+                    {(me?.tenant_has_game || me?.tenant_has_bank) &&
+                      (showFullMaintenanceMenu || showLimitedMaintenanceMenu) && (
                       <a
                         {...sidebarSubmenuLinkProps("/transaction-maintenance", goTo)}
                         className={`submenu-item ${pageKey === "transaction-maintenance" ? "current-page" : ""}`}
@@ -1361,7 +1532,7 @@ export default function AuthenticatedLayout() {
                         <span>{i18n.sidebarPayment}</span>
                       </a>
                     )}
-                    {me?.tenant_has_game && (showFullMaintenanceMenu || showLimitedMaintenanceMenu) && (
+                    {(me?.tenant_has_game || me?.tenant_has_bank) && (showFullMaintenanceMenu || showLimitedMaintenanceMenu) && (
                       <a
                         {...sidebarSubmenuLinkProps("/formula-maintenance", goTo)}
                         className={`submenu-item ${pageKey === "formula-maintenance" ? "current-page" : ""}`}
@@ -1376,14 +1547,15 @@ export default function AuthenticatedLayout() {
                         className={`submenu-item ${pageKey === "bankprocess-maintenance" ? "current-page" : ""}`}
                         data-prefetch-path="/bankprocess-maintenance"
                       >
-                        <span>{i18n.sidebarProcess}</span>
+                        <span>{i18n.sidebarBankProcess}</span>
                       </a>
                     )}
-                  </div>
-                </div>
+                </SidebarFlyoutSubmenu>
               </div>
             </div>
           )}
+        </div>
+        </div>
         </div>
 
         <div className="informationmenu-footer">
@@ -1444,15 +1616,17 @@ export default function AuthenticatedLayout() {
             <div className="notification-empty"><p>{i18n.loadingAnnouncements}</p></div>
           ) : displayAnnouncements.length > 0 ? (
             displayAnnouncements.map((announcement, index) => (
-              <div
+              <AnnouncementUpdateCard
                 key={announcement.id ?? index}
+                announcement={announcement}
+                labels={{
+                  updateIncludes: i18n.updateIncludes,
+                  versionUpdated: i18n.versionUpdated,
+                  teamName: i18n.announcementTeam,
+                }}
                 className={`notification-item ${announcement.isExpirationReminder || !readAnnouncements.has(index) ? "unread" : ""}${announcement.isExpirationReminder ? " expiration-reminder-item" : ""}`}
                 onClick={() => markAnnouncementRead(index)}
-              >
-                <div className="notification-title">{announcement.title}</div>
-                <div className="notification-message">{announcement.content}</div>
-                <div className="notification-time">{announcement.created_at ?? announcement.createdAt}</div>
-              </div>
+              />
             ))
           ) : (
             <div className="notification-empty">

@@ -6,7 +6,7 @@ import {
 } from "./partnershipAuditReadOnly.js"
 
 /**
- * @param {object|null|undefined} sessionMe current_user_api.data
+ * @param {object|null|undefined} sessionMe auth/current-user data
  * @param {(message: string, type?: string) => void} [notify]
  * @param {string} [blockedMessage]
  */

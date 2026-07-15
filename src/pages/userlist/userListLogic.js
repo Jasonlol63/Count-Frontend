@@ -1,6 +1,5 @@
 /** User list page — pure helpers (rules aligned with api/users/userlist_api.php + former legacy page) */
 
-import { formatRoleLabel, normRole } from "../../utils/auth/sidebarPermissions.js";
 import {
   companiesForCompanyPicker,
   DASHBOARD_GROUP_FILTER_OPT_OUT_KEY,
@@ -10,10 +9,9 @@ import {
   independentCompaniesForPicker,
   normalizeCompanyGroupId,
 } from "../../utils/company/sharedCompanyFilter.js";
+import { formatDmyDash } from "../../utils/date/dateUtils.js";
 
-export { formatRoleLabel, normRole };
-
-export const PAGE_SIZE = 20;
+export const PAGE_SIZE = 25;
 
 export const ROLE_HIERARCHY = {
   owner: 0,
@@ -53,20 +51,25 @@ export const PERMISSION_ICONS = {
   maintenance: "M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z",
 };
 
-export function rowLoginId(row) {
-  return row?.loginId ?? row?.login_id ?? "";
+export function normRole(r) {
+  return String(r || "").trim().toLowerCase();
 }
 
-export function rowLastLogin(row) {
-  return row?.lastLogin ?? row?.last_login ?? null;
+/** Ownership sidebar permission — only owner and partnership roles may have or see it. */
+export function roleSupportsOwnershipPermission(role) {
+  const r = normRole(role);
+  return r === "owner" || r === "partnership";
 }
 
-export function rowCreatedBy(row) {
-  return row?.createdBy ?? row?.created_by ?? "";
+export function getVisiblePermissionKeys(targetRole) {
+  if (roleSupportsOwnershipPermission(targetRole)) return PERMISSION_KEYS;
+  return PERMISSION_KEYS.filter((k) => k !== "ownership");
 }
 
-export function rowIsOwnerShadow(row) {
-  return !!(row?.isOwnerShadow ?? row?.is_owner_shadow);
+export function sanitizeSidebarPermissionsForRole(role, permissions) {
+  if (!Array.isArray(permissions)) return [];
+  if (roleSupportsOwnershipPermission(role)) return permissions;
+  return permissions.filter((p) => p !== "ownership");
 }
 
 /** Partnership / Audit：显示 Read Only 开关 */
@@ -92,7 +95,7 @@ export function canInteractWithReadOnlyToggle(currentUserRole, targetUserRole) {
  * Owner / Manager 等上级编辑下级只读账号时仍可修改（含关闭 Read Only）。
  */
 export function isUserModalPageReadOnlyLock(isEditMode, editingRow, role, readOnly, currentUserId) {
-  if (!isEditMode || rowIsOwnerShadow(editingRow)) return false;
+  if (!isEditMode || editingRow?.is_owner_shadow) return false;
   if (!roleHasReadOnlyToggle(role) || !readOnly) return false;
   if (!currentUserId || editingRow?.id == null) return false;
   return Number(editingRow.id) === Number(currentUserId);
@@ -100,7 +103,7 @@ export function isUserModalPageReadOnlyLock(isEditMode, editingRow, role, readOn
 
 /** Owner 登录后编辑列表中的 Owner 影子行（本人公司 Owner 资料） */
 export function isOwnerEditingOwnerShadow(row, currentUserRole) {
-  return rowIsOwnerShadow(row) && normRole(currentUserRole) === "owner";
+  return !!row?.is_owner_shadow && normRole(currentUserRole) === "owner";
 }
 
 /**
@@ -108,7 +111,7 @@ export function isOwnerEditingOwnerShadow(row, currentUserRole) {
  */
 export function getUserEditFieldLocks(row, currentUserId, currentUserRole) {
   if (isOwnerEditingOwnerShadow(row, currentUserRole)) {
-    return { name: false, email: false, role: true, password: false, sidebar: true, company: true };
+    return { name: false, email: false, role: true, password: false, sidebar: true, company: true, accountProcess: true };
   }
   const caps = computeRowCapabilities(row, currentUserId, currentUserRole);
   const curLevel = ROLE_HIERARCHY[normRole(currentUserRole)] ?? 999;
@@ -124,12 +127,15 @@ export function getUserEditFieldLocks(row, currentUserId, currentUserRole) {
     password: false,
     sidebar: isSelf || isSame || isLower,
     company: isSelf || isSame || isLower || !canPickCompany,
+    // 自己编辑自己时锁定账户/流程，避免把自己的账户全部清空后造成自我锁定（账户页无数据）
+    accountProcess: isSelf,
   };
 }
 
 export function getCurrentUserRolePermissions(currentUserRole) {
   const rolePermissions = {
     owner: ["home", "admin", "account", "ownership", "process", "datacapture", "payment", "report", "maintenance"],
+    partnership: ["home", "admin", "account", "ownership", "process", "datacapture", "payment", "report", "maintenance"],
     admin: ["home", "admin", "account", "process", "datacapture", "payment", "report", "maintenance"],
     manager: ["admin", "account", "process", "datacapture", "payment", "report", "maintenance"],
     supervisor: ["admin", "account", "process", "datacapture", "payment", "report"],
@@ -143,8 +149,11 @@ export function getCurrentUserRolePermissions(currentUserRole) {
 export function getRoleTemplateSidebarList(role) {
   if (!role) return [];
   const adminDefault = ["home", "admin", "account", "process", "datacapture", "payment", "report", "maintenance"];
+  const ownerDefault = ["home", "admin", "account", "ownership", "process", "datacapture", "payment", "report", "maintenance"];
+  const partnershipDefault = [...ownerDefault];
   const rolePermissions = {
-    partnership: PERMISSION_KEYS,
+    owner: ownerDefault,
+    partnership: partnershipDefault,
     admin: adminDefault,
     manager: ["admin", "account", "process", "datacapture", "payment", "report", "maintenance"],
     supervisor: ["admin", "account", "process", "datacapture", "payment", "report"],
@@ -195,19 +204,20 @@ export function getFinalPermissionsForCreation(selectedRole, manuallySelected, c
   }
   const defaultPermissions = rolePerms[sr] ?? [];
   const manual = new Set(manuallySelected);
-  return defaultPermissions.filter((perm) => {
+  const merged = defaultPermissions.filter((perm) => {
     if (currentUserPermissions.includes(perm)) return manual.has(perm);
     return true;
   });
+  return sanitizeSidebarPermissionsForRole(sr, merged);
 }
 
 /**
  * Row capabilities（列表行编辑/删除/状态规则）.
- * @param {object} row — user row with id, role, status, isOwnerShadow
+ * @param {object} row — user row with id, role, status, is_owner_shadow
  */
 export function computeRowCapabilities(row, currentUserId, currentUserRole) {
   const targetRole = normRole(row.role);
-  const isOwnerShadow = rowIsOwnerShadow(row);
+  const isOwnerShadow = !!row.is_owner_shadow;
   const targetUserId = Number(row.id);
   const currentLevel = ROLE_HIERARCHY[normRole(currentUserRole)] ?? 999;
   const targetLevel = ROLE_HIERARCHY[targetRole] ?? 999;
@@ -228,8 +238,7 @@ export function computeRowCapabilities(row, currentUserId, currentUserRole) {
     canDelete = false;
   } else if (isOwnerShadow) {
     canEditDelete = normRole(currentUserRole) === "owner";
-    canDelete = false;
-    canToggleStatus = false;
+    canDelete = canEditDelete;
   } else if (isLowPrivilegeUser && (isAdminUser || isOwnerUser)) {
     canEditDelete = false;
     canDelete = false;
@@ -240,11 +249,39 @@ export function computeRowCapabilities(row, currentUserId, currentUserRole) {
   }
 
   canToggleStatus = canEditDelete && !isSelf;
-  if (normRole(currentUserRole) === "admin" && targetRole === "admin" && !isSelf) {
+  if (!isOwnerShadow && (isSameLevel || isHigherLevel)) {
     canToggleStatus = false;
   }
 
   return { canEditDelete, canDelete, canToggleStatus, isSelf, isSameLevel, isHigherLevel, isOwnerShadow };
+}
+
+function parseUserLastLogin(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const d = new Date(s.replace(" ", "T"));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Last Login 列：仅展示日期 DD-MM-YYYY */
+export function formatUserLastLoginDate(raw) {
+  const d = parseUserLastLogin(raw);
+  if (!d) {
+    const s = String(raw || "").trim();
+    return s || "-";
+  }
+  return formatDmyDash(d);
+}
+
+/** Last Login 悬浮提示：仅时间 HH:MM:SS */
+export function formatUserLastLoginTimeTitle(raw) {
+  const d = parseUserLastLogin(raw);
+  if (!d) return "";
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${h}:${min}:${sec}`;
 }
 
 export function formatLastLogin(raw) {
@@ -253,44 +290,44 @@ export function formatLastLogin(raw) {
   if (!s) return "-";
   const d = new Date(s.replace(" ", "T"));
   if (Number.isNaN(d.getTime())) return s;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
   const h = String(d.getHours()).padStart(2, "0");
   const min = String(d.getMinutes()).padStart(2, "0");
-  return `${y}-${m}-${day} ${h}:${min}`;
+  return `${formatDmyDash(d)} ${h}:${min}`;
 }
 
 /**
  * Status visibility after toggle — aligned with processlist / account list:
  * - default: active (paginated)
  * - showInactive: inactive (paginated)
- * - showAll: all active (no pagination)
- * - showAll + showInactive: all inactive
+ * - showAll: active + inactive (no pagination)
+ * - showAll + showInactive: active + inactive
  */
 export function userRowVisibleAfterStatusChange(newStatus, { showInactive, showAll }) {
+  if (showAll) return true;
   const status = normRole(newStatus);
-  if (showAll && showInactive) return status === "inactive";
-  if (showAll) return status === "active";
   if (showInactive) return status === "inactive";
   return status === "active";
 }
 
-export function applyUserFilters(users, { search, showInactive, showAll, viewerRole }) {
+export function applyUserFilters(users, { search, showInactive, showAll, viewerRole, viewerUserId = null }) {
   const vr = normRole(viewerRole);
   let rows = users.map((u) => ({ ...u }));
   if (vr !== "owner") {
-    rows = rows.filter((u) => normRole(u.role) !== "partnership");
+    const viewerIdNum = Number(viewerUserId);
+    rows = rows.filter((u) => {
+      if (normRole(u.role) !== "partnership") return true;
+      if (!Number.isFinite(viewerIdNum) || viewerIdNum <= 0) return false;
+      return Number(u.id) === viewerIdNum;
+    });
   }
   const q = search.trim().toLowerCase();
   if (q) {
-    rows = rows.filter((u) => `${rowLoginId(u)} ${u.name || ""} ${u.email || ""}`.toLowerCase().includes(q));
+    rows = rows.filter((u) => `${u.login_id || ""} ${u.name || ""} ${u.email || ""}`.toLowerCase().includes(q));
   }
-  if (showAll && showInactive) {
-    rows = rows.filter((u) => normRole(u.status) === "inactive");
-  } else if (showAll) {
-    rows = rows.filter((u) => normRole(u.status) === "active");
-  } else if (showInactive) {
+  if (showAll) {
+    return rows;
+  }
+  if (showInactive) {
     rows = rows.filter((u) => normRole(u.status) === "inactive");
   } else {
     rows = rows.filter((u) => normRole(u.status) === "active");
@@ -299,14 +336,14 @@ export function applyUserFilters(users, { search, showInactive, showAll, viewerR
 }
 
 function shadowCmp(a, b) {
-  if (rowIsOwnerShadow(a) && !rowIsOwnerShadow(b)) return -1;
-  if (!rowIsOwnerShadow(a) && rowIsOwnerShadow(b)) return 1;
+  if (a.is_owner_shadow && !b.is_owner_shadow) return -1;
+  if (!a.is_owner_shadow && b.is_owner_shadow) return 1;
   return 0;
 }
 
 function tiebreakLoginName(a, b) {
-  const al = rowLoginId(a).toLowerCase();
-  const bl = rowLoginId(b).toLowerCase();
+  const al = String(a.login_id || "").toLowerCase();
+  const bl = String(b.login_id || "").toLowerCase();
   if (al < bl) return -1;
   if (al > bl) return 1;
   const an = String(a.name || "").toLowerCase();
@@ -340,8 +377,8 @@ export function sortUsers(rows, sortColumn, sortDirection) {
     sortWithShadow((a, b) => Number(a.id || 0) - Number(b.id || 0));
   } else if (sortColumn === "loginId") {
     sortWithShadow((a, b) => {
-      const aKey = rowLoginId(a).toLowerCase();
-      const bKey = rowLoginId(b).toLowerCase();
+      const aKey = String(a.login_id || "").toLowerCase();
+      const bKey = String(b.login_id || "").toLowerCase();
       if (aKey < bKey) return -1;
       if (aKey > bKey) return 1;
       const aName = String(a.name || "").toLowerCase();
@@ -372,8 +409,8 @@ export function sortUsers(rows, sortColumn, sortDirection) {
     );
   } else if (sortColumn === "lastLogin") {
     sortWithShadow((a, b) => {
-      const va = lastLoginSortMs(rowLastLogin(a));
-      const vb = lastLoginSortMs(rowLastLogin(b));
+      const va = lastLoginSortMs(a.last_login);
+      const vb = lastLoginSortMs(b.last_login);
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;
@@ -383,12 +420,12 @@ export function sortUsers(rows, sortColumn, sortDirection) {
     });
   } else if (sortColumn === "createdBy") {
     sortWithShadow((a, b) =>
-      String(rowCreatedBy(a)).localeCompare(String(rowCreatedBy(b)), undefined, { sensitivity: "base" }),
+      String(a.created_by || "").localeCompare(String(b.created_by || ""), undefined, { sensitivity: "base" }),
     );
   } else {
     sortWithShadow((a, b) => {
-      const aKey = rowLoginId(a).toLowerCase();
-      const bKey = rowLoginId(b).toLowerCase();
+      const aKey = String(a.login_id || "").toLowerCase();
+      const bKey = String(b.login_id || "").toLowerCase();
       if (aKey < bKey) return -1;
       if (aKey > bKey) return 1;
       const aName = String(a.name || "").toLowerCase();

@@ -5,11 +5,9 @@
  * Login scope rules: see `loginScope.js` and `includes/group_company_access.php`.
  */
 import { buildApiUrl } from "../core/apiUrl.js";
+import { stripPrivateQueryFromBrowserUrl } from "../routing/privateBrowserUrl.js";
 import { pathnameIs } from "../routing/pageRoutes.js";
-import {
-  fetchAccessibleTenants,
-  tenantAccessibleRowToUiCompany,
-} from "./tenantAccessibleApi.js";
+import { safeLocal as localStorage, safeSession as sessionStorage } from "../storage/safeStorage.js";
 import {
   clearCompanySessionFlagsCache,
   peekCompanySessionFlags,
@@ -18,25 +16,35 @@ import {
 import {
   permissionsIncludeBank,
   permissionsIncludeGames,
+  resolveCompanyCategoryFlags,
   resolveCompanyCategoryFlagsFromRow,
 } from "./companyCategoryFlags.js";
 import {
   canUseGroupOnlyMode,
   filterCompaniesForLoginScope,
+  filterCompaniesForUserScope,
   getLoginIdentifier,
   getLoginScope,
   isCompanyLogin,
   isGroupLogin,
   resolveAccessibleGroupIds,
 } from "./loginScope.js";
+import {
+  fetchAccessibleTenants,
+  tenantAccessibleRowToUiTenant,
+} from "./tenantAccessibleApi.js";
 
 export {
   canUseGroupOnlyMode,
+  filterCompaniesForAssignedScope,
   filterCompaniesForLoginScope,
+  filterCompaniesForUserScope,
   getLoginIdentifier,
   getLoginScope,
   isCompanyLogin,
   isGroupLogin,
+  resolveAssignedScopeGroupIds,
+  userHasExplicitAssignedScope,
 } from "./loginScope.js";
 
 export const DASHBOARD_GROUP_FILTER_KEY = "dashboard_group_filter";
@@ -59,7 +67,7 @@ export const DASHBOARD_SELECTED_CURRENCY_SCOPE_KEY = "dashboard_selected_currenc
 export const DASHBOARD_SELECTED_CURRENCY_BY_SCOPE_KEY = "dashboard_selected_currency_by_scope";
 /** Prevents re-applying login defaults on refresh while the same login session is active. */
 export const DASHBOARD_LOGIN_FILTER_APPLIED_KEY = "dashboard_login_filter_applied";
-/** Linked parent tenant codes (AP+IG) from tenant-accessible API for company login filter pills. */
+/** Linked group ids (AP+IG) from get_owner_companies_api for company login filter pills. */
 export const DASHBOARD_ACCESSIBLE_GROUP_IDS_KEY = "dashboard_accessible_group_ids";
 export const DASHBOARD_GROUP_FILTER_EVENT = "eazycount:dashboard-group-filter-changed";
 export const DASHBOARD_CURRENCY_FILTER_EVENT = "eazycount:dashboard-currency-filter-changed";
@@ -67,6 +75,7 @@ export const DASHBOARD_CURRENCY_FILTER_EVENT = "eazycount:dashboard-currency-fil
 export const DASHBOARD_GC_BOOTSTRAP_READY_EVENT = "eazycount:dashboard-gc-bootstrap-ready";
 /** One-shot localStorage handoff when opening an authenticated route in a new tab (sessionStorage is per-tab). */
 const DASHBOARD_TAB_BOOTSTRAP_KEY = "ec_dashboard_tab_bootstrap";
+
 const DASHBOARD_TAB_BOOTSTRAP_KEYS = [
   DASHBOARD_GROUP_FILTER_KEY,
   DASHBOARD_GROUP_FILTER_OPT_OUT_KEY,
@@ -311,13 +320,15 @@ export function resolveCrossPageCurrencyPreference({
   );
 }
 
-/** Store linked parent tenant codes from tenant-accessible API (company login: AP+IG). */
+/** Store linked group ids from companies / tenant-accessible API. */
 export function persistAccessibleGroupIdsFromApi(json) {
   const ids = Array.isArray(json?.accessible_parent_tenant_codes)
     ? json.accessible_parent_tenant_codes
     : Array.isArray(json?.accessibleParentTenantCodes)
       ? json.accessibleParentTenantCodes
-      : [];
+      : Array.isArray(json?.accessible_group_ids)
+        ? json.accessible_group_ids
+        : [];
   if (!ids.length) return;
   sessionStorage.setItem(
     DASHBOARD_ACCESSIBLE_GROUP_IDS_KEY,
@@ -358,9 +369,14 @@ export function seedDashboardFilterFromLogin({
   companies = [],
   sessionTenantId = null,
   sessionTenantCode = null,
+  // legacy aliases
+  sessionCompanyId = null,
+  sessionCompanyCode = null,
 }) {
   const ident = String(loginIdentifier || "").trim().toUpperCase();
   const list = filterCompaniesWithDisplayId(companies);
+  const tenantId = sessionTenantId ?? sessionCompanyId;
+  const tenantCode = sessionTenantCode ?? sessionCompanyCode;
 
   if (loginScope === "group" && ident) {
     persistDashboardGroupFilter(ident);
@@ -375,27 +391,34 @@ export function seedDashboardFilterFromLogin({
     persistDashboardGroupOnlyMode(false);
   }
 
-  let row = list.find((c) => String(c.tenant_code || "").trim().toUpperCase() === ident);
-  if (!row && sessionTenantId != null) {
-    row = list.find((c) => Number(c.tenant_id ?? c.id) === Number(sessionTenantId));
+  let row = list.find(
+    (c) =>
+      String(c.tenant_code || c.company_id || "")
+        .trim()
+        .toUpperCase() === ident,
+  );
+  if (!row && tenantId != null) {
+    row = list.find((c) => Number(c.tenant_id ?? c.id) === Number(tenantId));
   }
   if (
     !row &&
-    sessionTenantCode &&
-    String(sessionTenantCode).trim().toUpperCase() === ident &&
-    sessionTenantId != null
+    tenantCode &&
+    String(tenantCode).trim().toUpperCase() === ident &&
+    tenantId != null
   ) {
     row = {
-      tenant_id: sessionTenantId,
-      id: sessionTenantId,
-      tenant_code: sessionTenantCode,
+      tenant_id: tenantId,
+      id: tenantId,
+      tenant_code: tenantCode,
+      company_id: tenantCode,
       parent_tenant_code: null,
+      group_id: null,
     };
   }
 
-  const cidRaw = row?.tenant_id ?? row?.id ?? sessionTenantId;
+  const cidRaw = row?.tenant_id ?? row?.id ?? tenantId;
   const cid = Number.isFinite(Number(cidRaw)) && Number(cidRaw) > 0 ? Number(cidRaw) : null;
-  const group = row?.parent_tenant_code ? normalizeCompanyGroupId(row) : null;
+  const group = row?.parent_tenant_code || row?.group_id ? normalizeCompanyGroupId(row) : null;
 
   persistDashboardGroupOnlyMode(false);
   if (group) persistDashboardGroupFilter(group);
@@ -592,10 +615,10 @@ export function dashboardFilterEventMatchesPersisted(detail) {
  */
 export function shouldApplySessionToSidebar(sessionData, filter = readPersistedDashboardGcFilter()) {
   if (!sessionData || typeof sessionData !== "object") return false;
-  const sid = Number(sessionData.tenant_id);
+  const sid = Number(sessionData.company_id);
   if (!Number.isFinite(sid) || sid <= 0) return false;
 
-  const code = String(sessionData.tenant_code ?? "")
+  const code = String(sessionData.company_code ?? sessionData.company_id ?? "")
     .trim()
     .toUpperCase();
 
@@ -624,10 +647,10 @@ export function shouldApplySessionToSidebar(sessionData, filter = readPersistedD
  */
 export function shouldRefreshExpiryFromSession(sessionData, filter = readPersistedDashboardGcFilter()) {
   if (!sessionData || typeof sessionData !== "object") return false;
-  const sid = Number(sessionData.tenant_id);
+  const sid = Number(sessionData.company_id);
   if (!Number.isFinite(sid) || sid <= 0) return false;
 
-  const code = String(sessionData.tenant_code ?? "")
+  const code = String(sessionData.company_code ?? sessionData.company_id ?? "")
     .trim()
     .toUpperCase();
 
@@ -646,18 +669,9 @@ export function shouldRefreshExpiryFromSession(sessionData, filter = readPersist
   return true;
 }
 
-/** Remove stale `company_id` from the address bar (Admin/Account bookmarked URLs). */
+/** Remove sensitive query params from the address bar (company, filters, etc.). */
 export function stripCompanyIdFromUrl() {
-  if (typeof window === "undefined") return;
-  try {
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has("company_id")) return;
-    url.searchParams.delete("company_id");
-    const qs = url.searchParams.toString();
-    window.history.replaceState(null, "", qs ? `${url.pathname}?${qs}` : url.pathname);
-  } catch {
-    /* ignore */
-  }
+  stripPrivateQueryFromBrowserUrl();
 }
 
 /**
@@ -1003,6 +1017,13 @@ export function resolveGroupCategoryFlagsForSidebar(groupCode, options = {}) {
   return { hasGambling, hasBank: includeBank ? hasBank : false };
 }
 
+/** Group-only sidebar: aggregate gambling from group row / subsidiaries; bank stays off. */
+export function resolveGroupOnlySidebarGambling(groupCode) {
+  const flags = resolveGroupCategoryFlagsForSidebar(groupCode, { includeBank: false });
+  if (!flags) return null;
+  return Boolean(flags.hasGambling);
+}
+
 /**
  * Resolve expiration_date for sidebar optimistic patch from owner-companies cache.
  * @returns {string|null|undefined} undefined when cache cannot resolve (skip patch).
@@ -1057,7 +1078,8 @@ export function notifyDashboardGroupFilterChanged(selectedGroup, companyId, opti
   const groupAllMode =
     Boolean(persistedFilter.groupAllMode) && cid == null && !groupOnly;
   if (groupOnly && value) {
-    // Group-only: keep login-scope gambling flags on sidebar; only bank is cleared.
+    const groupGambling = resolveGroupOnlySidebarGambling(value);
+    if (groupGambling != null) hasGambling = groupGambling;
     hasBank = false;
   } else if (groupAllMode && value) {
     const groupFlags = resolveGroupCategoryFlagsForSidebar(value, { includeBank: true });
@@ -1065,7 +1087,7 @@ export function notifyDashboardGroupFilterChanged(selectedGroup, companyId, opti
       if (hasGambling == null) hasGambling = groupFlags.hasGambling;
       if (hasBank == null) hasBank = groupFlags.hasBank;
     }
-  } else if (persistedFilter.groupsAllMode && persistedFilter.sidebarAnchorGroup) {
+  } else if (persistedFilter.groupsAllMode && persistedFilter.sidebarAnchorGroup && cid == null) {
     const groupFlags = resolveGroupsAllSidebarCategoryFlags(persistedFilter);
     if (groupFlags) {
       hasGambling = groupFlags.hasGambling;
@@ -1088,6 +1110,33 @@ export function notifyDashboardGroupFilterChanged(selectedGroup, companyId, opti
   );
 }
 
+/** Sidebar category flags for a concrete company row (cache → permissions). */
+function resolveSidebarCompanyCategoryFlags(companyRow) {
+  if (!companyRow || typeof companyRow !== "object") return null;
+  const fromResolver = resolveCompanyCategoryFlags(companyRow);
+  if (fromResolver) return fromResolver;
+  const id = Number(companyRow.id);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const cached = peekCompanySessionFlags(id);
+  if (!cached) return null;
+  return {
+    hasGambling: Boolean(cached.has_gambling),
+    hasBank: Boolean(cached.has_bank),
+  };
+}
+
+function applySidebarCompanyRowNotifyOptions(opts, companyRow) {
+  if (!companyRow || typeof companyRow !== "object") return opts;
+  if (companyRow.company_id) opts.companyCode = companyRow.company_id;
+  opts.expirationDate = companyRow.expiration_date ?? null;
+  const flags = resolveSidebarCompanyCategoryFlags(companyRow);
+  if (flags) {
+    opts.hasGambling = flags.hasGambling;
+    opts.hasBank = flags.hasBank;
+  }
+  return opts;
+}
+
 /** Notify options for sidebar sync when dashboard Group / Company filter changes. */
 export function buildDashboardSidebarNotifyOptions(companyRow, selectedGroup, extra = {}) {
   const opts = { ...extra };
@@ -1099,6 +1148,10 @@ export function buildDashboardSidebarNotifyOptions(companyRow, selectedGroup, ex
         ? String(selectedGroup).trim().toUpperCase()
         : null;
   if (persisted.groupsAllMode && anchorGroup) {
+    const companyId = Number(companyRow?.id);
+    if (Number.isFinite(companyId) && companyId > 0) {
+      return applySidebarCompanyRowNotifyOptions(opts, companyRow);
+    }
     const groupFlags = resolveGroupsAllSidebarCategoryFlags({
       ...persisted,
       sidebarAnchorGroup: anchorGroup,
@@ -1109,32 +1162,19 @@ export function buildDashboardSidebarNotifyOptions(companyRow, selectedGroup, ex
     }
     opts.expirationDate =
       resolveSidebarExpirationForFilter({ selectedGroup: anchorGroup, companyId: null }) ?? null;
-    if (companyRow?.company_id) {
-      opts.companyCode = companyRow.company_id;
-    }
     return opts;
   }
   if (companyRow) {
-    if (companyRow.company_id) opts.companyCode = companyRow.company_id;
-    opts.expirationDate = companyRow.expiration_date ?? null;
-    const id = Number(companyRow.id);
-    if (Number.isFinite(id) && id > 0) {
-      const cached = peekCompanySessionFlags(id);
-      const fromRow = resolveCompanyCategoryFlagsFromRow(companyRow);
-      if (cached) {
-        opts.hasGambling = Boolean(cached.has_gambling);
-        opts.hasBank = Boolean(cached.has_bank);
-      } else if (fromRow) {
-        opts.hasGambling = fromRow.hasGambling;
-        opts.hasBank = fromRow.hasBank;
-      }
-    }
-    return opts;
+    return applySidebarCompanyRowNotifyOptions(opts, companyRow);
   }
   const g = selectedGroup ? String(selectedGroup).trim().toUpperCase() : null;
   if (g) {
-    const includeBank = Boolean(persisted.groupAllMode) && !persisted.groupOnly;
-    if (!persisted.groupOnly) {
+    if (persisted.groupOnly) {
+      const groupGambling = resolveGroupOnlySidebarGambling(g);
+      if (groupGambling != null) opts.hasGambling = groupGambling;
+      opts.hasBank = false;
+    } else {
+      const includeBank = Boolean(persisted.groupAllMode);
       const groupFlags = resolveGroupCategoryFlagsForSidebar(g, { includeBank });
       if (groupFlags) {
         opts.hasGambling = groupFlags.hasGambling;
@@ -1188,7 +1228,8 @@ export function buildDashboardFilterEventDetailFromPersisted() {
   let hasGambling = notifyOpts.hasGambling ?? cachedFlags?.has_gambling;
   let hasBank = notifyOpts.hasBank ?? cachedFlags?.has_bank;
   const groupAllMode = isDashboardGroupAllMode() && effectiveCid == null && !groupOnly;
-  const groupsAllSidebarFlags = resolveGroupsAllSidebarCategoryFlags(filter);
+  const groupsAllSidebarFlags =
+    effectiveCid == null ? resolveGroupsAllSidebarCategoryFlags(filter) : null;
   if (groupsAllSidebarFlags) {
     hasGambling = groupsAllSidebarFlags.hasGambling;
     hasBank = groupsAllSidebarFlags.hasBank;
@@ -1198,6 +1239,9 @@ export function buildDashboardFilterEventDetailFromPersisted() {
       if (hasGambling == null) hasGambling = groupFlags.hasGambling;
       if (hasBank == null) hasBank = groupFlags.hasBank;
     }
+  } else if (groupOnly && value) {
+    const groupGambling = resolveGroupOnlySidebarGambling(value);
+    if (groupGambling != null) hasGambling = groupGambling;
   }
   if (groupOnly) {
     hasBank = false;
@@ -1330,49 +1374,57 @@ export async function loadOwnerCompaniesCached(fetcher) {
 
 /** Shared GET accessible tenants — one HTTP request per session (Layout prefetch + page boot). */
 export async function fetchOwnerCompaniesAll(options = {}) {
-  const { signal, throwOnError = false } = options;
-  return loadOwnerCompaniesCached(async () => {
-    const { tenants, accessibleParentTenantCodes } = await fetchAccessibleTenants({
+  const { signal, throwOnError = false, me = null } = options;
+  const rows = await loadOwnerCompaniesCached(async () => {
+    const { tenants, accessibleParentTenantCodes, raw } = await fetchAccessibleTenants({
       signal,
       all: true,
       throwOnError,
     });
-    persistAccessibleGroupIdsFromApi({ accessibleParentTenantCodes });
-    return tenants.map(tenantAccessibleRowToUiCompany).map(normalizeOwnerCompanyRow).filter(Boolean);
+    persistAccessibleGroupIdsFromApi({
+      ...raw,
+      accessible_parent_tenant_codes: accessibleParentTenantCodes,
+    });
+    return tenants
+      .map((t) => normalizeOwnerCompanyRow(tenantAccessibleRowToUiTenant(t)))
+      .filter(Boolean);
   });
+  return me ? filterCompaniesForUserScope(rows, me) : rows;
 }
 
 /**
- * Normalize tenant-accessible picker rows for sidebar / filter UI.
+ * Normalize tenant / company picker rows so `id` / `company_id` / `group_id` work for Group+Company pills.
+ * Spring tenant-accessible → id = tenant_id, company_id = tenant_code, group_id = parent_tenant_code.
  */
-export function resolveCompanyDisplayCode(row) {
-  return String(
-    row?.tenant_code ?? row?.company_id ?? row?.companyId ?? row?.code ?? row?.name ?? "",
-  )
-    .trim()
-    .toUpperCase();
-}
-
 export function normalizeOwnerCompanyRow(row) {
   if (!row || typeof row !== "object") return row;
-  const tenantIdRaw = row.tenant_id ?? row.tenantId ?? row.id;
-  const tenant_id = Number(tenantIdRaw);
-  const tenant_code = resolveCompanyDisplayCode(row);
-  const parent_tenant_code = row.parent_tenant_code ?? row.parentTenantCode ?? null;
-  const native_parent_tenant_code =
-    row.native_parent_tenant_code ?? row.nativeParentTenantCode ?? parent_tenant_code ?? null;
-  const tenant_type = row.tenant_type ?? row.tenantType ?? null;
-  const resolvedId = Number.isFinite(tenant_id) && tenant_id > 0 ? tenant_id : row.id;
+  const idRaw = row.id ?? row.tenant_id ?? row.tenantId;
+  const id = Number(idRaw);
+  const company_id =
+    row.company_id ?? row.companyId ?? row.tenant_code ?? row.tenantCode ?? row.code ?? "";
+  const group_id =
+    row.group_id ??
+    row.groupId ??
+    row.parent_tenant_code ??
+    row.parentTenantCode ??
+    row.group ??
+    null;
+  const native_group_id =
+    row.native_group_id ??
+    row.nativeGroupId ??
+    row.native_parent_tenant_code ??
+    row.nativeParentTenantCode ??
+    group_id ??
+    null;
   return {
     ...row,
-    tenant_id: Number.isFinite(tenant_id) && tenant_id > 0 ? tenant_id : tenantIdRaw,
-    tenant_code,
-    company_id: tenant_code,
-    parent_tenant_code,
-    native_parent_tenant_code,
-    group_id: row.group_id ?? row.groupId ?? parent_tenant_code ?? null,
-    tenant_type,
-    id: resolvedId,
+    id: Number.isFinite(id) && id > 0 ? id : row.id,
+    tenant_id: Number.isFinite(id) && id > 0 ? id : row.tenant_id ?? null,
+    company_id,
+    group_id,
+    native_group_id,
+    tenant_code: row.tenant_code ?? row.tenantCode ?? company_id,
+    parent_tenant_code: row.parent_tenant_code ?? row.parentTenantCode ?? group_id,
   };
 }
 
@@ -1382,7 +1434,7 @@ export function companyRowIsGroupEntityAnyShape(companyRow) {
   const grp = normalizeCompanyGroupId(companyRow);
   if (!grp) return false;
   const code = String(
-    companyRow.tenant_code ?? companyRow.company_id ?? companyRow.companyId ?? companyRow.code ?? companyRow.name ?? "",
+    companyRow.company_id ?? companyRow.companyId ?? companyRow.code ?? companyRow.name ?? "",
   )
     .trim()
     .toUpperCase();
@@ -1394,12 +1446,40 @@ export function companyRowIsGroupEntityAnyShape(companyRow) {
  * One pill per company code; prefer the row matching `preferredCompanyId` when duplicates exist.
  * Always merges group-entity rows (e.g. AP placeholder with empty company_id) so Transaction scope can resolve them.
  */
+/**
+ * Map UI `companyId` to a visible pill row id when owner duplicate rows use different PKs
+ * (e.g. login/session row vs group-sliced picker row for the same company code).
+ */
+export function resolveGcPickerHighlightId(companiesForPicker, companyId, companyCode = null) {
+  const pid = companyId != null && companyId !== "" ? Number(companyId) : Number.NaN;
+  if (!Number.isFinite(pid) || pid <= 0) return null;
+  const pills = Array.isArray(companiesForPicker) ? companiesForPicker : [];
+  
+  // 第一步：优先按 id 匹配，找到就返回
+  const matchById = pills.find((c) => Number(c.id) === pid);
+  if (matchById) return pid;
+  
+  // 第二步：如果 id 没匹配到，按 company_code 匹配
+  const code = String(companyCode ?? "").trim().toUpperCase();
+  if (code) {
+    const pill = pills.find(
+      (c) => String(c.company_id || "").trim().toUpperCase() === code,
+    );
+    const pillId = pill?.id != null ? Number(pill.id) : Number.NaN;
+    if (Number.isFinite(pillId) && pillId > 0) return pillId;
+  }
+  
+  // 第三步：如果都没匹配到，还是返回 pid
+  // 但是我们需要另一个修复来确保这个 pid 对应的公司在 pills 列表中！
+  return pid;
+}
+
 export function dedupeOwnerCompaniesByCode(companies, preferredCompanyId) {
   const list = filterCompaniesWithDisplayId(companies);
   const byCode = new Map();
   const norm = (v) => String(v || "").toUpperCase().trim();
   for (const comp of list) {
-    const key = norm(comp.tenant_code);
+    const key = norm(comp.company_id);
     if (!key) continue;
     const existing = byCode.get(key);
     if (!existing) {
@@ -1423,12 +1503,7 @@ export function dedupeOwnerCompaniesByCode(companies, preferredCompanyId) {
 }
 
 export function normalizeCompanyGroupId(comp) {
-  const raw =
-    comp?.parent_tenant_code ??
-    comp?.parentTenantCode ??
-    comp?.group_id ??
-    "";
-  return String(raw).trim().toUpperCase();
+  return String(comp?.parent_tenant_code ?? comp?.group_id ?? "").trim().toUpperCase();
 }
 
 /** Database/native group_id (not ownership-coalesced dashboard group_id). */
@@ -1583,7 +1658,7 @@ export function resolveInitialSelectedGroupFromSession(companies, currentCompany
 }
 
 export function filterCompaniesWithDisplayId(companies) {
-  return (companies || []).filter((c) => c?.tenant_code && String(c.tenant_code).trim() !== "");
+  return (companies || []).filter((c) => c?.company_id && String(c.company_id).trim() !== "");
 }
 
 /**
@@ -1708,7 +1783,7 @@ export function companyRowIsGroupEntity(companyRow, groupId) {
   if (!g || !companyRow) return false;
   if (isVirtualGroupLinkCompanyRow(companyRow)) return false;
   const code = String(
-    companyRow.tenant_code ?? companyRow.company_id ?? companyRow.companyId ?? companyRow.code ?? companyRow.name ?? "",
+    companyRow.company_id ?? companyRow.companyId ?? companyRow.code ?? companyRow.name ?? "",
   )
     .trim()
     .toUpperCase();

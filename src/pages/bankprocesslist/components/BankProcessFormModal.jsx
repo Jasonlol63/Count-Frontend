@@ -9,8 +9,6 @@ import {
 import {
   parseProfitSharingToRows,
   serializeProfitSharingRows,
-  parseBankContractRentalMonthsForDayEnd,
-  contractBillingEndYmdForBankForm,
   bankProcessFrequencyNormalized,
   BANK_PROCESS_CONTRACT_OPTIONS,
   formatBankProcessContractLabel,
@@ -70,14 +68,8 @@ export default function BankProcessFormModal({
     setForm((prev) => ({ ...prev, profit_sharing: serializeProfitSharingRows(next, accounts) }));
   };
 
+  // 允许 1st_of_every_month / monthly 手动填写 Day end，仅保持不得早于 Day start。
   let dayEndMin = dayStart || undefined;
-  if (!isOnce && !isWeek && !isDay && frequency !== "monthly" && dayStart && contract) {
-    const term = parseBankContractRentalMonthsForDayEnd(contract);
-    const calculated = term ? contractBillingEndYmdForBankForm(dayStart, term, frequency) : null;
-    if (calculated) {
-      dayEndMin = calculated;
-    }
-  }
 
   return (
     <ProcessModalPortal>
@@ -120,20 +112,15 @@ export default function BankProcessFormModal({
                         {editMode ? (
                           <input id="bank_bank" readOnly className="bank-input" value={form.bank} />
                         ) : (
-                          <select
+                          <BankSimpleSelect
                             id="bank_bank"
-                            name="bank"
-                            className="bank-select"
                             value={form.bank}
-                            required
+                            onChange={(v) => setForm((prev) => ({ ...prev, bank: v }))}
+                            options={banksList.map((b) => ({ value: b, label: b }))}
+                            placeholder={t("selectBank")}
                             disabled={!form.country}
-                            onChange={(ev) => setForm((prev) => ({ ...prev, bank: ev.target.value }))}
-                          >
-                            <option value="">{t("selectBank")}</option>
-                            {banksList.map((b) => (
-                              <option key={b} value={b}>{b}</option>
-                            ))}
-                          </select>
+                            includeEmptyOption
+                          />
                         )}
                         {!editMode ? (
                           <button type="button" className="bank-add-btn" title={t("addNewBank")} onClick={onOpenBankModal}>+</button>
@@ -276,7 +263,7 @@ export default function BankProcessFormModal({
                               id="bank_day_end_monthly_cap_label_text"
                               className={`bank-day-end-cap-label${capOn ? " is-on" : ""}`}
                             >
-                              {capOn ? "ON" : "OFF"}
+                              {capOn ? t("toggleOn") : t("toggleOff")}
                             </span>
                             <label className="bank-day-end-cap-switch" htmlFor="bank_day_end_monthly_cap_switch">
                               <input
@@ -348,7 +335,7 @@ export default function BankProcessFormModal({
               </div>
               <div className="bank-form-row bank-form-row-last">
                 <div className="bank-form-cell bank-form-cell-left">
-                  <div className="form-group bank-day-start-frequency-wrap" style={{ marginBottom: 20 }}>
+                  <div className="form-group bank-day-start-frequency-wrap">
                     <label htmlFor="bank_day_start_frequency">{t("frequency")}</label>
                     <BankSimpleSelect
                       id="bank_day_start_frequency"
@@ -471,6 +458,33 @@ export default function BankProcessFormModal({
                       <p className="bank-remark-filled-hint">{[form.sop && t("sopFilled"), form.remark && t("remarkFilled")].filter(Boolean).join(" · ")}</p>
                     ) : null}
                   </div>
+                  {editMode ? (
+                    <div className="bank-form-section bank-form-section--record">
+                      <h3 className="account-section-header">{t("recordSection")}</h3>
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label htmlFor="bank_dts_modified">{t("dtsModified")}</label>
+                          <div id="bank_dts_modified" className="bank-form-dts-readonly">
+                            <span id="bank_dts_modified_date">{form.dts_modified_display || ""}</span>
+                            <span id="bank_dts_modified_user" className="bank-form-dts-readonly-user">
+                              {form.dts_modified_user_display || ""}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label htmlFor="bank_dts_created">{t("dtsCreated")}</label>
+                          <div id="bank_dts_created" className="bank-form-dts-readonly">
+                            <span id="bank_dts_created_date">{form.dts_created || ""}</span>
+                            <span id="bank_dts_created_user" className="bank-form-dts-readonly-user">
+                              {form.created_by || ""}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>

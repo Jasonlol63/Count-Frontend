@@ -23,6 +23,7 @@ import {
 } from "../../../utils/company/sharedCompanyFilter.js";
 import {
   filterCompaniesForBankOnlyPills,
+  filterCompaniesForDataCaptureMaintenancePills,
   filterCompaniesForGamesPills,
 } from "../../../utils/company/companyCategoryFlags.js";
 import { useGcFilterWithAllModes } from "../../../utils/company/useGcFilterWithAllModes.js";
@@ -48,7 +49,7 @@ export function useMaintenanceGroupCompanyFilter({
   onClearCompany,
   switchingCompany = false,
   enableGroupAnchorSession = true,
-  /** "games" — hide bank-only (CX); "bank" — hide games-only; payment/process list omit this. */
+  /** "games" — hide bank-only (CX); "datacapture" — Games + bank-only; "bank" — hide games-only; payment/process list omit this. */
   pillCategory = null,
 }) {
   const { me } = useAuthSession();
@@ -136,14 +137,44 @@ export function useMaintenanceGroupCompanyFilter({
   );
 
   const categoryScopedCompanies = useMemo(() => {
+    let filtered;
     if (pillCategory === "games") {
-      return filterCompaniesForGamesPills(visibleCompanies, companyId);
+      filtered = filterCompaniesForGamesPills(visibleCompanies, companyId);
+    } else if (pillCategory === "datacapture") {
+      filtered = filterCompaniesForDataCaptureMaintenancePills(visibleCompanies, companyId);
+    } else if (pillCategory === "bank") {
+      filtered = filterCompaniesForBankOnlyPills(visibleCompanies, companyId);
+    } else {
+      filtered = visibleCompanies;
     }
-    if (pillCategory === "bank") {
-      return filterCompaniesForBankOnlyPills(visibleCompanies, companyId);
+
+    // 关键修复：确保当前选中的公司一定在最终列表中！
+    if (companyId != null) {
+      // 先检查 filtered 中是否已经有该公司
+      const hasCompany = filtered.some((c) => Number(c.id) === Number(companyId));
+      if (!hasCompany) {
+        // 从完整的 companies 列表中找到该公司并添加进去
+        const companyToAdd = companies.find((c) => Number(c.id) === Number(companyId));
+        if (companyToAdd) {
+          // 先检查是否已有相同 company_code 的公司，有就替换，没有就添加
+          const existingIndex = filtered.findIndex(
+            (c) => String(c.company_id).toUpperCase().trim() === 
+                   String(companyToAdd.company_id).toUpperCase().trim()
+          );
+          if (existingIndex >= 0) {
+            // 替换掉 existingIndex 位置的公司
+            const newList = [...filtered];
+            newList[existingIndex] = companyToAdd;
+            return newList;
+          } else {
+            // 直接添加进去
+            return [...filtered, companyToAdd];
+          }
+        }
+      }
     }
-    return visibleCompanies;
-  }, [visibleCompanies, pillCategory, companyId]);
+    return filtered;
+  }, [visibleCompanies, pillCategory, companyId, companies]);
 
   const scopedGroupIds = useMemo(() => {
     if (pillCategory !== "bank") return groupIds;

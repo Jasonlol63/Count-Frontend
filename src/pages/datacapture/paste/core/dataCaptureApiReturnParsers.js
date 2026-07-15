@@ -1,5 +1,65 @@
 /** API-RETURN / 4.RETURN parsers. */
 
+/** Collapse newlines / runs of whitespace inside a pasted RETURN cell (matches PHP). */
+export function normalizeReturnPasteCell(raw) {
+    return String(raw == null ? "" : raw)
+        .replace(/[\r\n\u2028\u2029]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function extractSimpleBinaryOperatorTokens(expression) {
+    if (!expression || typeof expression !== "string") return null;
+    const compact = expression.replace(/\s/g, "").replace(/,/g, "");
+    if (/[()+]/.test(compact)) return null;
+    const m = compact.match(/^(-?\d+(?:\.\d+)?)([\-*/])(-?\d+(?:\.\d+)?)$/);
+    if (!m) return null;
+    return [m[1], m[2], m[3]];
+}
+
+function extractSimpleColonValueTokens(expression) {
+    if (!expression || typeof expression !== "string") return null;
+    if (extractSimpleBinaryOperatorTokens(expression)) return null;
+    const compact = expression.replace(/\s/g, "").replace(/,/g, "");
+    if (/[*/]/.test(compact) || /\+/.test(compact)) return null;
+    if (/^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$/.test(compact)) return null;
+    let m = compact.match(/^(-?\d+(?:\.\d+)?)$/);
+    if (m) return [m[1]];
+    m = compact.match(/^\((-?\d+(?:\.\d+)?)\)$/);
+    if (m) return [m[1]];
+    return null;
+}
+
+/** PHP `isReturnFormulaCell` — whether a cell should expand into label + numeric columns. */
+export function isReturnFormulaCell(raw) {
+    if (raw === null || raw === undefined) return false;
+    const s = normalizeReturnPasteCell(raw);
+    if (!s) return false;
+
+    const isDatePattern =
+        /^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s) || /^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s);
+    if (isDatePattern) return false;
+    if (!/\d/.test(s)) return false;
+
+    const hasParentheses = s.includes("(") || s.includes(")");
+    const hasColon = s.includes(":");
+    const hasMathOperators = s.includes("+") || s.includes("*") || s.includes("/");
+    const hasSubtractionBetweenNumbers = /[\d,.]+\s*-\s*[\d,.]+/.test(s);
+    const exprAfterColon = hasColon ? s.substring(s.indexOf(":") + 1).trim() : "";
+    const hasColonAndSingleValue = hasColon && extractSimpleColonValueTokens(exprAfterColon) !== null;
+    const hasColonAndOperators =
+        hasColon && (hasParentheses || hasMathOperators || hasSubtractionBetweenNumbers);
+
+    if (/[A-Za-z]/.test(s)) {
+        return hasColonAndOperators || hasColonAndSingleValue;
+    }
+
+    const numericOnly = s.replace(/,/g, "");
+    if (/^-?\d+(?:\.\d+)?$/.test(numericOnly)) return false;
+    if (!/[+\-*/()[\]]/.test(s)) return false;
+    return true;
+}
+
 /**
  * Whether a cell should be split as a RETURN formula/description column.
  * Supports `LABEL : (expr)` from Transaction Payment (label may contain letters)

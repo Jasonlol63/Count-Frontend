@@ -26,7 +26,12 @@ function normalizeSourcePercent(row, form) {
   const fromAttr = row?.getAttribute?.("data-source-percent") || "";
   const fromForm = form?.sourcePercentValue || form?.sourcePercent || "";
   const raw = String(fromAttr || fromForm || "1").trim() || "1";
-  if (isMisplacedCommission(raw)) return "1";
+  const formulaBody =
+    row?.getAttribute?.("data-formula-operators") ||
+    form?.formulaOperators ||
+    form?.lastSourceValue ||
+    "";
+  if (isMisplacedCommission(raw, formulaBody)) return "1";
   return raw;
 }
 

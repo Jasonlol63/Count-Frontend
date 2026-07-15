@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { accountModalOverlayZIndex, accountCompanyPickerZIndex } from "./ProcessModalPortal.jsx";
+import SimpleSelect from "./SimpleSelect.jsx";
 import { useSubmitGuard } from "../hooks/useSubmitGuard.js";
+import { formatAccountRoleDisplay } from "../translateFile/pages/accountTranslate.js";
 
 function upper(v) {
   return String(v || "").toUpperCase();
@@ -108,10 +110,35 @@ export default function AccountModal({
     return companyRows.filter((c) => String(c.company_id || "").toUpperCase().includes(q));
   }, [companyRows, companySearchQuery]);
 
+  const translate = (key, params) => (typeof t === "function" ? t(key, params) : key);
+
+  const roleOptions = useMemo(
+    () =>
+      (orderedRoles || []).map((r) => ({
+        value: r,
+        label: formatAccountRoleDisplay(translate, r),
+      })),
+    [orderedRoles, t],
+  );
+
+  const alertTypeOptions = useMemo(
+    () => [
+      { value: "weekly", label: translate("weekly") },
+      { value: "monthly", label: translate("monthly") },
+      ...Array.from({ length: 31 }, (_, i) => ({
+        value: String(i + 1),
+        label: translate("days", { n: i + 1 }),
+      })),
+    ],
+    [t],
+  );
+
   if (!open) return null;
 
-  const text = (key, params) => (typeof t === "function" ? t(key, params) : key);
+  const text = translate;
   const modalId = isEditMode ? "account-editModal" : "account-addModal";
+  const paymentAlertOn = form.payment_alert === "1";
+
   const currencyPlaceholder = text("newCurrencyPlaceholder");
   /** HTML size ≈ placeholder width (ch); CJK glyphs render wider → slight bump */
   const hasCjk = /[\u4e00-\u9fff\u3000-\u303f\u3040-\u30ff]/.test(currencyPlaceholder);
@@ -211,94 +238,68 @@ export default function AccountModal({
         </div>
         <div className="account-modal-body">
           <form className="account-form" onSubmit={handleFormSubmit}>
-            <div className="account-form-columns">
-              <div className="account-form-column">
-                <h3 className="account-section-header">{text("personalInformation")}</h3>
-                <div className="account-form-group">
-                  <label>{text("accountIdRequired")}</label>
-                  <input
-                    type="text"
-                    value={form.account_id}
-                    onChange={(e) => setForm((f) => ({ ...f, account_id: upper(e.target.value) }))}
-                    disabled={!!isEditMode}
-                    required
-                  />
-                </div>
-                <div className="account-form-group">
-                  <label>{text("nameRequired")}</label>
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: upper(e.target.value) }))}
-                    required
-                  />
-                </div>
-                <div className="account-form-group">
-                  <label>{text("roleRequired")}</label>
-                  <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} required>
-                    <option value="">{text("selectRole")}</option>
-                    {(orderedRoles || []).map((r) => (
-                      <option key={r} value={r}>
-                        {upper(r) === "UPLINE" ? text("supplier") : r}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="account-form-group">
-                  <label>{isEditMode ? text("password") : text("passwordRequired")}</label>
-                  <input
-                    type="password"
-                    value={form.password}
-                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                    required={!isEditMode}
-                  />
+            <div className="account-form-columns account-form-columns--paired-fields">
+              <h3 className="account-section-header">{text("personalInformation")}</h3>
+              <h3 className="account-section-header">{text("payment")}</h3>
+
+              <div className="account-form-group">
+                <label>{text("accountIdRequired")}</label>
+                <input
+                  type="text"
+                  value={form.account_id}
+                  onChange={(e) => setForm((f) => ({ ...f, account_id: upper(e.target.value) }))}
+                  disabled={!!isEditMode}
+                  required
+                />
+              </div>
+              <div className="account-form-group">
+                <label>{text("paymentAlert")}</label>
+                <div className="account-radio-group">
+                  <label className="account-radio-label">
+                    <input
+                      type="radio"
+                      name="payment_alert"
+                      value="1"
+                      checked={form.payment_alert === "1"}
+                      onChange={() => setForm((f) => ({ ...f, payment_alert: "1" }))}
+                    />
+                    {text("yes")}
+                  </label>
+                  <label className="account-radio-label">
+                    <input
+                      type="radio"
+                      name="payment_alert"
+                      value="0"
+                      checked={form.payment_alert === "0"}
+                      onChange={() =>
+                        setForm((f) => ({ ...f, payment_alert: "0", alert_type: "", alert_start_date: "", alert_amount: "" }))
+                      }
+                    />
+                    {text("noWord")}
+                  </label>
                 </div>
               </div>
 
-              <div className="account-form-column">
-                <h3 className="account-section-header">{text("payment")}</h3>
-                <div className="account-form-group">
-                  <label>{text("paymentAlert")}</label>
-                  <div className="account-radio-group">
-                    <label className="account-radio-label">
-                      <input
-                        type="radio"
-                        name="payment_alert"
-                        value="1"
-                        checked={form.payment_alert === "1"}
-                        onChange={() => setForm((f) => ({ ...f, payment_alert: "1" }))}
-                      />
-                      {text("yes")}
-                    </label>
-                    <label className="account-radio-label">
-                      <input
-                        type="radio"
-                        name="payment_alert"
-                        value="0"
-                        checked={form.payment_alert === "0"}
-                        onChange={() =>
-                          setForm((f) => ({ ...f, payment_alert: "0", alert_type: "", alert_start_date: "", alert_amount: "" }))
-                        }
-                      />
-                      {text("noWord")}
-                    </label>
-                  </div>
-                </div>
-
-                {form.payment_alert === "1" && (
+              <div className="account-form-group">
+                <label>{text("nameRequired")}</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: upper(e.target.value) }))}
+                  required
+                />
+              </div>
+              {paymentAlertOn ? (
+                <div className="account-form-columns__payment-extra">
                   <div className="account-form-row">
                     <div className="account-form-group">
                       <label>{text("alertType")}</label>
-                      <select value={form.alert_type} onChange={(e) => setForm((f) => ({ ...f, alert_type: e.target.value }))}>
-                        <option value="">{text("selectType")}</option>
-                        <option value="weekly">{text("weekly")}</option>
-                        <option value="monthly">{text("monthly")}</option>
-                        {Array.from({ length: 31 }, (_, i) => (
-                          <option key={i + 1} value={String(i + 1)}>
-                            {text("days", { n: i + 1 })}
-                          </option>
-                        ))}
-                      </select>
+                      <SimpleSelect
+                        value={form.alert_type}
+                        onChange={(v) => setForm((f) => ({ ...f, alert_type: v }))}
+                        options={alertTypeOptions}
+                        placeholder={text("selectType")}
+                      />
                     </div>
                     <div className="account-form-group">
                       <label>{text("startDate")}</label>
@@ -319,31 +320,66 @@ export default function AccountModal({
                       />
                     </div>
                   </div>
-                )}
-
-                {form.payment_alert === "1" && (
-                  <div className="account-form-group">
-                    <label>{text("alertAmount")}</label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder={text("enterAmountPlaceholder")}
-                      value={form.alert_amount || ""}
-                      onChange={(e) => setForm((f) => ({ ...f, alert_amount: e.target.value }))}
-                    />
-                  </div>
-                )}
-
-                <div className="account-form-group">
+                </div>
+              ) : (
+                <div className="account-form-group account-form-group--remark">
                   <label>{text("remark")}</label>
-                  <textarea
-                    rows="1"
+                  <input
+                    type="text"
+                    id={isEditMode ? "edit_remark" : "add_remark"}
                     value={form.remark}
                     onChange={(e) => setForm((f) => ({ ...f, remark: upper(e.target.value) }))}
-                    style={{ resize: "none", overflowY: "hidden", lineHeight: "1.5" }}
                   />
                 </div>
+              )}
+
+              <div className="account-form-group">
+                <label>{text("roleRequired")}</label>
+                <SimpleSelect
+                  value={form.role}
+                  onChange={(v) => setForm((f) => ({ ...f, role: v }))}
+                  options={roleOptions}
+                  placeholder={text("selectRole")}
+                  required
+                />
               </div>
+              {paymentAlertOn ? (
+                <div className="account-form-group">
+                  <label>{text("alertAmount")}</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder={text("enterAmountPlaceholder")}
+                    value={form.alert_amount || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, alert_amount: e.target.value }))}
+                  />
+                </div>
+              ) : (
+                <div className="account-form-columns__payment-extra" />
+              )}
+
+              <div className="account-form-group">
+                <label>{text("passwordRequired")}</label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                  required
+                />
+              </div>
+              {paymentAlertOn ? (
+                <div className="account-form-group account-form-group--remark account-form-group--remark-bottom">
+                  <label>{text("remark")}</label>
+                  <input
+                    type="text"
+                    id={isEditMode ? "edit_remark" : "add_remark"}
+                    value={form.remark}
+                    onChange={(e) => setForm((f) => ({ ...f, remark: upper(e.target.value) }))}
+                  />
+                </div>
+              ) : (
+                <div className="account-form-columns__payment-extra" />
+              )}
             </div>
 
             <div className="account-form-section">

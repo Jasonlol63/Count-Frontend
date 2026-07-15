@@ -1,4 +1,4 @@
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+﻿import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import {
   DEFAULT_PERMISSIONS_BANKPROCESS,
   fetchDomainCompanyPermissions,
@@ -31,17 +31,23 @@ export function isBankprocessMaintenanceRowSelectable(row) {
 }
 
 /**
- * Legacy Maintenance – Bank: one Post/Resend batch shares the same DTS Created timestamp.
+ * One Post/Resend batch: same DTS Created + bank process + period type + transaction date.
  * Clicking any checkbox selects every selectable row in that batch.
  */
 export function bankprocessMaintenanceBatchKey(row) {
   const ts = String(row?.dts_created ?? "").trim();
+  const bpId = Number(row?.source_bank_process_id) || 0;
+  const pt = String(row?.period_type ?? "monthly").trim().toLowerCase() || "monthly";
+  const txDate = String(row?.date ?? "").trim();
+  if (ts && bpId > 0) {
+    return `${ts}|${bpId}|${pt}|${txDate}`;
+  }
   if (ts) return ts;
   const tid = row?.transaction_id;
   return tid != null && tid !== "" ? `__tid_${tid}` : "";
 }
 
-/** @param {Array<{ transaction_id?: number, dts_created?: string, is_deleted?: unknown }>} rows */
+/** @param {Array<{ transaction_id?: number, dts_created?: string, source_bank_process_id?: number, period_type?: string, date?: string, is_deleted?: unknown }>} rows */
 export function bankprocessMaintenanceIdsInBatch(rows, batchKey) {
   if (!batchKey || !Array.isArray(rows)) return [];
   const ids = [];
@@ -56,7 +62,7 @@ export function bankprocessMaintenanceIdsInBatch(rows, batchKey) {
 
 /**
  * @param {number[]} selectedIds
- * @param {Array<{ transaction_id?: number, dts_created?: string, is_deleted?: unknown }>} rows
+ * @param {Array<{ transaction_id?: number, dts_created?: string, source_bank_process_id?: number, period_type?: string, date?: string, is_deleted?: unknown }>} rows
  * @param {number} clickedTransactionId
  */
 export function toggleBankprocessMaintenanceBatchSelection(selectedIds, rows, clickedTransactionId) {
@@ -90,7 +96,7 @@ export async function fetchCompanyPermissions(companyCode) {
 export async function fetchCompanyCurrencies(companyId) {
   let url = buildApiUrl("api/transactions/get_company_currencies_api.php");
   if (companyId) {
-    url += `?company_id=${encodeURIComponent(companyId)}`;
+    url += `?tenant_id=${encodeURIComponent(companyId)}`;
   }
   const response = await fetch(url);
   const data = await response.json();
@@ -142,7 +148,7 @@ export async function deleteBankprocessData(transactionIds) {
 }
 
 export async function updateSessionCompany(companyId) {
-  const res = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`));
+  const res = await fetch(buildApiUrl(`auth/switch-tenant?tenant_id=${companyId}`));
   const result = await res.json();
   if (!result.success) {
     throw new Error(result.error || "Switch company failed");

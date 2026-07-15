@@ -37,6 +37,7 @@ export function DataCaptureProvider({ children }) {
 
   const replaceGrid = useCallback(
     (nextGrid) => {
+      gridRef.current = nextGrid;
       setGridState(nextGrid);
       bumpGridVersion();
     },
@@ -47,6 +48,7 @@ export function DataCaptureProvider({ children }) {
     setGridState((prev) => {
       const base = prev || createEmptyGrid();
       const next = typeof updater === "function" ? updater(base) : updater;
+      gridRef.current = next;
       return next;
     });
   }, []);
@@ -54,9 +56,12 @@ export function DataCaptureProvider({ children }) {
   const updateCell = useCallback((rowIndex, colIndex, patch) => {
     setGridState((prev) => {
       if (!prev) return prev;
-      return setCell(prev, rowIndex, colIndex, patch);
+      const next = setCell(prev, rowIndex, colIndex, patch);
+      gridRef.current = next;
+      return next;
     });
-  }, []);
+    bumpGridVersion();
+  }, [bumpGridVersion]);
 
   const value = useMemo(
     () => ({

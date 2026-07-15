@@ -1,0 +1,95 @@
+/* Remove Word: plain text input (comma-separated). Keep class name so form CSS
+   `:not(.dc-remove-word-chip-input__field)` still skips forced uppercase. */
+
+.process-form .form-group .dc-remove-word-chip-input__field,
+.dc-remove-word-chip-input__field {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    text-transform: uppercase !important;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+body.datacapture-page .process-form .form-group .dc-remove-word-chip-input__field {
+    flex: 1;
+    min-height: 36px;
+    padding: clamp(6px, 0.35vw, 9px) clamp(8px, 0.63vw, 12px);
+    border: 1px solid var(--dc-border, #e2e8f0);
+    border-radius: 6px;
+    font-size: clamp(10px, 0.74vw, 14px);
+    font-weight: 600;
+    color: #334155;
+    background: #ffffff;
+}
+
+body.datacapture-page .process-form .form-group .dc-remove-word-chip-input__field:focus,
+body.datacapture-page .process-form .form-group .dc-remove-word-chip-input__field:focus-visible {
+    outline: none;
+    border-color: var(--dc-input-focus-border, #3b82f6);
+    box-shadow: var(--dc-input-focus-shadow, 0 0 0 2px rgba(59, 130, 246, 0.12));
+}
+
+body.ec-auth-shell.datacapture-page .process-form .dc-remove-word-chip-input__field:focus,
+body.ec-auth-shell.datacapture-page .process-form .dc-remove-word-chip-input__field:focus-visible {
+    outline: none !important;
+    border-color: var(--dc-input-focus-border, #3b82f6) !important;
+    box-shadow: var(--dc-input-focus-shadow, 0 0 0 2px rgba(59, 130, 246, 0.12)) !important;
+}
+
+.process-form-modal .process-form .form-group.process-form-remove-word-group,
+#addModal .modal-content.process-form-modal .process-form .form-group.process-form-remove-word-group,
+#editModal .modal-content.process-form-modal .process-form .form-group.process-form-remove-word-group {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    min-width: 0;
+}
+
+.process-form-modal .process-form .form-group.process-form-remove-word-group > label,
+#addModal .modal-content.process-form-modal .process-form .form-group.process-form-remove-word-group > label,
+#editModal .modal-content.process-form-modal .process-form .form-group.process-form-remove-word-group > label {
+    width: auto !important;
+    max-width: 100% !important;
+    margin-bottom: calc(var(--space-gap, 0.75rem) * 0.45) !important;
+}
+
+.process-form-modal .process-form .form-group.process-form-remove-word-group .field-help,
+#addModal .modal-content.process-form-modal .process-form .form-group.process-form-remove-word-group .field-help,
+#editModal .modal-content.process-form-modal .process-form .form-group.process-form-remove-word-group .field-help {
+    display: block;
+    margin-top: calc(var(--space-gap, 0.75rem) * 0.3);
+    font-style: italic;
+    color: #666;
+    line-height: 1.25;
+}
+
+.process-form-modal .process-form .form-group .dc-remove-word-chip-input__field,
+#addModal .modal-content.process-form-modal .process-form .form-group .dc-remove-word-chip-input__field,
+#editModal .modal-content.process-form-modal .process-form .form-group .dc-remove-word-chip-input__field {
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
+    min-height: var(--process-form-modal-control-min-h, clamp(2.75rem, 2.25vw, 3.25rem));
+    padding: calc(var(--space-gap, 0.75rem) * 0.45) calc(var(--space-gap, 0.75rem) * 0.65) !important;
+    border: 1px solid var(--dc-border, #e2e8f0) !important;
+    border-radius: 6px !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    font-size: clamp(10px, 0.74vw, 14px) !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+}
+
+.process-form-modal .process-form .form-group .dc-remove-word-chip-input__field:focus,
+.process-form-modal .process-form .form-group .dc-remove-word-chip-input__field:focus-visible,
+#addModal .modal-content.process-form-modal .process-form .form-group .dc-remove-word-chip-input__field:focus,
+#addModal .modal-content.process-form-modal .process-form .form-group .dc-remove-word-chip-input__field:focus-visible,
+#editModal .modal-content.process-form-modal .process-form .form-group .dc-remove-word-chip-input__field:focus,
+#editModal .modal-content.process-form-modal .process-form .form-group .dc-remove-word-chip-input__field:focus-visible {
+    outline: none !important;
+    border-color: var(--dc-input-focus-border, #3b82f6) !important;
+    box-shadow: var(--dc-input-focus-shadow, 0 0 0 2px rgba(59, 130, 246, 0.12)) !important;
+}

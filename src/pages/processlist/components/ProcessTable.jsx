@@ -1,5 +1,9 @@
 import React from "react";
 import { assetUrl } from "../../../utils/core/apiUrl.js";
+import {
+  formatProcessDayUseDisplay,
+  formatProcessStatusDisplay,
+} from "../../../translateFile/pages/processListTranslate.js";
 
 function upperCell(val) {
   if (val == null || val === "") return "";
@@ -14,13 +18,6 @@ function processStatusBadgeClass(statusKey) {
   if (statusKey === "active") return "status-active";
   if (statusKey === "waiting") return "status-waiting";
   return "status-inactive";
-}
-
-function processStatusLabel(statusKey) {
-  if (statusKey === "active") return "ACTIVE";
-  if (statusKey === "inactive") return "INACTIVE";
-  if (statusKey === "waiting") return "WAITING";
-  return statusKey ? statusKey.toUpperCase() : "INACTIVE";
 }
 
 function ProcessSortIcon({ column, sortColumn, sortDirection }) {
@@ -38,7 +35,8 @@ export default function ProcessTable({
   suppressEmpty = false,
   pageRows,
   currentPage,
-  PAGE_SIZE,
+  pageSize,
+  listRegionRef,
   sortColumn,
   sortDirection,
   onSort,
@@ -78,6 +76,7 @@ export default function ProcessTable({
     <div
       className={`process-table-wrapper games-process-table${showSelectColumn ? " process-table-wrapper--select-col" : ""}`}
       id="processTableWrapper"
+      ref={listRegionRef}
     >
       <div className="table-header games-process-table-header" id="tableHeader">
         <div className="header-item gambling-header">
@@ -106,7 +105,11 @@ export default function ProcessTable({
           </div>
         ) : null}
       </div>
-      <div className="process-cards" id="processTableBody">
+      <div
+        className={`process-cards${!showAll && pageRows.length > 0 ? " process-cards--paged-fill" : ""}`}
+        id="processTableBody"
+        style={!showAll && pageRows.length > 0 ? { "--games-process-page-size": Math.max(pageSize, pageRows.length) } : undefined}
+      >
         {pageRows.length === 0 && !suppressEmpty ? (
           <div className="process-card">
             <div className="card-item" style={{ textAlign: "left", padding: 20, gridColumn: "1 / -1" }}>
@@ -123,7 +126,7 @@ export default function ProcessTable({
               data-id={row.id}
             >
               <div className="card-item">
-                {(showAll ? idx : (currentPage - 1) * PAGE_SIZE + idx) + 1}
+                {(showAll ? idx : (currentPage - 1) * pageSize + idx) + 1}
               </div>
               <div className="card-item">{upperCell(row.process_name)}</div>
               <div className="card-item">{upperCell(row.description)}</div>
@@ -137,11 +140,11 @@ export default function ProcessTable({
                   role="button"
                   style={mutationsBlocked ? { cursor: "not-allowed" } : undefined}
                 >
-                  {processStatusLabel(statusKey)}
+                  {formatProcessStatusDisplay(t, statusKey)}
                 </span>
               </div>
               <div className="card-item">{upperCell(row.currency)}</div>
-              <div className="card-item">{upperCell(row.day_use)}</div>
+              <div className="card-item">{formatProcessDayUseDisplay(t, row.day_use)}</div>
               <div className="card-item card-item--action">
                 <button
                   type="button"

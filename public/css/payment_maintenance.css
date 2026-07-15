@@ -1159,6 +1159,7 @@ body.maintenance-page .maintenance-modal .btn-delete:hover {
     white-space: nowrap;
     border-bottom: none;
     min-height: var(--payment-list-cell-min-height);
+    min-width: 0;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -1246,7 +1247,16 @@ body.maintenance-page .maintenance-modal .btn-delete:hover {
     overflow: hidden;
     text-overflow: ellipsis;
     width: 100%;
+    min-width: 0;
     box-sizing: border-box;
+}
+
+.payment-maintenance-page-root .maintenance-virtual-cell .portal-tooltip-anchor {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    flex: 1 1 auto;
 }
 
 .payment-maintenance-page-root .maintenance-virtual-cell--left .payment-cell-text {

@@ -1,9 +1,60 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import SimpleSelect from "../../components/SimpleSelect.jsx";
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
+import { useLoginLang } from "../../utils/i18n/useLoginLang.js";
 import "../../../public/css/accountCSS.css";
 import "../../../public/css/deleted-log.css";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
+
+const DL_I18N = {
+  en: {
+    user: "User",
+    module: "Module",
+    search: "Search",
+    searchPh: "User, page, Acc ID, IP…",
+    apply: "Apply",
+    all: "All",
+    time: "Time",
+    company: "Company",
+    accId: "Acc ID",
+    whatHappened: "What happened",
+    ip: "IP",
+    detail: "Detail",
+    restore: "Restore",
+    view: "View",
+    noRecords: "No records.",
+    loading: "Loading…",
+    jsonTitle: "Deleted data (JSON)",
+    restoreConfirm: "Restore this record from the log?",
+    restoreFailed: "Restore failed",
+    restoreCompanyHint:
+      "Data was written back. To view it on Account List etc., switch the sidebar to the company of this log (internal company id: {id}).",
+  },
+  zh: {
+    user: "用户",
+    module: "模块",
+    search: "搜索",
+    searchPh: "用户、页面、Acc ID、IP…",
+    apply: "应用",
+    all: "全部",
+    time: "时间",
+    company: "公司",
+    accId: "Acc ID",
+    whatHappened: "删除内容",
+    ip: "IP",
+    detail: "详情",
+    restore: "恢复",
+    view: "查看",
+    noRecords: "暂无记录。",
+    loading: "加载中…",
+    jsonTitle: "已删除数据（JSON）",
+    restoreConfirm: "确定从日志恢复这条记录吗？",
+    restoreFailed: "恢复失败",
+    restoreCompanyHint:
+      "数据已写回数据库。若要在账号列表等页面查看，请先在侧栏切换到该删除记录所属公司（内部 company id: {id}）。",
+  },
+};
 
 function buildListUrl(searchParams) {
   const u = new URL(buildApiUrl("api/deleted_log_list_api.php"));
@@ -24,6 +75,8 @@ function buildListUrl(searchParams) {
 export default function DeletedLogPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const lang = useLoginLang();
+  const t = useMemo(() => DL_I18N[lang === "zh" ? "zh" : "en"], [lang]);
 
   const [loading, setLoading] = useState(true);
   const [payload, setPayload] = useState(null);
@@ -42,10 +95,10 @@ export default function DeletedLogPage() {
     const prev = document.title;
     document.title = "Deleted Log - EazyCount";
     document.body.classList.remove("bg");
-    document.body.classList.add("account-page");
+    document.body.classList.add("account-page", "deleted-log-page");
     return () => {
       document.title = prev;
-      document.body.classList.remove("account-page");
+      document.body.classList.remove("account-page", "deleted-log-page");
       document.body.classList.add("dashboard-page");
     };
   }, []);
@@ -135,7 +188,7 @@ export default function DeletedLogPage() {
 
   const onRestore = (id) => {
     const n = parseInt(String(id), 10);
-    if (!n || !window.confirm("Restore this record from the log?")) return;
+    if (!n || !window.confirm(t.restoreConfirm)) return;
     const sidebarCompanyId = payload?.sidebar_company_id != null ? String(payload.sidebar_company_id) : "";
     fetch(buildApiUrl("api/restore_api.php"), {
       method: "POST",
@@ -150,19 +203,15 @@ export default function DeletedLogPage() {
           const lc = d.log_company_id != null ? String(d.log_company_id) : "";
           const sid = sidebarCompanyId;
           if (lc !== "" && String(sid) !== lc) {
-            window.alert(
-              "数据已写回数据库。若要在账号列表等页面查看，请先在侧栏切换到该删除记录所属公司（内部 company id: " +
-                lc +
-                "）。"
-            );
+            window.alert(t.restoreCompanyHint.replace("{id}", lc));
           }
           load();
         } else {
-          window.alert(j && (j.message || j.error) ? j.message || j.error : "Restore failed");
+          window.alert(j && (j.message || j.error) ? j.message || j.error : t.restoreFailed);
         }
       })
       .catch(() => {
-        window.alert("Restore failed");
+        window.alert(t.restoreFailed);
       });
   };
 
@@ -210,47 +259,41 @@ export default function DeletedLogPage() {
           <form className="deleted-log-toolbar" onSubmit={onApply}>
             {appliedEntry !== "" ? <input type="hidden" name="entry" value={appliedEntry} /> : null}
             <div>
-              <label htmlFor="f-user">User</label>
-              <select
+              <label htmlFor="f-user">{t.user}</label>
+              <SimpleSelect
                 id="f-user"
                 value={draftUser}
-                onChange={(e) => setDraftUser(e.target.value)}
-              >
-                <option value="">All</option>
-                {usersDistinct.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
+                onChange={setDraftUser}
+                options={usersDistinct.map((u) => ({ value: u, label: u }))}
+                placeholder={t.all}
+                includeEmptyOption
+                forcePortal
+              />
             </div>
             <div>
-              <label htmlFor="f-module">Module</label>
-              <select
+              <label htmlFor="f-module">{t.module}</label>
+              <SimpleSelect
                 id="f-module"
                 value={draftModule}
-                onChange={(e) => setDraftModule(e.target.value)}
-              >
-                <option value="">All</option>
-                {moduleOptions.map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+                onChange={setDraftModule}
+                options={moduleOptions.map(([key, label]) => ({ value: key, label }))}
+                placeholder={t.all}
+                includeEmptyOption
+                forcePortal
+              />
             </div>
             <div>
-              <label htmlFor="f-q">Search</label>
+              <label htmlFor="f-q">{t.search}</label>
               <input
                 type="search"
                 id="f-q"
-                placeholder="User, page, Acc ID, IP…"
+                placeholder={t.searchPh}
                 value={draftQ}
                 onChange={(e) => setDraftQ(e.target.value)}
               />
             </div>
             <button type="submit" className="account-btn account-btn-add">
-              Apply
+              {t.apply}
             </button>
           </form>
 
@@ -260,14 +303,14 @@ export default function DeletedLogPage() {
 
           <div className="account-table-wrapper">
             <div className="deleted-log-table-header">
-              <div>Time</div>
-              <div>User</div>
-              <div>Company</div>
-              <div>Acc ID</div>
-              <div>What happened</div>
-              <div>IP</div>
-              <div>Detail</div>
-              <div>Restore</div>
+              <div>{t.time}</div>
+              <div>{t.user}</div>
+              <div>{t.company}</div>
+              <div>{t.accId}</div>
+              <div>{t.whatHappened}</div>
+              <div>{t.ip}</div>
+              <div>{t.detail}</div>
+              <div>{t.restore}</div>
             </div>
             {!loading &&
               rows.map((r) => (
@@ -289,18 +332,18 @@ export default function DeletedLogPage() {
                         setJsonOverlayOpen(true);
                       }}
                     >
-                      View
+                      {t.view}
                     </button>
                   </div>
                   <div className="deleted-log-cell-actions">
                     {r.can_restore ? (
                       <button
                         type="button"
-                        className="deleted-log-btn deleted-log-btn--danger js-deleted-restore"
+                        className="deleted-log-btn deleted-log-btn--restore js-deleted-restore"
                         data-id={r.id}
                         onClick={() => onRestore(r.id)}
                       >
-                        Restore
+                        {t.restore}
                       </button>
                     ) : (
                       <span style={{ color: "#94a3b8" }}>—</span>
@@ -310,17 +353,17 @@ export default function DeletedLogPage() {
               ))}
             {!loading && rows.length === 0 ? (
               <div className="deleted-log-card" style={{ gridTemplateColumns: "1fr", border: "none" }}>
-                <div style={{ padding: "16px", color: "#64748b" }}>No records.</div>
+                <div style={{ padding: "16px", color: "#64748b" }}>{t.noRecords}</div>
               </div>
             ) : null}
             {loading ? (
               <div className="deleted-log-card" style={{ gridTemplateColumns: "1fr", border: "none" }}>
-                <div style={{ padding: "16px", color: "#64748b" }}>Loading…</div>
+                <div style={{ padding: "16px", color: "#64748b" }}>{t.loading}</div>
               </div>
             ) : null}
           </div>
 
-          <div className="account-pagination-container" style={{ marginTop: 16 }}>
+          <div className="account-pagination-container deleted-log-pagination" style={{ marginTop: 16 }}>
             <button
               type="button"
               className="account-pagination-btn"
@@ -355,7 +398,7 @@ export default function DeletedLogPage() {
       >
         <div className="deleted-log-json-modal" role="dialog" aria-modal="true" aria-labelledby="deletedLogJsonTitle">
           <header>
-            <strong id="deletedLogJsonTitle">Deleted data (JSON)</strong>
+            <strong id="deletedLogJsonTitle">{t.jsonTitle}</strong>
             <button type="button" className="account-close" aria-label="Close" onClick={closeOverlay} />
           </header>
           <pre id="deletedLogJsonPre">{jsonOverlayText}</pre>

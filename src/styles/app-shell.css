@@ -8,9 +8,11 @@
 @import "./globals.css";
 @import "../../public/css/dashboard.css";
 @import "../../public/css/global-13inch.css";
+@import "../../public/css/list-badge-scale.css";
 @import "../../public/css/dashboard-scrollbar.css";
 @import "../../public/css/portal-tooltip.css";
 @import "../../public/css/sidebar.css";
+@import "../../public/css/select-unified.css";
 
 /* --- Session boot loading (login → dashboard, once per session) --- */
 @keyframes ec-shell-spin {
@@ -133,4 +135,67 @@ body.datacapture-summary-page .summary-table-x-scroll {
   overflow-y: visible !important;
   max-height: none !important;
   height: auto !important;
+}
+
+/* Transaction Payment: single page scroll on body (html stays visible — avoids dead scroll when body height is auto). */
+html:has(
+    body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+        .transaction-payment-history-page
+      )
+  ) {
+  height: auto !important;
+  overflow: visible !important;
+}
+
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  ),
+body.ec-auth-shell.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  ) {
+  height: auto !important;
+  min-height: 100vh !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  #root,
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  .ec-page-shell,
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  .ec-page-shell__content,
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  .transaction-container {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  #root,
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  .transaction-container {
+  min-height: 100vh !important;
+}
+
+body.dashboard-page.transaction-page:not(.member-winloss-page):not(.dashboard-home-page):not(
+    .transaction-payment-history-page
+  )
+  .transaction-container {
+  padding-bottom: clamp(24px, 3vh, 48px) !important;
 }

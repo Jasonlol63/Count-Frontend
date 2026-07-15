@@ -1,5 +1,6 @@
 import { calculateFormulaResultFromExpression } from "../formula/summaryFormulaReference.js";
 import { MoneyDecimal, formatThousands } from "../../../utils/money/moneyDecimal.js";
+import { getProcessValueFromSummaryRow } from "../lib/summaryIdProductDisplay.js";
 
 /** Legacy roundProcessedAmountTo2Decimals — HalfUp to 2 decimals. */
 export function roundProcessedAmountTo2Decimals(value) {
@@ -82,12 +83,18 @@ function applyRateValueToAmount(processedAmount, rateValueStr) {
 /** Resolve expression used to calculate base processed amount (legacy recalculateAndRenderProcessedAmount). */
 export function resolveFormulaTextForCalculation(row) {
   const operators = String(row.formulaOperators || "").trim();
-  let displayExpanded = String(row.formulaDisplay || row.formula || "").trim();
-  const hasDollarColumnRef = /\$(\d+)/.test(displayExpanded);
-  if (displayExpanded && displayExpanded !== "Formula" && !hasDollarColumnRef) {
+  const displayExpanded = String(row.formulaDisplay || row.formula || "").trim();
+
+  // formulaOperators holds $refs; formulaDisplay may show parenthesized negatives with implicit
+  // multiplication between adjacent factors — evaluateMoneyExpression handles )( as *.
+  if (operators) {
+    return operators;
+  }
+
+  if (displayExpanded && displayExpanded !== "Formula") {
     return displayExpanded;
   }
-  return operators || displayExpanded || "";
+  return "";
 }
 
 export function calculateBaseProcessedAmount(row) {
@@ -106,8 +113,11 @@ export function calculateBaseProcessedAmount(row) {
     return "0";
   }
 
+  // Use the base id (strip the description suffix, e.g. `*E198P2 (COMM)` -> `*E198P2`)
+  // so `$N` references resolve against the captured row instead of collapsing to 0.
   const processValue =
-    row.productType === "sub" ? row.subIdProduct || row.idProduct : row.idProduct;
+    getProcessValueFromSummaryRow(row) ||
+    (row.productType === "sub" ? row.subIdProduct || row.idProduct : row.idProduct);
   const sourcePercentText = String(row.sourcePercent || "1").trim() || "1";
   const enableSourcePercent =
     row.enableSourcePercent != null

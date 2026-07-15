@@ -1,4 +1,4 @@
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+﻿import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { fetchDomainCompanyPermissions } from "../shared/maintenanceCompanyApi.js";
 import { fetchReportScopeCurrencies } from "../../report/shared/reportCompanyApi.js";
 import { paymentMaintenanceScopeApiParams } from "./paymentMaintenanceScope.js";
@@ -47,12 +47,13 @@ export async function fetchCompanyCurrencies(_companyId, scope = null) {
 /**
  * Search payment data
  * @param {object} opts
- * @param {AbortSignal} [opts.signal] — cancel in-flight request when company / filters change
+ * @param {AbortSignal} [opts.signal] â€” cancel in-flight request when company / filters change
  */
 export async function searchPaymentData({
   dateFrom,
   dateTo,
   transactionType,
+  query,
   companyId,
   currency,
   scope,
@@ -62,6 +63,7 @@ export async function searchPaymentData({
   params.append("date_from", dateFrom);
   params.append("date_to", dateTo);
   if (transactionType) params.append("transaction_type", transactionType);
+  if (query?.trim()) params.set("q", query.trim().toUpperCase());
   if (companyId && scope?.mode !== "group") {
     params.append("company_id", String(companyId));
   }
@@ -119,7 +121,7 @@ export async function deletePaymentRecords(transactionIds, scope = null) {
  * Update session company
  */
 export async function updateSessionCompany(companyId) {
-  const response = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`), {
+  const response = await fetch(buildApiUrl(`auth/switch-tenant?tenant_id=${companyId}`), {
     credentials: "include",
   });
   const result = await response.json();

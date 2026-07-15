@@ -23,6 +23,8 @@ function FilterChip({ selected, label, onToggle }) {
 export default function BankProcessFilterChips({
   t,
   layout = "inline",
+  showActive,
+  setShowActive,
   showInactive,
   setShowInactive,
   showAll,
@@ -45,14 +47,19 @@ export default function BankProcessFilterChips({
       role="group"
     >
       <FilterChip
-        selected={showInactive}
-        label={t("showInactive")}
-        onToggle={() => setShowInactive((v) => !v)}
-      />
-      <FilterChip
         selected={showAll}
         label={t("showAll")}
         onToggle={() => setShowAll((v) => !v)}
+      />
+      <FilterChip
+        selected={showActive}
+        label={t("showActive")}
+        onToggle={() => setShowActive((v) => !v)}
+      />
+      <FilterChip
+        selected={showInactive}
+        label={t("showInactive")}
+        onToggle={() => setShowInactive((v) => !v)}
       />
       <FilterChip
         selected={showOfficial}

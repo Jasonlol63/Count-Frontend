@@ -72,7 +72,7 @@ export default function TransactionDashboardPage() {
 
           <div
             className={`dashboard-panels-row${
-              page.showProfitChartTab ? " dashboard-panels-row--with-summary-tabs" : ""
+              page.showSummaryPanelTabs ? " dashboard-panels-row--with-summary-tabs" : ""
             }`}
           >
             <DashboardTrendChart
@@ -83,14 +83,16 @@ export default function TransactionDashboardPage() {
               onToggleSeries={page.toggleChartSeries}
               chartDateRangeText={page.chartDateRangeText}
               chartXAxisLayout={page.chartXAxisLayout}
-              chartDataStable={page.chartDataStable}
               chartScopeKey={page.dashboardScopeKey}
+              panelAnimActive={page.panelsAnimReady}
+              panelAnimEpoch={page.panelAnimEpoch}
+              panelAnimDuration={page.panelAnimDuration}
             />
             <DashboardEarningsSummary
               i18n={i18n}
               currencyCode={page.currencyCode}
               currencies={page.currencies}
-              earningsCurrencyRows={page.earningsCurrencyRows}
+              panelCurrencyRows={page.panelCurrencyRows}
               useConvertedEarnings={page.useConvertedEarnings}
               earningsBreakdownShowsRate={page.earningsBreakdownShowsRate}
               summaryPanelLabel={page.summaryPanelLabel}
@@ -100,16 +102,16 @@ export default function TransactionDashboardPage() {
               earningsPanelStable={page.earningsPanelStable}
               earningsByCurrencyLoading={page.earningsByCurrencyLoading}
               exchangeRates={page.exchangeRates}
-              exchangeRatesError={page.exchangeRatesError}
               exchangeRatesLoading={page.exchangeRatesLoading}
               exchangeRateScopeKey={page.exchangeRateScopeKey}
-              rateFootnoteText={page.rateFootnoteText}
-              convertedEarningsTotal={page.convertedEarningsTotal}
-              showProfitChartTab={page.showProfitChartTab}
+              showSummaryPanelTabs={page.showSummaryPanelTabs}
+              showEarningPanelTab={page.showEarningPanelTab}
+              showNetProfitForTab={page.showNetProfitForTab}
               earningsPanelView={page.earningsPanelView}
               onEarningsPanelViewChange={page.setEarningsPanelView}
-              companyBreakdownRows={page.companyBreakdownRows}
-              companyNetProfitTotal={page.companyNetProfitTotal}
+              panelAnimActive={page.panelsAnimReady}
+              panelAnimEpoch={page.panelAnimEpoch}
+              panelAnimDuration={page.panelAnimDuration}
             />
           </div>
         </div>

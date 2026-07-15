@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import OwnAccountSelect from "./OwnAccountSelect.jsx";
-import { accountsForRowPicker, ownershipRowClientId } from "../ownershipRowHelpers.js";
+import {
+  accountsForRowPicker,
+  isExternalPartnerRow,
+  ownershipRowClientId,
+} from "../ownershipRowHelpers.js";
 
 function normalizePct(value) {
   const p = parseFloat(value);
@@ -22,7 +26,6 @@ export default function AccountEditorRow({
   idx,
   row,
   accounts,
-  allRows = [],
   maxPercentage = 100,
   onUpdate,
   onRemove,
@@ -40,16 +43,24 @@ export default function AccountEditorRow({
   const [dragEnabled, setDragEnabled] = useState(false);
   const rowClientId = ownershipRowClientId(row, idx);
   const pctMax = Math.max(0, Math.min(100, Number(maxPercentage) || 0));
+  const isPartnerRow = isExternalPartnerRow(row);
+  const effectivePctMax = isPartnerRow ? 100 : pctMax;
   const storedPct = normalizePct(row.percentage);
   const [displayPct, setDisplayPct] = useState(storedPct);
   const [inputValue, setInputValue] = useState(() => `${storedPct}%`);
   const isEditingPctRef = useRef(false);
 
   useEffect(() => {
-    if (isEditingPctRef.current) return;
+    if (isEditingPctRef.current) {
+      if (Math.abs(storedPct - displayPct) < 0.001) {
+        isEditingPctRef.current = false;
+      } else {
+        return;
+      }
+    }
     setDisplayPct(storedPct);
     setInputValue(`${storedPct}%`);
-  }, [rowClientId, storedPct]);
+  }, [rowClientId, storedPct, displayPct]);
 
   useEffect(() => {
     requestAnimationFrame(() => applySliderBg(sliderRef.current, displayPct));
@@ -63,21 +74,17 @@ export default function AccountEditorRow({
   }, [dragEnabled]);
 
   const isPartnership = String(row.role || "").toLowerCase() === "partnership";
-  const isGroupRow =
-    String(row.role || "").toUpperCase() === "GROUP" ||
-    String(row.owner_type || "").toLowerCase() === "group" ||
-    String(row.account_id || "").startsWith("G_");
-  const showRo = isPartnership || row.is_external_partner;
+  const showRo = isPartnership || isPartnerRow;
 
   const commitSliderPct = (raw) => {
-    const next = Math.min(normalizePct(raw), pctMax);
+    isEditingPctRef.current = true;
+    const next = Math.min(normalizePct(raw), effectivePctMax);
     setDisplayPct(next);
     setInputValue(`${next}%`);
     onUpdate(idx, "slider", next);
   };
 
-  const sliderDisabled =
-    readOnlyMode || row.is_external_partner || (pctMax <= 0 && storedPct <= 0);
+  const sliderDisabled = readOnlyMode || (!isPartnerRow && pctMax <= 0 && storedPct <= 0);
   const layoutLocked = readOnlyMode || structureLocked;
 
   const clearDragStyles = () => {
@@ -161,9 +168,9 @@ export default function AccountEditorRow({
       </div>
       <OwnAccountSelect
         value={row.account_id}
-        accounts={accountsForRowPicker(accounts, row.account_id, allRows)}
+        accounts={accountsForRowPicker(accounts, row.account_id)}
         displayLabel={row.account_label}
-        disabled={layoutLocked || row.is_external_partner || (isGroupRow && row.ownership_id)}
+        disabled={layoutLocked || isPartnerRow}
         t={t}
         onChange={(id) => onUpdate(idx, "account_id", id)}
       />
@@ -178,14 +185,13 @@ export default function AccountEditorRow({
           className="own-percent-input"
           id={`input-${companyId}-${rowClientId}`}
           value={inputValue}
-          disabled={readOnlyMode || row.is_external_partner || (pctMax <= 0 && storedPct <= 0)}
+          disabled={readOnlyMode || (!isPartnerRow && pctMax <= 0 && storedPct <= 0)}
           onFocus={() => {
             isEditingPctRef.current = true;
           }}
           onChange={(e) => setInputValue(e.target.value)}
           onBlur={(e) => {
-            isEditingPctRef.current = false;
-            const next = Math.min(normalizePct(e.target.value), pctMax);
+            const next = Math.min(normalizePct(e.target.value), effectivePctMax);
             setDisplayPct(next);
             setInputValue(`${next}%`);
             onUpdate(idx, "percent_input", next);
@@ -205,13 +211,10 @@ export default function AccountEditorRow({
             onPointerDown={() => {
               isEditingPctRef.current = true;
             }}
-            onPointerUp={() => {
-              isEditingPctRef.current = false;
-            }}
-            onPointerCancel={() => {
-              isEditingPctRef.current = false;
-            }}
+            onPointerUp={() => {}}
+            onPointerCancel={() => {}}
             onInput={(e) => commitSliderPct(e.target.value)}
+            onChange={(e) => commitSliderPct(e.target.value)}
           />
           <div className="own-slider-labels">
             <span>0%</span>

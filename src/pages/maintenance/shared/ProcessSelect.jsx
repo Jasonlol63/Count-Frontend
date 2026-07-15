@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
 
 /**
  * Searchable process dropdown for maintenance pages.
@@ -17,7 +18,6 @@ export default function ProcessSelect({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
 
@@ -36,6 +36,12 @@ export default function ProcessSelect({
     : { id: "", process_name: placeholder };
 
   const displayProcesses = [selectAllSeed, ...filteredProcesses];
+
+  const { highlightIdx, setHighlightIdx, listRef, handleListKeyDown, highlightClass } = useListboxKeyboard({
+    open: isOpen,
+    itemCount: displayProcesses.length,
+    resetToken: searchTerm,
+  });
 
   useEffect(() => {
     if (isOpen && searchInputRef.current) {
@@ -77,7 +83,6 @@ export default function ProcessSelect({
   const handleToggle = () => {
     setIsOpen(!isOpen);
     setSearchTerm("");
-    setHighlightedIndex(0);
   };
 
   const handleSelect = (process) => {
@@ -102,19 +107,11 @@ export default function ProcessSelect({
 
   const handleKeyDown = (e) => {
     if (!isOpen) return;
-
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHighlightedIndex((prev) => (prev + 1) % displayProcesses.length);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlightedIndex((prev) => (prev - 1 + displayProcesses.length) % displayProcesses.length);
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      handleSelect(displayProcesses[highlightedIndex]);
-    } else if (e.key === "Escape") {
-      setIsOpen(false);
-    }
+    handleListKeyDown(e, {
+      len: displayProcesses.length,
+      onSelectIndex: (idx) => handleSelect(displayProcesses[idx]),
+      onClose: () => setIsOpen(false),
+    });
   };
 
   return (
@@ -137,14 +134,13 @@ export default function ProcessSelect({
               autoComplete="off"
               value={searchTerm}
               onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setHighlightedIndex(0);
+                setSearchTerm(e.target.value.toUpperCase());
               }}
               onKeyDown={handleKeyDown}
               ref={searchInputRef}
             />
           </div>
-          <div className="custom-select-options">
+          <div className="custom-select-options" ref={listRef}>
             {displayProcesses.length > 0 ? (
               displayProcesses.map((p, index) => {
                 const value = resolveValue(p);
@@ -167,9 +163,10 @@ export default function ProcessSelect({
                 return (
                   <div
                     key={index}
-                    className={`custom-select-option ${selectedValue === value ? "selected" : ""} ${highlightedIndex === index ? "highlighted" : ""}`}
+                    className={`custom-select-option ${selectedValue === value ? "selected" : ""}${highlightClass(index)}`}
+                    data-kb-idx={index}
                     onClick={() => handleSelect(p)}
-                    onMouseEnter={() => setHighlightedIndex(index)}
+                    onMouseEnter={() => setHighlightIdx(index)}
                   >
                     {text}
                   </div>

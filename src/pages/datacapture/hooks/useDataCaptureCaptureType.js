@@ -81,8 +81,12 @@ export function useDataCaptureCaptureType() {
   }, []);
 
   const handleCaptureTypeChange = useCallback(
-    (e) => {
-      applyCaptureType(e.target.value);
+    (eOrValue) => {
+      const next =
+        typeof eOrValue === "object" && eOrValue?.target != null
+          ? eOrValue.target.value
+          : String(eOrValue ?? "");
+      applyCaptureType(next);
     },
     [applyCaptureType],
   );

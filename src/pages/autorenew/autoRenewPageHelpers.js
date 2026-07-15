@@ -1,4 +1,5 @@
 import { calculateCountdown, resolveDomainFeePriceForPeriod } from "../domain/domainHelpers.js";
+import { formatDmyDash } from "../../utils/date/dateUtils.js";
 
 export const AUTO_RENEW_PAGE_SIZE = 20;
 
@@ -164,12 +165,9 @@ export function formatSubmitterAt(value) {
   const raw = String(value).trim();
   const d = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
   if (Number.isNaN(d.getTime())) return raw;
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
   const hours = String(d.getHours()).padStart(2, "0");
   const mins = String(d.getMinutes()).padStart(2, "0");
-  return `${day}/${month}/${year} ${hours}:${mins}`;
+  return `${formatDmyDash(d)} ${hours}:${mins}`;
 }
 
 export function rowStableKey(row) {
@@ -196,7 +194,7 @@ export function resolveAutoRenewDisplayPrice(row, drafts, feeSettings) {
 
 export function canDeleteRow(row) {
   return (
-    row?.status === "approved" &&
+    (row?.status === "approved" || row?.status === "rejected") &&
     Boolean(row?.can_delete) &&
     Number(row?.request_id) > 0 &&
     !row?.is_payment_deleted

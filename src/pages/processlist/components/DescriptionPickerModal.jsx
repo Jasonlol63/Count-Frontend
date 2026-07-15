@@ -67,8 +67,11 @@ export default function DescriptionPickerModal({
       aria-modal="true"
     >
       <div className="modal-content description-selection-modal">
-        <div className="modal-header description-selection-modal-header">
+        <div className="modal-header account-form-modal-header description-selection-modal-header">
           <h2>{t("selectOrAddDescription")}</h2>
+          <span className="close" onClick={onClose} role="presentation">
+            &times;
+          </span>
         </div>
         <div className="modal-body">
           <div className="description-selection-container">

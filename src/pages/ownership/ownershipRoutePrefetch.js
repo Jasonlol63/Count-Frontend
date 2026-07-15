@@ -12,11 +12,12 @@ function cacheKey(monthKey) {
   return monthKey || getOwnershipCurrentMonthKey();
 }
 
-function companiesApiUrl(monthKey) {
+function companiesApiUrl(monthKey, force = false) {
   const monthQs = isOwnershipHistoricalMonth(monthKey)
     ? `&month=${encodeURIComponent(monthKey)}`
     : "";
-  return buildApiUrl(`api/ownership/get_companies_api.php?all=1${monthQs}`);
+  const bustQs = force ? `&_=${Date.now()}` : "";
+  return buildApiUrl(`api/ownership/get_companies_api.php?all=1${monthQs}${bustQs}`);
 }
 
 /** Read warm company list from sidebar hover prefetch (same shape as get_companies_api JSON). */
@@ -24,29 +25,36 @@ export function peekOwnershipCompaniesCache(monthKey = getOwnershipCurrentMonthK
   return cache.get(cacheKey(monthKey)) ?? null;
 }
 
-export async function prefetchOwnershipCompanies(monthKey = getOwnershipCurrentMonthKey()) {
+/** Drop cached company list so the next load hits the API (after join/ungroup/save). */
+export function invalidateOwnershipCompaniesCache(monthKey = getOwnershipCurrentMonthKey()) {
   const key = cacheKey(monthKey);
-  const hit = cache.get(key);
-  if (hit) return hit;
+  cache.delete(key);
+  inflight.delete(key);
+}
+
+export async function prefetchOwnershipCompanies(
+  monthKey = getOwnershipCurrentMonthKey(),
+  { force = false } = {},
+) {
+  const key = cacheKey(monthKey);
+  if (force) {
+    cache.delete(key);
+    inflight.delete(key);
+  } else {
+    const hit = cache.get(key);
+    if (hit) return hit;
+  }
 
   const pending = inflight.get(key);
   if (pending) return pending;
 
-  const promise = fetch(companiesApiUrl(monthKey), { credentials: "include" })
+  const promise = fetch(companiesApiUrl(monthKey, force), {
+    credentials: "include",
+    cache: force ? "no-store" : "default",
+  })
     .then((res) => res.json())
     .then((json) => {
       if (isApiSuccess(json)) {
-        // Map Spring Boot tenant-accessible output to legacy company format
-        const mapped = (json.data || [])
-          .filter((t) => t.tenant_type === "COMPANY")
-          .map((t) => ({
-            id: t.tenant_id,
-            name: t.tenant_code,
-            company_id: t.tenant_code,
-            expiration_date: t.expiration_date,
-            group_id: t.parent_tenant_code,
-          }));
-        json.data = mapped;
         cache.set(key, json);
         return json;
       }

@@ -32,11 +32,15 @@ function screenAvailRect() {
   return { left, top, width, height };
 }
 
-/** 分屏：优先贴在 Transaction 窗口右侧，宽度为剩余可用区域。 */
-export function resolvePaymentHistoryPopupPosition(outerWidth, outerHeight) {
+/** 分屏：右侧空间足够时贴在 Transaction 旁，否则居中占满可用宽度。 */
+export function resolvePaymentHistoryPopupPosition(outerWidth, outerHeight, dockRight = false) {
   const screen = screenAvailRect();
   let left = Math.round(screen.left + (screen.width - outerWidth) / 2);
   let top = Math.round(screen.top + (screen.height - outerHeight) / 2);
+
+  if (!dockRight) {
+    return { left, top };
+  }
 
   try {
     const opener = window.opener;
@@ -62,10 +66,13 @@ export function resolvePaymentHistoryPopupPosition(outerWidth, outerHeight) {
   return { left, top };
 }
 
-/** 分屏宽度：Transaction 右侧剩余空间，上限 1320 卡片宽。 */
+/** 优先完整展示表格：右侧放得下则贴边，否则用屏幕可用全宽居中打开。 */
 export function resolvePaymentHistoryPopupOpenSize() {
   const screen = screenAvailRect();
-  let width = Math.min(CARD_MAX_WIDTH + POPUP_CHROME_PAD, screen.width - POPUP_MARGIN * 2);
+  const maxWidth = screen.width - POPUP_MARGIN * 2;
+  const preferWidth = Math.min(CARD_MAX_WIDTH + POPUP_CHROME_PAD, maxWidth);
+  let width = preferWidth;
+  let dockRight = false;
 
   try {
     const opener = window.opener;
@@ -73,13 +80,18 @@ export function resolvePaymentHistoryPopupOpenSize() {
       const ox = opener.screenX ?? opener.screenLeft ?? screen.left;
       const ow = opener.outerWidth ?? 0;
       const spaceRight = screen.left + screen.width - (ox + ow) - POPUP_MARGIN * 2;
-      width = Math.min(CARD_MAX_WIDTH + POPUP_CHROME_PAD, Math.max(POPUP_MIN_WIDTH, spaceRight));
+      if (spaceRight >= preferWidth) {
+        width = Math.min(preferWidth, spaceRight);
+        dockRight = true;
+      } else {
+        width = maxWidth;
+      }
     }
   } catch {
     /* ignore */
   }
 
-  width = Math.max(POPUP_MIN_WIDTH, Math.min(width, screen.width - POPUP_MARGIN * 2));
+  width = Math.max(POPUP_MIN_WIDTH, Math.min(width, maxWidth));
 
   let height = screen.height - POPUP_MARGIN * 2;
   try {
@@ -94,12 +106,12 @@ export function resolvePaymentHistoryPopupOpenSize() {
     /* ignore cross-origin opener */
   }
 
-  return { width, height: Math.max(POPUP_MIN_HEIGHT, height) };
+  return { width, height: Math.max(POPUP_MIN_HEIGHT, height), dockRight };
 }
 
 export function buildPaymentHistoryPopupFeatures() {
-  const { width, height } = resolvePaymentHistoryPopupOpenSize();
-  const { left, top } = resolvePaymentHistoryPopupPosition(width, height);
+  const { width, height, dockRight } = resolvePaymentHistoryPopupOpenSize();
+  const { left, top } = resolvePaymentHistoryPopupPosition(width, height, dockRight);
   return `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`;
 }
 

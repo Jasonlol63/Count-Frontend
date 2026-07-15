@@ -226,7 +226,13 @@ export default function TransactionHeader({
                               if (mutationsBlocked) return;
                               const tid = it.transaction_id || it.id;
                               if (!tid) return;
-                              await approveContra({ transactionId: tid, scopeApi });
+                              await approveContra({
+                                transactionId: tid,
+                                scopeApi,
+                                toAccountCode: it.to_account_code,
+                                fromAccountCode: it.from_account_code,
+                                currency: it.currency,
+                              });
                             }}
                           >
                             {m.approve}

@@ -12,6 +12,21 @@ function cleanAmt(raw) {
     .trim();
 }
 
+/** RATE Middle-Man 手续费 remark：charge {第一币种} {用户输入} Service Fees */
+export function buildRateServiceFeeRemark(currencyFrom, middlemanInputAmount) {
+  const inputStr = cleanAmt(middlemanInputAmount);
+  if (!inputStr) return "";
+  try {
+    const dec = MoneyDecimal.toDecimal(inputStr, 0);
+    if (dec.lte(0)) return "";
+  } catch {
+    return "";
+  }
+  const currency = String(currencyFrom ?? "").trim().toUpperCase();
+  if (!currency) return "";
+  return `charge ${currency} ${inputStr} Service Fees`;
+}
+
 /**
  * RATE submit payload aligned with `js/transaction.js` submitAction + `api/transactions/submit_api.php` expectations.
  * `toGrossStr` = gross converted amount (half-up 2dp string), same role as legacy `dataset.grossAmount` / getRateCurrencyToGrossAmount.
@@ -34,6 +49,7 @@ export function buildRatePayload({
   rateToAccount,
   rateTransferToAccount,
   rateTransferFromAccount,
+  rateMiddlemanInputAmount,
 }) {
   const transferToId = rateTransferToAccount?.id ? String(rateTransferToAccount.id) : "";
   const transferFromId = rateTransferFromAccount?.id ? String(rateTransferFromAccount.id) : "";
@@ -48,7 +64,26 @@ export function buildRatePayload({
   } catch {
     middleDec = MoneyDecimal.toDecimal("0", 0);
   }
-  if (!middleDec.gt(0)) middleDec = MoneyDecimal.toDecimal("0", 0);
+  if (middleDec.isZero()) middleDec = MoneyDecimal.toDecimal("0", 0);
+
+  let inputAmtDec = MoneyDecimal.toDecimal("0", 0);
+  try {
+    const inputStr = cleanAmt(rateMiddlemanInputAmount);
+    if (inputStr) {
+      inputAmtDec = MoneyDecimal.toDecimal(inputStr, 0);
+    }
+  } catch {
+    // ignore
+  }
+
+  let rateDec = MoneyDecimal.toDecimal("0", 0);
+  try {
+    if (parsedRateNormalizedStr) {
+      rateDec = MoneyDecimal.toDecimal(parsedRateNormalizedStr, 0);
+    }
+  } catch {
+    // ignore
+  }
 
   const fromCode = rateFromAccount?.account_id || "";
   const toCode = rateToAccount?.account_id || "";
@@ -61,9 +96,12 @@ export function buildRatePayload({
   const transferToDesc = `Transaction from ${transferFromCode} (Rate: ${rateExchangeRateRaw})`;
 
   const middleDesc =
-    middleId && middleDec.gt(0)
+    middleId && !middleDec.isZero()
       ? `Rate charge (x${rateMiddlemanRate}) from ${rateCurrencyFrom} ${MoneyDecimal.formatFixed(fromDec.toString(), 2)}`
       : "";
+
+  const serviceFeeRemark = buildRateServiceFeeRemark(rateCurrencyFrom, rateMiddlemanInputAmount);
+  const sms = serviceFeeRemark || txRemark;
 
   const payload = {
     transaction_type: "RATE",
@@ -72,7 +110,7 @@ export function buildRatePayload({
     amount: formatRateAmount(fromDec.toString()),
     transaction_date: rateDate,
     description: "",
-    sms: txRemark,
+    sms,
     currency: rateCurrencyFrom,
 
     rate_from_account_id: fromId,
@@ -94,6 +132,7 @@ export function buildRatePayload({
     rate_middleman_rate: rateMiddlemanRate,
     rate_middleman_amount: rateMiddlemanAmount ? formatRateAmount(middleDec.toString()) : "",
     rate_middleman_account: middleId,
+    rate_middleman_input_amount: rateMiddlemanInputAmount ? cleanAmt(rateMiddlemanInputAmount) : "",
 
     rate_transfer_amount: "",
     rate_account_from_amount: "",
@@ -104,8 +143,13 @@ export function buildRatePayload({
     const transferGross = grossDec;
     let transferToSide = transferGross;
     let transferFromSide = transferGross;
-    if (middleId && middleDec.gt(0)) {
-      transferFromSide = transferGross.minus(middleDec);
+    if (middleId && !middleDec.isZero()) {
+      let finalFeeForPayload = middleDec;
+      if (inputAmtDec.gt(0) && rateDec.gt(0)) {
+        const convertedInputAmtDec = inputAmtDec.times(rateDec);
+        finalFeeForPayload = middleDec.minus(convertedInputAmtDec);
+      }
+      transferFromSide = transferGross.minus(finalFeeForPayload);
     }
 
     payload.rate_transfer_from_account_id = transferToId;
@@ -121,7 +165,7 @@ export function buildRatePayload({
     payload.rate_transfer_from_account = transferToId;
     payload.rate_transfer_to_account = transferFromId;
 
-    if (middleId && middleDec.gt(0)) {
+    if (middleId && !middleDec.isZero()) {
       payload.rate_middleman_account_id = middleId;
       payload.rate_middleman_currency = rateCurrencyTo;
       payload.rate_middleman_amount = formatRateAmount(middleDec.toString());
@@ -130,4 +174,94 @@ export function buildRatePayload({
   }
 
   return { payload, middleId };
+}
+
+/** Account DB ids involved in a submit — used for post-submit focused list (To + From, RATE legs, etc.). */
+export function collectSubmitFocusAccountIds({
+  txType,
+  toAccountId,
+  fromAccountId,
+  isAdjustment = false,
+  rateToAccountId,
+  rateFromAccountId,
+  rateTransferToAccountId,
+  rateTransferFromAccountId,
+  rateMiddlemanAccountId,
+} = {}) {
+  const ids = new Set();
+  const add = (id) => {
+    const n = Number(id);
+    if (Number.isFinite(n) && n > 0) ids.add(n);
+  };
+
+  const type = String(txType || "").toUpperCase().trim();
+  if (type === "RATE") {
+    add(rateToAccountId);
+    add(rateFromAccountId);
+    add(rateTransferToAccountId);
+    add(rateTransferFromAccountId);
+    add(rateMiddlemanAccountId);
+    return [...ids];
+  }
+
+  add(toAccountId);
+  if (!isAdjustment) add(fromAccountId);
+  return [...ids];
+}
+
+/**
+ * Cr/Dr (or Win/Loss) deltas for optimistic list update after approved submit.
+ * CONTRA/PAYMENT/CLAIM/CLEAR/RECEIVE: To −amount, From +amount.
+ * ADJUSTMENT: To += signed amount.
+ * WIN/LOSE: amounts go to win_loss (To/From signs per period search).
+ */
+export function buildOptimisticSubmitDeltas({
+  txType,
+  amount,
+  toAccountId,
+  fromAccountId,
+} = {}) {
+  const type = String(txType || "").toUpperCase().trim();
+  if (!type || type === "RATE") return [];
+
+  let amtStr;
+  try {
+    const cleaned = MoneyDecimal.cleanMoneyInput(amount);
+    if (!cleaned) return [];
+    amtStr = MoneyDecimal.toDecimal(cleaned).toString();
+  } catch {
+    return [];
+  }
+
+  const toId = Number(toAccountId);
+  const fromId = Number(fromAccountId);
+  const deltas = [];
+  const push = (id, patch) => {
+    if (Number.isFinite(id) && id > 0) deltas.push({ accountDbId: id, ...patch });
+  };
+
+  if (type === "ADJUSTMENT") {
+    push(toId, { crDrDelta: amtStr });
+    return deltas;
+  }
+
+  if (type === "WIN" || type === "LOSE") {
+    const absAmt = MoneyDecimal.abs(amtStr).toString();
+    // Period search: To WIN −amount / LOSE +amount; From WIN +amount / LOSE −amount.
+    if (type === "WIN") {
+      push(toId, { winLossDelta: MoneyDecimal.sub("0", absAmt).toString() });
+      push(fromId, { winLossDelta: absAmt });
+    } else {
+      push(toId, { winLossDelta: absAmt });
+      push(fromId, { winLossDelta: MoneyDecimal.sub("0", absAmt).toString() });
+    }
+    return deltas;
+  }
+
+  if (["CONTRA", "PAYMENT", "CLAIM", "CLEAR", "RECEIVE"].includes(type)) {
+    push(toId, { crDrDelta: MoneyDecimal.sub("0", amtStr).toString() });
+    push(fromId, { crDrDelta: amtStr });
+  }
+
+  return deltas;
 }

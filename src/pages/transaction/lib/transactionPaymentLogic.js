@@ -1,11 +1,26 @@
 import { parseBalanceValue } from "./transactionFormat.js";
 import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
 import { resolveSavedCurrencyOrder } from "../../../utils/company/currencyDisplayOrder.js";
+import { clearTxSearchCache } from "../../../utils/transaction/transactionSearchCache.js";
 
 export const TRANSACTION_CURRENCY_FILTER_KEY_PREFIX = "transaction_currency_filter_v1_";
 export const TX_LIST_SESSION_PREFIX = "count168_txlist_v1_";
 export const TX_LIST_INVALIDATE_LS_KEY = "count168_tx_invalidate_ts";
+export const TX_LIST_INVALIDATE_HANDLED_KEY = "count168_tx_invalidate_handled";
 export const TX_DATA_CHANGED_EVENT = "tx-data-changed";
+
+/** Broadcast that transaction balances changed elsewhere (maintenance delete, process post, etc.). */
+export function notifyTransactionListInvalidated(source = "unknown") {
+  const ts = Date.now();
+  try {
+    localStorage.setItem(TX_LIST_INVALIDATE_LS_KEY, String(ts));
+  } catch {
+    /* ignore */
+  }
+  clearTxSearchCache();
+  window.dispatchEvent(new CustomEvent(TX_DATA_CHANGED_EVENT, { detail: { ts, source } }));
+  return ts;
+}
 
 /** @param {string|null|undefined} role */
 export function getRoleClass(role) {
@@ -63,6 +78,12 @@ export function dedupeRowsByAccountAndCurrency(rows) {
   const indexByKey = new Map();
   const norm = (v) => String(v || "").toUpperCase().trim();
   const keyOf = (row) => {
+    if (row?.type_search_row) {
+      const tid = Number(row?.transaction_id);
+      const accountDbId = norm(row?.account_db_id);
+      const currency = norm(row?.currency);
+      return `TX:${tid > 0 ? tid : "x"}_${accountDbId || "DB"}_${currency}`;
+    }
     const currency = norm(row?.currency);
     // Prefer stable UI identity (account_id). account_db_id is fallback only.
     const accountCode = norm(row?.account_id);
@@ -138,21 +159,198 @@ export function sanitizeSearchApiData(data) {
   };
 }
 
-/** True when ending balance is non-zero (2dp display tolerance). */
-export function rowHasNonZeroBalance(row) {
-  const num = parseBalanceValue(row.balance);
-  if (num === null) return true;
-  try {
-    return MoneyDecimal.toDecimal(String(num), 0).abs().gt("0.00001");
-  } catch {
-    return Math.abs(num) > 1e-5;
+/**
+ * Instantly patch period Cr/Dr (or Win/Loss) + Balance in search payload after submit.
+ * Missing accounts are skipped (forceRefresh will insert them). Re-splits left/right by balance sign.
+ */
+export function applyOptimisticSubmitBalancePatch(rawSearchData, { currency, deltas } = {}) {
+  if (!rawSearchData || typeof rawSearchData !== "object") return rawSearchData;
+  const currencyCode = String(currency || "").toUpperCase().trim();
+  if (!currencyCode || !Array.isArray(deltas) || deltas.length === 0) return rawSearchData;
+
+  const deltaById = new Map();
+  for (const d of deltas) {
+    const id = Number(d?.accountDbId);
+    if (!Number.isFinite(id) || id <= 0) continue;
+    const prev = deltaById.get(id) || { crDrDelta: "0", winLossDelta: "0" };
+    try {
+      if (d.crDrDelta != null && String(d.crDrDelta).trim() !== "") {
+        prev.crDrDelta = MoneyDecimal.add(prev.crDrDelta, d.crDrDelta).toString();
+      }
+      if (d.winLossDelta != null && String(d.winLossDelta).trim() !== "") {
+        prev.winLossDelta = MoneyDecimal.add(prev.winLossDelta, d.winLossDelta).toString();
+      }
+    } catch {
+      /* skip bad delta */
+    }
+    deltaById.set(id, prev);
   }
+  if (deltaById.size === 0) return rawSearchData;
+
+  const patchRow = (row) => {
+    const id = Number(row?.account_db_id);
+    const rowCur = String(row?.currency || "").toUpperCase().trim();
+    if (!deltaById.has(id) || rowCur !== currencyCode) return row;
+    const delta = deltaById.get(id);
+    try {
+      const bf = cleanMoneyCell(row?.bf);
+      const wlFull = cleanMoneyCell(row?.win_loss_full != null ? row.win_loss_full : row?.win_loss);
+      const crDr = cleanMoneyCell(row?.cr_dr);
+
+      const nextWlFull =
+        delta.winLossDelta && !MoneyDecimal.toDecimal(delta.winLossDelta, 0).isZero()
+          ? MoneyDecimal.add(wlFull, delta.winLossDelta).toString()
+          : wlFull;
+      const nextCrDr =
+        delta.crDrDelta && !MoneyDecimal.toDecimal(delta.crDrDelta, 0).isZero()
+          ? MoneyDecimal.add(crDr, delta.crDrDelta).toString()
+          : crDr;
+
+      const balanceFull = MoneyDecimal.add(MoneyDecimal.add(bf, nextWlFull), nextCrDr).toString();
+      const next = {
+        ...row,
+        win_loss: MoneyDecimal.formatFixedHalfUp(nextWlFull, 2),
+        win_loss_full: nextWlFull,
+        cr_dr: MoneyDecimal.formatFixedHalfUp(nextCrDr, 2),
+        balance_full: balanceFull,
+        balance: MoneyDecimal.formatFixedHalfUp(balanceFull, 2),
+      };
+      if (delta.crDrDelta && !MoneyDecimal.toDecimal(delta.crDrDelta, 0).isZero()) {
+        next.has_crdr_transactions = 1;
+      }
+      if (delta.winLossDelta && !MoneyDecimal.toDecimal(delta.winLossDelta, 0).isZero()) {
+        next.has_win_loss_transactions = 1;
+      }
+      return next;
+    } catch {
+      return row;
+    }
+  };
+
+  const combined = [...(rawSearchData.left_table || []), ...(rawSearchData.right_table || [])].map(patchRow);
+  const left = [];
+  const right = [];
+  for (const row of combined) {
+    try {
+      if (MoneyDecimal.cmp(cleanMoneyCell(row?.balance), "0") < 0) right.push(row);
+      else left.push(row);
+    } catch {
+      left.push(row);
+    }
+  }
+
+  return sanitizeSearchApiData({
+    ...rawSearchData,
+    left_table: left,
+    right_table: right,
+  });
 }
 
-/** @deprecated Prefer {@link applyZeroBalanceFilter} — kept for legacy callers. */
-export function rowPassesHideZeroBalanceFilter(showZero, row) {
+export const TX_FILTER_EPS = 0.00001;
+
+/** API 返回的 0/1、true/false、"0"/"1" 统一为布尔。 */
+function txRowFlag(v) {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  return parseInt(String(v || "0"), 10) !== 0;
+}
+
+/** True when ending balance is non-zero (2dp display tolerance). */
+export function rowHasNonZeroBalance(row) {
+  return !rowIsZeroBalance(row);
+}
+
+/** Balance 展示列是否为 0（与 transaction.js rowIsZeroBalance 一致）。 */
+export function rowIsZeroBalance(row) {
+  const num = parseBalanceValue(String(row?.balance ?? "").replace(/,/g, ""));
+  if (num === null) return true;
+  return Math.abs(num) <= TX_FILTER_EPS;
+}
+
+/**
+ * 本期是否有 Payment/CrDr 动账：展示净额非 0，或 API 标志有流水（含轧成 0.00 / CONTRA 清账）。
+ * 与 search_api has_crdr_transactions / has_contra_clear_period 对齐。
+ */
+export function rowHasPeriodCrdr(row) {
+  const crdr = parseBalanceValue(row?.cr_dr);
+  if (crdr !== null && Math.abs(crdr) > TX_FILTER_EPS) return true;
+  return txRowFlag(row?.has_crdr_transactions) || txRowFlag(row?.has_contra_clear_period);
+}
+
+/**
+ * 本期是否有 Win/Loss 动账：展示净额非 0，或 API 标志有流水（含当日正负轧成 0.00）。
+ * 与 search_api has_win_loss_transactions / has_period_id_product_rows 对齐。
+ */
+export function rowHasPeriodWinLoss(row) {
+  const wl = parseBalanceValue(String(row?.win_loss ?? "").replace(/,/g, ""));
+  if (wl !== null && Math.abs(wl) > TX_FILTER_EPS) return true;
+  return txRowFlag(row?.has_win_loss_transactions) || txRowFlag(row?.has_period_id_product_rows);
+}
+
+/**
+ * API 查询参数：Show all 0 balance 与 Payment/Win-Loss Only 联动的覆盖规则。
+ * @returns {{ showInactiveForQuery: boolean, showCaptureOnlyForQuery: boolean, hideZeroBalanceForQuery: boolean }}
+ */
+export function buildTransactionSearchQueryFilters({
+  showZeroBalance = false,
+  showPaymentOnly = false,
+  showCaptureOnly = false,
+}) {
+  return {
+    showInactiveForQuery: showZeroBalance && showPaymentOnly ? false : !!showPaymentOnly,
+    showCaptureOnlyForQuery: showZeroBalance && showCaptureOnly ? false : !!showCaptureOnly,
+    hideZeroBalanceForQuery: !showZeroBalance,
+  };
+}
+
+/** Layer B：零余额过滤（balance=0 但本期有 Cr/Dr 或 Win/Loss 动账时仍显示）。 */
+export function rowPassesHideZeroBalanceFilter(showZero, row, opts = {}) {
   if (showZero) return true;
-  return rowHasNonZeroBalance(row);
+  if (!rowIsZeroBalance(row)) return true;
+  if (opts.showPaymentOnly && rowHasPeriodCrdr(row)) return true;
+  if (opts.showWinLossOnly && rowHasPeriodWinLoss(row)) return true;
+  return false;
+}
+
+/**
+ * Layer A + B 完整过滤（与 transaction.js applyFilters 一致）。
+ * @param {object[]} rows
+ * @param {{ showZero?: boolean, showPaymentOnly?: boolean, showWinLossOnly?: boolean }} opts
+ */
+export function applyTransactionDisplayFilters(rows, { showZero = false, showPaymentOnly = false, showWinLossOnly = false } = {}) {
+  let filtered = Array.isArray(rows) ? rows : [];
+  if (showPaymentOnly || showWinLossOnly) {
+    if (showPaymentOnly && showWinLossOnly) {
+      filtered = filtered.filter((row) =>
+        showZero
+          ? rowIsZeroBalance(row) || rowHasPeriodCrdr(row) || rowHasPeriodWinLoss(row)
+          : rowHasPeriodCrdr(row) || rowHasPeriodWinLoss(row),
+      );
+    } else if (showPaymentOnly) {
+      filtered = filtered.filter((row) =>
+        showZero ? rowIsZeroBalance(row) || rowHasPeriodCrdr(row) : rowHasPeriodCrdr(row),
+      );
+    } else {
+      filtered = filtered.filter((row) =>
+        showZero ? rowIsZeroBalance(row) || rowHasPeriodWinLoss(row) : rowHasPeriodWinLoss(row),
+      );
+    }
+  }
+  const layerBOpts = { showPaymentOnly, showWinLossOnly };
+  return filtered.filter((row) => rowPassesHideZeroBalanceFilter(showZero, row, layerBOpts));
+}
+
+/** 左右表一次性过滤（rawSearchData → 展示行）。 */
+export function filterTransactionTableRows(rawLeft, rawRight, { showZeroBalance, showPaymentOnly, showCaptureOnly }) {
+  const opts = {
+    showZero: !!showZeroBalance,
+    showPaymentOnly: !!showPaymentOnly,
+    showWinLossOnly: !!showCaptureOnly,
+  };
+  return {
+    left: applyTransactionDisplayFilters(rawLeft, opts),
+    right: applyTransactionDisplayFilters(rawRight, opts),
+  };
 }
 
 export function normalizeRateRowsByCrDr(leftRows, rightRows, isRate) {
@@ -184,112 +382,23 @@ export function normalizeRateRowsByCrDr(leftRows, rightRows, isRate) {
   return { leftRows: normalizedLeft, rightRows: normalizedRight };
 }
 
-/**
- * Show Payment Only / Show Win/Loss Only 行筛选 — 与 `js/transaction.js` `applyZeroBalanceFilterAndRender`
- * 内「先应用 Show Payment Only / Show Win/Loss 过滤」分支一致（含仅 W/L、双勾选+Show 0 balance 的 OR 规则）。
- * Show Win/Loss Only：优先 has_win_loss_transactions（本期有 W/L 动账），再兜底 net win_loss_full 非零（与 hasCrdr 对称）。
- */
+/** @deprecated Use {@link filterTransactionTableRows} — kept for legacy two-step callers. */
 export function applyPaymentWinLossFilters(rawLeft, rawRight, { showPaymentOnly, showCaptureOnly, showZeroBalance = false }) {
-  const safeLeft = Array.isArray(rawLeft) ? rawLeft : [];
-  const safeRight = Array.isArray(rawRight) ? rawRight : [];
-  if (!showPaymentOnly && !showCaptureOnly) {
-    return { filteredLeft: safeLeft, filteredRight: safeRight };
-  }
-
-  const eps = "0.00001";
-
-  const flagToBool = (v) => {
-    if (typeof v === "boolean") return v;
-    if (typeof v === "number") return v !== 0;
-    return parseInt(String(v || "0"), 10) !== 0;
-  };
-
-  const hasCrdr = (row) => {
-    const byFlag =
-      typeof row.has_crdr_transactions === "boolean"
-        ? row.has_crdr_transactions
-        : typeof row.has_crdr_transactions === "number"
-          ? row.has_crdr_transactions !== 0
-          : parseInt(String(row.has_crdr_transactions || "0"), 10) !== 0;
-    const crdr = parseBalanceValue(row.cr_dr);
-    let byValue = false;
-    if (crdr !== null) {
-      try {
-        byValue = MoneyDecimal.toDecimal(crdr, 0).abs().gt(eps);
-      } catch {
-        byValue = Math.abs(crdr) > 1e-5;
-      }
-    }
-    return byFlag || byValue;
-  };
-
-  const isZeroBalance = (row) => {
-    const bal = parseBalanceValue(row.balance);
-    if (bal === null) return false;
-    try {
-      return MoneyDecimal.toDecimal(bal, 0).abs().lte(eps);
-    } catch {
-      return Math.abs(bal) <= 1e-5;
-    }
-  };
-
-  const winLossAmountNonZero = (row) => {
-    const probeFull =
-      row.win_loss_full !== undefined && row.win_loss_full !== null && String(row.win_loss_full).trim() !== ""
-        ? String(row.win_loss_full).replace(/,/g, "").trim()
-        : null;
-    const probes = probeFull != null ? [probeFull, row.win_loss] : [row.win_loss];
-    for (const candidate of probes) {
-      const wl = parseBalanceValue(candidate);
-      if (wl === null) continue;
-      try {
-        if (MoneyDecimal.toDecimal(wl, 0).abs().gt(eps)) return true;
-      } catch {
-        if (Math.abs(wl) > 1e-5) return true;
-      }
-    }
-    return false;
-  };
-
-  const hasWinLoss = (row) => {
-    if (flagToBool(row.has_win_loss_transactions) || flagToBool(row.has_period_id_product_rows)) {
-      return true;
-    }
-    return winLossAmountNonZero(row);
-  };
-
-  let shouldShow = () => true;
-  if (showPaymentOnly && showCaptureOnly) {
-    shouldShow = showZeroBalance
-      ? (row) => isZeroBalance(row) || hasCrdr(row) || hasWinLoss(row)
-      : (row) => hasCrdr(row) || hasWinLoss(row);
-  } else if (showPaymentOnly) {
-    shouldShow = showZeroBalance ? (row) => isZeroBalance(row) || hasCrdr(row) : hasCrdr;
-  } else if (showCaptureOnly) {
-    shouldShow = showZeroBalance ? (row) => isZeroBalance(row) || hasWinLoss(row) : hasWinLoss;
-  }
-
-  return {
-    filteredLeft: safeLeft.filter(shouldShow),
-    filteredRight: safeRight.filter(shouldShow),
-  };
+  const { left, right } = filterTransactionTableRows(rawLeft, rawRight, {
+    showZeroBalance,
+    showPaymentOnly,
+    showCaptureOnly,
+  });
+  return { filteredLeft: left, filteredRight: right };
 }
 
-export function applyZeroBalanceFilter(
-  filteredLeft,
-  filteredRight,
-  showZeroBalance,
-  { showCaptureOnly = false, showPaymentOnly = false } = {},
-) {
-  // Any visibility toggle: keep upstream rows (incl. balance 0.00 when W/L or Payment filter matched).
-  if (showZeroBalance || showCaptureOnly || showPaymentOnly) {
-    return { left: filteredLeft, right: filteredRight };
-  }
-  // Default: hide rows whose ending balance is 0.00.
-  return {
-    left: filteredLeft.filter(rowHasNonZeroBalance),
-    right: filteredRight.filter(rowHasNonZeroBalance),
-  };
+/** @deprecated Use {@link filterTransactionTableRows} — Layer A+B 已在 applyPaymentWinLossFilters 内完成。 */
+export function applyZeroBalanceFilter(filteredLeft, filteredRight, showZeroBalance, { showCaptureOnly = false, showPaymentOnly = false } = {}) {
+  return filterTransactionTableRows(filteredLeft, filteredRight, {
+    showZeroBalance,
+    showPaymentOnly,
+    showCaptureOnly,
+  });
 }
 
 /** Same as `js/transaction.js` winLossFullRawForTotals: sum full-precision W/L before half-up. */
@@ -501,19 +610,47 @@ export function readTransactionCurrencyFilterState(companyId) {
   }
 }
 
+/** @param {Set<number>|null|undefined} typeSearchAccountIds */
+export function rowMatchesTypeSearchAccountSet(row, typeSearchAccountIds) {
+  if (!typeSearchAccountIds || typeSearchAccountIds.size === 0) return false;
+  const dbId = Number(row?.account_db_id);
+  if (!Number.isFinite(dbId) || dbId <= 0) return false;
+  return typeSearchAccountIds.has(dbId);
+}
+
+/** Keep only rows whose account_db_id appears in the all-time type search set. */
+export function applyTypeSearchAccountFilter(left, right, typeSearchAccountIds) {
+  if (!typeSearchAccountIds || typeSearchAccountIds.size === 0) {
+    return { left: [], right: [] };
+  }
+  const keep = (rows) =>
+    (Array.isArray(rows) ? rows : []).filter((row) => rowMatchesTypeSearchAccountSet(row, typeSearchAccountIds));
+  return { left: keep(left), right: keep(right) };
+}
+
+/** Whether any currency has post-submit focused account ids. */
+export function hasSubmitFocusByCurrency(byCurrency) {
+  if (!byCurrency || typeof byCurrency !== "object") return false;
+  return Object.values(byCurrency).some((ids) => Array.isArray(ids) && ids.length > 0);
+}
+
+/** Focused account ids for one currency code (uppercase key in map). */
+export function getSubmitFocusAccountIdsForCurrency(byCurrency, currencyCode) {
+  const code = String(currencyCode || "").toUpperCase().trim();
+  if (!code) return [];
+  const ids = byCurrency?.[code];
+  return Array.isArray(ids) ? ids : [];
+}
+
 /** Row count after the same client filters as the main grid (for search-complete toasts). */
-export function countDisplayedRows(rawSearchData, searchState, txType) {
+export function countDisplayedRows(rawSearchData, searchState, txType, typeSearchActive = false) {
   if (!rawSearchData) return 0;
   const rawLeft = dedupeRowsByAccountAndCurrency(rawSearchData.left_table || []);
   const rawRight = dedupeRowsByAccountAndCurrency(rawSearchData.right_table || []);
-  const pf = applyPaymentWinLossFilters(rawLeft, rawRight, {
-    showPaymentOnly: searchState.showPaymentOnly,
-    showCaptureOnly: searchState.showCaptureOnly,
-    showZeroBalance: searchState.showZeroBalance,
-  });
-  const z = applyZeroBalanceFilter(pf.filteredLeft, pf.filteredRight, searchState.showZeroBalance, {
-    showCaptureOnly: searchState.showCaptureOnly,
-    showPaymentOnly: searchState.showPaymentOnly,
+  const z = filterTransactionTableRows(rawLeft, rawRight, {
+    showZeroBalance: typeSearchActive ? true : searchState.showZeroBalance,
+    showPaymentOnly: typeSearchActive ? false : searchState.showPaymentOnly,
+    showCaptureOnly: typeSearchActive ? false : searchState.showCaptureOnly,
   });
   const norm = normalizeRateRowsByCrDr(z.left, z.right, txType === "RATE");
   return (norm.leftRows?.length || 0) + (norm.rightRows?.length || 0);
@@ -534,6 +671,33 @@ export function readTxListFromSessionStorage(sessionKey) {
   } catch {
     return null;
   }
+}
+
+/** Row count in rendered table presentation (after client-side filters). */
+export function countTransactionPresentationRows(tp) {
+  if (!tp || tp.mode === "none") return 0;
+  if (tp.mode === "grouped") {
+    return (tp.grouped || []).reduce(
+      (sum, g) => sum + (g.left?.length || 0) + (g.right?.length || 0),
+      0,
+    );
+  }
+  return (tp.defaultLeft?.length || 0) + (tp.defaultRight?.length || 0);
+}
+
+export function hasTransactionCurrencyFilter(showAllCurrencies, selectedCurrencies) {
+  return Boolean(showAllCurrencies) || (Array.isArray(selectedCurrencies) && selectedCurrencies.length > 0);
+}
+
+export function shouldShowTransactionTablesSection({
+  showAllCurrencies,
+  selectedCurrencies,
+  tablePresentation,
+  searchLoading,
+}) {
+  if (!hasTransactionCurrencyFilter(showAllCurrencies, selectedCurrencies)) return false;
+  if (countTransactionPresentationRows(tablePresentation) > 0) return true;
+  return Boolean(searchLoading);
 }
 
 export function buildTxListSessionKey({
@@ -557,9 +721,9 @@ export function buildTxListSessionKey({
     cur = [...selectedCurrencies].sort().join(",");
   }
   const cid = companyId != null ? String(companyId) : "";
-  const hideZero = hideZeroBalance ? "0" : "1";
+  const hideZb = hideZeroBalance ? "1" : "0";
   return (
     TX_LIST_SESSION_PREFIX +
-    [cid, dateFrom, dateTo, cat, showInactive ? "1" : "0", showCaptureOnly ? "1" : "0", hideZero, cur, showAllCurrencies ? "1" : "0"].join("|")
+    [cid, dateFrom, dateTo, cat, showInactive ? "1" : "0", showCaptureOnly ? "1" : "0", hideZb, cur, showAllCurrencies ? "1" : "0"].join("|")
   );
 }

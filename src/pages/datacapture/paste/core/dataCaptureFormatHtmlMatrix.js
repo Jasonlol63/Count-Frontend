@@ -3,8 +3,197 @@
 import {
   sanitizeFormatHtmlFragment,
   sanitizeCopiedStyleString,
-  stripBackgroundFromStyle,
 } from "./dataCaptureFormatStyleUtils.js";
+import {
+  expandCollapsedTableRows,
+  tokenizeCollapsedReportRow,
+} from "./dataCaptureFormatClipboardNormalize.js";
+
+function cellTextIsMoneyOrNumberLike(text) {
+  const cleaned = String(text ?? "")
+    .trim()
+    .replace(/[,$]/g, "")
+    .replace(/^\((.*)\)$/, "-$1");
+  if (!cleaned) return false;
+  return /^-?\d+(?:\.\d+)?$/.test(cleaned);
+}
+
+function isSummaryLabelToken(text) {
+  const normalized = String(text ?? "")
+    .trim()
+    .replace(/:$/, "")
+    .toUpperCase();
+  return (
+    normalized === "SUBTOTAL" ||
+    normalized === "SUB TOTAL" ||
+    normalized === "TOTAL AMOUNT" ||
+    normalized === "TOTAL" ||
+    normalized === "GRAND TOTAL"
+  );
+}
+
+/** Agent-period style: one label + many money fields in a single collapsed cell. */
+function looksLikeHorizontalReportFieldDump(tokens) {
+  if (!Array.isArray(tokens) || tokens.length < 3) return false;
+  const moneyCount = tokens.filter((token) => cellTextIsMoneyOrNumberLike(token)).length;
+  if (moneyCount < 2) return false;
+  if (moneyCount < Math.ceil(tokens.length * 0.5)) return false;
+  const first = String(tokens[0] ?? "").trim();
+  if (!first) return false;
+  if (cellTextIsMoneyOrNumberLike(first) && !isSummaryLabelToken(first)) return false;
+  return true;
+}
+
+function elementHasVisibleText(el) {
+  return Boolean(String(el?.textContent || "").replace(/\s+/g, " ").trim());
+}
+
+function isLayoutWrapperTag(el) {
+  const tag = (el?.tagName || "").toLowerCase();
+  return (
+    tag === "p" ||
+    tag === "div" ||
+    tag === "span" ||
+    tag === "font" ||
+    tag === "section" ||
+    tag === "article" ||
+    tag === "center"
+  );
+}
+
+/**
+ * Chrome / Word HTML often wraps a whole report row in one <p class="MsoNormal">
+ * (or similar) whose children are the real fields. Descend through single wrappers.
+ */
+function unwrapSingleLayoutWrappers(root) {
+  let current = root;
+  for (let depth = 0; depth < 6; depth += 1) {
+    const kids = Array.from(current?.children || []).filter(elementHasVisibleText);
+    if (kids.length !== 1 || !isLayoutWrapperTag(kids[0])) break;
+    const grand = Array.from(kids[0].children || []).filter(elementHasVisibleText);
+    // Only unwrap when the wrapper carries multiple field children underneath.
+    if (grand.length < 2) break;
+    current = kids[0];
+  }
+  return current || root;
+}
+
+function collectNestedReportFieldCells(sourceCell) {
+  if (!sourceCell) return [];
+  const root = unwrapSingleLayoutWrappers(sourceCell);
+
+  const directHint = Array.from(
+    root.querySelectorAll(
+      [
+        ":scope > mat-cell",
+        ":scope > mat-footer-cell",
+        ":scope > mat-header-cell",
+        ":scope > .mat-cell",
+        ":scope > .mat-footer-cell",
+        ":scope > .mat-header-cell",
+        ':scope > [role="gridcell"]',
+        ":scope > div",
+        ":scope > span",
+        ":scope > font",
+        ":scope > a",
+        ":scope > p",
+      ].join(", "),
+    ),
+  ).filter(elementHasVisibleText);
+  if (directHint.length >= 2) return directHint;
+
+  // Generic direct children (covers a+div mixes and MsoNormal-wrapped spans).
+  const directKids = Array.from(root.children || []).filter(elementHasVisibleText);
+  if (directKids.length >= 2) return directKids;
+
+  const nested = Array.from(
+    root.querySelectorAll(
+      "mat-cell, mat-footer-cell, .mat-cell, .mat-footer-cell, [role='gridcell']",
+    ),
+  ).filter((el) => {
+    let parent = el.parentElement;
+    while (parent && parent !== root && parent !== sourceCell) {
+      const tag = (parent.tagName || "").toLowerCase();
+      if (tag === "mat-cell" || tag === "mat-footer-cell" || tag === "td" || tag === "th") {
+        if (parent !== root && parent !== sourceCell) return false;
+      }
+      parent = parent.parentElement;
+    }
+    return parent === root || parent === sourceCell;
+  });
+  return nested.filter(elementHasVisibleText);
+}
+
+function getDirectRowCells(sourceRow) {
+  return Array.from(sourceRow?.children || []).filter((el) => {
+    const tag = (el.tagName || "").toUpperCase();
+    return tag === "TD" || tag === "TH";
+  });
+}
+
+function patchFromPlainReportToken(token, colIndex, rowTokens) {
+  const value = String(token ?? "").trim();
+  const styles = ["border: 1px solid #d0d7de !important;"];
+  let html;
+
+  if (colIndex === 0 && !isSummaryLabelToken(value) && /^[A-Z0-9][A-Z0-9_-]{2,}$/i.test(value)) {
+    styles.push("color: #82b8b9", "text-decoration: underline");
+    html = `<a href="#" style="color: #82b8b9;">${value}</a>`;
+  } else if (colIndex === rowTokens.length - 1 && cellTextIsMoneyOrNumberLike(value)) {
+    const numeric = Number(String(value).replace(/[$,]/g, ""));
+    if (Number.isFinite(numeric) && numeric > 0) {
+      styles.push("color: #82c751");
+      html = `<span style="color: #82c751;">${value}</span>`;
+    } else if (Number.isFinite(numeric) && numeric < 0) {
+      styles.push("color: #ff7575");
+      html = `<span style="color: #ff7575;">${value}</span>`;
+    }
+  }
+
+  if (isSummaryLabelToken(value) || (colIndex === 0 && isSummaryLabelToken(value))) {
+    styles.push("font-weight: 700");
+  }
+
+  return {
+    value,
+    ...(html ? { html } : {}),
+    styleCssText: styles.join(" "),
+  };
+}
+
+/** DataTables footers often use <th> for Total / Grand Total data rows. */
+function allThRowLooksLikeDataOrSummary(tr) {
+  const cells = Array.from(tr.querySelectorAll("th,td"));
+  if (cells.length < 2) return false;
+  const texts = cells.map((cell) => String(cell.textContent || "").replace(/\s+/g, " ").trim());
+  const nonEmpty = texts.filter(Boolean);
+  if (nonEmpty.length < 2) return false;
+
+  const first = nonEmpty[0].replace(/:$/, "").toUpperCase();
+  if (
+    first === "TOTAL" ||
+    first === "GRAND TOTAL" ||
+    first === "SUBTOTAL" ||
+    first === "SUB TOTAL" ||
+    first === "TOTAL AMOUNT"
+  ) {
+    return true;
+  }
+
+  const nums = nonEmpty.filter((text) => cellTextIsMoneyOrNumberLike(text)).length;
+  return nums >= 2 && nums >= Math.ceil(nonEmpty.length * 0.5);
+}
+
+function trLooksLikePaginatorOrInfoRow(tr) {
+  const className = String(tr.className || "").toLowerCase();
+  if (/datatables_info|mat-paginator|paginator/i.test(className)) return true;
+  const texts = Array.from(tr.querySelectorAll("th,td"))
+    .map((cell) => String(cell.textContent || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (!texts.length) return true;
+  const joined = texts.join(" ");
+  return /^Showing\s+\d+\s+to\s+\d+\s+of\s+\d+/i.test(joined);
+}
 
 /** @returns {{ headerRows: Element[], dataRows: Element[], maxCols: number, allRows: Element[] } | null} */
 export function parseFormatHtmlTableStructure(htmlString) {
@@ -14,6 +203,8 @@ export function parseFormatHtmlTableStructure(htmlString) {
   const table = tempDiv.querySelector("table");
   if (!table) return null;
 
+  expandCollapsedTableRows(table);
+
   const allRows = Array.from(table.querySelectorAll("tr"));
   if (allRows.length === 0) return null;
 
@@ -21,9 +212,16 @@ export function parseFormatHtmlTableStructure(htmlString) {
   const dataRows = [];
 
   allRows.forEach((tr) => {
-    if (tr.querySelectorAll("th").length > 0) {
+    // Match PHP: only <thead> rows, or rows that are entirely <th> (no <td>).
+    // Exception: DataTables Total/Grand Total footers are all <th> but must stay as data.
+    const inThead = !!tr.closest("thead");
+    const thCount = tr.querySelectorAll("th").length;
+    const tdCount = tr.querySelectorAll("td").length;
+    const allTh = thCount > 0 && tdCount === 0;
+    const isHeaderRow = inThead || (allTh && !allThRowLooksLikeDataOrSummary(tr));
+    if (isHeaderRow) {
       headerRows.push(tr);
-    } else {
+    } else if (!trLooksLikePaginatorOrInfoRow(tr)) {
       dataRows.push(tr);
     }
   });
@@ -74,13 +272,39 @@ function extractCellLines(sourceCell) {
   } else if (hasNewline) {
     lines = cellText.split(/\r?\n|\r/).map((part) => part.trim()).filter((part) => part !== "");
   } else {
-    const directSpans = sourceCell.querySelectorAll(":scope > span");
-    if (directSpans.length >= 2) {
-      const parts = Array.from(directSpans)
-        .map((span) => (span.textContent || "").trim())
-        .filter((part) => part !== "");
-      if (parts.length >= 2) {
-        lines = [parts[0], parts[1]];
+    const nestedFields = collectNestedReportFieldCells(sourceCell);
+    if (nestedFields.length >= 3) {
+      lines = nestedFields
+        .map((el) => String(el.textContent || "").replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+    } else {
+      const scanRoot = unwrapSingleLayoutWrappers(sourceCell);
+      const directChildren = Array.from(scanRoot.childNodes || []);
+      const directSpans = directChildren.filter(
+        (node) => node.nodeType === Node.ELEMENT_NODE && node.tagName === "SPAN",
+      );
+      const hasOnlySpanChildren = directChildren.every((node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          return !String(node.textContent || "").trim();
+        }
+        return node.nodeType === Node.ELEMENT_NODE && node.tagName === "SPAN";
+      });
+
+      const spansAreBlockLike =
+        directSpans.length >= 2 &&
+        directSpans.every((span) => {
+          const styleAttr = String(span.getAttribute("style") || "").toLowerCase();
+          return /\bdisplay\s*:\s*(block|table|flex|grid|list-item)\b/.test(styleAttr);
+        });
+
+      // Avoid false positives: inline spans are often just styling wrappers, not vertical split rows.
+      if (hasOnlySpanChildren && spansAreBlockLike) {
+        const parts = directSpans
+          .map((span) => (span.textContent || "").trim())
+          .filter((part) => part !== "");
+        if (parts.length >= 2) {
+          lines = parts;
+        }
       }
     }
   }
@@ -91,7 +315,10 @@ function extractCellLines(sourceCell) {
 /** First-cell BR/SPAN check used for required row count pre-detection. */
 function sourceRowNeedsVerticalSplit(sourceCells) {
   if (sourceCells.length === 0) return false;
-  return extractCellLines(sourceCells[0]).length >= 2;
+  const lines = extractCellLines(sourceCells[0]);
+  // Agent-period collapsed rows are HORIZONTAL field dumps, not 2-line vertical splits.
+  if (nestedFieldsLookLikeReportRow(lines)) return false;
+  return lines.length >= 2;
 }
 
 /** Count tbody rows after vertical splits (SUB TOTAL / GRAND TOTAL). */
@@ -124,26 +351,6 @@ function detectRowVerticalSplit(sourceCells) {
     }
   });
 
-  if (hasVerticalSplit && cellsWithSplit.length > 0) {
-    sourceCells.forEach((sourceCell, cellIndex) => {
-      if (cellsWithSplit.some((entry) => entry.index === cellIndex)) return;
-      const cellText = (sourceCell.textContent || sourceCell.innerText || "").trim();
-      if (cellText.length < 4) return;
-      const half = Math.floor(cellText.length / 2);
-      const first = cellText.substring(0, half).trim();
-      const second = cellText.substring(half).trim();
-      if (first !== "" && second !== "") {
-        cellsWithSplit.push({
-          index: cellIndex,
-          cell: sourceCell,
-          topData: first,
-          bottomData: second,
-          allLines: [first, second],
-        });
-      }
-    });
-  }
-
   const isFirstCellWithBrOrSpan = cellsWithSplit.some((entry) => entry.index === 0);
   return { hasVerticalSplit, cellsWithSplit, isFirstCellWithBrOrSpan };
 }
@@ -155,26 +362,59 @@ function extractPlainText(sourceCell) {
   return (tempDiv.textContent || tempDiv.innerText || "").trim();
 }
 
+/** Material report status classes often carry color without inline style. */
+function inferVisualStyleFromCellClass(sourceCell) {
+  const cls = String(sourceCell?.className || "");
+  const parts = [];
+  // Match Report Center: positive #82c751, agent link #82b8b9
+  if (/\bpositive\b/i.test(cls)) parts.push("color: #82c751");
+  if (/\bnegative\b/i.test(cls)) parts.push("color: #ff7575");
+  if (sourceCell?.querySelector?.("a")) {
+    parts.push("color: #82b8b9", "text-decoration: underline");
+  }
+  return parts.length ? `${parts.join("; ")};` : "";
+}
+
 export function buildFormatDataCellStyle(sourceCell) {
   const sourceCellStyle = sourceCell.getAttribute("style");
-  const sourceCellComputedStyle = window.getComputedStyle(sourceCell);
-
-  if (sourceCellStyle) {
-    const sanitizedCellStyle = stripBackgroundFromStyle(sanitizeCopiedStyleString(sourceCellStyle));
-    return sanitizedCellStyle && !sanitizedCellStyle.includes("border")
-      ? `border: 1px solid #d0d7de !important; ${sanitizedCellStyle}`
-      : sanitizedCellStyle || "border: 1px solid #d0d7de !important;";
+  let sourceCellComputedStyle = null;
+  try {
+    if (typeof window?.getComputedStyle === "function") {
+      sourceCellComputedStyle = window.getComputedStyle(sourceCell);
+    }
+  } catch {
+    sourceCellComputedStyle = null;
   }
 
-  const color = sourceCellComputedStyle.color;
-  const fontWeight = sourceCellComputedStyle.fontWeight;
-  const textAlign = sourceCellComputedStyle.textAlign;
+  const classVisual = inferVisualStyleFromCellClass(sourceCell);
+
+  // 2.Format 1:1 — keep color/background/weight from clipboard; only drop layout props.
+  if (sourceCellStyle) {
+    const sanitizedCellStyle = sanitizeCopiedStyleString(sourceCellStyle);
+    const merged = [sanitizedCellStyle, classVisual].filter(Boolean).join(" ").trim();
+    return merged && !merged.includes("border")
+      ? `border: 1px solid #d0d7de !important; ${merged}`
+      : merged || "border: 1px solid #d0d7de !important;";
+  }
+
+  const color = sourceCellComputedStyle?.color;
+  const fontWeight = sourceCellComputedStyle?.fontWeight;
+  const textAlign = sourceCellComputedStyle?.textAlign;
+  const backgroundColor = sourceCellComputedStyle?.backgroundColor;
   let styleString = "border: 1px solid #d0d7de !important;";
   if (color && color !== "rgb(0, 0, 0)") styleString += ` color: ${color} !important;`;
+  if (
+    backgroundColor &&
+    backgroundColor !== "rgba(0, 0, 0, 0)" &&
+    backgroundColor !== "transparent"
+  ) {
+    styleString += ` background-color: ${backgroundColor} !important;`;
+  }
   if (fontWeight && fontWeight !== "normal" && fontWeight !== "400") {
     styleString += ` font-weight: ${fontWeight} !important;`;
   }
   if (textAlign && textAlign !== "left") styleString += ` text-align: ${textAlign} !important;`;
+  if (classVisual) styleString += ` ${classVisual}`;
   return styleString;
 }
 
@@ -208,8 +448,12 @@ export function buildFormatDataCellPatch(sourceCell, displayText) {
 
   if (cellText && cellText.trim() !== "") {
     const sourceCellStyle = sourceCell.getAttribute("style");
-    if (sourceCellStyle) {
-      const sanitizedSpanStyle = stripBackgroundFromStyle(sanitizeCopiedStyleString(sourceCellStyle));
+    const classVisual = inferVisualStyleFromCellClass(sourceCell);
+    if (sourceCellStyle || classVisual) {
+      const sanitizedSpanStyle = [sanitizeCopiedStyleString(sourceCellStyle || ""), classVisual]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
       if (sanitizedSpanStyle) {
         return {
           value: cellText,
@@ -255,32 +499,120 @@ function fillSourceRowPatches(targetRow, sourceCells, maxCols, lineSelector) {
   return targetRow;
 }
 
+function nestedFieldsLookLikeReportRow(texts) {
+  if (!Array.isArray(texts) || texts.length < 3) return false;
+  if (looksLikeHorizontalReportFieldDump(texts)) return true;
+  const moneyCount = texts.filter((token) => cellTextIsMoneyOrNumberLike(token)).length;
+  return moneyCount >= 2 && moneyCount >= Math.ceil(texts.length * 0.4);
+}
+
+function expandCollapsedFieldsToRow(fieldEls, maxCols) {
+  const width = Math.max(maxCols, fieldEls.length);
+  const row = fieldEls.map((el) => buildFormatDataCellPatch(el));
+  while (row.length < width) row.push({ value: "" });
+  return [row];
+}
+
+function expandPlainTokensToRow(tokens, maxCols) {
+  const width = Math.max(maxCols, tokens.length);
+  const row = tokens.map((token, index) => patchFromPlainReportToken(token, index, tokens));
+  while (row.length < width) row.push({ value: "" });
+  return [row];
+}
+
+function tryExpandLeadingDumpCell(sourceCells, maxCols) {
+  if (!sourceCells.length) return null;
+  const first = sourceCells[0];
+  const restAreBlank = sourceCells.slice(1).every((cell) => {
+    const text = extractPlainText(cell);
+    if (text) return false;
+    return collectNestedReportFieldCells(cell).length === 0;
+  });
+  // Multi-TD row where only the first cell holds the report field stack.
+  if (sourceCells.length > 1 && !restAreBlank) return null;
+
+  const nested = collectNestedReportFieldCells(first);
+  const nestedTexts = nested.map((el) => extractPlainText(el));
+  if (nested.length >= 3 && nestedFieldsLookLikeReportRow(nestedTexts)) {
+    return expandCollapsedFieldsToRow(nested, maxCols);
+  }
+
+  const lines = extractCellLines(first);
+  if (nestedFieldsLookLikeReportRow(lines)) {
+    return expandPlainTokensToRow(lines, maxCols);
+  }
+
+  const tokens = tokenizeCollapsedReportRow(first.textContent || "");
+  if (nestedFieldsLookLikeReportRow(tokens)) {
+    return expandPlainTokensToRow(tokens, maxCols);
+  }
+
+  if (nested.length >= 3) {
+    return expandCollapsedFieldsToRow(nested, maxCols);
+  }
+  return null;
+}
+
 function expandSourceRowToMatrixRows(sourceRow, maxCols) {
-  const sourceCells = sourceRow.querySelectorAll("td, th");
+  // Direct children only — nested tables must not inflate sourceCells.
+  const sourceCells = getDirectRowCells(sourceRow);
+
+  // Collapsed Material / Word / wide-empty-TD row → expand HORIZONTALLY.
+  const leadingExpand = tryExpandLeadingDumpCell(sourceCells, maxCols);
+  if (leadingExpand) return leadingExpand;
+
   const { hasVerticalSplit, cellsWithSplit, isFirstCellWithBrOrSpan } =
     detectRowVerticalSplit(sourceCells);
 
-  if (isFirstCellWithBrOrSpan && hasVerticalSplit && cellsWithSplit.length > 0) {
-    const topRow = emptyRowPatch(maxCols);
-    const bottomRow = emptyRowPatch(maxCols);
-
-    fillSourceRowPatches(topRow, sourceCells, maxCols, (cellIndex) => {
-      const splitInfo = cellsWithSplit.find((entry) => entry.index === cellIndex);
-      if (splitInfo) return splitInfo.topData;
-      return extractPlainText(sourceCells[cellIndex]);
-    });
-
-    fillSourceRowPatches(bottomRow, sourceCells, maxCols, (cellIndex) => {
-      const splitInfo = cellsWithSplit.find((entry) => entry.index === cellIndex);
-      if (splitInfo) return splitInfo.bottomData;
-      return extractPlainText(sourceCells[cellIndex]);
-    });
-
-    return [topRow, bottomRow];
+  const firstSplitLines = cellsWithSplit.find((entry) => entry.index === 0)?.allLines || [];
+  if (nestedFieldsLookLikeReportRow(firstSplitLines) && sourceCells.length === 1) {
+    return expandPlainTokensToRow(firstSplitLines, maxCols);
   }
 
-  const row = emptyRowPatch(maxCols);
-  fillSourceRowPatches(row, sourceCells, maxCols, () => null);
+  if (isFirstCellWithBrOrSpan && hasVerticalSplit && cellsWithSplit.length > 0) {
+    // True vertical split (e.g. two stacked labels in one Excel cell) — only top/bottom.
+    // Do not use this path for 9-field agent dumps.
+    const firstLines = cellsWithSplit[0]?.allLines || [];
+    if (firstLines.length <= 2) {
+      const topRow = emptyRowPatch(maxCols);
+      const bottomRow = emptyRowPatch(maxCols);
+
+      fillSourceRowPatches(topRow, sourceCells, maxCols, (cellIndex) => {
+        const splitInfo = cellsWithSplit.find((entry) => entry.index === cellIndex);
+        if (splitInfo) return splitInfo.topData;
+        return extractPlainText(sourceCells[cellIndex]);
+      });
+
+      fillSourceRowPatches(bottomRow, sourceCells, maxCols, (cellIndex) => {
+        const splitInfo = cellsWithSplit.find((entry) => entry.index === cellIndex);
+        if (splitInfo) return splitInfo.bottomData;
+        return extractPlainText(sourceCells[cellIndex]);
+      });
+
+      return [topRow, bottomRow];
+    }
+  }
+
+  const row = emptyRowPatch(Math.max(maxCols, sourceCells.length));
+  fillSourceRowPatches(row, sourceCells, row.length, () => null);
+
+  // Safety: single filled cell still looks like a stacked field dump → expand it.
+  const nonEmptyIdx = [];
+  row.forEach((cell, index) => {
+    if (String(cell?.value || "").trim() || String(cell?.html || "").trim()) nonEmptyIdx.push(index);
+  });
+  if (nonEmptyIdx.length === 1) {
+    const dumpCell = sourceCells[nonEmptyIdx[0]] || sourceCells[0];
+    if (dumpCell) {
+      const nested = collectNestedReportFieldCells(dumpCell);
+      if (nested.length >= 3) return expandCollapsedFieldsToRow(nested, Math.max(maxCols, nested.length));
+      const lines = extractCellLines(dumpCell);
+      if (nestedFieldsLookLikeReportRow(lines)) {
+        return expandPlainTokensToRow(lines, Math.max(maxCols, lines.length));
+      }
+    }
+  }
+
   return [row];
 }
 

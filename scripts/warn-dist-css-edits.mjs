@@ -23,14 +23,14 @@ function main() {
   if (!distExists) return;
 
   const changedFiles = readChangedFiles();
-  const changedDistCss = changedFiles.filter((file) => file.startsWith("dist/css/"));
+  const changedDistCss = changedFiles.filter((file) => file.startsWith("frontend/dist/css/"));
 
   if (changedDistCss.length === 0) return;
 
   console.warn("\n[css-workflow warning]");
-  console.warn("Detected edits under dist/css.");
+  console.warn("Detected edits under frontend/dist/css.");
   console.warn("Do not edit build artifacts directly.");
-  console.warn("Please edit source files under public/css, then run npm run build.\n");
+  console.warn("Please edit source files under frontend/public/css, then run npm run build.\n");
   changedDistCss.forEach((file) => console.warn(` - ${file}`));
   console.warn("");
 }

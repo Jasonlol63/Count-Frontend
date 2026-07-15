@@ -1,32 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { LOGIN_I18N } from "../../translateFile/auth/authTranslate.js";
+import { LOGIN_I18N, localizeAuthApiMessage } from "../../translateFile/auth/authTranslate.js";
 import { buildApiUrl, buildSpaPath } from "../../utils/core/apiUrl.js";
+import { fetchCurrentUser, loginWithTenant } from "../../utils/auth/authApi.js";
+import { resolveDefaultLandingPath } from "../../utils/auth/sidebarPermissions.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
 import {
   clearDashboardFilterSession,
   seedDashboardFilterFromLogin,
 } from "../../utils/company/sharedCompanyFilter.js";
 import { useAuthBackground } from "./useAuthBackground.js";
+import { safeLocal, safeSession } from "../../utils/storage/safeStorage.js";
+import { extractPlainTextFromRichText } from "../../utils/content/richTextSanitizer.js";
 
 const LOGIN_ASSET_RETRY_KEY = "ec_login_asset_retry";
 
 function tryLoginPageReloadOnce() {
-  if (sessionStorage.getItem(LOGIN_ASSET_RETRY_KEY)) {
-    sessionStorage.removeItem(LOGIN_ASSET_RETRY_KEY);
+  if (safeSession.getItem(LOGIN_ASSET_RETRY_KEY)) {
+    safeSession.removeItem(LOGIN_ASSET_RETRY_KEY);
     return false;
   }
-  sessionStorage.setItem(LOGIN_ASSET_RETRY_KEY, "1");
+  safeSession.setItem(LOGIN_ASSET_RETRY_KEY, "1");
   const url = new URL(window.location.href);
   url.searchParams.set("_", String(Date.now()));
   window.location.replace(url.toString());
   return true;
-}
-
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text ?? "";
-  return div.innerHTML;
 }
 
 function AlertModal({ open, title, message, confirmText, onClose }) {
@@ -100,7 +98,7 @@ export default function LoginPage() {
   const [maintenanceList, setMaintenanceList] = useState([]);
   const [modal, setModal] = useState({ open: false, title: "Notice", message: "" });
   const [submitting, setSubmitting] = useState(false);
-  const [lang, setLang] = useState(() => localStorage.getItem("login_lang") || "en");
+  const [lang, setLang] = useState(() => safeLocal.getItem("login_lang") || "en");
 
   const langThumbRef = useRef(null);
   const prevLangRef = useRef(lang);
@@ -111,7 +109,7 @@ export default function LoginPage() {
   }, [roleFromUrl]);
 
   useEffect(() => {
-    localStorage.setItem("login_lang", lang);
+    safeLocal.setItem("login_lang", lang);
   }, [lang]);
 
   useEffect(() => {
@@ -151,12 +149,12 @@ export default function LoginPage() {
   }, [lang]);
 
   useEffect(() => {
-    sessionStorage.removeItem(LOGIN_ASSET_RETRY_KEY);
+    safeSession.removeItem(LOGIN_ASSET_RETRY_KEY);
   }, []);
 
   useEffect(() => {
-    if (sessionStorage.getItem("ec_skip_session_bootstrap") === "1") {
-      sessionStorage.removeItem("ec_skip_session_bootstrap");
+    if (safeSession.getItem("ec_skip_session_bootstrap") === "1") {
+      safeSession.removeItem("ec_skip_session_bootstrap");
       return undefined;
     }
 
@@ -164,13 +162,8 @@ export default function LoginPage() {
     const controller = new AbortController();
     (async () => {
       try {
-        const res = await fetch(buildApiUrl("auth/current-user"), {
-          credentials: "include",
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const json = await res.json();
-        if (cancelled || !res.ok || !json?.success || !json?.data) return;
+        const { ok, json } = await fetchCurrentUser({ signal: controller.signal });
+        if (cancelled || !ok || !json?.success || !json?.data) return;
 
         const user = json.data;
         const userType = String(user.user_type || "").toLowerCase();
@@ -186,7 +179,8 @@ export default function LoginPage() {
           navigate(spaPath("user-secondary-password"), { replace: true });
           return;
         }
-        navigate(spaPath("dashboard"), { replace: true });
+        const landing = resolveDefaultLandingPath(user);
+        navigate(landing || spaPath("login"), { replace: true });
       } catch (err) {
         if (err?.name === "AbortError") return;
         // stay on login page when not authenticated
@@ -200,10 +194,21 @@ export default function LoginPage() {
 
   const showNotice = useCallback(
     (message, title) => {
-      setModal({ open: true, title: title || i18n.notice, message: message || "Unknown error" });
+      setModal({
+        open: true,
+        title: title || i18n.notice,
+        message: message || i18n.unknownError,
+      });
     },
     [i18n.notice]
   );
+
+  useEffect(() => {
+    const msg = safeSession.getItem("ec_maintenance_notice");
+    if (!msg) return;
+    safeSession.removeItem("ec_maintenance_notice");
+    showNotice(msg, i18n.notice);
+  }, [showNotice, i18n.notice]);
 
   useEffect(() => {
     document.body.classList.remove(
@@ -257,37 +262,24 @@ export default function LoginPage() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      const fd = new FormData();
-      fd.append("tenant_code", tenantCode.toUpperCase().trim());
-      fd.append("password", password);
-      fd.append("login_role", role);
-      if (role === "member") {
-        fd.append("account_id", userField.toUpperCase().trim());
-      } else {
-        fd.append("login_id", userField.toUpperCase().trim());
-        if (rememberMe) fd.append("remember_me", "1");
-      }
-
-      const res = await fetch(buildApiUrl("auth/login"), {
-        method: "POST",
-        body: fd,
-        credentials: "include",
-        cache: "no-store",
+      const { ok, status, json: data, parsed } = await loginWithTenant({
+        tenantCode,
+        password,
+        loginRole: role,
+        loginId: role === "member" ? undefined : userField,
+        accountId: role === "member" ? userField : undefined,
+        rememberMe,
       });
-      const raw = await res.text();
-      let data = {};
-      try {
-        data = raw ? JSON.parse(raw) : {};
-      } catch {
-        const msg = res.ok
+      if (!parsed) {
+        const msg = ok
           ? i18n.loginInvalidResponse
-          : i18n.loginServerError.replace("{status}", String(res.status));
+          : i18n.loginServerError.replace("{status}", String(status));
         if (tryLoginPageReloadOnce()) return;
         showNotice(msg);
         return;
       }
       if (data.status === "success" && data.redirect) {
-        sessionStorage.removeItem(LOGIN_ASSET_RETRY_KEY);
+        safeSession.removeItem(LOGIN_ASSET_RETRY_KEY);
         clearDashboardFilterSession();
         const sessionTenant = data.tenant && typeof data.tenant === "object" ? data.tenant : {};
         const loginTenant =
@@ -302,8 +294,7 @@ export default function LoginPage() {
           seedDashboardFilterFromLogin({
             loginScope,
             loginIdentifier,
-            sessionTenantId:
-              sessionTenant.id != null ? Number(sessionTenant.id) : null,
+            sessionTenantId: sessionTenant.id != null ? Number(sessionTenant.id) : null,
             sessionTenantCode: loginScope === "company" ? loginIdentifier : null,
           });
         }
@@ -312,7 +303,6 @@ export default function LoginPage() {
         const redirect = String(data.redirect || "");
         const loginRole = role;
 
-        // Smooth routing: do not follow legacy "dashboard.php -> member" chain.
         if (loginRole === "member" || userType === "member") {
           navigate(spaPath("member"), { replace: true });
           return;
@@ -332,6 +322,18 @@ export default function LoginPage() {
         })();
 
         if (internalPath) {
+          if (internalPath === "/dashboard") {
+            try {
+              const userRes = await fetchCurrentUser();
+              if (userRes.ok && userRes.json?.success && userRes.json?.data) {
+                const landing = resolveDefaultLandingPath(userRes.json.data);
+                navigate(landing || spaPath("login"), { replace: true });
+                return;
+              }
+            } catch {
+              /* fall through; layout guard will correct */
+            }
+          }
           navigate(buildSpaPath(internalPath), { replace: true });
           return;
         }
@@ -343,7 +345,7 @@ export default function LoginPage() {
         }
         return;
       }
-      showNotice(data.message || i18n.loginFailed);
+      showNotice(localizeAuthApiMessage(data.message, lang) || i18n.loginFailed);
     } catch {
       if (tryLoginPageReloadOnce()) return;
       showNotice(i18n.loginError);
@@ -362,11 +364,11 @@ export default function LoginPage() {
         {maintenanceVisible && (
           <div className="sc-login-maintenance-wrapper">
             <div className="sc-login-maintenance-track">
-              {[...maintenanceList, ...maintenanceList].map((item, index) => (
+              {[...maintenanceList, ...maintenanceList].filter(Boolean).map((item, index) => (
                 <div className="sc-login-maintenance-item" key={`${item.id}-${index}`}>
                   <span className="sc-login-maintenance-dot" />
                   <span className="sc-login-maintenance-label">{item.prefix || i18n.maintenanceLabel}</span>
-                  <span dangerouslySetInnerHTML={{ __html: escapeHtml(item.content) }} />
+                  <span>{extractPlainTextFromRichText(item.content)}</span>
                 </div>
               ))}
             </div>

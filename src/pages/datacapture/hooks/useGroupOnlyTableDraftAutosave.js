@@ -4,7 +4,7 @@ import {
   normalizeGroupOnlyDraftCurrencyId,
   saveGroupOnlyTableDraft,
 } from "../lib/dataCaptureGroupOnlyTableDraft.js";
-import { isGroupOnlyProcessId } from "../lib/dataCaptureGroupOnlyProcesses.js";
+import { isGroupPayrollDraftProcessId } from "../lib/dataCaptureGroupOnlyProcesses.js";
 import { captureTableSnapshot } from "../lib/dataCaptureTableSnapshot.js";
 import { getDataCaptureState } from "../lib/dataCaptureRuntime.js";
 import { useDataCaptureContext } from "../context/DataCaptureContext.jsx";
@@ -16,7 +16,8 @@ import { useDataCaptureContext } from "../context/DataCaptureContext.jsx";
 export function useGroupOnlyTableDraftAutosave({
   enabled,
   captureScope,
-  selectedGroup,
+  draftBucket,
+  payrollDraftServerSync = true,
   selectedProcessId,
   currencyId,
   captureType,
@@ -31,11 +32,11 @@ export function useGroupOnlyTableDraftAutosave({
 
   useLayoutEffect(() => {
     skipAfterRestoreRef.current = true;
-  }, [selectedProcessId, currencyId]);
+  }, [selectedProcessId, currencyId, draftBucket]);
 
   useEffect(() => {
-    if (!enabled || !selectedGroup || !processIdRef.current) return;
-    if (!isGroupOnlyProcessId(processIdRef.current)) return;
+    if (!enabled || !draftBucket || !processIdRef.current) return;
+    if (!isGroupPayrollDraftProcessId(processIdRef.current)) return;
     const cid = normalizeGroupOnlyDraftCurrencyId(currencyIdRef.current);
     if (!cid) return;
     if (getDataCaptureState().isRestoring) {
@@ -56,14 +57,14 @@ export function useGroupOnlyTableDraftAutosave({
     const activeCaptureType = getBridgeCaptureType(captureType || "1.Text");
     const tableData = captureTableSnapshot(activeCaptureType);
     saveGroupOnlyTableDraft(
-      selectedGroup,
+      draftBucket,
       processIdRef.current,
       cid,
       {
         tableData,
         captureType: activeCaptureType,
       },
-      { captureScope },
+      { captureScope, serverSync: payrollDraftServerSync },
     );
-  }, [enabled, captureScope, selectedGroup, captureType, gridVersion, currencyId]);
+  }, [enabled, captureScope, draftBucket, payrollDraftServerSync, captureType, gridVersion, currencyId]);
 }

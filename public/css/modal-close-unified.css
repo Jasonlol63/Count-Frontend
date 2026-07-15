@@ -321,9 +321,37 @@
   padding-right: 3rem !important;
 }
 
+#linkAccountModal .account-modal-header {
+  padding-right: 3rem !important;
+}
+
+#addModal .modal-content.process-form-modal .modal-header,
+#editModal .modal-content.process-form-modal .modal-header {
+  padding-right: 3rem !important;
+}
+
+.modal-content.description-selection-modal .modal-header,
+.modal-content.description-selection-modal .description-selection-modal-header.modal-header {
+  padding-right: 3rem !important;
+}
+
 @media (max-width: 768px) {
   #account-addModal .account-modal-header,
   #account-editModal .account-modal-header {
+    padding-right: 1.1rem !important;
+  }
+
+  #linkAccountModal .account-modal-header {
+    padding-right: 1.1rem !important;
+  }
+
+  #addModal .modal-content.process-form-modal .modal-header,
+  #editModal .modal-content.process-form-modal .modal-header {
+    padding-right: 1.1rem !important;
+  }
+
+  .modal-content.description-selection-modal .modal-header,
+  .modal-content.description-selection-modal .description-selection-modal-header.modal-header {
     padding-right: 1.1rem !important;
   }
 

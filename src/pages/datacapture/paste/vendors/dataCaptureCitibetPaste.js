@@ -1,7 +1,8 @@
 import { isCitibetCaptureType } from "../../lib/dataCaptureFormRules.js";
 import { parseCitibetPasteData } from "../core/dataCapturePasteDetect.js";
 import { applyDataMatrixToGrid, notifyPasteSuccess } from "../core/dataCapturePasteApply.js";
-import { recomputeSubmitStateAfterPaste, runConvertTableOnSubmit } from "../../lib/dataCaptureBridge.js";
+import { finalizePasteWithOptionalConvert } from "../../grid/dataCaptureGridPasteHistory.js";
+import { recomputeSubmitStateAfterPaste } from "../../lib/dataCaptureBridge.js";
 
 export function handleCitibetPaste(e, pastedData, anchorCell, captureType, preParsed = null) {
   const parsed = preParsed || parseCitibetPasteData(pastedData, captureType);
@@ -10,6 +11,7 @@ export function handleCitibetPaste(e, pastedData, anchorCell, captureType, prePa
   const { dataMatrix, maxRows, maxCols, usedMajorParser } = parsed;
   const { successCount } = applyDataMatrixToGrid(dataMatrix, anchorCell, {
     uppercaseValues: true,
+    deferUndoCheckpoint: true,
   });
 
   if (successCount > 0) {
@@ -18,15 +20,10 @@ export function handleCitibetPaste(e, pastedData, anchorCell, captureType, prePa
     notifyPasteSuccess("No cells were pasted from Citibet report.", "danger");
   }
 
-  if (successCount > 0) {
-    setTimeout(() => {
-      if (usedMajorParser) {
-        recomputeSubmitStateAfterPaste();
-      } else {
-        runConvertTableOnSubmit();
-      }
-    }, 100);
-  }
+  finalizePasteWithOptionalConvert(successCount, {
+    runConvert: !usedMajorParser,
+    beforeCommit: usedMajorParser ? () => recomputeSubmitStateAfterPaste() : undefined,
+  });
 
   return successCount > 0;
 }

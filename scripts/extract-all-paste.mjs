@@ -3,9 +3,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, "..");
+const root = path.resolve(__dirname, "../..");
 const srcPath = path.join(root, "js/datacapture.js");
-const outDir = path.join(root, "src/pages/datacapture/paste");
+const outDir = path.join(root, "frontend/src/pages/datacapture/paste");
 const lines = fs.readFileSync(srcPath, "utf8").split("\n");
 
 function slice(start, end) {

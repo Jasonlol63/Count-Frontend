@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RESET_PASSWORD_I18N } from "../../translateFile/auth/authTranslate.js";
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { useAuthBackground } from "./useAuthBackground.js";
+import { logoutSession } from "../../utils/auth/authApi.js";
 import { sendResetTac, submitResetPassword } from "./resetPassword.js";
 import { sanitizeEmailInput, validateEmail } from "../../utils/input/emailValidation.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
@@ -187,11 +187,7 @@ export default function ResetPasswordPage() {
       if (data.success) {
         sessionStorage.setItem("ec_skip_session_bootstrap", "1");
         try {
-          await fetch(buildApiUrl("auth/logout"), {
-            method: "POST",
-            credentials: "include",
-            cache: "no-store",
-          });
+          await logoutSession();
         } catch {
           /* proceed to login even if logout request fails */
         }
@@ -213,7 +209,7 @@ export default function ResetPasswordPage() {
 
   return (
     <>
-      <div className="login-container">
+      <div className="login-container reset-password-page">
         <div className="login-header">
           <h2>{i18n.pageTitle}</h2>
         </div>
@@ -279,7 +275,7 @@ export default function ResetPasswordPage() {
                   placeholder={i18n.confirmPasswordPlaceholder}
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
-                  style={{ borderColor: passwordMatched ? "#e1e5e9" : "#dc3545" }}
+                  className={!passwordMatched && confirmPassword ? "input--mismatch" : undefined}
                   required
                 />
               </div>
@@ -296,7 +292,7 @@ export default function ResetPasswordPage() {
                     onClick={() => setLang("zh")}
                     aria-pressed={lang === "zh"}
                   >
-                    中
+                    ä¸­
                   </button>
                   <button
                     type="button"

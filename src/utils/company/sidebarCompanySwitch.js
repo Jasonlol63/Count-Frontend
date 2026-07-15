@@ -1,4 +1,4 @@
-import { notifyCompanySessionUpdated } from "./companySessionEvents.js";
+﻿import { notifyCompanySessionUpdated } from "./companySessionEvents.js";
 import { peekCompanySessionFlags } from "./companySessionFlagsCache.js";
 import { normalizeCompanyCode } from "./loginScope.js";
 import { notifyDashboardGroupFilterChanged } from "./sharedCompanyFilter.js";
@@ -48,7 +48,7 @@ export function isGamesOnlyCategoryFlags(flags) {
 
 /**
  * Patch sidebar `me` immediately after company session sync (all pages).
- * Pass `update_company_session_api.php` payload when available.
+ * Pass switch-tenant payload when available.
  */
 export function applySidebarForCompanySwitch(viewGroup, companyRow, apiData) {
   const cid = Number(companyRow?.id);
@@ -73,15 +73,21 @@ export function applySidebarForCompanySwitch(viewGroup, companyRow, apiData) {
   notifyDashboardGroupFilterChanged(vg, cid, opts);
 }
 
-/** Bank-only companies may use payment-maintenance and bankprocess-maintenance. */
+/** Bank-only companies: payment, bank process, data capture, and transaction maintenance. */
 export function isBankOnlyAllowedMaintenancePath(path) {
   const pageKey = pathnameToPageKey(path);
-  return pageKey === "bankprocess-maintenance" || pageKey === "payment-maintenance";
+  return (
+    pageKey === "bankprocess-maintenance" ||
+    pageKey === "payment-maintenance" ||
+    pageKey === "capture-maintenance" ||
+    pageKey === "transaction-maintenance" ||
+    pageKey === "formula-maintenance"
+  );
 }
 
 /**
  * When company category does not match the current maintenance route, return redirect path.
- * Bank-only (e.g. CX): leave games maintenance → dashboard; may stay on payment/bankprocess maintenance.
+ * Bank-only (e.g. CX): may use payment / bankprocess / capture / transaction maintenance.
  * Always call applySidebarForCompanySwitch before navigating.
  */
 export function resolveMaintenanceRedirectForSession(sessionData, currentPath) {
@@ -91,20 +97,13 @@ export function resolveMaintenanceRedirectForSession(sessionData, currentPath) {
 
   if (isBankOnlyCategoryFlags(flags)) {
     if (isBankOnlyAllowedMaintenancePath(currentPath)) return null;
-    if (
-      pageKey === "transaction-maintenance" ||
-      pageKey === "capture-maintenance" ||
-      pageKey === "formula-maintenance"
-    ) {
-      return spaPath("payment-maintenance");
-    }
     if (pageKey === "dashboard") return null;
     return spaPath("dashboard");
   }
 
   if (isGamesOnlyCategoryFlags(flags)) {
     if (pageKey === "bankprocess-maintenance") return spaPath("capture-maintenance");
-    // Payment Maintenance 与 Process 共用公司 pills，切换 Games 公司时不跳转。
+    // Payment Maintenance ä¸Ž Process å…±ç”¨å…¬å¸ pillsï¼Œåˆ‡æ¢ Games å…¬å¸æ—¶ä¸è·³è½¬ã€‚
     return null;
   }
 

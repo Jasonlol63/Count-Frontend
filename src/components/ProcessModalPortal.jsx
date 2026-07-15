@@ -20,7 +20,8 @@ export const processModalBackdropStyle = {
 /** Dropdowns portaled to body must sit above the modal backdrop (10050). */
 export const processModalDropdownZIndex = 10060;
 export const profitSharingModalDropdownZIndex = 10101;
-export const accountModalDropdownZIndex = 20001;
+/** Above #userModal / Account modal overlay (accountModalOverlayZIndex). */
+export const accountModalDropdownZIndex = 20060;
 /** Add Account modal above ProcessModalPortal bank modals (10050). */
 export const accountModalOverlayZIndex = 20050;
 /** Company picker above Add Account modal; below validation toast (26000). */
@@ -39,7 +40,9 @@ export function portalToDocumentBody(node) {
 /** Resolve portal dropdown z-index from the nearest open process/bank modal. */
 export function getProcessModalDropdownZIndex(fromEl) {
   if (!fromEl?.closest) return processModalDropdownZIndex;
-  if (fromEl.closest("#addAccountModal, .account-modal")) return accountModalDropdownZIndex;
+  if (fromEl.closest("#userModal, #account-addModal, #account-editModal, #addAccountModal, .account-modal")) {
+    return accountModalDropdownZIndex;
+  }
   if (fromEl.closest("#profitSharingModal")) return profitSharingModalDropdownZIndex;
   return processModalDropdownZIndex;
 }

@@ -14,9 +14,11 @@ export function useDataCaptureSubmittedList(captureScope, captureDate) {
     queryFn: async () => {
       const res = await fetchSubmissionsByCaptureDate(captureDate, captureScope);
       if (res.success) return Array.isArray(res.data) ? res.data : [];
-      return [];
+      throw new Error(res.error || res.message || "Failed to load submitted processes");
     },
     enabled,
+    retry: 1,
+    placeholderData: (previousData) => previousData,
   });
 
   const refreshSubmitted = useCallback(async () => {
@@ -44,5 +46,6 @@ export function useDataCaptureSubmittedList(captureScope, captureDate) {
     submittedItems: query.data ?? [],
     refreshSubmitted,
     submissionsLoading: query.isLoading,
+    submissionsError: query.error,
   };
 }

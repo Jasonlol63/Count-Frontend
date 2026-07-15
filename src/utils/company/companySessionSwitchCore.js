@@ -1,19 +1,15 @@
-import { buildApiUrl } from "../core/apiUrl.js";
 import { notifyCompanySessionUpdated } from "./companySessionEvents.js";
+import { switchSessionTenant } from "../auth/authApi.js";
 
-/** POST `update_company_session_api.php` — shared by Admin-aligned optimistic company picks. */
+/** POST /auth/switch-tenant — shared by optimistic company/tenant picks. */
 export async function fetchUpdateCompanySession(companyId, { signal } = {}) {
   const nextId = Number(companyId);
   if (!Number.isFinite(nextId) || nextId <= 0) {
     return { ok: false, json: { success: false } };
   }
   try {
-    const res = await fetch(
-      buildApiUrl(`api/session/update_company_session_api.php?company_id=${nextId}`),
-      { credentials: "include", signal },
-    );
-    const json = await res.json().catch(() => ({}));
-    return { ok: res.ok, json };
+    const { ok, json } = await switchSessionTenant(nextId, { signal });
+    return { ok, json };
   } catch (err) {
     if (err?.name === "AbortError") throw err;
     return { ok: false, json: { success: false } };
@@ -21,7 +17,7 @@ export async function fetchUpdateCompanySession(companyId, { signal } = {}) {
 }
 
 /**
- * Background PHP session sync after UI already shows the target company (Account / Admin pattern).
+ * Background session sync after UI already shows the target tenant.
  * @returns {Promise<boolean>} true when session matches or was updated successfully
  */
 export async function syncCompanySessionInBackground({

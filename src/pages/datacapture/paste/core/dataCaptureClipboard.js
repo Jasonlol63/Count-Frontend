@@ -36,11 +36,68 @@ export function clipboardLooksLikeGridPaste(clipboard) {
   }
   try {
     const text = clipboard.getData?.("text/plain") || "";
-    if (text && text.includes("\t") && (text.includes("\n") || text.includes("\r"))) return true;
+    if (!text || !text.trim()) return false;
+    // Excel 单行复制也带 Tab；多行 TSV 同样支持
+    if (text.includes("\t")) return true;
+    if (text.includes("\n") || text.includes("\r")) return true;
+    // 单个值也可贴入选中格
+    return true;
   } catch {
     /* ignore */
   }
   return false;
+}
+
+/** Read clipboard for programmatic paste (Ctrl+V on selected cells). */
+export async function readClipboardForPaste() {
+  if (navigator.clipboard?.read) {
+    try {
+      const items = await navigator.clipboard.read();
+      let text = "";
+      let html = "";
+      for (const item of items) {
+        for (const type of item.types) {
+          if (type === "text/plain") {
+            text = await (await item.getType(type)).text();
+          } else if (type === "text/html") {
+            html = await (await item.getType(type)).text();
+          }
+        }
+      }
+      if (text || html) return { text, html };
+    } catch (err) {
+      console.warn("clipboard.read failed, falling back to readText:", err);
+    }
+  }
+
+  if (navigator.clipboard?.readText) {
+    const text = await navigator.clipboard.readText();
+    return { text, html: "" };
+  }
+
+  throw new Error("clipboard unavailable");
+}
+
+/** Synthetic paste event with text/html payloads (for Ctrl+V / context menu paste). */
+export function buildSyntheticPasteEvent(target, { text = "", html = "" } = {}) {
+  const types = [];
+  if (html) types.push("text/html");
+  if (text || !html) types.push("text/plain");
+
+  return {
+    preventDefault() {},
+    stopPropagation() {},
+    clipboardData: {
+      types,
+      getData(type) {
+        if (type === "text/html") return html || "";
+        if (type === "text/plain" || type === "text" || type === "Text") return text || "";
+        return "";
+      },
+    },
+    target,
+    currentTarget: target,
+  };
 }
 
 export function getClipboardPlainText(e) {
@@ -84,13 +141,67 @@ export function detectHtmlTableInClipboard(e) {
   return null;
 }
 
+/**
+ * Rich table HTML used by 1.Text format-merge mode.
+ * Only treat as rich when it's a table and carries format/span hints.
+ */
+export function isFormatRichHtmlTable(html) {
+  if (!html || !/<table\b/i.test(html)) return false;
+  return /rowspan\s*=|colspan\s*=|style\s*=|<font\b|<strong\b|<b\b|<span\b/i.test(html);
+}
+
+/**
+ * Form controls that must never land in the grid as live widgets.
+ * Intentionally does NOT strip button / svg / img / role=button — 1.TEXT and
+ * 2.FORMAT paste keep report action icons for visual 1:1 (handlers already
+ * stripped by sanitizePastedCellHtml).
+ */
+const PASTED_FORM_CONTROL_SELECTOR = "input, select, textarea";
+
+/**
+ * Remove live form controls from pasted HTML while keeping text, formatting,
+ * and decorative icons (button / svg / img).
+ */
+export function stripInteractiveUiFromHtml(html) {
+  if (!html || !html.includes("<")) return html || "";
+  try {
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    div.querySelectorAll(PASTED_FORM_CONTROL_SELECTOR).forEach((el) => {
+      const text = (el.textContent || "").trim();
+      if (text) {
+        el.replaceWith(document.createTextNode(text));
+      } else {
+        el.remove();
+      }
+    });
+    return div.innerHTML;
+  } catch {
+    return html;
+  }
+}
+
+/** Plain text from sanitized HTML (after UI elements are stripped). */
+export function plainTextFromSanitizedHtml(html) {
+  if (!html) return "";
+  if (!html.includes("<")) return String(html).replace(/\u00a0/g, " ").trim();
+  try {
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    return (div.textContent ?? "").replace(/\u00a0/g, " ").trim();
+  } catch {
+    return "";
+  }
+}
+
 export function sanitizePastedCellHtml(cellContent) {
   if (!cellContent) return "";
-  return cellContent
+  const stripped = cellContent
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
     .replace(/javascript:/gi, "")
     .replace(/on\w+\s*=\s*["'][^"']*["']/gi, "");
+  return stripInteractiveUiFromHtml(stripped);
 }
 
 /** Reorder columns when No./User appear at the end (common Excel copy quirk). */
@@ -159,4 +270,95 @@ export function measureHtmlTable(table) {
 
   if (maxCols === 0) return null;
   return { allRows: Array.from(allRows), maxCols };
+}
+
+/** Top-level tables only (ignore tables nested inside a cell). */
+export function getTopLevelTables(root) {
+  return Array.from(root.querySelectorAll("table")).filter((t) => {
+    const parentTable = t.parentElement ? t.parentElement.closest("table") : null;
+    return !parentTable;
+  });
+}
+
+/** Count only a table's OWN cells (cells not belonging to a nested table). */
+function ownCellCount(table) {
+  let count = 0;
+  table.querySelectorAll("td, th").forEach((cell) => {
+    if (cell.closest("table") === table) count += 1;
+  });
+  return count;
+}
+
+/**
+ * The table with the most of its OWN td/th cells (the real data table).
+ *
+ * Counting own cells (not nested descendants) is what lets us drill into a
+ * report that wraps the real data grid inside a single cell of an outer layout
+ * table: the outer wrapper has few own cells, the inner data grid has many, so
+ * the inner grid wins instead of dumping the whole grid into one cell.
+ */
+function pickLargestTable(tables) {
+  let best = null;
+  let bestScore = -1;
+  tables.forEach((t) => {
+    const score = ownCellCount(t);
+    if (score > bestScore) {
+      bestScore = score;
+      best = t;
+    }
+  });
+  return best;
+}
+
+/** Widest row's column count (colspan-aware). */
+function tableColCount(table) {
+  let maxCols = 0;
+  table.querySelectorAll("tr").forEach((tr) => {
+    maxCols = Math.max(maxCols, countRowCols(tr));
+  });
+  return maxCols;
+}
+
+/**
+ * Pick the real data table and the rows to paste.
+ *
+ * - The largest table (most cells) is the data table. When a report wraps the
+ *   real table inside a single cell of an outer layout table (e.g. the M8BET
+ *   Win-Lose report), this drills into the nested table instead of dumping the
+ *   whole table into one cell.
+ * - Only when the data table is itself top-level do we also stack sibling
+ *   top-level tables that have the SAME column count — this keeps the MarioClub
+ *   report's separate TOTAL footer table while ignoring unrelated side tables
+ *   (which have a different column count).
+ */
+export function measureTopLevelTables(root) {
+  const allTables = Array.from(root.querySelectorAll("table"));
+  if (!allTables.length) return null;
+
+  const primary = pickLargestTable(allTables);
+  if (!primary) return null;
+
+  const topTables = getTopLevelTables(root);
+  const primaryIsTopLevel = topTables.includes(primary);
+
+  let tablesToStack;
+  if (primaryIsTopLevel) {
+    const primaryCols = tableColCount(primary);
+    tablesToStack = topTables.filter((t) => tableColCount(t) === primaryCols);
+    if (!tablesToStack.includes(primary)) tablesToStack.push(primary);
+  } else {
+    tablesToStack = [primary];
+  }
+
+  const allRows = [];
+  let maxCols = 0;
+  tablesToStack.forEach((table) => {
+    table.querySelectorAll("tr").forEach((tr) => {
+      allRows.push(tr);
+      maxCols = Math.max(maxCols, countRowCols(tr));
+    });
+  });
+
+  if (!allRows.length || maxCols === 0) return null;
+  return { allRows, maxCols };
 }

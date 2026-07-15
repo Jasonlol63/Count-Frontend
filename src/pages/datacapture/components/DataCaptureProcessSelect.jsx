@@ -1,8 +1,9 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
 
 const CONTAINER_EDGE_PAD = 8;
-const PORTAL_GAP = 2;
+const PORTAL_GAP = 1;
 const PROCESS_SEARCH_RESERVE = 52;
 const PORTAL_DROPDOWN_CAP = 280;
 const MIN_DROPDOWN_HEIGHT = 120;
@@ -61,7 +62,6 @@ export default function DataCaptureProcessSelect({
   processListTruncated,
   processRowsCount,
   visibleProcesses,
-  filteredProcesses,
   selectProcessRow,
   displayTextFromProcessRow,
   onBeforeToggle,
@@ -71,6 +71,12 @@ export default function DataCaptureProcessSelect({
   const dropdownRef = useRef(null);
   const [menuStyle, setMenuStyle] = useState(null);
   const [optionsMaxHeight, setOptionsMaxHeight] = useState(250);
+
+  const { highlightIdx, setHighlightIdx, listRef, handleListKeyDown, handleButtonKeyDown, highlightClass } = useListboxKeyboard({
+    open: processOpen,
+    itemCount: visibleProcesses.length,
+    resetToken: processFilter,
+  });
 
   const positionMenu = useCallback(() => {
     const btn = buttonRef.current;
@@ -127,17 +133,19 @@ export default function DataCaptureProcessSelect({
             value={processFilter}
             onChange={(e) => setProcessFilter(e.target.value.toUpperCase())}
             onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                setProcessOpen(false);
-              } else if (e.key === "Enter") {
-                e.preventDefault();
-                const first = filteredProcesses[0];
-                if (first) void selectProcessRow(first);
-              }
+              handleListKeyDown(e, {
+                len: visibleProcesses.length,
+                onSelectIndex: (idx) => {
+                  const row = visibleProcesses[idx];
+                  if (row) void selectProcessRow(row);
+                },
+                onClose: () => setProcessOpen(false),
+              });
             }}
           />
         </div>
         <div
+          ref={listRef}
           className="custom-select-options dc-react-process-options"
           style={{ flex: "1 1 auto", minHeight: 0, maxHeight: optionsMaxHeight }}
         >
@@ -149,11 +157,13 @@ export default function DataCaptureProcessSelect({
               {t("typeToSearchProcesses", { count: processRowsCount })}
             </div>
           ) : null}
-          {visibleProcesses.map((row) => (
+          {visibleProcesses.map((row, idx) => (
             <div
               key={row.id}
               role="presentation"
-              className="custom-select-option"
+              className={`custom-select-option${highlightClass(idx)}`}
+              data-kb-idx={idx}
+              onMouseEnter={() => setHighlightIdx(idx)}
               onClick={() => void selectProcessRow(row)}
             >
               {displayTextFromProcessRow(row)}
@@ -190,6 +200,22 @@ export default function DataCaptureProcessSelect({
             }
           : {})}
         onClick={handleToggle}
+        onKeyDown={(e) => {
+          handleButtonKeyDown(e, {
+            isOpen: processOpen,
+            onToggleOpen: () => {
+              onBeforeToggle?.();
+              positionMenu();
+              setProcessOpen(true);
+            },
+            onClose: () => setProcessOpen(false),
+            len: visibleProcesses.length,
+            onSelectIndex: (idx) => {
+              const row = visibleProcesses[idx];
+              if (row) void selectProcessRow(row);
+            },
+          });
+        }}
       >
         {selectedProcess?.displayText || t("selectProcess")}
       </button>

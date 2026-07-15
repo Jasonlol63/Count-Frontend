@@ -1,15 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { formatSpringOwnershipLabel } from "../ownershipRowHelpers.js";
+import { useListboxKeyboard } from "../../../../components/useListboxKeyboard.js";
 
 export function formatOwnAccountLabel(acc, t) {
   if (!acc) return "";
   const mainStr = parseInt(acc.is_main_owner, 10) === 1 ? t("mainOwnerSuffix") : "";
-  if (acc.account_label) return `${acc.account_label}${mainStr}`;
-
-  const ownerType = String(acc.owner_type || "").toLowerCase();
-  const role = String(acc.role || "").toUpperCase();
-  if (ownerType === "group" || role === "GROUP") {
-    return `${formatSpringOwnershipLabel(acc)}${mainStr}`;
+  const accountType = String(acc.type || "").toLowerCase();
+  if (accountType === "group") {
+    return `${acc.account_name}${mainStr}`;
   }
   return `${acc.account_name} (${acc.name})${mainStr}`;
 }
@@ -36,9 +33,19 @@ export default function OwnAccountSelect({ value, onChange, accounts, displayLab
 
   const placeholder = t("selectAccountPlaceholder");
 
+  const menuItems = useMemo(() => [{ id: "", label: placeholder }, ...accounts.map((a) => ({ id: a.id, label: formatOwnAccountLabel(a, t), acc: a }))], [accounts, placeholder, t]);
+
+  const getItemLabel = useCallback((idx) => menuItems[idx]?.label ?? "", [menuItems]);
+
+  const { highlightIdx, setHighlightIdx, listRef, handleButtonKeyDown, highlightClass } = useListboxKeyboard({
+    open,
+    itemCount: menuItems.length,
+    getItemLabel,
+  });
+
   const selected = useMemo(
-    () => accounts.find((a) => String(a.account_id) === String(value)),
-    [accounts, value],
+    () => accounts.find((a) => String(a.id) === String(value)),
+    [accounts, value]
   );
 
   const triggerLabel = useMemo(() => {
@@ -53,11 +60,7 @@ export default function OwnAccountSelect({ value, onChange, accounts, displayLab
     close();
   };
 
-  const isGroupAccount = (acc) => {
-    const ownerType = String(acc?.owner_type || "").toLowerCase();
-    const role = String(acc?.role || "").toUpperCase();
-    return ownerType === "group" || role === "GROUP" || String(acc?.account_id || "").startsWith("G_");
-  };
+  const isGroupValue = (id) => String(id || "").startsWith("G_");
 
   return (
     <div className="own-account-select-wrap" ref={wrapRef}>
@@ -71,34 +74,40 @@ export default function OwnAccountSelect({ value, onChange, accounts, displayLab
           if (disabled) return;
           setOpen((v) => !v);
         }}
+        onKeyDown={(e) => {
+          handleButtonKeyDown(e, {
+            isOpen: open,
+            onToggleOpen: () => setOpen(true),
+            onClose: close,
+            len: menuItems.length,
+            onSelectIndex: (idx) => {
+              const item = menuItems[idx];
+              if (item) pick(item.id);
+            },
+          });
+        }}
       >
-        <span className="own-account-select-trigger-text">{triggerLabel}</span>
+        <span className="own-account-select-trigger-text">
+          {triggerLabel}
+        </span>
       </button>
       {open ? (
-        <div className="own-account-select-menu" role="listbox">
-          <button
-            type="button"
-            role="option"
-            aria-selected={!value}
-            className={`own-account-select-option${!value ? " is-selected" : ""}`}
-            onClick={() => pick("")}
-          >
-            {placeholder}
-          </button>
-          {accounts.map((acc) => {
-            const accountId = acc.account_id;
-            const isGroup = isGroupAccount(acc);
-            const isSelected = String(value) === String(accountId);
+        <div className="own-account-select-menu" role="listbox" ref={listRef}>
+          {menuItems.map((item, idx) => {
+            const isGroup = item.acc && (String(item.acc.type || "").toLowerCase() === "group" || isGroupValue(item.id));
+            const isSelected = String(value) === String(item.id);
             return (
               <button
-                key={String(accountId)}
+                key={String(item.id || "__empty__")}
                 type="button"
                 role="option"
                 aria-selected={isSelected}
-                className={`own-account-select-option${isSelected ? " is-selected" : ""}${isGroup ? " is-group" : ""}`}
-                onClick={() => pick(accountId)}
+                className={`own-account-select-option${isSelected ? " is-selected" : ""}${isGroup ? " is-group" : ""}${highlightClass(idx)}`}
+                data-kb-idx={idx}
+                onMouseEnter={() => setHighlightIdx(idx)}
+                onClick={() => pick(item.id)}
               >
-                {formatOwnAccountLabel(acc, t)}
+                {item.label}
               </button>
             );
           })}

@@ -108,17 +108,17 @@ export default function DomainFeeModal({ onClose, onFeeSaved, lang = "en" }) {
   const { submitting, runGuarded } = useSubmitGuard(true);
 
   useEffect(() => {
-    fetch(buildApiUrl("api/domain/list-fee"), {
+    fetch(buildApiUrl("api/domain/domain_api.php"), {
       cache: "no-cache",
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "get_domain_fee_settings" }),
     })
       .then((r) => r.json())
       .then((res) => {
-        if (res.success && res.data && res.data.length > 0) {
-          const settings = res.data[0];
-          const normalized = normalizeDomainFeeSettingsFromApi(settings);
+        if (res.success && res.data) {
+          const normalized = normalizeDomainFeeSettingsFromApi(res.data);
           setCompanyPeriodPrices(periodPricesToEditState(normalized.company));
           setGroupPeriodPrices(periodPricesToEditState(normalized.group));
         } else {
@@ -129,14 +129,18 @@ export default function DomainFeeModal({ onClose, onFeeSaved, lang = "en" }) {
   }, [lang]);
 
   function handleSave() {
-    fetch(buildApiUrl("api/domain/add-fee"), {
+    fetch(buildApiUrl("api/domain/domain_api.php"), {
       cache: "no-cache",
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        action: "save_domain_fee_settings",
         company_period_prices: companyPeriodPrices,
+        period_prices: companyPeriodPrices,
         group_period_prices: groupPeriodPrices,
+        company_price: companyPeriodPrices["6months"] ?? "",
+        group_price: groupPeriodPrices["6months"] ?? "",
       }),
     })
       .then((r) => r.json())

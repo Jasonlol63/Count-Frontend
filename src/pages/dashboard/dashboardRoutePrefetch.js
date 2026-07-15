@@ -79,7 +79,7 @@ export function warmDashboardRouteCache({ me = null } = {}) {
     let rows = getCachedOwnerCompanies();
     if (!rows?.length) {
       try {
-        rows = await fetchOwnerCompaniesAll();
+        rows = await fetchOwnerCompaniesAll({ me });
       } catch {
         return;
       }

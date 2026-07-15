@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { buildTemplateKey } from "../formula/summarySaveTemplatePure.js";
-import { addSuppressedRows } from "../lib/summarySuppressedRows.js";
+import { addSuppressedRows, makeSuppressionKey } from "../lib/summarySuppressedRows.js";
 import { clearRowEditableFields } from "../table/summaryRowData.js";
 import {
   mapRowsWithAmountRecalc,
@@ -87,13 +87,23 @@ export function SummaryProvider({ children, initialRows = [] }) {
   );
 
   const deleteSelectedRows = useCallback(() => {
-    const toRemove = [];
-    const toClear = [];
+    const selectedSubRowsToRemove = new Set();
+    const selectedMainRowsToClear = new Set();
+    const selectedSuppressionKeys = new Set();
     const templatesToDelete = [];
     const suppressedRows = [];
     for (const row of rowsRef.current) {
       if (!row.deleteChecked) continue;
       suppressedRows.push(row);
+      const suppressionKey = makeSuppressionKey(row);
+      if (suppressionKey) {
+        selectedSuppressionKeys.add(suppressionKey);
+      }
+      if (row.productType === "sub") {
+        selectedSubRowsToRemove.add(row.key);
+      } else {
+        selectedMainRowsToClear.add(row.key);
+      }
       const templateKey = row.templateKey || buildTemplateKey(row) || row.idProduct;
       if (templateKey || row.templateId) {
         templatesToDelete.push({
@@ -103,38 +113,46 @@ export function SummaryProvider({ children, initialRows = [] }) {
           productType: row.productType || "main",
         });
       }
-      if (row.productType === "sub") {
-        toRemove.push(row.key);
-      } else {
-        toClear.push(row.key);
-      }
     }
     if (suppressedRows.length) {
       addSuppressedRows(suppressedRows);
     }
+    const selectedCount = suppressedRows.length;
     const parentsToResequence = new Set(
       suppressedRows
         .filter((r) => r.productType === "sub")
         .map((r) => String(r.parentIdProduct || r.idProduct || "").trim())
         .filter(Boolean)
     );
+    let nextRows = rowsRef.current;
+    const beforeCount = rowsRef.current.length;
     flushSync(() => {
       setRows((prev) => {
-        let next = prev.filter((row) => !toRemove.includes(row.key));
-        next = next.map((row) =>
-          toClear.includes(row.key) ? { ...clearRowEditableFields(row), deleteChecked: false } : row
-        );
+        let next = prev.filter((row) => {
+          if (row.productType !== "sub") return true;
+          if (selectedSubRowsToRemove.has(row.key)) return false;
+          if (selectedSuppressionKeys.has(makeSuppressionKey(row))) return false;
+          return true;
+        });
+        next = next.map((row) => {
+          if (row.productType === "sub") return row;
+          if (selectedMainRowsToClear.has(row.key) || selectedSuppressionKeys.has(makeSuppressionKey(row))) {
+            return { ...clearRowEditableFields(row), deleteChecked: false };
+          }
+          return row;
+        });
         for (const parent of parentsToResequence) {
           next = resequenceSubOrdersInRows(next, parent);
         }
-        return mapRowsWithAmountRecalc(next, globalRateInputRef.current);
+        nextRows = mapRowsWithAmountRecalc(next, globalRateInputRef.current);
+        return nextRows;
       });
     });
     return {
-      removed: toRemove.length,
-      cleared: toClear.length,
+      removed: Math.max(selectedSubRowsToRemove.size, beforeCount - nextRows.length),
+      cleared: selectedMainRowsToClear.size,
       templatesToDelete,
-      nextRows: rowsRef.current,
+      nextRows,
     };
   }, []);
 

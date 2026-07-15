@@ -2,14 +2,17 @@ import { normalizeSummaryIdProductText } from "./summaryIdProductUtils.js";
 
 export const SUMMARY_SUPPRESSED_ROWS_KEY = "summarySuppressedRowKeys";
 
-/** Stable key for a summary row within one capture round (rowIndex + idProduct). */
+/** Stable key for a summary row within one capture round (rowIndex + idProduct + subOrder). */
 export function makeSuppressionKey(row) {
   if (!row) return "";
   const id = normalizeSummaryIdProductText(row.idProduct || "");
   const ri = row.rowIndex != null && !Number.isNaN(Number(row.rowIndex)) ? String(row.rowIndex) : "";
   const pt = row.productType === "sub" ? "sub" : "main";
-  return `${pt}|${ri}|${id}`;
+  // Include subOrder for sub rows so each sub row gets a unique suppression key
+  const so = pt === "sub" && row.subOrder != null ? `|${row.subOrder}` : "";
+  return `${pt}|${ri}|${id}${so}`;
 }
+
 
 export function loadSuppressedRowKeys() {
   try {

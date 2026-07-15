@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { pathnameIs } from "../../../utils/routing/pageRoutes.js";
+import { formatDmyDash } from "../../../utils/date/dateUtils.js";
 import { useAuthSession } from "../../../context/AuthSessionContext.jsx";
 import { notifyCompanySessionUpdated } from "../../../utils/company/companySessionEvents.js";
 import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
-import {
-  bindDashboardSessionCache,
+import { switchSessionTenant } from "../../../utils/auth/authApi.js";
+import {  bindDashboardSessionCache,
   buildDashboardCacheKey,
   clearEarningsFromScopeKeys,
   earningsRowsAreUsable,
@@ -42,33 +42,36 @@ import {
   sumConvertedKpiMetrics,
   warmFrankfurterRatesForCurrencies,
 } from "../../../utils/dashboard/frankfurterRates.js";
-import { DASHBOARD_API, DASHBOARD_BOOTSTRAP_API, DASHBOARD_PROFIT_COLOR, isDashboardHistoricalOwnershipMonth } from "../lib/dashboardConstants.js";
+import { DASHBOARD_API, DASHBOARD_BOOTSTRAP_API, DASHBOARD_PANEL_ANIM_DURATION_MS, DASHBOARD_PROFIT_COLOR, isDashboardHistoricalOwnershipMonth } from "../lib/dashboardConstants.js";
 import {
   buildChartRows,
+  buildSkeletonChartRows,
   makeDashboardChartXTick,
   resolveDailyChartXAxisTicks,
 } from "../lib/dashboardChart.jsx";
 import {
   chartMonthSpan,
-  formatDisplayDate,
+  formatChartDateRangeText,
   parseYmd,
   previousMonthEquivalentRange,
   shouldAggregateChartByMonth,
 } from "../lib/dashboardDateUtils.js";
 import { formatI18nTemplate } from "../lib/dashboardFormat.js";
-import { buildKpiCompare, computeKpiMetrics, mergeDashboardOwnershipFields } from "../lib/dashboardKpi.js";
+import { buildKpiCompare, computeKpiMetrics, mergeDashboardOwnershipFields, viewerHasEarningsConfig } from "../lib/dashboardKpi.js";
 import {
-  applySingleSubsidiaryGroupEarningsRows,
   mergeCompanyBreakdownRowLists,
   normalizeSubsidiaryEarningsByCompany,
-  sortCompanyBreakdownRowsByPicker,
-  sumCompanyBreakdownAmount,
   buildCompanyNetProfitRowsFromPairs,
 } from "../lib/dashboardCompanyProfit.js";
+import {
+  applyTenantLedgerToParams,
+  LEDGER_GROUP,
+} from "../../../utils/company/tenantLedgerParams.js";
 import {
   canAccessGroupLedgerForGroup,
   canPrefetchCompanyScope,
   canUseGroupOnlyMode,
+  companyLoginCanUseGroupsAllLedger,
   companyLoginHasGroupLedgerPrivilege,
   filterCompaniesForDashboardApiAccess,
   companyLoginRequiresSubsidiaryWithGroup,
@@ -76,8 +79,9 @@ import {
   isGroupLogin,
   isCompanyLogin,
   resolveVisibleGroupIds,
+  filterGroupIdsForLedgerAccess,
 } from "../../../utils/company/loginScope.js";
-import { sortIds } from "../lib/dashboardEarnings.js";
+import { mapPanelCurrencyRows, sortIds } from "../lib/dashboardEarnings.js";
 import {
   companiesInGroupList,
   companiesNativeInGroupList,
@@ -100,7 +104,6 @@ import {
   applyLoginScopeToSessionStorageIfNeeded,
   resolveBootCompanyId,
   resolveInitialSelectedGroupFromSession,
-  filterCompaniesForLoginScope,
   sortedUniqueGroupIds,
   resolveOwnerDashboardGroupIds,
   isVirtualGroupLinkCompanyRow,
@@ -158,7 +161,7 @@ function companyDashboardAwaitingGroupPick(me, companies, groupIds) {
   return independentCompaniesForPicker(companies, gids).length === 0;
 }
 
-/** Company login bound to a grouped subsidiary (e.g. C168 under AP) — boot with session company + group. */
+/** Company login bound to a grouped subsidiary (e.g. C168 under AP) â€” boot with session company + group. */
 function resolveCompanyLoginGroupedSubsidiary(me, companies, groupIds) {
   if (!me || !companyLoginRequiresSubsidiaryWithGroup(me)) return null;
   const cid = me.company_id ? parseInt(me.company_id, 10) : Number.NaN;
@@ -187,6 +190,15 @@ function resolveViewGroupForCompany(companyRow, fallbackGroup = null) {
   return fallbackGroup ? String(fallbackGroup).trim().toUpperCase() : null;
 }
 
+/** Group ledger dashboard API params (view_group + group_only; never legacy group-entity company row). */
+function appendGroupLedgerDashboardParams(q, groupKey) {
+  const g = String(groupKey || "").trim().toUpperCase();
+  if (!g) return "";
+  applyTenantLedgerToParams(q, { ledger: LEDGER_GROUP, groupId: g, companyId: null });
+  q.set("view_group", g);
+  return g;
+}
+
 /** Query params for group-only dashboard currency (matches loadCurrencies group-only branch). */
 function buildGroupOnlyScopeCurrencyQuery(companies, groupKey) {
   const g = String(groupKey).trim().toUpperCase();
@@ -199,15 +211,16 @@ function buildGroupOnlyScopeCurrencyQuery(companies, groupKey) {
     q.set("group_id", g);
     q.set("group_aggregate", "1");
   } else {
-    q.set("group_id", g);
-    q.set("view_group", g);
+    appendGroupLedgerDashboardParams(q, g);
   }
   return q;
 }
 
 /** Group-ledger account currencies for one group tab (AP / IG). */
-async function fetchGroupLedgerCurrencyCodes(companies, groupKey) {
-  const q = buildGroupOnlyScopeCurrencyQuery(companies, groupKey);
+async function fetchGroupLedgerCurrencyCodes(companies, groupKey, me) {
+  const g = String(groupKey || "").trim().toUpperCase();
+  if (!g || (me && !canAccessGroupLedgerForGroup(me, g, companies))) return [];
+  const q = buildGroupOnlyScopeCurrencyQuery(companies, g);
   if (!q.get("company_id") && !q.get("group_id")) return [];
   try {
     const curRes = await fetch(
@@ -220,6 +233,92 @@ async function fetchGroupLedgerCurrencyCodes(companies, groupKey) {
   } catch {
     return [];
   }
+}
+
+/** Currencies from company Currency Setting table (reliable for group-all merge). */
+async function fetchCompanyCurrencySettingCodes(companyId, companyRow, viewGroup, groupIds) {
+  const cid = parseInt(companyId, 10);
+  if (!Number.isFinite(cid) || cid <= 0) return [];
+
+  const vg = viewGroup ? normalizeDashboardViewGroup(viewGroup) : "";
+  const queries = [];
+  if (vg) {
+    const subQ = new URLSearchParams({ company_id: String(cid) });
+    appendDashboardSubsidiaryScopeParams(subQ, vg);
+    queries.push(subQ);
+  }
+  if (!vg || (companyRow && companyRowIsIndependent(companyRow, groupIds))) {
+    queries.push(new URLSearchParams({ company_id: String(cid) }));
+  }
+
+  for (const q of queries) {
+    try {
+      const res = await fetch(
+        buildApiUrl(`api/transactions/get_company_currencies_api.php?${q.toString()}`),
+        { credentials: "include" }
+      );
+      const json = await res.json();
+      if (res.ok && json.success && Array.isArray(json.data) && json.data.length) {
+        return json.data.map((r) => String(r.code).toUpperCase()).filter(Boolean);
+      }
+    } catch {
+      /* try next query shape */
+    }
+  }
+
+  if (vg) {
+    const subQ = buildSubsidiaryCompanyCurrencyQuery(cid, vg);
+    if (subQ) {
+      try {
+        const curRes = await fetch(
+          buildApiUrl(`api/transactions/get_scope_account_currencies_api.php?${subQ}`),
+          { credentials: "include" }
+        );
+        const curJson = await curRes.json();
+        if (curRes.ok && curJson.success && Array.isArray(curJson.data) && curJson.data.length) {
+          return curJson.data.map((r) => String(r.code).toUpperCase()).filter(Boolean);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  return [];
+}
+
+/** Union currencies for Company "All" (single group or Group "All" + Company "All"). */
+async function fetchGroupAllMergeCurrencyCodes(
+  companies,
+  mergeCompanyIds,
+  { groupsAllMode = false, selectedGroup = null, groupIds = [], cacheRef = null } = {}
+) {
+  const ids = (mergeCompanyIds || []).filter((id) => Number.isFinite(id) && id > 0);
+  if (!ids.length) return [];
+
+  const groupKey = selectedGroup ? String(selectedGroup).trim().toUpperCase() : null;
+
+  const results = await Promise.all(
+    ids.map(async (cid) => {
+      const cached = cacheRef?.get?.(cid);
+      if (cached?.length) return cached;
+
+      const row = companies.find((c) => parseInt(c.id, 10) === cid);
+      const vg = groupsAllMode ? resolveViewGroupForCompany(row, selectedGroup) : groupKey;
+      const rowCodes = await fetchCompanyCurrencySettingCodes(cid, row, vg, groupIds);
+      if (rowCodes.length && cacheRef) cacheRef.set(cid, rowCodes);
+      return rowCodes;
+    })
+  );
+
+  const merged = new Set(results.flat());
+  if (!merged.size && cacheRef) {
+    for (const cid of ids) {
+      const cc = cacheRef.get(cid);
+      if (cc?.length) cc.forEach((c) => merged.add(c));
+    }
+  }
+  return [...merged];
 }
 
 function normalizeDashboardViewGroup(viewGroup) {
@@ -248,7 +347,7 @@ function appendDashboardGroupTabParams(q, viewGroup, { subsidiaryOnly = false } 
   if (subsidiaryOnly) q.set("subsidiary_accounts_only", "1");
 }
 
-/** Subsidiary drill-down currency query — safe for company login without group ledger. */
+/** Subsidiary drill-down currency query â€” safe for company login without group ledger. */
 function buildSubsidiaryCompanyCurrencyQuery(companyId, viewGroup) {
   const id = parseInt(companyId, 10);
   if (!Number.isFinite(id) || id <= 0) return null;
@@ -261,10 +360,12 @@ function buildSubsidiaryCompanyCurrencyQuery(companyId, viewGroup) {
 function scopeCurrencyQueryUsesGroupLedger(queryString) {
   const params = new URLSearchParams(queryString);
   if (params.get("group_aggregate") === "1") return true;
+  if (params.get("group_only") === "1") return true;
   const vg = params.get("view_group") || params.get("group_id");
   if (!vg) return false;
   if (params.get("subsidiary_accounts_only") === "1") return false;
   if (params.get("company_ids")) return false;
+  if (params.get("company_id")) return false;
   return true;
 }
 
@@ -273,23 +374,14 @@ function mayWarmGroupLedgerCurrencies(me, groupCode, companies) {
   return canAccessGroupLedgerForGroup(me, groupCode, companies);
 }
 
-function isCompanyOwnerWithGroupLedger(me) {
-  return (
-    isCompanyLogin(me) &&
-    !isGroupLogin(me) &&
-    companyLoginHasGroupLedgerPrivilege(me) &&
-    canUseGroupOnlyMode(me)
-  );
-}
-
-/** Group All + no company pill: AP+IG group-ledger KPI/currency scope (group login or company owner). */
+/** Group All + no company pill: AP+IG group-ledger KPI/currency scope (group login or privileged company login). */
 function isGroupsAllLedgerDataScope({ groupsAllMode, groupAllMode, companyId, me }) {
   const singleCid = companyId != null && companyId !== "" ? parseInt(companyId, 10) : Number.NaN;
   if (!groupsAllMode || groupAllMode || !me || (Number.isFinite(singleCid) && singleCid > 0)) {
     return false;
   }
   if (isGroupLogin(me) && canUseGroupOnlyMode(me)) return true;
-  return isCompanyOwnerWithGroupLedger(me);
+  return companyLoginCanUseGroupsAllLedger(me);
 }
 
 /** Group ID "All" with no active company: union AP+IG group-ledger currencies. */
@@ -404,14 +496,76 @@ function writeDashboardGroupCurrencyCaches(groupRef, { groupKey, groupsAllMode, 
   if (!Array.isArray(codes) || !codes.length) return;
   if (groupAllMode && groupKey) {
     groupRef.set(`${groupKey}:ALL`, codes);
+    persistGroupAllCurrencyCodes(groupKey, codes);
   }
   if (groupAllMode && groupsAllMode) {
     groupRef.set("GROUPS:ALL", codes);
+    persistGroupsAllCurrencyCodes(codes);
   }
   if (groupKey && !groupAllMode) {
     groupRef.set(groupKey, codes);
   } else if (groupsAllMode && !groupAllMode) {
     groupRef.set("GROUPS:ALL", codes);
+    persistGroupsAllCurrencyCodes(codes);
+  }
+}
+
+const DASHBOARD_GROUPS_ALL_CURRENCIES_KEY = "dashboard_groups_all_currency_codes";
+const DASHBOARD_GROUP_ALL_CURRENCIES_PREFIX = "dashboard_group_all_currency_codes:";
+
+function readPersistedGroupsAllCurrencyCodes() {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(DASHBOARD_GROUPS_ALL_CURRENCIES_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const list = parsed.map((c) => String(c).toUpperCase()).filter(Boolean);
+    return list.length ? list : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistGroupsAllCurrencyCodes(codes) {
+  if (typeof sessionStorage === "undefined" || !Array.isArray(codes) || !codes.length) return;
+  try {
+    sessionStorage.setItem(
+      DASHBOARD_GROUPS_ALL_CURRENCIES_KEY,
+      JSON.stringify([...new Set(codes.map((c) => String(c).toUpperCase()).filter(Boolean))])
+    );
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function readPersistedGroupAllCurrencyCodes(groupKey) {
+  if (typeof sessionStorage === "undefined" || !groupKey) return null;
+  try {
+    const g = String(groupKey).trim().toUpperCase();
+    const raw = sessionStorage.getItem(`${DASHBOARD_GROUP_ALL_CURRENCIES_PREFIX}${g}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const list = parsed.map((c) => String(c).toUpperCase()).filter(Boolean);
+    return list.length ? list : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistGroupAllCurrencyCodes(groupKey, codes) {
+  if (typeof sessionStorage === "undefined" || !groupKey || !Array.isArray(codes) || !codes.length) {
+    return;
+  }
+  try {
+    const g = String(groupKey).trim().toUpperCase();
+    sessionStorage.setItem(
+      `${DASHBOARD_GROUP_ALL_CURRENCIES_PREFIX}${g}`,
+      JSON.stringify([...new Set(codes.map((c) => String(c).toUpperCase()).filter(Boolean))])
+    );
+  } catch {
+    /* quota / private mode */
   }
 }
 
@@ -433,20 +587,26 @@ function mirrorDashboardEarningsAcrossCurrencies(
   }
 }
 
-function alignPrimaryEarningsInRows(rows, primaryCode, primaryEarnings) {
-  if (!Array.isArray(rows) || primaryEarnings == null) return rows;
+function alignPrimaryCurrencyRows(rows, primaryCode, primaryNetProfit, primaryEarnings) {
+  if (!Array.isArray(rows)) return rows;
   const primary = String(primaryCode || "").trim().toUpperCase();
-  if (!primary || !Number.isFinite(Number(primaryEarnings))) return rows;
-  return rows.map((row) =>
-    String(row?.code || "").trim().toUpperCase() === primary
-      ? { ...row, earnings: Number(primaryEarnings) }
-      : row
-  );
+  if (!primary) return rows;
+  return rows.map((row) => {
+    if (String(row?.code || "").trim().toUpperCase() !== primary) return row;
+    const next = { ...row };
+    if (primaryNetProfit != null && Number.isFinite(Number(primaryNetProfit))) {
+      next.netProfit = Number(primaryNetProfit);
+    }
+    if (primaryEarnings != null && Number.isFinite(Number(primaryEarnings))) {
+      next.earnings = Number(primaryEarnings);
+    }
+    return next;
+  });
 }
 
-function normalizeEarningsRowsForDisplay(rows, primaryCode, primaryEarnings) {
+function normalizeEarningsRowsForDisplay(rows, primaryCode, primaryNetProfit, primaryEarnings) {
   return sanitizeDuplicateNonPrimaryEarnings(
-    alignPrimaryEarningsInRows(rows, primaryCode, primaryEarnings),
+    alignPrimaryCurrencyRows(rows, primaryCode, primaryNetProfit, primaryEarnings),
     primaryCode,
     primaryEarnings
   );
@@ -497,18 +657,44 @@ function readInitialDashboardPageState() {
 }
 
 /** Coalesce rapid scope updates (company pick + currency hydrate) into one load. */
-const LOAD_DASHBOARD_DEBOUNCE_MS = 0;
+const LOAD_DASHBOARD_DEBOUNCE_MS = 90;
 const DASHBOARD_STALE_RETRY_MAX = 3;
 const EARNINGS_INCOMPLETE_RETRY_MAX = 5;
 const PREFETCH_WAIT_MAX_ROUNDS = 40;
-/** Serial gap between group-all per-currency earnings fetches (avoids browser ERR_INSUFFICIENT_RESOURCES). */
-const GROUP_ALL_EARNINGS_CURRENCY_DELAY_MS = 150;
 /** Wait before low-priority sibling prefetches after a company pick. */
 const COMPANY_SWITCH_PREFETCH_DELAY_MS = 3000;
+/** Coalesce rapid filter switches into one currency reload. */
+const LOAD_CURRENCIES_COALESCE_MS = 32;
+/** Defer session sync so dashboard fetch gets connection priority on company pick. */
+const COMPANY_SESSION_DEFER_MS = 500;
+/** Defer group-all currency refresh while dashboard merge is in flight. */
+const CURRENCY_REFRESH_DEFER_MS = 600;
+/** Parallel company dashboard fetches when merging Group/Company "All". */
+const MERGE_DASHBOARD_PARALLEL_BATCH = 12;
 /** Idle delay before one-time session warm of picker companies (current currency only). */
 const SESSION_DASHBOARD_WARM_DELAY_MS = 6000;
 /** Parallel kpi bootstrap requests when filling multi-currency earnings sidebar. */
 const EARNINGS_KPI_PARALLEL_BATCH = 3;
+/** Defer trend-chart daily fetch so MoM previous can use DB first. */
+const CHART_DAILY_DEFER_MS = 250;
+
+function scheduleChartDailyLoad(cacheKey, resolveScopeKey, loadChartDaily) {
+  window.setTimeout(() => {
+    if (resolveScopeKey() === cacheKey) {
+      void loadChartDaily(cacheKey);
+    }
+  }, CHART_DAILY_DEFER_MS);
+}
+
+async function runTasksInBatches(items, batchSize, runTask) {
+  const results = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const settled = await Promise.all(batch.map((item) => runTask(item)));
+    results.push(...settled);
+  }
+  return results;
+}
 
 
 function dashboardFetchInit(signal) {
@@ -565,6 +751,23 @@ function dashboardScopeNeedsCurrency({
   if (usesGroupLedgerDashboard || groupAllMode || groupsAllMode) return false;
   if (mergedSubsetIds?.length > 1) return false;
   return companyId != null;
+}
+
+/** Best-effort currency for API/cache before React state settles (subsidiary MYR, etc.). */
+function resolveProvisionalDashboardCurrency({
+  currencyCode,
+  companyId,
+  currenciesRef,
+  currenciesByCompanyRef,
+}) {
+  if (currencyCode) return String(currencyCode).trim().toUpperCase();
+  const cid = companyId != null ? parseInt(companyId, 10) : Number.NaN;
+  if (Number.isFinite(cid) && cid > 0) {
+    const fromCompany = currenciesByCompanyRef?.current?.get(cid)?.[0];
+    if (fromCompany) return String(fromCompany).trim().toUpperCase();
+  }
+  const fromList = currenciesRef?.current?.[0];
+  return fromList ? String(fromList).trim().toUpperCase() : "";
 }
 
 function resolveDashboardActiveCurrency({
@@ -633,19 +836,21 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   const prevEarningsCurrenciesSigRef = useRef("");
   const upgradeActiveScopeEarningsRef = useRef(null);
   const dashboardFetchGenRef = useRef(0);
-  /** Scope that last failed loadDashboard — suppress stale-gen retry storms. */
+  /** Scope that last failed loadDashboard â€” suppress stale-gen retry storms. */
   const dashboardFetchFailedScopeRef = useRef("");
   const dashboardStaleRetryRef = useRef({ scopeKey: "", attempts: 0 });
   const earningsIncompleteRetryRef = useRef(0);
   const earningsLoadInFlightRef = useRef("");
+  /** Group IDs (AP/IG) that returned viewer earnings config on the last Group All load. */
+  const earningsEnabledGroupIdsRef = useRef([]);
   const earningsScopeUpgradeRef = useRef({ scopeKey: "", attempts: 0 });
   /** Aborts in-flight dashboard API calls when scope changes again. */
   const dashboardFetchAbortRef = useRef(null);
-  /** Last scope key passed to loadDashboard — abort when currency/mode slice changes. */
+  /** Last scope key passed to loadDashboard â€” abort when currency/mode slice changes. */
   const dashboardFetchScopeRef = useRef("");
-  /** Company/group/date slice — abort in-flight active load only when this changes. */
+  /** Company/group/date slice â€” abort in-flight active load only when this changes. */
   const dashboardFetchStructuralScopeRef = useRef("");
-  /** Bumped on each group/company pick — defers background prefetch until interaction settles. */
+  /** Bumped on each group/company pick â€” defers background prefetch until interaction settles. */
   const scopeInteractionGenRef = useRef(0);
   const dashboardDataRef = useRef(null);
   const dateFromRef = useRef(dateFrom);
@@ -653,6 +858,10 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   const companySwitchGenRef = useRef(0);
   const currencyLoadGenRef = useRef(0);
   const loadCurrenciesRef = useRef(null);
+  const loadCurrenciesCoalesceTimerRef = useRef(null);
+  /** Skip redundant currency network reloads for the same filter scope. */
+  const currencyScopeLoadedRef = useRef({ key: "", count: 0 });
+  const primeCurrenciesFromCacheRef = useRef(null);
   const skipNextCurrencyClickRef = useRef(false);
   /** After company pill change, next currency resolve picks the first pill (MYR). */
   const preferFirstCurrencyRef = useRef(false);
@@ -680,7 +889,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   const loadDashboardTriggerKeyRef = useRef("");
   const loadDashboardStructuralKeyRef = useRef("");
   const ensureDeferredDashboardLoadsRef = useRef(null);
-  /** Prevents synchronous DASHBOARD_GROUP_FILTER_EVENT ↔ sync re-entry stack overflow. */
+  /** Prevents synchronous DASHBOARD_GROUP_FILTER_EVENT â†” sync re-entry stack overflow. */
   const syncGcFilterInFlightRef = useRef(false);
   const [gcBootstrapReady, setGcBootstrapReady] = useState(false);
   const [groupFilterOptOutTick, setGroupFilterOptOutTick] = useState(0);
@@ -715,7 +924,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   );
 
   /**
-   * Group-level KPI (AP/IG): group ledger API or group-entity row only — never merge subsidiaries (e.g. C168).
+   * Group-level KPI (AP/IG): group ledger API or group-entity row only â€” never merge subsidiaries (e.g. C168).
    * Company "All" (groupAllMode) aggregates subsidiaries via merge, not group ledger.
    */
   const usesGroupLedgerDashboard = useMemo(() => {
@@ -727,16 +936,37 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     return companyRowIsGroupEntity(row, selectedGroup);
   }, [groupsAllMode, groupAllMode, selectedGroup, companyId, companies, me]);
 
-  /** Subsidiary drill-down under a group tab (e.g. C168 under AP) — isolate from group-ledger data. */
+  /** View group for API/KPI when Group tab is implicit (e.g. All Groups + C168 â†’ AP). */
+  const dashboardViewGroup = useMemo(() => {
+    if (selectedGroup) return String(selectedGroup).trim().toUpperCase();
+    if (groupsAllMode && companyId != null) {
+      const row = companies.find((c) => parseInt(c.id, 10) === parseInt(companyId, 10));
+      return resolveViewGroupForCompany(row, null);
+    }
+    return null;
+  }, [selectedGroup, groupsAllMode, companyId, companies]);
+
+  /** Subsidiary drill-down under a group tab (e.g. C168 under AP) â€” isolate from group-ledger data. */
   const subsidiaryDashboardScope = useMemo(() => {
-    if (companyId == null || groupsAllMode || groupAllMode || !selectedGroup) return false;
+    if (companyId == null || groupAllMode) return false;
+    const row = companies.find((c) => parseInt(c.id, 10) === parseInt(companyId, 10));
+    if (groupsAllMode) {
+      const vg = resolveViewGroupForCompany(row, null);
+      return !!(row && vg && !companyRowIsGroupEntity(row, vg));
+    }
+    if (!selectedGroup) return false;
     return !usesGroupLedgerDashboard;
-  }, [companyId, selectedGroup, groupsAllMode, groupAllMode, usesGroupLedgerDashboard]);
+  }, [companyId, selectedGroup, groupsAllMode, groupAllMode, usesGroupLedgerDashboard, companies]);
 
   /** KPI earnings: group aggregate or subsidiary drill-down ownership multipliers. */
   const resolveKpiOwnershipOpts = useCallback(
     (cid = companyId, grp = selectedGroup) => {
-      if (groupAllMode && grp) return { groupAggregateEarnings: true };
+      if (groupsAllMode && groupAllMode && (cid == null || cid === "")) {
+        return { groupsAllCompaniesAggregate: true };
+      }
+      if (groupAllMode && grp) {
+        return { groupAggregateEarnings: true, groupAllCompaniesEarningsSum: true };
+      }
       if (groupsAllMode && !groupAllMode && (cid == null || cid === "")) {
         return { groupAggregateEarnings: true };
       }
@@ -745,7 +975,15 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         const row = companies.find((c) => parseInt(c.id, 10) === parseInt(cid, 10));
         if (companyRowIsGroupEntity(row, grp)) return { groupAggregateEarnings: true };
       }
-      if (cid == null || groupsAllMode || groupAllMode || !grp) return {};
+      if (groupsAllMode && !groupAllMode && cid != null && cid !== "") {
+        const row = companies.find((c) => parseInt(c.id, 10) === parseInt(cid, 10));
+        const vg = resolveViewGroupForCompany(row, null);
+        if (row && vg && !companyRowIsGroupEntity(row, vg)) {
+          return { subsidiaryGroupDrillDown: true };
+        }
+        return {};
+      }
+      if (cid == null || groupAllMode || !grp) return {};
       const row = companies.find((c) => parseInt(c.id, 10) === parseInt(cid, 10));
       if (companyRowIsGroupEntity(row, grp)) return {};
       return { subsidiaryGroupDrillDown: true };
@@ -759,7 +997,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     companyId == null &&
     !groupAllMode &&
     canUseGroupOnlyMode(me) &&
-    (isGroupLogin(me) || isCompanyOwnerWithGroupLedger(me));
+    (isGroupLogin(me) || companyLoginCanUseGroupsAllLedger(me));
   const groupAggregateMode =
     groupAllMode || groupOnlyDashboard || groupsAllGroupLevel || usesGroupLedgerDashboard;
   /** All-currency merge: any scope with 2+ currencies (single company or group aggregate). */
@@ -777,6 +1015,23 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       const subset =
         overrides.mergedSubsetIds !== undefined ? overrides.mergedSubsetIds : mergedSubsetIds;
       const cur = overrides.currencyCode !== undefined ? overrides.currencyCode : currencyCode;
+      let effectiveCur = cur ? String(cur).trim().toUpperCase() : "";
+      const list = currenciesRef.current.length ? currenciesRef.current : currencies;
+      if (!effectiveCur && gaMode && cid == null && list[0]) {
+        effectiveCur = String(list[0]).trim().toUpperCase();
+      }
+      if (!effectiveCur && cid != null && list[0]) {
+        const row = companies.find((c) => parseInt(c.id, 10) === parseInt(cid, 10));
+        const usesLedger =
+          !gAll &&
+          !gaMode &&
+          selGroup &&
+          row &&
+          companyRowIsGroupEntity(row, selGroup);
+        if (!usesLedger) {
+          effectiveCur = String(list[0]).trim().toUpperCase();
+        }
+      }
       const from = overrides.dateFrom ?? dateFrom;
       const to = overrides.dateTo ?? dateTo;
       const showAll =
@@ -793,6 +1048,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         const row = companies.find((c) => parseInt(c.id, 10) === parseInt(cid, 10));
         return companyRowIsGroupEntity(row, selGroup);
       })();
+      if (!effectiveCur && cid == null && usesLedger && list[0]) {
+        effectiveCur = String(list[0]).trim().toUpperCase();
+      }
       const subScope = cid != null && !gAll && !gaMode && selGroup && !usesLedger;
 
       if (subScope && scopeCompanyKey != null) {
@@ -816,7 +1074,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         companyId: scopeCompanyKey,
         dateFrom: from,
         dateTo: to,
-        currencyCode: cur,
+        currencyCode: effectiveCur,
         selectedGroup: selGroup,
         groupsAllMode: gAll,
         groupAllMode: gaMode,
@@ -834,6 +1092,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       dateFrom,
       dateTo,
       currencyCode,
+      currencies,
       showAllCurrencies,
       canShowAllCurrencies,
       conversionBaseCurrency,
@@ -940,6 +1199,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   );
 
   const resolveCodesForEarningsBootstrap = useCallback(() => {
+    if (groupsAllMode && groupAllMode) {
+      const groupsAllCodes = currenciesByGroupRef.current.get("GROUPS:ALL");
+      if (groupsAllCodes?.length > 1) return groupsAllCodes;
+      const persistedAll = readPersistedGroupsAllCurrencyCodes();
+      if (persistedAll?.length > 1) return persistedAll;
+    }
     if (groupAllMode && selectedGroup) {
       const g = String(selectedGroup).trim().toUpperCase();
       const groupAllCodes = currenciesByGroupRef.current.get(`${g}:ALL`);
@@ -955,7 +1220,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
             : null) ??
       (currenciesRef.current.length > 1 ? currenciesRef.current : null)
     );
-  }, [subsidiaryDashboardScope, companyId, selectedGroup, groupAllMode]);
+  }, [subsidiaryDashboardScope, companyId, selectedGroup, groupAllMode, groupsAllMode]);
 
   const resolvePrefetchBootstrapCodes = useCallback((targetCompanyId, viewGroup, isActiveScope = false) => {
     const id = parseInt(targetCompanyId, 10);
@@ -967,16 +1232,14 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     );
   }, []);
 
-  useLayoutEffect(() => {
-    document.body.classList.add("transaction-page", "dashboard-home-page");
-    return () => document.body.classList.remove("transaction-page", "dashboard-home-page");
-  }, []);
-
   useEffect(
     () => () => {
       dashboardFetchAbortRef.current?.abort();
       if (earningsRetryTimerRef.current) {
         window.clearTimeout(earningsRetryTimerRef.current);
+      }
+      if (loadCurrenciesCoalesceTimerRef.current) {
+        window.clearTimeout(loadCurrenciesCoalesceTimerRef.current);
       }
     },
     []
@@ -987,9 +1250,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     const u = meRef.current;
     if (!sessionReady || !u) return;
     try {
-      const cjRows = await fetchOwnerCompaniesAll({ signal, throwOnError: true });
+      const cjRows = await fetchOwnerCompaniesAll({ signal, throwOnError: true, me: u });
       await fetchOwnerGroupsAll(u, { signal });
-      const scopedCompanies = filterCompaniesForLoginScope(cjRows, u);
+      const scopedCompanies = cjRows;
       setCompanies((prev) =>
         companiesListSignature(prev) === companiesListSignature(scopedCompanies)
           ? prev
@@ -1007,9 +1270,50 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       if (bootstrapGcOnceRef.current) return;
 
       if (isDashboardSessionBootstrapped(bootSessionKey)) {
+        const persistedRefresh = readPersistedDashboardGcFilter();
+        if (persistedRefresh.groupsAllMode) {
+          setGroupsAllMode(true);
+          setGroupAllMode(Boolean(persistedRefresh.groupAllMode));
+          setSelectedGroup(null);
+          setCompanyId(
+            persistedRefresh.groupOnly || persistedRefresh.groupAllMode
+              ? null
+              : persistedRefresh.companyId
+          );
+        }
         bootstrapGcOnceRef.current = true;
         setGcBootstrapReady(true);
         setLoading(false);
+        if (persistedRefresh.groupsAllMode && persistedRefresh.groupAllMode) {
+          primeCurrenciesFromCacheRef.current?.({
+            companyId: null,
+            selectedGroup: null,
+            groupsAllMode: true,
+            groupAllMode: true,
+          });
+        } else if (persistedRefresh.groupAllMode && persistedRefresh.selectedGroup) {
+          primeCurrenciesFromCacheRef.current?.({
+            companyId: null,
+            selectedGroup: persistedRefresh.selectedGroup,
+            groupsAllMode: false,
+            groupAllMode: true,
+          });
+        }
+        primeDashboardFromCacheRef.current?.({
+          companyId:
+            persistedRefresh.groupOnly || persistedRefresh.groupAllMode
+              ? null
+              : persistedRefresh.companyId,
+          selectedGroup: persistedRefresh.groupsAllMode
+            ? null
+            : persistedRefresh.selectedGroup,
+          groupsAllMode: persistedRefresh.groupsAllMode,
+          groupAllMode: persistedRefresh.groupAllMode,
+          mergedSubsetIds: null,
+        });
+        window.setTimeout(() => {
+          void scheduleLoadCurrenciesRef.current?.(true);
+        }, 0);
         return;
       }
 
@@ -1026,7 +1330,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         !groupFilterOptOut &&
         isGroupLogin(u) &&
         persisted.companyId == null &&
-        readDashboardSelectedCompanyId() == null;
+        readDashboardSelectedCompanyId() == null &&
+        !persisted.groupsAllMode &&
+        !persisted.groupAllMode;
 
       if ((groupOnlyBoot || groupLoginBoot) && canUseGroupOnlyMode(u)) {
         const ident = getLoginIdentifier(u);
@@ -1189,7 +1495,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       if (bootGroupAllMode) {
         bootCid = null;
       } else if (bootGroupsAllMode) {
-        if (isCompanyOwnerWithGroupLedger(u)) {
+        if (companyLoginCanUseGroupsAllLedger(u)) {
           bootCid = null;
         } else {
           const persistedCompany = persisted.companyId;
@@ -1282,6 +1588,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           null,
           buildDashboardSidebarNotifyOptions(null, readGroupsAllSidebarGroup()),
         );
+        window.setTimeout(() => {
+          void scheduleLoadCurrenciesRef.current?.(true);
+        }, 0);
       }
     } catch (err) {
       if (err?.name === "AbortError") return;
@@ -1313,8 +1622,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   useLayoutEffect(() => {
     if (!sessionReady || !me || !bootstrapSessionKey) return undefined;
     bindDashboardSessionCache(bootstrapSessionKey);
-    if (isDashboardSessionBootstrapped(bootstrapSessionKey) && !bootstrapGcOnceRef.current) {
-      bootstrapGcOnceRef.current = true;
+    if (isDashboardSessionBootstrapped(bootstrapSessionKey)) {
       setGcBootstrapReady(true);
     }
     return undefined;
@@ -1373,12 +1681,30 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         } else {
           companySame = companyId == null && !groupAllMode;
         }
-        if (groupsAllSame && groupAllSame && selGroupSame && companySame) return;
+        if (groupsAllSame && groupAllSame && selGroupSame && companySame) {
+          if (!currenciesRef.current?.length && targetGroupAllMode) {
+            primeCurrenciesFromCacheRef.current?.({
+              companyId: null,
+              selectedGroup: null,
+              groupsAllMode: true,
+              groupAllMode: true,
+            });
+            void scheduleLoadCurrenciesRef.current?.(true);
+          }
+          return;
+        }
 
         setGroupsAllMode(true);
         setGroupAllMode(targetGroupAllMode);
         setSelectedGroup(null);
         setCompanyId(targetCompanyId);
+        primeCurrenciesFromCacheRef.current?.({
+          companyId: null,
+          selectedGroup: null,
+          groupsAllMode: true,
+          groupAllMode: targetGroupAllMode,
+        });
+        void scheduleLoadCurrenciesRef.current?.(true);
         return;
       }
 
@@ -1636,20 +1962,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     async (id, viewGroup = selectedGroup, syncGen = null) => {
       const gen = syncGen ?? ++companySwitchGenRef.current;
       try {
-        const q = new URLSearchParams({ company_id: String(id) });
-        const vg = viewGroup ? String(viewGroup).trim() : "";
-        if (vg) q.set("view_group", vg);
-        const res = await fetch(
-          buildApiUrl(`api/session/update_company_session_api.php?${q.toString()}`),
-          {
-            credentials: "include",
-          }
-        );
-        const j = await res.json();
+        const { json } = await switchSessionTenant(id);
         if (gen !== companySwitchGenRef.current) return false;
-        if (!res.ok || !j.success) {
-          const reason = String(j?.data?.reason || "").toLowerCase();
-          const msg = String(j?.message || j?.error || "");
+        if (!json?.success) {
+          const reason = String(json?.data?.reason || "").toLowerCase();
+          const msg = String(json?.message || json?.error || "");
           const lower = msg.toLowerCase();
           const shouldShowModal =
             reason === "expired" ||
@@ -1670,16 +1987,16 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
             setCompanyAccessModal({ open: true, message: modalMessage });
             setLoadError(modalMessage);
           } else {
-            setLoadError(j.message || j.error || i18n.couldNotSwitchCompany);
+            setLoadError(json.message || json.error || i18n.couldNotSwitchCompany);
           }
           return false;
         }
         if (gen !== companySwitchGenRef.current) return false;
-        if (typeof window.updateSidebarDataCaptureVisibility === "function" && j?.data) {
-          window.updateSidebarDataCaptureVisibility(j.data.has_gambling, j.data.has_bank);
+        if (typeof window.updateSidebarDataCaptureVisibility === "function" && json?.data) {
+          window.updateSidebarDataCaptureVisibility(json.data.has_gambling, json.data.has_bank);
         }
-        if (j?.data) {
-          notifyCompanySessionUpdated(j?.data ?? null);
+        if (json?.data) {
+          notifyCompanySessionUpdated(json?.data ?? null);
         }
         return true;
       } catch (err) {
@@ -1744,7 +2061,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     }
   }, [companyId, selectedGroup, groupsAllMode, groupAllMode, mergedSubsetIds, companies, me, companiesForPicker, resolveActiveCurrencyForScope]);
 
-  /** Instant currency pills when switching group/company — uses in-memory cache from prior visits. */
+  /** Instant currency pills when switching group/company â€” uses in-memory cache from prior visits. */
   const primeCurrenciesFromCache = useCallback(
     (scope = {}) => {
       const cid = scope.companyId !== undefined ? scope.companyId : companyId;
@@ -1780,7 +2097,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           : null;
       const pickIsGroupEntity =
         Boolean(groupKey) && pickRow && companyRowIsGroupEntity(pickRow, groupKey);
-      /** IG+CX drill-down: company pills only — never group merge / group ledger fallbacks. */
+      /** IG+CX drill-down: company pills only â€” never group merge / group ledger fallbacks. */
       const isSubsidiaryCurrencyScope =
         Number.isFinite(singleCid) &&
         singleCid > 0 &&
@@ -1797,7 +2114,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         }
       } else {
         if (!cached?.length && groupKey && gaMode) {
-          cached = currenciesByGroupRef.current.get(`${groupKey}:ALL`) ?? null;
+          cached =
+            currenciesByGroupRef.current.get(`${groupKey}:ALL`) ??
+            readPersistedGroupAllCurrencyCodes(groupKey);
         }
         if (!cached?.length && groupKey && !isCompanyOnlyScope && !gaMode) {
           cached = currenciesByGroupRef.current.get(groupKey) ?? null;
@@ -1844,7 +2163,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           gAll &&
           !(Number.isFinite(singleCid) && singleCid > 0) &&
           (!(scope.groupAllMode ?? groupAllMode) ||
-            isCompanyOwnerWithGroupLedger(meRef.current))
+            companyLoginCanUseGroupsAllLedger(meRef.current))
         ) {
           const merged = new Set();
           for (const gid of groupIds) {
@@ -1855,7 +2174,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           if (merged.size) cached = [...merged];
         }
         if (!cached?.length && gAll) {
-          cached = currenciesByGroupRef.current.get("GROUPS:ALL") ?? null;
+          cached =
+            currenciesByGroupRef.current.get("GROUPS:ALL") ??
+            (gaMode ? readPersistedGroupsAllCurrencyCodes() : null);
+          if (cached?.length) {
+            currenciesByGroupRef.current.set("GROUPS:ALL", cached);
+          }
         }
       }
       if (!cached?.length) {
@@ -1899,6 +2223,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     },
     [companyId, selectedGroup, groupsAllMode, groupAllMode, companies, groupIds, me, companiesForPicker, resolveActiveCurrencyForScope]
   );
+  primeCurrenciesFromCacheRef.current = primeCurrenciesFromCache;
 
   const orderCurrencyCodes = useCallback(
     (codes, order) => orderDashboardCurrencyCodes(codes, order),
@@ -1911,6 +2236,26 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     const gen = ++currencyLoadGenRef.current;
     const singleCid = companyId != null ? parseInt(companyId, 10) : null;
     const groupKey = selectedGroup ? String(selectedGroup).trim().toUpperCase() : null;
+    const effectiveGroupKey =
+      groupKey ??
+      (groupsAllMode && Number.isFinite(singleCid) && singleCid > 0
+        ? resolveViewGroupForCompany(
+            companies.find((c) => parseInt(c.id, 10) === singleCid),
+            null
+          )
+        : null);
+
+    if (!meRef.current) return;
+
+    if (
+      currencyScopeLoadedRef.current.key === scopeKey &&
+      currencyScopeLoadedRef.current.count > 1 &&
+      currenciesRef.current.length > 1 &&
+      !groupAllMode &&
+      !groupsAllMode
+    ) {
+      return;
+    }
 
     const companySubsidiaryScopeIdle =
       companyLoginRequiresSubsidiaryWithGroup(me) &&
@@ -1967,18 +2312,31 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         currenciesByCompanyRef.current.set(singleCid, list);
         persistDashboardCurrencyDisplayOrder(currencyDisplayOrderByCompanyRef, singleCid, list);
       } else {
-        writeDashboardGroupCurrencyCaches(currenciesByGroupRef, {
+        writeDashboardGroupCurrencyCaches(currenciesByGroupRef.current, {
           groupKey,
           groupsAllMode,
           groupAllMode,
           codes: list,
         });
       }
+      currencyScopeLoadedRef.current = { key: scopeKey, count: list.length };
+    };
+
+    const deferGroupAllCurrencyNetworkRefresh = (refreshFn) => {
+      const wait = () => {
+        if (gen !== currencyLoadGenRef.current || scopeCurrencyKeyRef.current !== scopeKey) return;
+        if (dashboardFetchInFlightScopeRef.current) {
+          window.setTimeout(wait, 250);
+          return;
+        }
+        void refreshFn();
+      };
+      window.setTimeout(wait, CURRENCY_REFRESH_DEFER_MS);
     };
 
     /** Group "All" aggregate: union group-ledger currencies from every visible group (AP + IG). */
     if (groupsAllLedgerCurrencyScope) {
-      const gids = groupIds.filter((g) => String(g || "").trim());
+      const gids = filterGroupIdsForLedgerAccess(me, groupIds, companies);
       if (!gids.length) {
         commitCurrencyList([]);
         return;
@@ -2000,7 +2358,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
             const g = String(gid).trim().toUpperCase();
             const cached = currenciesByGroupRef.current.get(g);
             if (cached?.length) return cached;
-            const rowCodes = await fetchGroupLedgerCurrencyCodes(companies, g);
+            const rowCodes = await fetchGroupLedgerCurrencyCodes(companies, g, me);
             if (rowCodes.length) {
               currenciesByGroupRef.current.set(g, rowCodes);
             }
@@ -2049,104 +2407,140 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
     /** Company "All": union currencies from every merged subsidiary (deduped). */
     if (groupAllMode && !(Number.isFinite(singleCid) && singleCid > 0)) {
-      const mergeRows = resolveMergeCompanyList();
-      const mergeCompanyIds = mergeRows
+      let mergeRows = resolveMergeCompanyList();
+      if (!mergeRows.length && groupsAllMode && companiesForPicker?.length) {
+        mergeRows = companiesForPicker;
+      }
+      if (!mergeRows.length && groupsAllMode) {
+        mergeRows = resolveGroupsAllMergeCompanyList(companies, groupIds);
+      } else if (!mergeRows.length && groupKey) {
+        mergeRows = resolveGroupAllMergeCompanyList(companies, groupKey, groupIds);
+      }
+      let mergeCompanyIds = mergeRows
         .map((c) => parseInt(c.id, 10))
         .filter((id) => Number.isFinite(id) && id > 0);
 
       if (!mergeCompanyIds.length) {
-        commitCurrencyList([]);
+        if (!companies.length) return;
+        const cachedFallback = groupsAllMode
+          ? currenciesByGroupRef.current.get("GROUPS:ALL") ??
+            readPersistedGroupsAllCurrencyCodes()
+          : groupKey
+            ? currenciesByGroupRef.current.get(`${groupKey}:ALL`) ??
+              readPersistedGroupAllCurrencyCodes(groupKey)
+            : null;
+        if (cachedFallback?.length) {
+          commitCurrencyList(cachedFallback);
+          writeDashboardGroupCurrencyCaches(currenciesByGroupRef.current, {
+            groupKey,
+            groupsAllMode,
+            groupAllMode,
+            codes: cachedFallback,
+          });
+          return;
+        }
+        if (currenciesRef.current.length > 0) return;
         return;
       }
 
-      try {
-        const orderCompanyId = resolveDashboardCurrencyOrderCompanyId({
-          companyId: null,
-          selectedGroup: groupKey,
-          companies,
-          me,
-          companiesForPicker,
-        });
-        const ordParams = new URLSearchParams({ _t: String(Date.now()) });
-        if (orderCompanyId) ordParams.set("company_id", String(orderCompanyId));
+      const readCachedGroupAllCurrencyCodes = () =>
+        groupsAllMode
+          ? currenciesByGroupRef.current.get("GROUPS:ALL") ??
+            readPersistedGroupsAllCurrencyCodes()
+          : groupKey
+            ? currenciesByGroupRef.current.get(`${groupKey}:ALL`) ??
+              readPersistedGroupAllCurrencyCodes(groupKey)
+            : null;
 
-        const [currencyResults, ordRes] = await Promise.all([
-          Promise.all(
-            mergeCompanyIds.map(async (cid) => {
-              const row = companies.find((c) => parseInt(c.id, 10) === cid);
-              const vg = groupsAllMode
-                ? resolveViewGroupForCompany(row, selectedGroup)
-                : groupKey;
-              const q = new URLSearchParams({ company_id: String(cid) });
-              if (vg) {
-                q.set("view_group", vg);
-                q.set("group_id", vg);
-                q.set("subsidiary_accounts_only", "1");
-              } else if (row && !companyRowIsIndependent(row, groupIds)) {
-                q.set("subsidiary_accounts_only", "1");
-              }
-              try {
-                const curRes = await fetch(
-                  buildApiUrl(`api/transactions/get_scope_account_currencies_api.php?${q.toString()}`),
+      const loadGroupAllCurrenciesFromNetwork = async () => {
+        if (gen !== currencyLoadGenRef.current || scopeCurrencyKeyRef.current !== scopeKey) {
+          return;
+        }
+        try {
+          const orderCompanyId = resolveDashboardCurrencyOrderCompanyId({
+            companyId: null,
+            selectedGroup: groupKey,
+            companies,
+            me,
+            companiesForPicker,
+          });
+          const ordParams = new URLSearchParams({ _t: String(Date.now()) });
+          if (orderCompanyId) ordParams.set("company_id", String(orderCompanyId));
+
+          const [rawCodes, ordRes] = await Promise.all([
+            fetchGroupAllMergeCurrencyCodes(companies, mergeCompanyIds, {
+              groupsAllMode,
+              selectedGroup,
+              groupIds,
+              cacheRef: currenciesByCompanyRef.current,
+            }),
+            orderCompanyId
+              ? fetch(
+                  buildApiUrl(`api/transactions/user_currency_order_api.php?${ordParams.toString()}`),
                   { credentials: "include" }
-                );
-                const curJson = await curRes.json();
-                if (!curRes.ok || !curJson.success || !Array.isArray(curJson.data)) {
-                  return currenciesByCompanyRef.current.get(cid) ?? [];
-                }
-                const rowCodes = curJson.data.map((r) => String(r.code).toUpperCase()).filter(Boolean);
-                if (rowCodes.length && cid !== orderCompanyId) {
-                  currenciesByCompanyRef.current.set(cid, rowCodes);
-                }
-                return rowCodes;
-              } catch {
-                return currenciesByCompanyRef.current.get(cid) ?? [];
-              }
-            })
-          ),
-          orderCompanyId
-            ? fetch(
-                buildApiUrl(`api/transactions/user_currency_order_api.php?${ordParams.toString()}`),
-                { credentials: "include" }
-              ).catch(() => null)
-            : Promise.resolve(null),
-        ]);
+                ).catch(() => null)
+              : Promise.resolve(null),
+          ]);
 
-        if (gen !== currencyLoadGenRef.current || scopeCurrencyKeyRef.current !== scopeKey) return;
+          if (gen !== currencyLoadGenRef.current || scopeCurrencyKeyRef.current !== scopeKey) return;
 
-        let codes = [...new Set(currencyResults.flat())];
-        if (ordRes) {
-          const ordJson = await ordRes.json();
-          codes = applyResolvedCurrencyOrder(
+          let codes = [...new Set(rawCodes)];
+          if (!codes.length) {
+            const cachedUnion = new Set();
+            const persistedAll = readPersistedGroupsAllCurrencyCodes();
+            if (persistedAll?.length) persistedAll.forEach((c) => cachedUnion.add(c));
+            for (const gid of groupIds) {
+              const g = String(gid).trim().toUpperCase();
+              const gc = currenciesByGroupRef.current.get(g);
+              if (gc?.length) gc.forEach((c) => cachedUnion.add(c));
+            }
+            const groupsAllCached = currenciesByGroupRef.current.get("GROUPS:ALL");
+            if (groupsAllCached?.length) groupsAllCached.forEach((c) => cachedUnion.add(c));
+            codes = [...cachedUnion];
+          }
+          if (ordRes) {
+            const ordJson = await ordRes.json();
+            codes = applyResolvedCurrencyOrder(
+              codes,
+              orderCompanyId,
+              ordJson?.data?.order,
+              currencyDisplayOrderByCompanyRef,
+              userCurrencyDisplayOrderRef,
+            );
+          } else {
+            codes = applyDashboardCurrencyDisplayOrder(
+              codes,
+              orderCompanyId,
+              currencyDisplayOrderByCompanyRef,
+              userCurrencyDisplayOrderRef,
+            );
+          }
+          if (gen !== currencyLoadGenRef.current || scopeCurrencyKeyRef.current !== scopeKey) return;
+
+          if (!userCurrencyDisplayOrderRef.current?.length) {
+            persistDashboardCurrencyDisplayOrder(currencyDisplayOrderByCompanyRef, orderCompanyId, codes);
+          }
+          writeDashboardGroupCurrencyCaches(currenciesByGroupRef.current, {
+            groupKey,
+            groupsAllMode,
+            groupAllMode,
             codes,
-            orderCompanyId,
-            ordJson?.data?.order,
-            currencyDisplayOrderByCompanyRef,
-            userCurrencyDisplayOrderRef,
-          );
-        } else {
-          codes = applyDashboardCurrencyDisplayOrder(
-            codes,
-            orderCompanyId,
-            currencyDisplayOrderByCompanyRef,
-            userCurrencyDisplayOrderRef,
-          );
-        }
-        if (gen !== currencyLoadGenRef.current || scopeCurrencyKeyRef.current !== scopeKey) return;
+          });
 
-        if (!userCurrencyDisplayOrderRef.current?.length) {
-          persistDashboardCurrencyDisplayOrder(currencyDisplayOrderByCompanyRef, orderCompanyId, codes);
+          if (codes.length) {
+            commitCurrencyList(codes);
+          }
+        } catch {
+          /* Keep previous currency pills on transient errors. */
         }
-        writeDashboardGroupCurrencyCaches(currenciesByGroupRef, {
-          groupKey,
-          groupsAllMode,
-          groupAllMode,
-          codes,
-        });
+      };
 
-        commitCurrencyList(codes);
-      } catch {
-        /* Keep previous currency pills on transient errors. */
+      const cachedGroupAllCodes = readCachedGroupAllCurrencyCodes();
+      if (cachedGroupAllCodes?.length > 1) {
+        commitCurrencyList(cachedGroupAllCodes);
+        deferGroupAllCurrencyNetworkRefresh(loadGroupAllCurrenciesFromNetwork);
+      } else {
+        await loadGroupAllCurrenciesFromNetwork();
       }
       return;
     }
@@ -2209,7 +2603,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
                 }
               }
             } catch {
-              /* fall through — keep previous pills */
+              /* fall through â€” keep previous pills */
             }
           }
         }
@@ -2226,7 +2620,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     }
 
     const groupPlusCompanyCurrency =
-      Boolean(groupKey) && singleCid != null && !groupOnlyCurrencyScope && !subsidiaryDashboardScope;
+      Boolean(effectiveGroupKey) && singleCid != null && !groupOnlyCurrencyScope && !subsidiaryDashboardScope;
 
     if (!companyIds.length && !groupLedgerOnly && !groupOnlyCurrencyScope) {
       commitCurrencyList([]);
@@ -2239,7 +2633,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         const q = new URLSearchParams();
         if (subsidiaryDashboardScope && singleCid) {
           q.set("company_id", String(singleCid));
-          appendDashboardSubsidiaryScopeParams(q, groupKey);
+          appendDashboardSubsidiaryScopeParams(q, effectiveGroupKey);
         } else if (groupLedgerOnly && groupKey && canUseGroupOnlyMode(me, groupKey, companies)) {
           q.set("group_id", groupKey);
           q.set("view_group", groupKey);
@@ -2284,6 +2678,18 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         const curJson = await curRes.json();
         if (curRes.ok && curJson.success && Array.isArray(curJson.data)) {
           codes = curJson.data.map((r) => String(r.code).toUpperCase());
+        }
+        if (subsidiaryDashboardScope && singleCid) {
+          const row = companies.find((c) => parseInt(c.id, 10) === singleCid);
+          const settingCodes = await fetchCompanyCurrencySettingCodes(
+            singleCid,
+            row,
+            effectiveGroupKey,
+            groupIds
+          );
+          if (settingCodes.length) {
+            codes = [...new Set([...codes, ...settingCodes])];
+          }
         }
         if (!codes.length && singleCid) {
           const cached = currenciesByCompanyRef.current.get(singleCid);
@@ -2395,7 +2801,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         applyCurrencyCodes(codes, singleCid);
       } else if (groupKey) {
         applyCurrencyCodes(codes, null);
-        writeDashboardGroupCurrencyCaches(currenciesByGroupRef, {
+        writeDashboardGroupCurrencyCaches(currenciesByGroupRef.current, {
           groupKey,
           groupsAllMode,
           groupAllMode,
@@ -2429,9 +2835,121 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
   loadCurrenciesRef.current = loadCurrencies;
 
+  const scheduleLoadCurrencies = useCallback(
+    (immediate = false) => {
+      if (loadCurrenciesCoalesceTimerRef.current) {
+        window.clearTimeout(loadCurrenciesCoalesceTimerRef.current);
+        loadCurrenciesCoalesceTimerRef.current = null;
+      }
+      if (immediate) {
+        void loadCurrencies();
+        return;
+      }
+      loadCurrenciesCoalesceTimerRef.current = window.setTimeout(() => {
+        loadCurrenciesCoalesceTimerRef.current = null;
+        void loadCurrencies();
+      }, LOAD_CURRENCIES_COALESCE_MS);
+    },
+    [loadCurrencies]
+  );
+  const scheduleLoadCurrenciesRef = useRef(scheduleLoadCurrencies);
+  scheduleLoadCurrenciesRef.current = scheduleLoadCurrencies;
+
   useLayoutEffect(() => {
-    void loadCurrenciesRef.current?.();
-  }, [buildScopeCurrencyKey, groupIds.length, companies.length]);
+    if (!sessionReady || !meRef.current || !gcBootstrapReady || !companies.length) return;
+    scheduleLoadCurrenciesRef.current();
+  }, [
+    buildScopeCurrencyKey,
+    groupIds.length,
+    companiesSig,
+    sessionReady,
+    gcBootstrapReady,
+    groupsAllMode,
+    groupAllMode,
+    companyId,
+    me?.user_id,
+    me?.id,
+  ]);
+
+  useEffect(() => {
+    if (!gcBootstrapReady || !sessionReady || !meRef.current) return;
+    if (!groupsAllMode || !groupAllMode || companyId != null) return;
+    primeCurrenciesFromCache({
+      companyId: null,
+      selectedGroup: null,
+      groupsAllMode: true,
+      groupAllMode: true,
+    });
+    scheduleLoadCurrenciesRef.current();
+  }, [
+    gcBootstrapReady,
+    sessionReady,
+    groupsAllMode,
+    groupAllMode,
+    companyId,
+    primeCurrenciesFromCache,
+  ]);
+
+  /** Dashboard KPI can load before currency pills settle â€” retry after merge data is ready. */
+  useEffect(() => {
+    if (!gcBootstrapReady || !sessionReady || !meRef.current) return;
+    if (companyId != null) {
+      if (!subsidiaryDashboardScope || currencyCode || currencies.length < 1) return;
+      const scopeKey = buildDashboardCurrencyScopeKey({ companyId, selectedGroup });
+      const nextCode = resolveActiveCurrencyForScope({
+        codes: currencies,
+        scopeKey,
+        isCompanyOnlyScope: false,
+        isGroupOnlyScope: false,
+        prev: currencyCodeRef.current,
+      });
+      if (nextCode && nextCode !== currencyCodeRef.current) {
+        setCurrencyCode(nextCode);
+      }
+      return;
+    }
+    if (usesGroupLedgerDashboard) {
+      if (currencyCode || currencies.length < 1) return;
+      const scopeKey = buildDashboardCurrencyScopeKey({ companyId: null, selectedGroup });
+      const nextCode = resolveActiveCurrencyForScope({
+        codes: currencies,
+        scopeKey,
+        isCompanyOnlyScope: false,
+        isGroupOnlyScope: true,
+        prev: currencyCodeRef.current,
+      });
+      if (nextCode && nextCode !== currencyCodeRef.current) {
+        setCurrencyCode(nextCode);
+      }
+      return;
+    }
+    if (!groupAllMode && !(groupsAllMode && !groupAllMode)) return;
+    if (currencies.length > 1) return;
+    primeCurrenciesFromCache({
+      companyId: null,
+      selectedGroup: groupsAllMode ? null : selectedGroup,
+      groupsAllMode,
+      groupAllMode,
+    });
+    void scheduleLoadCurrenciesRef.current?.(true);
+  }, [
+    gcBootstrapReady,
+    sessionReady,
+    dashboardData,
+    groupAllMode,
+    groupsAllMode,
+    companyId,
+    selectedGroup,
+    companiesSig,
+    currencies.length,
+    currencies,
+    currencyCode,
+    subsidiaryDashboardScope,
+    usesGroupLedgerDashboard,
+    me?.user_id,
+    primeCurrenciesFromCache,
+    resolveActiveCurrencyForScope,
+  ]);
 
   useEffect(() => {
     currencyPrefetchFailedRef.current.clear();
@@ -2483,7 +3001,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       const json = await res.json();
       if (!res.ok || !json.success || !Array.isArray(json.data)) {
         const msg = String(json?.message || json?.error || "");
-        const denied = !res.ok || msg.includes("无权访问");
+        const denied = !res.ok || msg.includes("æ— æƒè®¿é—®");
         if (denied) {
           currencyPrefetchFailedRef.current.add(queryString);
           if (groupLedgerQuery && viewGroup) {
@@ -2567,8 +3085,48 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
             companyId: null,
             selectedGroup: null,
             groupsAllMode: true,
-            groupAllMode: isCompanyOwnerWithGroupLedger(me) ? false : groupAllMode,
+            groupAllMode: companyLoginCanUseGroupsAllLedger(me) ? false : groupAllMode,
           });
+        }
+        return;
+      }
+
+      if (
+        groupsAllMode &&
+        groupAllMode &&
+        !(Number.isFinite(activeId) && activeId > 0)
+      ) {
+        const mergeRows = filterCompaniesForDashboardApiAccess(
+          me,
+          resolveGroupsAllMergeCompanyList(companies, groupIds),
+          companies,
+          null
+        );
+        const mergeIds = mergeRows
+          .map((c) => parseInt(c.id, 10))
+          .filter((id) => Number.isFinite(id) && id > 0);
+        if (mergeIds.length) {
+          const codes = await fetchGroupAllMergeCurrencyCodes(companies, mergeIds, {
+            groupsAllMode: true,
+            selectedGroup: null,
+            groupIds,
+            cacheRef: currenciesByCompanyRef.current,
+          });
+          if (!cancelled && codes.length) {
+            writeDashboardGroupCurrencyCaches(currenciesByGroupRef.current, {
+              groupKey: null,
+              groupsAllMode: true,
+              groupAllMode: true,
+              codes,
+            });
+            primeCurrenciesFromCache({
+              companyId: null,
+              selectedGroup: null,
+              groupsAllMode: true,
+              groupAllMode: true,
+            });
+            void scheduleLoadCurrenciesRef.current?.(true);
+          }
         }
         return;
       }
@@ -2605,12 +3163,10 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       }
 
       if (Number.isFinite(activeId) && activeId > 0 && !currenciesByCompanyRef.current.has(activeId)) {
-        const q = buildCompanyCurrencyQuery(
-          activeId,
-          groupsAllMode ? null : activeGroup
-        );
-        if (q) {
-          const codes = await fetchScopeCurrenciesDeduped(q);
+        const row = companies.find((c) => parseInt(c.id, 10) === activeId);
+        const vg = groupsAllMode ? null : activeGroup;
+        if (row && shouldPrefetchCompanyScope(activeId, vg)) {
+          const codes = await fetchCompanyCurrencySettingCodes(activeId, row, vg, groupIds);
           if (!cancelled && codes?.length) {
             const savedOrder = resolvePreferredCurrencyDisplayOrder(activeId, {
               displayOrderByCompanyRef: currencyDisplayOrderByCompanyRef,
@@ -2682,9 +3238,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       if (!Number.isFinite(id) || id <= 0 || id === activeId || currenciesByCompanyRef.current.has(id)) {
         return;
       }
-      const q = buildCompanyCurrencyQuery(cid, viewGroup);
-      if (!q) return;
-      const codes = await fetchScopeCurrenciesDeduped(q);
+      if (!shouldPrefetchCompanyScope(id, viewGroup)) return;
+      const row = companies.find((c) => parseInt(c.id, 10) === id);
+      if (!row || isVirtualGroupLinkCompanyRow(row)) return;
+      const vg = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
+      if (vg && companyRowIsGroupEntity(row, vg)) return;
+      const codes = await fetchCompanyCurrencySettingCodes(id, row, vg || null, groupIds);
       if (!cancelled && codes?.length) {
         const savedOrder = resolvePreferredCurrencyDisplayOrder(id, {
           displayOrderByCompanyRef: currencyDisplayOrderByCompanyRef,
@@ -2789,7 +3348,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         (selectedGroup ? String(selectedGroup).trim().toUpperCase() : null);
       const row = companies.find((c) => parseInt(c.id, 10) === parseInt(cid, 10));
       const subsidiaryOnly =
-        Boolean(viewGroup) && !(row && companyRowIsGroupEntity(row, viewGroup));
+        Boolean(viewGroup) &&
+        (!(row && companyRowIsGroupEntity(row, viewGroup)) ||
+          !canAccessGroupLedgerForGroup(meRef.current, viewGroup, companies));
       appendDashboardGroupTabParams(q, viewGroup, { subsidiaryOnly });
       const cacheKey = q.toString();
       const cachedPayload = getDashboardPayloadCache(cacheKey);
@@ -2919,13 +3480,21 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       const to = overrides.dateTo ?? dateTo;
       const codes = overrides.codes ?? currenciesRef.current;
 
+      const enabledGids =
+        gAll && earningsEnabledGroupIdsRef.current.length
+          ? earningsEnabledGroupIdsRef.current
+          : [];
+      const mergeCompanyRows = gAll
+        ? enabledGids.length
+          ? enabledGids.flatMap((g) => resolveGroupAllMergeCompanyList(companies, g, groupIds))
+          : resolveGroupsAllMergeCompanyList(companies, groupIds)
+        : selGroup
+          ? resolveGroupAllMergeCompanyList(companies, selGroup, groupIds)
+          : [];
+
       const mergeRows = filterCompaniesForDashboardApiAccess(
         meRef.current,
-        gAll
-          ? resolveGroupsAllMergeCompanyList(companies, groupIds)
-          : selGroup
-            ? resolveGroupAllMergeCompanyList(companies, selGroup, groupIds)
-            : [],
+        mergeCompanyRows,
         companies,
         gAll ? null : selGroup
       );
@@ -2938,13 +3507,20 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         const vg = resolveViewGroupForCompany(row, gAll ? selGroup : selGroup);
         const snap = resolveMemberDashboardSnapshot(cid, vg, cur, from, to);
         if (!snap?.current) return null;
-        snapshots.push(snap);
+        snapshots.push({ ...snap, company: row, viewGroup: vg });
       }
 
       const mergedCurrent = mergeGroupData(
         snapshots.map((s) => s.current),
         { startDate: from, endDate: to }
       );
+      const byCompanyCurrent = buildCompanyNetProfitRowsFromPairs(
+        snapshots.map((s) => ({ company: s.company, data: s.current, viewGroup: s.viewGroup })),
+        selGroup
+      );
+      if (byCompanyCurrent.length) {
+        mergedCurrent.subsidiary_earnings_by_company = byCompanyCurrent;
+      }
       const allPrev = snapshots.every((s) => s.previous);
       const mergedPrevious = allPrev
         ? mergeGroupData(
@@ -2975,6 +3551,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       companies,
       groupIds,
       resolveMemberDashboardSnapshot,
+      buildCompanyNetProfitRowsFromPairs,
     ]
   );
 
@@ -3181,9 +3758,6 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           setLoading(true);
           return false;
         }
-        setDisplayScopeKey("");
-        setDashboardData(null);
-        setDashboardDataPrev(null);
         setLoading(true);
         return false;
       }
@@ -3209,30 +3783,30 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     (rangeFrom, rangeTo, currencyOverride, data, viewGroupOverride) => {
       if (!data) return;
       const cur = currencyOverride ?? currencyCodeRef.current;
-      if (usesGroupLedgerDashboard && selectedGroup) {
-        const vg = String(selectedGroup).trim().toUpperCase();
+      if (companyId != null) {
         const q = new URLSearchParams({
           date_from: rangeFrom,
           date_to: rangeTo,
-          view_group: vg,
-          group_id: vg,
+          company_id: String(companyId),
         });
+        if (cur) q.append("currency", cur);
+        const viewGroup =
+          viewGroupOverride ??
+          (selectedGroup ? String(selectedGroup).trim().toUpperCase() : null);
+        appendDashboardGroupTabParams(q, viewGroup, { subsidiaryOnly: subsidiaryDashboardScope });
+        setDashboardPayloadCache(q.toString(), data);
+        return;
+      }
+      if (usesGroupLedgerDashboard && selectedGroup) {
+        const q = new URLSearchParams({
+          date_from: rangeFrom,
+          date_to: rangeTo,
+        });
+        appendGroupLedgerDashboardParams(q, selectedGroup);
         if (cur) q.append("currency", cur);
         setDashboardPayloadCache(q.toString(), data);
         return;
       }
-      if (companyId == null) return;
-      const q = new URLSearchParams({
-        date_from: rangeFrom,
-        date_to: rangeTo,
-        company_id: String(companyId),
-      });
-      if (cur) q.append("currency", cur);
-      const viewGroup =
-        viewGroupOverride ??
-        (selectedGroup ? String(selectedGroup).trim().toUpperCase() : null);
-      appendDashboardGroupTabParams(q, viewGroup, { subsidiaryOnly: subsidiaryDashboardScope });
-      setDashboardPayloadCache(q.toString(), data);
     },
     [companyId, usesGroupLedgerDashboard, selectedGroup, subsidiaryDashboardScope]
   );
@@ -3241,16 +3815,19 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     (entries, cidOverride = null, groupOverride = undefined) => {
       const cid = cidOverride ?? companyId;
       const grp = groupOverride !== undefined ? groupOverride : selectedGroup;
-      return (entries || []).map(({ code, payload }) => ({
-        code,
-        earnings: payload
-          ? computeKpiMetrics(
-              applyDashboardPayloadAdjustments(payload, cid, grp),
-              grp,
-              resolveKpiOwnershipOpts(cid, grp)
-            )?.earnings ?? 0
-          : 0,
-      }));
+      return (entries || []).map(({ code, payload }) => {
+        if (!payload) {
+          return { code, netProfit: 0, earnings: 0 };
+        }
+        const metrics = computeKpiMetrics(
+          applyDashboardPayloadAdjustments(payload, cid, grp),
+          grp,
+          resolveKpiOwnershipOpts(cid, grp)
+        );
+        const netProfit = metrics?.netProfit ?? 0;
+        const earnings = metrics?.earnings ?? netProfit;
+        return { code, netProfit, earnings };
+      });
     },
     [applyDashboardPayloadAdjustments, companyId, selectedGroup, resolveKpiOwnershipOpts]
   );
@@ -3285,9 +3862,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       const q = new URLSearchParams({
         date_from: rangeFrom,
         date_to: rangeTo,
-        view_group: g,
-        group_id: g,
       });
+      appendGroupLedgerDashboardParams(q, g);
       if (cur) q.append("currency", cur);
       setDashboardPayloadCache(q.toString(), data);
     },
@@ -3433,13 +4009,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         prefetch: "1",
         currency: code,
       });
-      if (usesGroupLedgerDashboard && selectedGroup) {
-        const vg = String(selectedGroup).trim().toUpperCase();
-        q.set("view_group", vg);
-        q.set("group_id", vg);
-      } else if (companyId != null) {
+      if (companyId != null) {
         q.set("company_id", String(companyId));
-        appendDashboardGroupTabParams(q, selectedGroup, { subsidiaryOnly: subsidiaryDashboardScope });
+        appendDashboardGroupTabParams(q, dashboardViewGroup, { subsidiaryOnly: subsidiaryDashboardScope });
+      } else if (usesGroupLedgerDashboard && selectedGroup) {
+        appendGroupLedgerDashboardParams(q, selectedGroup);
       } else {
         return;
       }
@@ -3463,21 +4037,21 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         const current = applyDashboardPayloadAdjustments(
           json.data.current,
           companyId,
-          selectedGroup
+          dashboardViewGroup
         );
         const previous = json.data.previous
-          ? applyDashboardPayloadAdjustments(json.data.previous, companyId, selectedGroup)
+          ? applyDashboardPayloadAdjustments(json.data.previous, companyId, dashboardViewGroup)
           : null;
         const earningsCurrent = earningsRowsFromBootstrapEntries(
           json.data.earnings?.current,
           companyId,
-          selectedGroup
+          dashboardViewGroup
         );
 
         if (companyId != null) {
           seedDashboardPayloadCacheForCompany(
             companyId,
-            selectedGroup,
+            dashboardViewGroup,
             rangeFrom,
             rangeTo,
             code,
@@ -3517,6 +4091,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       earningsRowsFromBootstrapEntries,
       seedDashboardPayloadCacheForCompany,
       seedDashboardPayloadCacheForGroup,
+      dashboardViewGroup,
     ]
   );
 
@@ -3618,17 +4193,23 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         date_to: dateTo,
         bootstrap_scope: scope,
       });
-      if (usesGroupLedgerDashboard && selectedGroup) {
-        const vg = String(selectedGroup).trim().toUpperCase();
-        q.set("view_group", vg);
-        q.set("group_id", vg);
-      } else if (companyId != null) {
+      if (companyId != null) {
         q.set("company_id", String(companyId));
-        appendDashboardGroupTabParams(q, selectedGroup, { subsidiaryOnly: subsidiaryDashboardScope });
+        appendDashboardGroupTabParams(q, dashboardViewGroup, { subsidiaryOnly: subsidiaryDashboardScope });
+      } else if (usesGroupLedgerDashboard && selectedGroup) {
+        appendGroupLedgerDashboardParams(q, selectedGroup);
       } else {
         throw new Error(i18n.failedToLoadDashboard);
       }
-      const effectiveCurrency = currencyOverride ?? currencyCode;
+      const effectiveCurrency =
+        currencyOverride ??
+        (currencyCodeRef.current ||
+          resolveProvisionalDashboardCurrency({
+            currencyCode: currencyCodeRef.current,
+            companyId,
+            currenciesRef,
+            currenciesByCompanyRef,
+          }));
       if (effectiveCurrency) q.set("currency", effectiveCurrency);
 
       const codesForBootstrap = currencyOverride
@@ -3673,10 +4254,10 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         scope === "previous"
           ? null
           : json.data.current != null
-            ? applyDashboardPayloadAdjustments(json.data.current, companyId, selectedGroup)
+            ? applyDashboardPayloadAdjustments(json.data.current, companyId, dashboardViewGroup)
             : null;
       const previous = json.data.previous
-        ? applyDashboardPayloadAdjustments(json.data.previous, companyId, selectedGroup)
+        ? applyDashboardPayloadAdjustments(json.data.previous, companyId, dashboardViewGroup)
         : null;
 
       if (current) {
@@ -3698,6 +4279,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       dateTo,
       usesGroupLedgerDashboard,
       selectedGroup,
+      dashboardViewGroup,
       companyId,
       subsidiaryDashboardScope,
       currencyCode,
@@ -3709,7 +4291,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     ]
   );
 
-  /** MoM compare baseline — deferred so the first bootstrap only waits on current period. */
+  /** MoM compare baseline â€” deferred so the first bootstrap only waits on current period. */
   const loadDashboardPreviousPeriod = useCallback(
     async (targetScopeKey) => {
       const cacheKey = targetScopeKey ?? dashboardScopeKey;
@@ -3748,7 +4330,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         setDashboardDataPrev(boot.previous);
         patchDashboardCache(cacheKey, { previous: boot.previous });
       } catch {
-        /* Background MoM compare — non-blocking. */
+        /* Background MoM compare â€” non-blocking. */
       } finally {
         if (previousPeriodInFlightRef.current === cacheKey) {
           previousPeriodInFlightRef.current = "";
@@ -3771,7 +4353,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     ]
   );
 
-  /** Trend chart daily series — deferred so KPI bootstrap can skip GROUP BY daily aggregation. */
+  /** Trend chart daily series â€” deferred so KPI bootstrap can skip GROUP BY daily aggregation. */
   const loadDashboardChartDaily = useCallback(
     async (targetScopeKey) => {
       const cacheKey = targetScopeKey ?? dashboardScopeKey;
@@ -3806,7 +4388,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         dashboardDataRef.current = merged;
         patchDashboardCache(cacheKey, { current: merged });
       } catch {
-        /* Background chart — non-blocking. */
+        /* Background chart â€” non-blocking. */
       } finally {
         if (chartDailyInFlightRef.current === cacheKey) {
           chartDailyInFlightRef.current = "";
@@ -3857,8 +4439,10 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       if (!vg) {
         throw new Error(i18n.failedToLoadDashboard);
       }
-      q.append("view_group", vg);
-      q.append("group_id", vg);
+      if (!canAccessGroupLedgerForGroup(meRef.current, vg, companies)) {
+        throw new Error(i18n.failedToLoadDashboard);
+      }
+      appendGroupLedgerDashboardParams(q, vg);
       const cacheKey = q.toString();
       const cachedPayload = getDashboardPayloadCache(cacheKey);
       if (cachedPayload != null) {
@@ -3877,7 +4461,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       setDashboardPayloadCache(cacheKey, json.data);
       return json.data;
     },
-    [selectedGroup, i18n]
+    [selectedGroup, companies, i18n]
   );
 
   const fetchMergedCompanyDashboards = useCallback(
@@ -3887,7 +4471,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       rangeTo,
       currencyOverride,
       viewGroupFallback = null,
-      useActiveScopeAbort = true
+      useActiveScopeAbort = true,
+      { earningsOnly = false } = {}
     ) => {
       const accessible = filterCompaniesForDashboardApiAccess(
         meRef.current,
@@ -3898,19 +4483,27 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       if (!accessible.length) {
         throw new Error(i18n.failedToLoadDashboard);
       }
-      const settled = await Promise.allSettled(
-        accessible.map((c) => {
+      const settled = await runTasksInBatches(
+        accessible,
+        MERGE_DASHBOARD_PARALLEL_BATCH,
+        async (c) => {
           const cid = parseInt(c.id, 10);
           const viewGroup = resolveViewGroupForCompany(c, viewGroupFallback ?? selectedGroup);
-          return fetchDashboardPayload(
-            cid,
-            rangeFrom,
-            rangeTo,
-            currencyOverride,
-            viewGroup,
-            useActiveScopeAbort
-          ).then((data) => ({ company: c, data, viewGroup }));
-        })
+          try {
+            const data = await fetchDashboardPayload(
+              cid,
+              rangeFrom,
+              rangeTo,
+              currencyOverride,
+              viewGroup,
+              useActiveScopeAbort,
+              { earningsOnly }
+            );
+            return { status: "fulfilled", value: { company: c, data, viewGroup } };
+          } catch (reason) {
+            return { status: "rejected", reason };
+          }
+        }
       );
       const pairs = settled
         .filter((entry) => entry.status === "fulfilled" && entry.value?.data)
@@ -3947,18 +4540,37 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       rangeFrom,
       rangeTo,
       currencyOverride,
-      { groupKey = null, groupsAllMerge = false, useActiveScopeAbort = true } = {}
+      {
+        groupKey = null,
+        groupsAllMerge = false,
+        useActiveScopeAbort = true,
+        earningsOnly = false,
+        earningsGroupsOnly = false,
+      } = {}
     ) => {
-      const companyList = groupsAllMerge
-        ? resolveGroupsAllMergeCompanyList(companies, groupIds)
-        : resolveGroupAllMergeCompanyList(companies, groupKey ?? selectedGroup, groupIds);
+      let companyList;
+      if (groupsAllMerge) {
+        const enabled = earningsGroupsOnly
+          ? earningsEnabledGroupIdsRef.current.filter((g) => String(g || "").trim())
+          : [];
+        if (enabled.length) {
+          companyList = enabled.flatMap((g) =>
+            resolveGroupAllMergeCompanyList(companies, g, groupIds)
+          );
+        } else {
+          companyList = resolveGroupsAllMergeCompanyList(companies, groupIds);
+        }
+      } else {
+        companyList = resolveGroupAllMergeCompanyList(companies, groupKey ?? selectedGroup, groupIds);
+      }
       return fetchMergedCompanyDashboards(
         companyList,
         rangeFrom,
         rangeTo,
         currencyOverride,
         groupKey ?? selectedGroup,
-        useActiveScopeAbort
+        useActiveScopeAbort,
+        { earningsOnly }
       );
     },
     [companies, groupIds, selectedGroup, fetchMergedCompanyDashboards]
@@ -3967,15 +4579,20 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   const enrichGroupAllMergedDashboard = useCallback(
     async (merged, rangeFrom, rangeTo, currencyOverride, groupKey, useActiveScopeAbort = true) => {
       if (!merged || !groupKey) return merged;
-      const ledger = await fetchGroupDashboardPayload(
-        rangeFrom,
-        rangeTo,
-        currencyOverride,
-        groupKey,
-        useActiveScopeAbort,
-        { earningsOnly: true }
-      );
-      return attachGroupAggregateEarningsFields(merged, ledger);
+      try {
+        const ledger = await fetchGroupDashboardPayload(
+          rangeFrom,
+          rangeTo,
+          currencyOverride,
+          groupKey,
+          useActiveScopeAbort,
+          { earningsOnly: true }
+        );
+        return attachGroupAggregateEarningsFields(merged, ledger);
+      } catch {
+        // Company login may not have group-ledger permission; keep merged subsidiary payload usable.
+        return merged;
+      }
     },
     [fetchGroupDashboardPayload]
   );
@@ -3985,6 +4602,20 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       const mergeAbort =
         useActiveScopeAbort !== undefined ? useActiveScopeAbort : !groupAllMode;
       const earningsOpts = earningsOnly ? { earningsOnly: true } : {};
+      if (companyId != null) {
+        const row = companies.find((c) => parseInt(c.id, 10) === parseInt(companyId, 10));
+        const viewGroup =
+          dashboardViewGroup ?? resolveViewGroupForCompany(row, selectedGroup);
+        return fetchDashboardPayload(
+          companyId,
+          rangeFrom,
+          rangeTo,
+          currencyOverride,
+          viewGroup,
+          mergeAbort,
+          earningsOpts
+        );
+      }
       if (usesGroupLedgerDashboard && selectedGroup) {
         return fetchGroupDashboardPayload(
           rangeFrom,
@@ -4001,6 +4632,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           return fetchGroupAllMergedDashboard(rangeFrom, rangeTo, currencyOverride, {
             groupsAllMerge: true,
             useActiveScopeAbort: mergeAbort,
+            earningsOnly,
+            earningsGroupsOnly: false,
           });
         }
         if (selectedGroup) {
@@ -4009,6 +4642,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
             useActiveScopeAbort: mergeAbort,
           });
           if (earningsOnly) return merged;
+          if (!canAccessGroupLedgerForGroup(meRef.current, selectedGroup, companies)) {
+            return merged;
+          }
           return enrichGroupAllMergedDashboard(
             merged,
             rangeFrom,
@@ -4028,19 +4664,39 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           me,
         })
       ) {
-        const gids = groupIds.filter((g) => String(g || "").trim());
+        const gids = filterGroupIdsForLedgerAccess(me, groupIds, companies);
         if (!gids.length) {
           throw new Error(i18n.failedToLoadDashboard);
         }
-        const results = await Promise.all(
+        const settled = await Promise.allSettled(
           gids.map((gid) =>
-            fetchGroupDashboardPayload(rangeFrom, rangeTo, currencyOverride, gid)
+            fetchGroupDashboardPayload(rangeFrom, rangeTo, currencyOverride, gid, mergeAbort, earningsOpts)
           )
         );
+        const results = settled
+          .filter((entry) => entry.status === "fulfilled")
+          .map((entry) => entry.value);
+        if (!results.length) {
+          const rejected = settled.find((entry) => entry.status === "rejected");
+          throw rejected?.reason ?? new Error(i18n.failedToLoadDashboard);
+        }
+        earningsEnabledGroupIdsRef.current = gids
+          .map((gid, idx) => ({ gid, payload: settled[idx]?.status === "fulfilled" ? settled[idx].value : null }))
+          .filter(({ payload }) => payload && viewerHasEarningsConfig(payload))
+          .map(({ gid }) => String(gid).trim().toUpperCase());
+        const earningsResults = results.filter((row) => viewerHasEarningsConfig(row));
         const merged = finalizeMergedGroupLedgerDashboard(
           mergeGroupData(results, { startDate: rangeFrom, endDate: rangeTo }),
-          results
+          earningsResults
         );
+        merged._earnings_enabled_group_ids = gids
+          .map((gid, idx) => ({
+            gid,
+            payload: settled[idx]?.status === "fulfilled" ? settled[idx].value : null,
+          }))
+          .filter(({ payload }) => payload && viewerHasEarningsConfig(payload))
+          .map(({ gid }) => String(gid || "").trim().toUpperCase())
+          .filter(Boolean);
         const byCompany = mergeCompanyBreakdownRowLists(
           results.map((r) => normalizeSubsidiaryEarningsByCompany(r?.subsidiary_earnings_by_company))
         );
@@ -4048,18 +4704,6 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           merged.subsidiary_earnings_by_company = byCompany;
         }
         return merged;
-      }
-
-      if (companyId != null) {
-        return fetchDashboardPayload(
-          companyId,
-          rangeFrom,
-          rangeTo,
-          currencyOverride,
-          null,
-          mergeAbort,
-          earningsOpts
-        );
       }
 
       if (mergedSubsetIds && mergedSubsetIds.length > 1) {
@@ -4077,6 +4721,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       groupsAllMode,
       groupIds,
       selectedGroup,
+      dashboardViewGroup,
       mergedSubsetIds,
       companies,
       fetchGroupDashboardPayload,
@@ -4103,15 +4748,42 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     [applyDashboardPayloadAdjustments, companyId, selectedGroup, resolveKpiOwnershipOpts]
   );
 
-  const buildSeededEarningsRows = useCallback((codes, primaryCode, primaryEarnings) => {
+  const computeCurrencyMetricsFromPayload = useCallback(
+    (payload, grp = selectedGroup) => {
+      if (!payload) return { netProfit: null, earnings: null };
+      const merged = mergeDashboardOwnershipFields(payload, dashboardDataRef.current);
+      const metrics = computeKpiMetrics(
+        applyDashboardPayloadAdjustments(merged, companyId, grp),
+        grp,
+        resolveKpiOwnershipOpts(companyId, grp)
+      );
+      if (!metrics) return { netProfit: null, earnings: null };
+      return {
+        netProfit: metrics.netProfit,
+        earnings: metrics.earnings,
+      };
+    },
+    [applyDashboardPayloadAdjustments, companyId, selectedGroup, resolveKpiOwnershipOpts]
+  );
+
+  const buildCurrencyRowFromPayload = useCallback(
+    (code, payload, grp = selectedGroup) => {
+      const { netProfit, earnings } = computeCurrencyMetricsFromPayload(payload, grp);
+      return { code, netProfit, earnings };
+    },
+    [computeCurrencyMetricsFromPayload]
+  );
+
+  const buildSeededEarningsRows = useCallback((codes, primaryCode, primaryNetProfit, primaryEarnings) => {
     const primaryUpper = String(primaryCode || "").toUpperCase();
-    return codes.map((code) => ({
-      code,
-      earnings:
-        String(code).toUpperCase() === primaryUpper && primaryEarnings != null
-          ? primaryEarnings
-          : null,
-    }));
+    return codes.map((code) => {
+      const isPrimary = String(code).toUpperCase() === primaryUpper;
+      return {
+        code,
+        netProfit: isPrimary && primaryNetProfit != null ? primaryNetProfit : null,
+        earnings: isPrimary && primaryEarnings != null ? primaryEarnings : null,
+      };
+    });
   }, []);
 
   const scheduleIncompleteEarningsRetry = useCallback((delayMs = 150) => {
@@ -4142,19 +4814,16 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
             { earningsOnly: true, useActiveScopeAbort: false }
           );
           if (gen !== earningsFetchGenRef.current) return null;
-          return {
-            code,
-            earnings: computeEarningsFromPayload(payload),
-          };
+          return buildCurrencyRowFromPayload(code, payload);
         } catch {
           if (attempt < maxRetries) {
             await new Promise((resolve) => window.setTimeout(resolve, 280));
           }
         }
       }
-      return { code, earnings: null };
+      return { code, netProfit: null, earnings: null };
     },
-    [groupAllMode, loadMergedDashboard, computeEarningsFromPayload]
+    [groupAllMode, loadMergedDashboard, buildCurrencyRowFromPayload]
   );
 
   const fetchGroupAllEarningsRowsForRange = useCallback(
@@ -4164,23 +4833,17 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
       const primary = currencyCodeRef.current;
       const primaryUpper = String(primary || "").trim().toUpperCase();
-      const rows = [];
       const reuseMainPayload =
         rangeFrom === dateFromRef.current &&
         rangeTo === dateToRef.current &&
         dashboardDataRef.current != null;
 
-      for (let idx = 0; idx < list.length; idx += 1) {
-        const code = list[idx];
-        if (gen !== earningsFetchGenRef.current) return [];
+      const resolveCodeEarnings = async (code) => {
+        if (gen !== earningsFetchGenRef.current) return null;
         const codeUpper = String(code).trim().toUpperCase();
 
         if (reuseMainPayload && codeUpper === primaryUpper) {
-          rows.push({
-            code,
-            earnings: computeEarningsFromPayload(dashboardDataRef.current),
-          });
-          continue;
+          return buildCurrencyRowFromPayload(code, dashboardDataRef.current);
         }
 
         const cached = tryBuildGroupAllDashboardFromCompanyCaches({
@@ -4193,34 +4856,50 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           const hit = cached.earnings.find(
             (row) => String(row?.code || "").trim().toUpperCase() === codeUpper
           );
-          if (hit?.earnings != null) {
-            rows.push({ code, earnings: hit.earnings });
-            continue;
+          if (hit?.earnings != null || hit?.netProfit != null) {
+            return {
+              code,
+              netProfit: hit.netProfit ?? hit.earnings,
+              earnings: hit.earnings ?? hit.netProfit,
+            };
           }
         }
         if (cached?.current) {
-          rows.push({
-            code,
-            earnings: computeEarningsFromPayload(cached.current),
-          });
-          continue;
+          return buildCurrencyRowFromPayload(code, cached.current);
         }
 
         const fetched = await fetchSingleCurrencyEarnings(code, gen, { retries: 0 });
-        rows.push(fetched ?? { code, earnings: null });
+        return fetched ?? { code, netProfit: null, earnings: null };
+      };
 
-        if (idx < list.length - 1 && gen === earningsFetchGenRef.current) {
-          await new Promise((resolve) =>
-            window.setTimeout(resolve, GROUP_ALL_EARNINGS_CURRENCY_DELAY_MS)
-          );
+      const primaryCode =
+        list.find((code) => String(code).trim().toUpperCase() === primaryUpper) ?? list[0];
+      const otherCodes = list.filter(
+        (code) =>
+          String(code).trim().toUpperCase() !== String(primaryCode).trim().toUpperCase()
+      );
+
+      const rows = [];
+      const primaryRow = await resolveCodeEarnings(primaryCode);
+      if (primaryRow) rows.push(primaryRow);
+
+      if (otherCodes.length) {
+        const settled = await runTasksInBatches(
+          otherCodes,
+          EARNINGS_KPI_PARALLEL_BATCH,
+          (code) => resolveCodeEarnings(code)
+        );
+        for (const row of settled) {
+          if (row) rows.push(row);
         }
       }
 
+      if (gen !== earningsFetchGenRef.current) return [];
       return rows;
     },
     [
       tryBuildGroupAllDashboardFromCompanyCaches,
-      computeEarningsFromPayload,
+      buildCurrencyRowFromPayload,
       fetchSingleCurrencyEarnings,
     ]
   );
@@ -4232,12 +4911,14 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
       const primary = currencyCodeRef.current;
       const primaryPayload = dashboardDataRef.current;
-      const primaryEarnings =
-        primaryPayload != null ? computeEarningsFromPayload(primaryPayload) : null;
+      const primaryMetrics =
+        primaryPayload != null ? computeCurrencyMetricsFromPayload(primaryPayload) : null;
+      const primaryNetProfit = primaryMetrics?.netProfit ?? null;
+      const primaryEarnings = primaryMetrics?.earnings ?? null;
 
       setEarningsByCurrency((prev) => {
         if (dashboardEarningsRowsComplete(prev, codes, primary, primaryEarnings)) return prev;
-        return buildSeededEarningsRows(codes, primary, primaryEarnings);
+        return buildSeededEarningsRows(codes, primary, primaryNetProfit, primaryEarnings);
       });
       setEarningsByCurrencyLoading(true);
 
@@ -4246,8 +4927,10 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       );
 
       try {
-        const settled = await Promise.all(
-          others.map((code) => fetchSingleCurrencyEarnings(code, gen))
+        const settled = await runTasksInBatches(
+          others,
+          EARNINGS_KPI_PARALLEL_BATCH,
+          (code) => fetchSingleCurrencyEarnings(code, gen)
         );
 
         if (gen !== earningsFetchGenRef.current) {
@@ -4255,15 +4938,23 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           return [];
         }
 
-        const rows = buildSeededEarningsRows(codes, primary, primaryEarnings).map((row) => {
-          if (row.earnings != null) return row;
-          const hit = settled.find(
-            (entry) =>
-              entry &&
-              String(entry.code).toUpperCase() === String(row.code).toUpperCase()
-          );
-          return hit ? { code: row.code, earnings: hit.earnings } : row;
-        });
+        const rows = buildSeededEarningsRows(codes, primary, primaryNetProfit, primaryEarnings).map(
+          (row) => {
+            if (row.netProfit != null && row.earnings != null) return row;
+            const hit = settled.find(
+              (entry) =>
+                entry &&
+                String(entry.code).toUpperCase() === String(row.code).toUpperCase()
+            );
+            return hit
+              ? {
+                  code: row.code,
+                  netProfit: hit.netProfit ?? row.netProfit,
+                  earnings: hit.earnings ?? row.earnings,
+                }
+              : row;
+          }
+        );
 
         const sanitizedRows = sanitizeDuplicateNonPrimaryEarnings(
           rows,
@@ -4301,7 +4992,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       }
     },
     [
-      computeEarningsFromPayload,
+      computeCurrencyMetricsFromPayload,
       buildSeededEarningsRows,
       fetchSingleCurrencyEarnings,
       dashboardScopeKey,
@@ -4395,10 +5086,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         currencies.map(async (code) => {
           if (gen !== earningsFetchGenRef.current) return null;
           if (reuseMainPayload && code === activeCurrency) {
-            return {
-              code,
-              earnings: computeEarningsFromPayload(dashboardDataRef.current),
-            };
+            return buildCurrencyRowFromPayload(code, dashboardDataRef.current);
           }
           return fetchSingleCurrencyEarnings(code, gen);
         })
@@ -4408,7 +5096,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
       return settled.filter(Boolean);
     },
-    [currencies, computeEarningsFromPayload, fetchSingleCurrencyEarnings]
+    [currencies, buildCurrencyRowFromPayload, fetchSingleCurrencyEarnings]
   );
 
   const loadEarningsByCurrency = useCallback(async () => {
@@ -4552,12 +5240,13 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   useEffect(() => {
     earningsFetchGenRef.current += 1;
     earningsIncompleteRetryRef.current = 0;
+    earningsEnabledGroupIdsRef.current = [];
     earningsScopeUpgradeRef.current = { scopeKey: "", attempts: 0 };
     dashboardFetchFailedScopeRef.current = "";
     dashboardStaleRetryRef.current = { scopeKey: "", attempts: 0 };
   }, [dateFrom, dateTo, companyId, selectedGroup, dashboardScopeKey]);
 
-  /** Sync earnings rows when currency list or cache updates — do not abort parallel fetches on hydrate. */
+  /** Sync earnings rows when currency list or cache updates â€” do not abort parallel fetches on hydrate. */
   useEffect(() => {
     if (
       prevEarningsCurrenciesSigRef.current !== "" &&
@@ -4579,9 +5268,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       return;
     }
     const primary = currencyCodeRef.current;
-    const primaryEarnings = dashboardDataRef.current
-      ? computeEarningsFromPayload(dashboardDataRef.current)
-      : null;
+    const primaryMetrics = dashboardDataRef.current
+      ? computeCurrencyMetricsFromPayload(dashboardDataRef.current)
+      : { netProfit: null, earnings: null };
+    const primaryNetProfit = primaryMetrics.netProfit;
+    const primaryEarnings = primaryMetrics.earnings;
     const scopeEarnings = resolveScopeDashboardEarnings(
       currencies,
       dashboardScopeKey,
@@ -4593,7 +5284,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       dashboardEarningsRowsComplete(scopeEarnings, currencies, primary, primaryEarnings)
     ) {
       setEarningsByCurrency(
-        normalizeEarningsRowsForDisplay(scopeEarnings, primary, primaryEarnings)
+        normalizeEarningsRowsForDisplay(
+          scopeEarnings,
+          primary,
+          primaryNetProfit,
+          primaryEarnings
+        )
       );
       setEarningsByCurrencyPrev([]);
       setEarningsByCurrencyLoading(false);
@@ -4608,7 +5304,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     );
     if (readyEarnings) {
       setEarningsByCurrency(
-        normalizeEarningsRowsForDisplay(readyEarnings, primary, primaryEarnings)
+        normalizeEarningsRowsForDisplay(
+          readyEarnings,
+          primary,
+          primaryNetProfit,
+          primaryEarnings
+        )
       );
       setEarningsByCurrencyPrev([]);
       setEarningsByCurrencyLoading(false);
@@ -4617,12 +5318,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     if (dashboardDataRef.current) {
       setEarningsByCurrency((prev) => {
         if (dashboardEarningsRowsComplete(prev, currencies, primary, primaryEarnings)) return prev;
-        return buildSeededEarningsRows(currencies, primary, primaryEarnings);
+        return buildSeededEarningsRows(currencies, primary, primaryNetProfit, primaryEarnings);
       });
       setEarningsByCurrencyLoading(true);
       return;
     }
-    setEarningsByCurrency(currencies.map((code) => ({ code, earnings: null })));
+    setEarningsByCurrency(currencies.map((code) => ({ code, netProfit: null, earnings: null })));
     setEarningsByCurrencyPrev([]);
     setEarningsByCurrencyLoading(true);
   }, [
@@ -4633,7 +5334,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     dashboardScopeKey,
     resolveScopeDashboardEarnings,
     getCompleteCachedEarnings,
-    computeEarningsFromPayload,
+    computeCurrencyMetricsFromPayload,
     buildSeededEarningsRows,
     listCurrencyScopeKeys,
   ]);
@@ -4774,7 +5475,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
     const codes = currenciesRef.current;
     const primary = currencyCodeRef.current;
-    const primaryEarnings = computeEarningsFromPayload(dashboardDataRef.current);
+    const primaryMetrics = computeCurrencyMetricsFromPayload(dashboardDataRef.current);
+    const primaryNetProfit = primaryMetrics.netProfit;
+    const primaryEarnings = primaryMetrics.earnings;
     const cached = getDashboardCache(cacheKey);
     const readyEarnings = getCompleteCachedEarnings(
       cached,
@@ -4784,7 +5487,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     );
     if (readyEarnings) {
       setEarningsByCurrency(
-        normalizeEarningsRowsForDisplay(readyEarnings, primary, primaryEarnings)
+        normalizeEarningsRowsForDisplay(
+          readyEarnings,
+          primary,
+          primaryNetProfit,
+          primaryEarnings
+        )
       );
       setEarningsByCurrencyPrev([]);
       setEarningsByCurrencyLoading(false);
@@ -4799,7 +5507,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     );
     if (shared && dashboardEarningsRowsComplete(shared, codes, primary, primaryEarnings)) {
       setEarningsByCurrency(
-        normalizeEarningsRowsForDisplay(shared, primary, primaryEarnings)
+        normalizeEarningsRowsForDisplay(shared, primary, primaryNetProfit, primaryEarnings)
       );
       setEarningsByCurrencyPrev([]);
       setEarningsByCurrencyLoading(false);
@@ -4812,7 +5520,49 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       !groupAllMode &&
       !(mergedSubsetIds && mergedSubsetIds.length > 1) &&
       (companyId != null || groupAggregateMode);
-    if (!canUseBootstrap) return;
+
+    if (!canUseBootstrap) {
+      if (!groupAllMode || !dashboardDataRef.current) return;
+      const gen = ++earningsFetchGenRef.current;
+      try {
+        setEarningsByCurrencyLoading(true);
+        const rows = await fetchGroupAllEarningsRowsForRange(
+          dateFromRef.current,
+          dateToRef.current,
+          gen,
+          codes
+        );
+        if (gen !== earningsFetchGenRef.current) return;
+        const normalized = normalizeEarningsRowsForDisplay(
+          rows,
+          primary,
+          primaryNetProfit,
+          primaryEarnings
+        );
+        setEarningsByCurrency(normalized);
+        setEarningsByCurrencyPrev([]);
+        if (cacheKey && normalized.length) {
+          patchDashboardCache(cacheKey, { earnings: normalized });
+          mirrorDashboardEarningsAcrossCurrencies(
+            normalized,
+            codes,
+            resolveDashboardScopeKey,
+            primary,
+            primaryEarnings
+          );
+        }
+        if (!dashboardEarningsRowsComplete(normalized, codes, primary, primaryEarnings)) {
+          scheduleIncompleteEarningsRetry(400);
+        }
+      } catch {
+        if (gen === earningsFetchGenRef.current) scheduleIncompleteEarningsRetry(400);
+      } finally {
+        if (gen === earningsFetchGenRef.current) {
+          setEarningsByCurrencyLoading(false);
+        }
+      }
+      return;
+    }
     if (dashboardBootstrapInFlightRef.current === cacheKey) return;
 
     const gen = ++earningsFetchGenRef.current;
@@ -4849,21 +5599,15 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     };
 
     try {
+      setEarningsByCurrencyLoading(true);
+      const ok = await runBootstrapEarningsFallback();
+      if (gen !== earningsFetchGenRef.current) return;
+      if (ok) return;
+
       const rows = await loadEarningsProgressive(gen, { cacheKey });
       if (gen !== earningsFetchGenRef.current) return;
       if (dashboardEarningsRowsComplete(rows, codes)) return;
-    } catch {
-      if (gen !== earningsFetchGenRef.current) return;
-    }
-
-    if (gen !== earningsFetchGenRef.current) return;
-    if (dashboardBootstrapInFlightRef.current === cacheKey) return;
-
-    setEarningsByCurrencyLoading(true);
-    try {
-      const ok = await runBootstrapEarningsFallback();
-      if (gen !== earningsFetchGenRef.current) return;
-      if (!ok) scheduleIncompleteEarningsRetry(400);
+      scheduleIncompleteEarningsRetry(400);
     } catch {
       if (gen !== earningsFetchGenRef.current) return;
       scheduleIncompleteEarningsRetry(400);
@@ -4888,8 +5632,26 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     loadEarningsProgressive,
     resolveDashboardScopeKey,
     scheduleIncompleteEarningsRetry,
+    computeCurrencyMetricsFromPayload,
+    fetchGroupAllEarningsRowsForRange,
+    dateFrom,
+    dateTo,
   ]);
   upgradeActiveScopeEarningsRef.current = upgradeActiveScopeEarnings;
+
+  useEffect(() => {
+    if (currencies.length <= 1 || !dashboardData) return;
+    if (companyId != null && !groupAllMode) return;
+    if (!groupAllMode && !(groupsAllMode && !groupAllMode)) return;
+    void upgradeActiveScopeEarningsRef.current?.();
+  }, [
+    currencies.length,
+    currenciesScopeSig,
+    dashboardData,
+    groupAllMode,
+    groupsAllMode,
+    companyId,
+  ]);
 
   const ensureDeferredDashboardLoads = useCallback(
     (cacheKey, cached, multiCurrencyCodes) => {
@@ -4899,7 +5661,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         void loadDashboardPreviousPeriod(cacheKey);
       }
       if (dashboardPayloadNeedsChartDaily(cached.current)) {
-        void loadDashboardChartDaily(cacheKey);
+        scheduleChartDailyLoad(cacheKey, resolveDashboardScopeKey, loadDashboardChartDaily);
       }
 
       const needsMultiCurrencyEarnings =
@@ -5050,13 +5812,19 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         scopeEarningsReady
       ) {
         if (companyId != null) {
+          const provisionalCur = resolveProvisionalDashboardCurrency({
+            currencyCode,
+            companyId,
+            currenciesRef,
+            currenciesByCompanyRef,
+          });
           const q = new URLSearchParams({
             date_from: dateFrom,
             date_to: dateTo,
             company_id: String(companyId),
           });
-          if (currencyCode) q.append("currency", currencyCode);
-          appendDashboardGroupTabParams(q, selectedGroup, { subsidiaryOnly: subsidiaryDashboardScope });
+          if (provisionalCur) q.append("currency", provisionalCur);
+          appendDashboardGroupTabParams(q, dashboardViewGroup, { subsidiaryOnly: subsidiaryDashboardScope });
           const payload = getDashboardPayloadCache(q.toString());
           if (payload) {
             const adjusted = applyDashboardPayloadAdjustments(payload, companyId, selectedGroup);
@@ -5066,13 +5834,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
             hydratedFromPayload = true;
           }
         } else if (usesGroupLedgerDashboard && selectedGroup) {
-          const vg = String(selectedGroup).trim().toUpperCase();
           const q = new URLSearchParams({
             date_from: dateFrom,
             date_to: dateTo,
-            view_group: vg,
-            group_id: vg,
           });
+          appendGroupLedgerDashboardParams(q, selectedGroup);
           if (currencyCode) q.append("currency", currencyCode);
           const payload = getDashboardPayloadCache(q.toString());
           if (payload) {
@@ -5137,10 +5903,16 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       groupsAllMode,
       mergedSubsetIds,
     });
+    const provisionalCurrency = resolveProvisionalDashboardCurrency({
+      currencyCode,
+      companyId,
+      currenciesRef,
+      currenciesByCompanyRef,
+    });
     if (
       needsDashboardFetch &&
       scopeNeedsCurrency &&
-      !currencyCode &&
+      !provisionalCurrency &&
       !latestCached?.current &&
       !hydratedFromPayload
     ) {
@@ -5175,7 +5947,10 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
       if (canUseDashboardBootstrap) {
         try {
-          const boot = await loadDashboardViaBootstrap({ scope: "kpi" });
+          const boot = await loadDashboardViaBootstrap({
+            scope: "kpi",
+            currencyOverride: provisionalCurrency || undefined,
+          });
           if (gen !== dashboardFetchGenRef.current) return;
 
           current = boot.current;
@@ -5207,10 +5982,15 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           } else if (needsMultiCurrencyEarnings) {
             const primary = currencyCode;
             const codes = codesForEarnings || currenciesRef.current;
-            const primaryEarnings =
-              computeKpiMetrics(current, selectedGroup, resolveKpiOwnershipOpts())?.earnings ??
-              null;
-            setEarningsByCurrency(buildSeededEarningsRows(codes, primary, primaryEarnings));
+            const primaryMetrics = computeCurrencyMetricsFromPayload(current);
+            setEarningsByCurrency(
+              buildSeededEarningsRows(
+                codes,
+                primary,
+                primaryMetrics.netProfit,
+                primaryMetrics.earnings
+              )
+            );
             setEarningsByCurrencyLoading(true);
             void upgradeActiveScopeEarnings();
           } else {
@@ -5222,7 +6002,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
             void loadDashboardPreviousPeriod(cacheKey);
           }
           if (dashboardPayloadNeedsChartDaily(boot.current)) {
-            void loadDashboardChartDaily(cacheKey);
+            scheduleChartDailyLoad(cacheKey, resolveDashboardScopeKey, loadDashboardChartDaily);
           }
           return;
         } catch {
@@ -5290,11 +6070,17 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         if (groupAllMode && needsMultiCurrencyEarnings && !warmedGroupAll?.earnings?.length) {
           const codes = codesForEarnings || currenciesRef.current;
           const primary = currencyCode;
-          const primaryEarnings =
-            computeKpiMetrics(current, selectedGroup, resolveKpiOwnershipOpts())?.earnings ??
-            null;
-          setEarningsByCurrency(buildSeededEarningsRows(codes, primary, primaryEarnings));
+          const primaryMetrics = computeCurrencyMetricsFromPayload(current);
+          setEarningsByCurrency(
+            buildSeededEarningsRows(
+              codes,
+              primary,
+              primaryMetrics.netProfit,
+              primaryMetrics.earnings
+            )
+          );
           setEarningsByCurrencyLoading(true);
+          void upgradeActiveScopeEarnings();
         }
 
         patchDashboardCache(cacheKey, cachePatch);
@@ -5443,6 +6229,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   useLayoutEffect(() => {
     if (!sessionReady || !me) return undefined;
     const persisted = readPersistedDashboardGcFilter();
+    primeCurrenciesFromCache({
+      companyId: persisted.groupOnly || persisted.groupAllMode ? null : persisted.companyId,
+      selectedGroup: persisted.groupsAllMode ? null : persisted.selectedGroup,
+      groupsAllMode: persisted.groupsAllMode,
+      groupAllMode: persisted.groupAllMode,
+    });
     primeDashboardFromCacheRef.current({
       companyId: persisted.groupOnly || persisted.groupAllMode ? null : persisted.companyId,
       selectedGroup: persisted.groupsAllMode ? null : persisted.selectedGroup,
@@ -5451,7 +6243,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       mergedSubsetIds: null,
     });
     return undefined;
-  }, [sessionReady, me?.user_id, me?.id]);
+  }, [sessionReady, me?.user_id, me?.id, primeCurrenciesFromCache]);
 
   /** On scope change after bootstrap, hydrate from cache before network. */
   useEffect(() => {
@@ -5467,7 +6259,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     primeDashboardFromCache,
   ]);
 
-  /** Warm active group companies (incl. current) so first entry and 95↔AG switches hit cache. */
+  /** Warm active group companies (incl. current) so first entry and 95â†”AG switches hit cache. */
   useEffect(() => {
     if (
       !gcBootstrapReady ||
@@ -5536,15 +6328,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     groupIds,
     companies,
     companyId,
-    groupAllMode,
-    dateFrom,
-    dateTo,
     prefetchDashboardCompany,
-    prefetchDashboardGroupLedger,
     shouldPrefetchCompanyScope,
   ]);
 
-  /** Warm dashboard cache for sibling groups/companies so first AP↔IG / company switches feel instant. */
+  /** Warm dashboard cache for sibling groups/companies so first APâ†”IG / company switches feel instant. */
   useEffect(() => {
     if (!gcBootstrapReady || !companies.length || !dateFrom || !dateTo || groupAllMode) {
       return undefined;
@@ -5874,6 +6662,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     if (ownershipCurrent) {
       current = {
         ...current,
+        profit: ownershipCurrent.profit,
+        netProfit: ownershipCurrent.netProfit,
         earnings: ownershipCurrent.earnings,
         kpiCardEarnings: ownershipCurrent.kpiCardEarnings,
         showEarnings: ownershipCurrent.showEarnings,
@@ -5918,20 +6708,19 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     [dateFrom, dateTo]
   );
 
-  const chartRows = useMemo(
-    () =>
-      dashboardData
-        ? buildChartRows(
-            dashboardData,
-            dateFrom,
-            dateTo,
-            i18n.locale,
-            selectedGroup,
-            resolveKpiOwnershipOpts()
-          )
-        : [],
-    [dashboardData, dateFrom, dateTo, i18n.locale, selectedGroup, resolveKpiOwnershipOpts]
-  );
+  const chartRows = useMemo(() => {
+    if (!dashboardData) return [];
+    const rows = buildChartRows(
+      dashboardData,
+      dateFrom,
+      dateTo,
+      i18n.locale,
+      selectedGroup,
+      resolveKpiOwnershipOpts()
+    );
+    if (rows.length > 0) return rows;
+    return buildSkeletonChartRows(dateFrom, dateTo, i18n.locale);
+  }, [dashboardData, dateFrom, dateTo, i18n.locale, selectedGroup, resolveKpiOwnershipOpts]);
 
   const chartMonthSpanCount = useMemo(
     () => chartMonthSpan(dateFrom, dateTo),
@@ -5959,18 +6748,16 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   const kpiFooter = useMemo(() => {
     const cur =
       showAllCurrencies && canShowAllCurrencies
-        ? `${i18n.all} · ${conversionBaseCurrency || "—"}`
-        : currencyCode || "—";
+        ? `${i18n.all} Â· ${conversionBaseCurrency || "â€”"}`
+        : currencyCode || "â€”";
     const from = parseYmd(dateFrom);
     const to = parseYmd(dateTo);
-    const loc = i18n.locale;
     if (from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth()) {
-      const monthYear = to.toLocaleDateString(loc, { month: "short", year: "numeric" });
-      return `${cur} · ${monthYear}`;
+      return `${cur} Â· ${formatDmyDash(to)}`;
     }
-    const left = from.toLocaleDateString(loc, { month: "short", day: "numeric" });
-    const right = to.toLocaleDateString(loc, { month: "short", day: "numeric", year: "numeric" });
-    return `${cur} · ${left} – ${right}`;
+    const left = formatDmyDash(from);
+    const right = formatDmyDash(to);
+    return `${cur} Â· ${left} â€“ ${right}`;
   }, [
     currencyCode,
     conversionBaseCurrency,
@@ -5979,17 +6766,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     i18n.all,
     dateFrom,
     dateTo,
-    i18n.locale,
   ]);
 
-  const chartDateRangeText = useMemo(() => {
-    if (dashboardData?.date_range) {
-      return `${formatDisplayDate(dashboardData.date_range.from)} ${i18n.to} ${formatDisplayDate(
-        dashboardData.date_range.to
-      )}`;
-    }
-    return `${formatDisplayDate(dateFrom)} ${i18n.to} ${formatDisplayDate(dateTo)}`;
-  }, [dashboardData, dateFrom, dateTo, i18n.to]);
+  const chartDateRangeText = useMemo(
+    () => formatChartDateRangeText(dateFrom, dateTo, i18n.to),
+    [dateFrom, dateTo, i18n.to]
+  );
 
   const chartSeries = useMemo(() => {
     const series = [
@@ -6011,16 +6793,25 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
   const earningsCurrencyRows = useMemo(() => {
     const earningsRows = Array.isArray(earningsByCurrency) ? earningsByCurrency : [];
-    const seededRows = earningsRows.length
-      ? earningsRows
-      : currencies.map((code) => ({
-          code,
-          earnings: code === currencyCode && dashboardData ? kpi.earnings : null,
-        }));
+    const primaryNetProfit = kpi?.netProfit ?? null;
+    const primaryEarnings = kpi?.showEarnings ? kpi.earnings : primaryNetProfit;
+    const seededRows =
+      earningsRows.length > 0
+        ? earningsRows
+        : currencies.map((code) => {
+            const isPrimary =
+              String(code).toUpperCase() === String(currencyCode || "").toUpperCase();
+            return {
+              code,
+              netProfit: isPrimary && primaryNetProfit != null ? primaryNetProfit : null,
+              earnings: isPrimary && primaryEarnings != null ? primaryEarnings : null,
+            };
+          });
     const baseRows = normalizeEarningsRowsForDisplay(
       seededRows,
       currencyCode,
-      dashboardData ? kpi.earnings : null
+      primaryNetProfit,
+      primaryEarnings
     );
 
     const base = String(displayCurrencyCode || "").toUpperCase();
@@ -6030,13 +6821,32 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       !exchangeRatesLoading &&
       frankfurterRatesPartiallyUsable(base, currencies, rates);
 
-    return baseRows.map((row) => {
+    return currencies.map((code) => {
+      const codeUpper = String(code).toUpperCase();
+      const existing =
+        baseRows.find((row) => String(row.code).toUpperCase() === codeUpper) ?? { code };
+      let netProfit = existing.netProfit ?? existing.earnings;
+      let earnings = existing.earnings ?? existing.netProfit;
+      if (
+        codeUpper === String(currencyCode || "").toUpperCase()
+      ) {
+        if (netProfit == null && primaryNetProfit != null) netProfit = primaryNetProfit;
+        if (earnings == null && primaryEarnings != null) earnings = primaryEarnings;
+      }
+      const netProfitConverted =
+        canConvert && netProfit != null
+          ? convertToBaseAmount(netProfit, code, base, rates)
+          : null;
       const earningsConverted =
-        canConvert && row.earnings != null
-          ? convertToBaseAmount(row.earnings, row.code, base, rates)
+        canConvert && earnings != null
+          ? convertToBaseAmount(earnings, code, base, rates)
           : null;
       return {
-        ...row,
+        ...existing,
+        code,
+        netProfit,
+        earnings,
+        netProfitConverted,
         earningsConverted,
       };
     });
@@ -6045,8 +6855,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     currencies,
     displayCurrencyCode,
     currencyCode,
+    kpi.showEarnings,
     kpi.earnings,
-    dashboardData,
+    kpi.netProfit,
     exchangeRates.rates,
     exchangeRatesError,
     exchangeRatesLoading,
@@ -6056,8 +6867,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     () =>
       currencies.length <= 1 ||
       (earningsCurrencyRows.length === currencies.length &&
-        earningsCurrencyRows.every((row) => row.earnings != null)),
-    [currencies.length, earningsCurrencyRows]
+        earningsCurrencyRows.every(
+          (row) =>
+            row.netProfit != null && (!kpi.showEarnings || row.earnings != null)
+        )),
+    [currencies.length, earningsCurrencyRows, kpi.showEarnings]
   );
 
   const useConvertedEarnings = useMemo(
@@ -6077,17 +6891,43 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     ]
   );
 
-  /** Multi-currency breakdown always uses the Rate column (never Share %). */
-  const earningsBreakdownShowsRate = useMemo(
-    () => currencies.length > 1,
-    [currencies.length]
+  const panelCurrencyRows = useMemo(
+    () => {
+      if (earningsPanelView === "netProfitFor") {
+        const companyRows = normalizeSubsidiaryEarningsByCompany(
+          dashboardData?.subsidiary_earnings_by_company
+        );
+        return companyRows.map((row) => ({
+          code: row.company_id,
+          group: row.group_id,
+          netProfit: row.net_profit,
+          earnings: row.net_profit,
+          netProfitConverted: null,
+          earningsConverted: null,
+        }));
+      }
+      return mapPanelCurrencyRows(earningsCurrencyRows, earningsPanelView, {
+        useConverted: useConvertedEarnings,
+      });
+    },
+    [earningsCurrencyRows, earningsPanelView, useConvertedEarnings, dashboardData]
   );
 
-  const convertedEarningsTotal = useMemo(() => {
+  const convertedPanelTotal = useMemo(() => {
+    if (earningsPanelView === "netProfitFor") return null;
     if (!useConvertedEarnings) return null;
-    return sumConvertedEarnings(earningsCurrencyRows, displayCurrencyCode, exchangeRates.rates)
-      .total;
-  }, [useConvertedEarnings, earningsCurrencyRows, displayCurrencyCode, exchangeRates.rates]);
+    const rows = earningsCurrencyRows.map((row) => ({
+      code: row.code,
+      earnings: earningsPanelView === "earning" ? row.earnings : row.netProfit,
+    }));
+    return sumConvertedEarnings(rows, displayCurrencyCode, exchangeRates.rates).total;
+  }, [
+    useConvertedEarnings,
+    earningsCurrencyRows,
+    earningsPanelView,
+    displayCurrencyCode,
+    exchangeRates.rates,
+  ]);
 
   const earningsCurrencyRowsPrev = useMemo(() => {
     if (!earningsByCurrencyPrev.length) return [];
@@ -6100,6 +6940,10 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
     return earningsByCurrencyPrev.map((row) => ({
       ...row,
+      netProfitConverted:
+        canConvert && row.netProfit != null
+          ? convertToBaseAmount(row.netProfit, row.code, base, rates)
+          : null,
       earningsConverted:
         canConvert && row.earnings != null
           ? convertToBaseAmount(row.earnings, row.code, base, rates)
@@ -6119,33 +6963,62 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     return sumConvertedEarnings(earningsCurrencyRowsPrev, currencyCode, exchangeRates.rates).total;
   }, [useConvertedEarnings, earningsCurrencyRowsPrev, currencyCode, exchangeRates.rates]);
 
-  /** Non-ownership viewers: summary panel shows net profit label + multi-currency converted total. */
-  const summaryUsesCurrencyTotal = !kpi.showEarnings;
+  const showNetProfitForTab = useMemo(
+    () =>
+      Boolean(groupOnlyDashboard) &&
+      normalizeSubsidiaryEarningsByCompany(dashboardData?.subsidiary_earnings_by_company).length > 0,
+    [groupOnlyDashboard, dashboardData]
+  );
 
-  const summaryPanelLabel = summaryUsesCurrencyTotal ? i18n.netProfit : i18n.earnings;
+  const showEarningPanelTab = kpi.showEarnings;
+  /** Show tab strip only when there is an alternate view to switch to. */
+  const showSummaryPanelTabs = useMemo(
+    () => showEarningPanelTab || showNetProfitForTab,
+    [showEarningPanelTab, showNetProfitForTab]
+  );
 
-  /** Pie panel hero total — multi-currency: converted amount sum; single-currency: earnings or net profit. */
+  /** Multi-currency breakdown uses Rate column; group+company tabs use same layout as IG+95. */
+  const earningsBreakdownShowsRate = useMemo(
+    () =>
+      (currencies.length > 1 || showSummaryPanelTabs) &&
+      earningsPanelView !== "netProfitFor",
+    [currencies.length, showSummaryPanelTabs, earningsPanelView]
+  );
+
+  const summaryPanelLabel =
+    earningsPanelView === "earning"
+      ? i18n.earnings
+      : earningsPanelView === "netProfitFor"
+        ? i18n.netProfitCompanyCaption
+        : i18n.netProfit;
+
+  /** Pie panel hero total â€” matches KPI card unless All-currencies aggregate mode. */
   const summaryEarningsValue = useMemo(() => {
+    if (earningsPanelView === "netProfitFor") {
+      return panelCurrencyRows.reduce((sum, row) => sum + (parseFloat(row.netProfit) || 0), 0);
+    }
+    const earningTab = earningsPanelView === "earning";
+    if (currencies.length > 1 && useConvertedEarnings && convertedPanelTotal != null) {
+      return convertedPanelTotal;
+    }
     if (showAllCurrencies && canShowAllCurrencies && multiCurrencyKpi) {
-      return multiCurrencyKpi.earnings;
+      return earningTab ? multiCurrencyKpi.earnings : multiCurrencyKpi.netProfit;
     }
-    if (currencies.length > 1 && useConvertedEarnings && convertedEarningsTotal != null) {
-      return convertedEarningsTotal;
+    if (showAllCurrencies && canShowAllCurrencies && currencies.length > 1 && useConvertedEarnings && convertedPanelTotal != null) {
+      return convertedPanelTotal;
     }
-    if (summaryUsesCurrencyTotal) {
-      return kpi.netProfit;
-    }
-    return kpi.earnings;
+    return earningTab ? kpi.earnings : kpi.netProfit;
   }, [
+    earningsPanelView,
     showAllCurrencies,
     canShowAllCurrencies,
     multiCurrencyKpi,
-    summaryUsesCurrencyTotal,
     currencies.length,
     useConvertedEarnings,
-    convertedEarningsTotal,
+    convertedPanelTotal,
     kpi.netProfit,
     kpi.earnings,
+    panelCurrencyRows,
   ]);
 
   const summaryConversionNote = useMemo(() => {
@@ -6153,58 +7026,14 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     return i18n.earningsIncludesConversion;
   }, [earningsBreakdownShowsRate, i18n.earningsIncludesConversion]);
 
-  /**
-   * Company net profit tab: group-level views only (Group All / company All / group ledger).
-   * Hidden on subsidiary drill-down (e.g. IG + 95) — currency panel only there.
-   * Does not require has_group_ownership (admin / net-profit-only viewers still see tabs).
-   */
-  const showProfitChartTab = useMemo(() => {
-    if (subsidiaryDashboardScope) return false;
-    if (!groupIds.length) return false;
-    return Boolean(
-      (groupsAllMode && companyId == null) ||
-      groupAllMode ||
-      usesGroupLedgerDashboard ||
-      groupsAllGroupLevel
-    );
-  }, [
-    subsidiaryDashboardScope,
-    groupIds.length,
-    groupsAllMode,
-    companyId,
-    groupAllMode,
-    usesGroupLedgerDashboard,
-    groupsAllGroupLevel,
-  ]);
-
-  const companyBreakdownRows = useMemo(() => {
-    if (!showProfitChartTab) return [];
-    const rows = normalizeSubsidiaryEarningsByCompany(
-      dashboardData?.subsidiary_earnings_by_company
-    );
-    const sorted = sortCompanyBreakdownRowsByPicker(rows, companiesForPicker);
-    return applySingleSubsidiaryGroupEarningsRows(
-      sorted,
-      dashboardData,
-      resolveKpiOwnershipOpts()
-    );
-  }, [
-    showProfitChartTab,
-    dashboardData,
-    companiesForPicker,
-    resolveKpiOwnershipOpts,
-  ]);
-
-  const companyNetProfitTotal = useMemo(
-    () => sumCompanyBreakdownAmount(companyBreakdownRows, "netProfit"),
-    [companyBreakdownRows]
-  );
-
   useEffect(() => {
-    if (!showProfitChartTab && earningsPanelView === "netProfit") {
+    if (!showEarningPanelTab && earningsPanelView === "earning") {
       setEarningsPanelView("currency");
     }
-  }, [showProfitChartTab, earningsPanelView]);
+    if (!showNetProfitForTab && earningsPanelView === "netProfitFor") {
+      setEarningsPanelView("currency");
+    }
+  }, [showEarningPanelTab, showNetProfitForTab, earningsPanelView]);
 
   const exchangeRateScopeKey = useMemo(
     () =>
@@ -6217,67 +7046,56 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     [companyId, displayCurrencyCode, currencies, dateTo]
   );
 
-  const rateFootnoteText = useMemo(() => {
-    if (currencies.length <= 1) return "";
-    if (exchangeRatesLoading || exchangeRates.scopeKey !== exchangeRateScopeKey) {
-      return i18n.rateLoading;
-    }
-    if (exchangeRatesError) return i18n.rateUnavailable;
-    const foreignCodes = currencies
-      .map((c) => String(c).toUpperCase())
-      .filter((c) => c !== String(displayCurrencyCode).toUpperCase());
-    if (!foreignCodes.length) return "";
-    const convertibleForeignCodes = foreignCodes.filter(
-      (code) => !frankfurterMissingQuotes(displayCurrencyCode, [code], exchangeRates.rates).includes(code)
-    );
-    if (!convertibleForeignCodes.length) return i18n.rateUnavailable;
-    const dateLabel = exchangeRates.date || "—";
-    let text = formatI18nTemplate(i18n.rateFootnote, {
-      codes: convertibleForeignCodes.join(", "),
-      date: dateLabel,
-    });
-    const missingQuotes = frankfurterMissingQuotes(
-      displayCurrencyCode,
-      currencies,
-      exchangeRates.rates
-    );
-    if (missingQuotes.length) {
-      text += ` · ${i18n.rateUnavailable}`;
-    }
-    return text;
-  }, [
-    currencies,
-    displayCurrencyCode,
-    exchangeRateScopeKey,
-    exchangeRatesLoading,
-    exchangeRatesError,
-    exchangeRates.date,
-    exchangeRates.rates,
-    exchangeRates.scopeKey,
-    i18n,
-  ]);
-
   const scopeDataPending =
     Boolean(dashboardScopeKey) && displayScopeKey !== dashboardScopeKey;
   const chartDataStable = useMemo(
-    () =>
-      !scopeDataPending &&
-      Boolean(dashboardData) &&
-      chartRows.length > 0 &&
-      !dashboardPayloadNeedsChartDaily(dashboardData),
-    [scopeDataPending, dashboardData, chartRows.length]
+    () => !scopeDataPending && Boolean(dashboardData),
+    [scopeDataPending, dashboardData]
   );
+  const summaryScopeLoading = scopeDataPending || (loading && !dashboardData);
   const summaryEarningsLoading =
-    scopeDataPending ||
-    (loading && !dashboardData) ||
+    summaryScopeLoading ||
     (currencies.length > 1 &&
       (exchangeRatesLoading ||
         earningsByCurrencyLoading ||
         !allCurrencyEarningsReady ||
-        (useConvertedEarnings && convertedEarningsTotal == null)));
+        (showAllCurrencies &&
+          canShowAllCurrencies &&
+          useConvertedEarnings &&
+          convertedPanelTotal == null)));
   const earningsPanelStable =
     currencies.length <= 1 ||
     (allCurrencyEarningsReady && !earningsByCurrencyLoading && !exchangeRatesLoading);
+  const panelsAnimReady = useMemo(() => {
+    if (!chartDataStable) return false;
+    if (currencies.length <= 1) return true;
+    return earningsPanelStable;
+  }, [chartDataStable, currencies.length, earningsPanelStable]);
+  const panelsAnimSessionRef = useRef("");
+  const [panelAnimEpoch, setPanelAnimEpoch] = useState(0);
+  useEffect(() => {
+    const sessionKey = [
+      dashboardScopeKey,
+      dateFrom,
+      dateTo,
+      earningsPanelView,
+      currencies.length > 1 ? [...currencies].sort().join(",") : "",
+    ].join("|");
+    if (!panelsAnimReady) {
+      panelsAnimSessionRef.current = "";
+      return;
+    }
+    if (panelsAnimSessionRef.current === sessionKey) return;
+    panelsAnimSessionRef.current = sessionKey;
+    setPanelAnimEpoch((n) => n + 1);
+  }, [
+    panelsAnimReady,
+    dashboardScopeKey,
+    dateFrom,
+    dateTo,
+    earningsPanelView,
+    currencies,
+  ]);
   const kpiLoading = loading && !dashboardData;
 
   useLayoutEffect(() => {
@@ -6308,13 +7126,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
         if (target?.id) {
           const id = parseInt(target.id, 10);
-          flushSync(() => {
-            setGroupsAllMode(false);
-            setGroupAllMode(false);
-            setMergedSubsetIds(null);
-            setSelectedGroup(null);
-            applyCompanySelection(id);
-          });
+          setGroupsAllMode(false);
+          setGroupAllMode(false);
+          setMergedSubsetIds(null);
+          setSelectedGroup(null);
+          applyCompanySelection(id);
           persistDashboardGroupsAllMode(false);
           clearDashboardGroupFilterKeepCompany(id, { companyRow: target });
           setGroupFilterOptOutTick((n) => n + 1);
@@ -6334,13 +7150,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           });
           void syncCompanySession(id, null);
         } else {
-          flushSync(() => {
-            setGroupsAllMode(false);
-            setGroupAllMode(false);
-            setMergedSubsetIds(null);
-            setSelectedGroup(null);
-            setCompanyId(null);
-          });
+          setGroupsAllMode(false);
+          setGroupAllMode(false);
+          setMergedSubsetIds(null);
+          setSelectedGroup(null);
+          setCompanyId(null);
           if (typeof sessionStorage !== "undefined") {
             sessionStorage.setItem(DASHBOARD_GROUP_FILTER_OPT_OUT_KEY, "1");
             sessionStorage.removeItem("dashboard_group_filter");
@@ -6479,17 +7293,15 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         (groupsAllMode || !gid || gid === selectedGroup);
       if (isActive) {
         if (groupsAllMode) {
-          const ownerGroupsAllLedger = isCompanyOwnerWithGroupLedger(me);
+          const groupsAllLedgerLogin = companyLoginCanUseGroupsAllLedger(me);
           scopeInteractionGenRef.current += 1;
           persistDashboardGroupsAllMode(true);
           persistDashboardGroupOnlyMode(false);
-          persistDashboardGroupAllMode(!ownerGroupsAllLedger);
+          persistDashboardGroupAllMode(!groupsAllLedgerLogin);
           persistDashboardSelectedCompany(null);
-          flushSync(() => {
-            setCompanyId(null);
-            setGroupAllMode(!ownerGroupsAllLedger);
-            setMergedSubsetIds(null);
-          });
+          setCompanyId(null);
+          setGroupAllMode(!groupsAllLedgerLogin);
+          setMergedSubsetIds(null);
           notifyDashboardGroupFilterChanged(
             null,
             null,
@@ -6499,19 +7311,19 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
             companyId: null,
             selectedGroup: null,
             groupsAllMode: true,
-            groupAllMode: !ownerGroupsAllLedger,
+            groupAllMode: !groupsAllLedgerLogin,
             clearOnMiss: true,
           });
           primeDashboardFromCache({
             companyId: null,
             selectedGroup: null,
             groupsAllMode: true,
-            groupAllMode: !ownerGroupsAllLedger,
+            groupAllMode: !groupsAllLedgerLogin,
             mergedSubsetIds: null,
           });
           return;
         }
-        if (!canUseGroupOnlyMode(me)) return;
+        if (!canUseGroupOnlyMode(me, selectedGroup, companies)) return;
         const g = selectedGroup;
         clearCompanySelection(g);
         primeCurrenciesFromCache({
@@ -6555,24 +7367,22 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         buildDashboardSidebarNotifyOptions(c, persistGroup, { ignoreGroupOnly: true }),
       );
       resetCurrencyForCompanySwitch(id, groupsAllMode ? null : gid);
-      flushSync(() => {
-        dashboardFetchInFlightScopeRef.current = "";
-        dashboardBootstrapInFlightRef.current = "";
-        applyCompanySelection(id);
-        primeCurrenciesFromCache({
-          companyId: id,
-          selectedGroup: groupsAllMode ? null : gid,
-          groupsAllMode,
-          groupAllMode: false,
-          clearOnMiss: true,
-        });
-        primeDashboardFromCache({
-          companyId: id,
-          selectedGroup: groupsAllMode ? null : gid,
-          groupsAllMode,
-          groupAllMode: false,
-          mergedSubsetIds: null,
-        });
+      dashboardFetchInFlightScopeRef.current = "";
+      dashboardBootstrapInFlightRef.current = "";
+      applyCompanySelection(id);
+      primeCurrenciesFromCache({
+        companyId: id,
+        selectedGroup: groupsAllMode ? null : gid,
+        groupsAllMode,
+        groupAllMode: false,
+        clearOnMiss: true,
+      });
+      primeDashboardFromCache({
+        companyId: id,
+        selectedGroup: groupsAllMode ? null : gid,
+        groupsAllMode,
+        groupAllMode: false,
+        mergedSubsetIds: null,
       });
       if (gid && !groupsAllMode) {
         window.setTimeout(() => {
@@ -6588,21 +7398,22 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           }
         }, COMPANY_SWITCH_PREFETCH_DELAY_MS);
       }
+      const sessionViewGroup = groupsAllMode ? null : (gid || null);
       window.setTimeout(() => {
         if (switchGen !== companySwitchGenRef.current) return;
-        void syncCompanySession(id, groupsAllMode ? null : gid || selectedGroup, switchGen).then((ok) => {
-        if (switchGen !== companySwitchGenRef.current) return;
-        if (!ok && prevId != null) {
-          const prevCo = companies.find((x) => parseInt(x.id, 10) === parseInt(prevId, 10));
-          if (!groupsAllMode && prevCo?.group_id) {
-            setSelectedGroup(String(prevCo.group_id).toUpperCase());
-            sessionStorage.setItem("dashboard_group_filter", String(prevCo.group_id).toUpperCase());
-            persistDashboardGroupsAllMode(false);
+        void syncCompanySession(id, sessionViewGroup, switchGen).then((ok) => {
+          if (switchGen !== companySwitchGenRef.current) return;
+          if (!ok && prevId != null) {
+            const prevCo = companies.find((x) => parseInt(x.id, 10) === parseInt(prevId, 10));
+            if (!groupsAllMode && prevCo?.group_id) {
+              setSelectedGroup(String(prevCo.group_id).toUpperCase());
+              sessionStorage.setItem("dashboard_group_filter", String(prevCo.group_id).toUpperCase());
+              persistDashboardGroupsAllMode(false);
+            }
+            applyCompanySelection(prevId);
           }
-          applyCompanySelection(prevId);
-        }
         });
-      }, 80);
+      }, COMPANY_SESSION_DEFER_MS);
     },
     [
       companyId,
@@ -6647,24 +7458,22 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         allowGroupOnly: canUseGroupOnlyMode(me, groupForPersist, companies),
         groupsAllMode,
       });
-      flushSync(() => {
-        setGroupAllMode(false);
-        setMergedSubsetIds(null);
-        setCompanyId(null);
-        primeCurrenciesFromCache({
-          companyId: null,
-          selectedGroup: groupForPersist,
-          groupsAllMode,
-          groupAllMode: false,
-          clearOnMiss: true,
-        });
-        primeDashboardFromCache({
-          companyId: null,
-          selectedGroup: groupForPersist,
-          groupsAllMode,
-          groupAllMode: false,
-          mergedSubsetIds: null,
-        });
+      setGroupAllMode(false);
+      setMergedSubsetIds(null);
+      setCompanyId(null);
+      primeCurrenciesFromCache({
+        companyId: null,
+        selectedGroup: groupForPersist,
+        groupsAllMode,
+        groupAllMode: false,
+        clearOnMiss: true,
+      });
+      primeDashboardFromCache({
+        companyId: null,
+        selectedGroup: groupForPersist,
+        groupsAllMode,
+        groupAllMode: false,
+        mergedSubsetIds: null,
       });
       notifyDashboardGroupFilterChanged(
         groupForPersist,
@@ -6682,23 +7491,21 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       companyAllMode: true,
       groupsAllMode,
     });
-    flushSync(() => {
-      setGroupAllMode(true);
-      setMergedSubsetIds(null);
-      setCompanyId(null);
-      primeCurrenciesFromCache({
-        companyId: null,
-        selectedGroup: groupForPersist,
-        groupsAllMode,
-        groupAllMode: true,
-      });
-      primeDashboardFromCache({
-        companyId: null,
-        selectedGroup: groupForPersist,
-        groupsAllMode,
-        groupAllMode: true,
-        mergedSubsetIds: null,
-      });
+    setGroupAllMode(true);
+    setMergedSubsetIds(null);
+    setCompanyId(null);
+    primeCurrenciesFromCache({
+      companyId: null,
+      selectedGroup: groupForPersist,
+      groupsAllMode,
+      groupAllMode: true,
+    });
+    primeDashboardFromCache({
+      companyId: null,
+      selectedGroup: groupForPersist,
+      groupsAllMode,
+      groupAllMode: true,
+      mergedSubsetIds: null,
     });
     notifyDashboardGroupFilterChanged(
       groupForPersist,
@@ -6726,9 +7533,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   ]);
 
   const handlePickAllGroups = useCallback(() => {
-    const companyOwnerGroupsAll = isCompanyOwnerWithGroupLedger(me);
+    const companyGroupsAllLedger = companyLoginCanUseGroupsAllLedger(me);
     const companyLoginGroupsAll =
-      isCompanyLogin(me) && !isGroupLogin(me) && !companyOwnerGroupsAll;
+      isCompanyLogin(me) && !isGroupLogin(me) && !companyGroupsAllLedger;
     const preserveCompanyId = (() => {
       if (!companyLoginGroupsAll) return null;
       const fromState = companyId != null ? parseInt(companyId, 10) : Number.NaN;
@@ -6740,11 +7547,13 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       return Number.isFinite(first) && first > 0 ? first : null;
     })();
     const useCompanyAllAggregate = companyLoginGroupsAll && !preserveCompanyId;
+    const groupLoginAllGroupsAggregate =
+      isGroupLogin(me) && !companyGroupsAllLedger && !useCompanyAllAggregate;
     if (
       groupsAllMode &&
       companyId == null &&
       !groupAllMode &&
-      !companyOwnerGroupsAll &&
+      !companyGroupsAllLedger &&
       !(companyLoginGroupsAll && preserveCompanyId) &&
       !useCompanyAllAggregate
     ) {
@@ -6758,9 +7567,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     if (sidebarAnchorGroup) persistGroupsAllSidebarGroup(sidebarAnchorGroup);
     persistDashboardGroupsAllMode(true);
     persistDashboardGroupOnlyMode(false);
-    const nextGroupAllMode = companyOwnerGroupsAll ? false : useCompanyAllAggregate;
+    const nextGroupAllMode = companyGroupsAllLedger
+      ? false
+      : useCompanyAllAggregate || groupLoginAllGroupsAggregate;
     persistDashboardGroupAllMode(nextGroupAllMode);
-    if (companyOwnerGroupsAll) {
+    if (companyGroupsAllLedger) {
       persistDashboardSelectedCompany(null);
     } else if (preserveCompanyId && !useCompanyAllAggregate) {
       persistDashboardFilterState(null, preserveCompanyId, {
@@ -6773,7 +7584,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     if (typeof sessionStorage !== "undefined") {
       sessionStorage.removeItem("dashboard_group_filter");
     }
-    const nextCompanyId = companyOwnerGroupsAll
+    const nextCompanyId = companyGroupsAllLedger
       ? null
       : companyLoginGroupsAll && !useCompanyAllAggregate
         ? preserveCompanyId
@@ -6782,13 +7593,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       nextCompanyId != null
         ? companies.find((c) => parseInt(c.id, 10) === parseInt(nextCompanyId, 10))
         : null;
-    flushSync(() => {
-      setGroupsAllMode(true);
-      setGroupAllMode(nextGroupAllMode);
-      setMergedSubsetIds(null);
-      setSelectedGroup(null);
-      setCompanyId(nextCompanyId);
-    });
+    setGroupsAllMode(true);
+    setGroupAllMode(nextGroupAllMode);
+    setMergedSubsetIds(null);
+    setSelectedGroup(null);
+    setCompanyId(nextCompanyId);
     notifyDashboardGroupFilterChanged(
       null,
       nextCompanyId,
@@ -6895,22 +7704,20 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
     setGroupAllMode(false);
     persistDashboardFilterState(bootGroup, id, { allowGroupOnly: false });
-    flushSync(() => {
-      applyCompanySelection(id);
-      primeCurrenciesFromCache({
-        companyId: id,
-        selectedGroup: bootGroup,
-        groupsAllMode: false,
-        groupAllMode: false,
-        clearOnMiss: true,
-      });
-      primeDashboardFromCache({
-        companyId: id,
-        selectedGroup: bootGroup,
-        groupsAllMode: false,
-        groupAllMode: false,
-        mergedSubsetIds: null,
-      });
+    applyCompanySelection(id);
+    primeCurrenciesFromCache({
+      companyId: id,
+      selectedGroup: bootGroup,
+      groupsAllMode: false,
+      groupAllMode: false,
+      clearOnMiss: true,
+    });
+    primeDashboardFromCache({
+      companyId: id,
+      selectedGroup: bootGroup,
+      groupsAllMode: false,
+      groupAllMode: false,
+      mergedSubsetIds: null,
     });
     notifyDashboardGroupFilterChanged(bootGroup, id);
     const bootRow = companies.find((co) => parseInt(co.id, 10) === id);
@@ -6973,10 +7780,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   const applyCrossPageCurrency = useCallback(
     (code) => {
       setShowAllCurrencies(false);
-      flushSync(() => {
-        primeDashboardFromCache({ currencyCode: code });
-        setCurrencyCode(code);
-      });
+      primeDashboardFromCache({ currencyCode: code });
+      setCurrencyCode(code);
     },
     [primeDashboardFromCache]
   );
@@ -6997,16 +7802,14 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         return;
       }
       setShowAllCurrencies(false);
-      flushSync(() => {
-        primeDashboardFromCache({
-          currencyCode: code,
-          companyId: groupAllMode ? null : companyId,
-          selectedGroup,
-          groupsAllMode,
-          groupAllMode,
-        });
-        setCurrencyCode(code);
+      primeDashboardFromCache({
+        currencyCode: code,
+        companyId: groupAllMode ? null : companyId,
+        selectedGroup,
+        groupsAllMode,
+        groupAllMode,
       });
+      setCurrencyCode(code);
       persistCrossPageCurrency(code);
     },
     [
@@ -7043,7 +7846,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           currenciesByCompanyRef.current.set(orderCompanyId, next);
         }
       }
-      writeDashboardGroupCurrencyCaches(currenciesByGroupRef, {
+      writeDashboardGroupCurrencyCaches(currenciesByGroupRef.current, {
         groupKey: selectedGroup ? String(selectedGroup).trim().toUpperCase() : null,
         groupsAllMode,
         groupAllMode,
@@ -7099,8 +7902,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     chartDateRangeText,
     chartXAxisLayout,
     chartDataStable,
+    panelsAnimReady,
+    panelAnimEpoch,
+    panelAnimDuration: DASHBOARD_PANEL_ANIM_DURATION_MS,
     dashboardScopeKey,
     earningsCurrencyRows,
+    panelCurrencyRows,
     useConvertedEarnings,
     earningsBreakdownShowsRate,
     summaryPanelLabel,
@@ -7112,14 +7919,13 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     exchangeRates,
     exchangeRatesError,
     exchangeRatesLoading,
-    rateFootnoteText,
     exchangeRateScopeKey,
-    convertedEarningsTotal,
-    showProfitChartTab,
+    convertedPanelTotal,
+    showSummaryPanelTabs,
+    showEarningPanelTab,
+    showNetProfitForTab,
     earningsPanelView,
     setEarningsPanelView,
-    companyBreakdownRows,
-    companyNetProfitTotal,
     handlePickGroup,
     handlePickAllGroups,
     handlePickCompany,

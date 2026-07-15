@@ -53,7 +53,7 @@ export function useSummarySubmitPure({
       const accountList =
         accounts.length > 0 ? accounts : await fetchSummaryAccountList(captureScope);
 
-      const rowValidation = validateRowsForSubmit(rows);
+      const rowValidation = validateRowsForSubmit(rows, accountList, rateInput);
       if (!rowValidation.ok) {
         pushSummaryNotification("Error", rowValidation.message, "error");
         return;

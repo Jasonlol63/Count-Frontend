@@ -6,6 +6,7 @@ import {
   shouldRestoreFromUrl,
   stripSearchParamsFromUrl,
 } from "../lib/dataCaptureStorage.js";
+import { getDataCaptureState } from "../lib/dataCaptureRuntime.js";
 import { resolveDataCaptureGridDimensions } from "../grid/dataCaptureGridMeta.js";
 
 /**
@@ -30,6 +31,9 @@ export function useDataCapturePageLifecycle({
 
     const urlParams = new URLSearchParams(window.location.search);
     const shouldRestore = shouldRestoreFromUrl();
+    if (!shouldRestore) {
+      getDataCaptureState().restoreCompleted = false;
+    }
     const alreadyInit = dcFormGate.dataset.dcPageInit === "1";
 
     clearStaleFormatPreviewForFreshEntry(shouldRestore);
@@ -55,11 +59,16 @@ export function useDataCapturePageLifecycle({
         if (groupOnlyGrid) {
           void applyGroupOnlyPersistedForm?.();
         }
-        stripSearchParamsFromUrl(["submitted", "group_only"]);
+        void refreshSubmittedProcesses?.();
+        stripSearchParamsFromUrl(["submitted", "group_only", "group_id"]);
       }
     }
 
     if (shouldRestore) {
+      if (!getDataCaptureState().restoreCompleted) {
+        recomputeSubmitState?.();
+        return;
+      }
       const { rows, cols } = resolveDataCaptureGridDimensions(groupOnlyGrid);
       void ensureGridReady?.(rows, cols);
     }

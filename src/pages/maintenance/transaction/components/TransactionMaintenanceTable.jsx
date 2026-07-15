@@ -7,6 +7,7 @@ import {
 } from "../../shared/maintenanceVirtualScroll.js";
 import { formatAmount } from "../transactionMaintenanceLogic.js";
 import MaintenanceCreatedAtDisplay from "../../shared/MaintenanceCreatedAtDisplay.jsx";
+import MaintenanceEllipsisText from "../../shared/MaintenanceEllipsisText.jsx";
 import { MAINTENANCE_REPORT_ROW_HEIGHT } from "../../shared/maintenanceReportRowMetrics.js";
 import { measureMaintenanceVirtualRow } from "../../shared/measureMaintenanceVirtualRow.js";
 
@@ -54,14 +55,24 @@ function TopLoadingBar({ label }) {
   );
 }
 
-function WrapCell({ children, className = "", title }) {
+function WrapCell({ value, children, className = "" }) {
   return (
     <div
       role="cell"
       className={`maintenance-virtual-cell maintenance-virtual-cell--left transaction-virtual-cell--wrap ${className}`}
-      title={title}
     >
-      <span className="transaction-cell-clamp-2">{children}</span>
+      {children ?? <MaintenanceEllipsisText value={value} className="transaction-cell-clamp-2" />}
+    </div>
+  );
+}
+
+function TextCell({ value, className = "" }) {
+  return (
+    <div
+      role="cell"
+      className={`maintenance-virtual-cell maintenance-virtual-cell--left ${className}`}
+    >
+      <MaintenanceEllipsisText value={value} className="transaction-cell-clamp-2" />
     </div>
   );
 }
@@ -82,27 +93,17 @@ function VirtualDataRow({ row, index }) {
       <WrapCell className="maintenance-virtual-cell--mono maintenance-virtual-cell--created-at">
         <MaintenanceCreatedAtDisplay value={row.dts_created} />
       </WrapCell>
-      <WrapCell title={row.process || "-"}>{row.process || "-"}</WrapCell>
-      <WrapCell title={row.id_product || "-"}>{row.id_product || "-"}</WrapCell>
-      <WrapCell title={row.account || "-"}>{row.account || "-"}</WrapCell>
-      <WrapCell title={row.description || "-"}>{row.description || "-"}</WrapCell>
-      <WrapCell title={row.remark || "-"}>{row.remark || "-"}</WrapCell>
-      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left" title={row.percent || "-"}>
-        {row.percent || "-"}
-      </div>
-      <div role="cell" className="maintenance-virtual-cell maintenance-cell-currency maintenance-virtual-cell--left" title={row.currency || "-"}>
-        {row.currency || "-"}
-      </div>
-      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left" title={row.rate || "-"}>
-        {row.rate || "-"}
-      </div>
-      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left" title={formatAmount(row.cr)}>
-        {formatAmount(row.cr)}
-      </div>
-      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left" title={formatAmount(row.dr)}>
-        {formatAmount(row.dr)}
-      </div>
-      <WrapCell title={row.created_by || "-"}>{row.created_by || "-"}</WrapCell>
+      <WrapCell value={row.process} />
+      <WrapCell value={row.id_product} />
+      <WrapCell value={row.account} />
+      <WrapCell value={row.description} />
+      <WrapCell value={row.remark} />
+      <TextCell value={row.percent} />
+      <TextCell value={row.currency} className="maintenance-cell-currency" />
+      <TextCell value={row.rate} />
+      <TextCell value={formatAmount(row.cr)} />
+      <TextCell value={formatAmount(row.dr)} />
+      <WrapCell value={row.created_by} />
     </div>
   );
 }
@@ -181,30 +182,17 @@ export default function TransactionMaintenanceTable({
     dataIncomplete,
   });
 
-  if (rows.length === 0 && (showSkeleton || statusMessage)) {
-    const label = statusMessage || m.loading;
+  if (rows.length === 0) {
+    const label = statusMessage || (showSkeleton ? m.loading : m.noDataAdjustSearch);
     return (
-      <div className="maintenance-list-container maintenance-virtual-table transaction-virtual-table">
-        <div className="maintenance-virtual-table-inner transaction-virtual-table-inner" role="table" aria-label={m.pageTitleTransaction}>
-          <TopLoadingBar label={label} />
-          <div className="maintenance-virtual-scroll" tabIndex={0}>
-            <VirtualTableHeader m={m} />
-            <div className="maintenance-virtual-empty-loading" aria-hidden />
-          </div>
+      <div className="empty-state-container" style={{ display: "block" }}>
+        <div className="empty-state">
+          <p>{label}</p>
         </div>
       </div>
     );
   }
 
-  if (rows.length === 0 && showEmptyState && !showSkeleton) {
-    return (
-      <div className="empty-state-container" style={{ display: "block" }}>
-        <div className="empty-state">
-          <p>{m.noDataAdjustSearch}</p>
-        </div>
-      </div>
-    );
-  }
 
   const showBlueBar = Boolean(showTopLoading);
   const topLabel = topLoadingLabel || m.loading;

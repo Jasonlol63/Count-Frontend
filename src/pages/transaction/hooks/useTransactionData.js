@@ -4,6 +4,7 @@ import { isCancelledError, useQueryClient } from "@tanstack/react-query";
 import { useAuthSession } from "../../../context/AuthSessionContext.jsx";
 import { notifyCompanySessionUpdated } from "../../../utils/company/companySessionEvents.js";
 import { spaPath } from "../../../utils/routing/pageRoutes.js";
+import { replaceBrowserPathOnly } from "../../../utils/routing/privateBrowserUrl.js";
 import {
   filterCompaniesWithDisplayId,
   fetchOwnerCompaniesAll,
@@ -220,7 +221,7 @@ export function useTransactionData({
           return;
         }
 
-        const rows = await fetchOwnerCompaniesAll();
+        const rows = await fetchOwnerCompaniesAll({ me: u });
         if (cancelled) return;
 
         const url = new URL(window.location.href);
@@ -537,9 +538,7 @@ export function useTransactionData({
     if (!g || !snap) return;
 
     const seq = ++scopeSwitchSeqRef.current;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("company_id");
-    window.history.replaceState(null, "", url.toString());
+    replaceBrowserPathOnly();
 
     persistDashboardGroupFilter(g);
     const nextSnap = {
@@ -604,9 +603,7 @@ export function useTransactionData({
         groupsAllMode: false,
       });
 
-      const url = new URL(window.location.href);
-      url.searchParams.set("company_id", String(numericCid));
-      window.history.replaceState(null, "", url.toString());
+      replaceBrowserPathOnly();
       persistDashboardGroupOnlyMode(false);
       persistDashboardFilterState(g, numericCid, { allowGroupOnly: false });
 
@@ -661,9 +658,7 @@ export function useTransactionData({
             ),
       };
 
-      const url = new URL(window.location.href);
-      url.searchParams.set("company_id", String(cid));
-      window.history.replaceState(null, "", url.toString());
+      replaceBrowserPathOnly();
       if (gid) persistDashboardGroupFilter(gid);
       persistDashboardGroupOnlyMode(false);
       persistDashboardFilterState(nextGroup, numericCid);
@@ -711,18 +706,15 @@ export function useTransactionData({
       const nextCompanyId =
         pickIndependent?.id != null ? Number(pickIndependent.id) : null;
 
-      const url = new URL(window.location.href);
       if (nextCompanyId != null && Number.isFinite(nextCompanyId) && nextCompanyId > 0) {
         clearDashboardGroupFilterKeepCompany(nextCompanyId);
-        url.searchParams.set("company_id", String(nextCompanyId));
       } else {
         sessionStorage.setItem(DASHBOARD_GROUP_FILTER_OPT_OUT_KEY, "1");
         persistDashboardGroupFilter(null);
         persistDashboardFilterState(null, null, { allowGroupOnly: false });
         notifyDashboardGroupFilterChanged(null, null);
-        url.searchParams.delete("company_id");
       }
-      window.history.replaceState(null, "", url.toString());
+      replaceBrowserPathOnly();
 
       const nextSnap = {
         ...snap,
@@ -778,9 +770,7 @@ export function useTransactionData({
   const onPickAllGroups = useCallback(() => {
     const snap = filterSnapshotRef.current;
     if (!snap || snap.groupsAllMode) return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("company_id");
-    window.history.replaceState(null, "", url.toString());
+    replaceBrowserPathOnly();
     persistDashboardGroupFilter(null);
     persistDashboardFilterState(null, null);
     persistDashboardGroupOnlyMode(false);
@@ -803,9 +793,7 @@ export function useTransactionData({
   const onPickAllInGroup = useCallback(() => {
     const snap = filterSnapshotRef.current;
     if (!snap || (snap.groupAllMode && !snap.companyId)) return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("company_id");
-    window.history.replaceState(null, "", url.toString());
+    replaceBrowserPathOnly();
     persistDashboardGroupOnlyMode(false);
     persistDashboardFilterState(snap.groupsAllMode ? null : snap.selectedGroup, null);
     notifyDashboardGroupFilterChanged(snap.groupsAllMode ? null : snap.selectedGroup, null);

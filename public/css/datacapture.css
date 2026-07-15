@@ -23,7 +23,7 @@ body.datacapture-page {
     --dc-accent-soft: #eff6ff;
     --dc-border: #e2e8f0;
     --dc-text-muted: #64748b;
-    --dc-layout-gap: clamp(12px, 1.15vw, 18px);
+    --dc-layout-gap: 10px;
     --dc-top-col-left: minmax(0, 1.8fr);
     --dc-top-col-right: minmax(0, 1fr);
     --dc-input-focus-border: #3b82f6;
@@ -40,6 +40,8 @@ body.ec-auth-shell.datacapture-page .process-form textarea:focus-visible,
 body.ec-auth-shell.datacapture-page .dc-remove-word-chip-input:focus-within,
 body.ec-auth-shell.datacapture-page .process-form .dc-description-input-wrap:hover,
 body.ec-auth-shell.datacapture-page .process-form .dc-description-input-wrap:focus-within,
+body.ec-auth-shell.datacapture-page .process-form .description-input-wrap:hover,
+body.ec-auth-shell.datacapture-page .process-form .description-input-wrap:focus-within,
 body.ec-auth-shell.datacapture-page .custom-select-button:focus,
 body.ec-auth-shell.datacapture-page .custom-select-button:focus-visible,
 body.ec-auth-shell.datacapture-page .custom-select-button.open {
@@ -51,7 +53,9 @@ body.ec-auth-shell.datacapture-page .custom-select-button.open {
 body.ec-auth-shell.datacapture-page .dc-remove-word-chip-input .dc-remove-word-chip-input__field:focus,
 body.ec-auth-shell.datacapture-page .dc-remove-word-chip-input .dc-remove-word-chip-input__field:focus-visible,
 body.ec-auth-shell.datacapture-page .process-form .dc-description-input-wrap input:focus,
-body.ec-auth-shell.datacapture-page .process-form .dc-description-input-wrap input:focus-visible {
+body.ec-auth-shell.datacapture-page .process-form .dc-description-input-wrap input:focus-visible,
+body.ec-auth-shell.datacapture-page .process-form .description-input-wrap input:focus,
+body.ec-auth-shell.datacapture-page .process-form .description-input-wrap input:focus-visible {
     outline: none !important;
     border: none !important;
     box-shadow: none !important;
@@ -163,6 +167,21 @@ body.datacapture-page .container {
         overflow: visible;
     }
 
+    /* Short viewport scrolls the whole page: let the form show in full and
+       drop the absolute-fill on the submitted card. */
+    body.datacapture-page .top-section .form-column > .form-container {
+        max-height: none;
+    }
+
+    body.datacapture-page .top-section .submitted-column {
+        position: static;
+    }
+
+    body.datacapture-page .top-section .submitted-column > .submitted-container {
+        position: static;
+        inset: auto;
+    }
+
     body.datacapture-page .form-container .process-form {
         overflow-x: hidden;
         overflow-y: visible;
@@ -207,20 +226,32 @@ body.datacapture-page .top-section .submitted-column {
     align-self: stretch;
 }
 
-body.datacapture-page .top-section .form-column > .form-container,
-body.datacapture-page .top-section .submitted-column > .submitted-container {
+body.datacapture-page .top-section .form-column > .form-container {
     flex: 1 1 auto;
     min-height: 0;
     height: 100%;
+    /* Pin the form card height to ~the bottom of the Description / Replace
+       Word row; the remaining fields (Remove Word, Remark, help) scroll
+       inside the form. The submitted card follows this height. */
+    max-height: 334px;
     margin: 0;
     box-sizing: border-box;
-}
-
-body.datacapture-page .top-section .form-column > .form-container {
     overflow: hidden;
 }
 
+/* Form card drives the top band height; the submitted card fills the same
+   height via absolute positioning and scrolls internally instead of
+   growing the band when it has many entries. */
+body.datacapture-page .top-section .submitted-column {
+    position: relative;
+}
+
 body.datacapture-page .top-section .submitted-column > .submitted-container {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    margin: 0;
+    box-sizing: border-box;
     overflow: hidden;
 }
 
@@ -250,6 +281,21 @@ body.datacapture-page .submitted-list {
     body.datacapture-page .top-section .form-column > .form-container,
     body.datacapture-page .top-section .submitted-column > .submitted-container {
         height: auto;
+    }
+
+    /* Stacked layout: drop the desktop fixed height / absolute-fill so cards
+       flow normally and show their full content. */
+    body.datacapture-page .top-section .form-column > .form-container {
+        max-height: none;
+    }
+
+    body.datacapture-page .top-section .submitted-column {
+        position: static;
+    }
+
+    body.datacapture-page .top-section .submitted-column > .submitted-container {
+        position: static;
+        inset: auto;
     }
 
     body.datacapture-page .submitted-list {
@@ -422,7 +468,7 @@ body.datacapture-page .process-form .dc-form-company-layout {
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
-    margin-bottom: clamp(10px, 0.85vw, 14px);
+    /* margin-bottom: clamp(10px, 0.85vw, 14px); */
 }
 
 body.datacapture-page .process-form .dc-form-company-layout__date {
@@ -750,7 +796,7 @@ body.datacapture-page .process-form .dc-form-row-full .form-group {
 .form-container {
     background: white;
     border-radius: 10px;
-    padding: clamp(14px, 1.25vw, 22px);
+    padding: 10px;
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 14px rgba(15, 23, 42, 0.06);
     flex: 1 1 auto;
     width: 100%;
@@ -773,7 +819,7 @@ body.datacapture-page .process-form .dc-form-row-full .form-group {
 .submitted-container {
     background: white;
     border-radius: 10px;
-    padding: clamp(14px, 1.25vw, 22px);
+    padding: 10px;
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 14px rgba(15, 23, 42, 0.06);
     flex: 1 1 auto;
     width: 100%;
@@ -867,117 +913,6 @@ body.datacapture-page .process-form .dc-form-row-full .form-group {
     text-transform: none;
 }
 
-body.datacapture-page .dc-remove-word-chip-input {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    align-content: flex-start;
-    gap: 6px;
-    width: 100%;
-    min-height: 36px;
-    padding: 5px 10px;
-    border: 1px solid var(--dc-border, #e2e8f0);
-    border-radius: 6px;
-    background: #ffffff;
-    box-sizing: border-box;
-    cursor: text;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-body.datacapture-page .dc-remove-word-chip-input:focus-within {
-    border-color: var(--dc-input-focus-border, #3b82f6);
-    box-shadow: var(--dc-input-focus-shadow, 0 0 0 2px rgba(59, 130, 246, 0.12));
-}
-
-body.datacapture-page .dc-remove-word-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    max-width: 100%;
-    height: 24px;
-    padding: 0 4px 0 8px;
-    border: 1px solid var(--dc-border, #e2e8f0);
-    border-radius: 4px;
-    background: #f8fafc;
-    color: #334155;
-    font-size: clamp(10px, 0.74vw, 14px);
-    font-weight: 600;
-    line-height: 1;
-}
-
-body.datacapture-page .dc-remove-word-chip__label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-body.datacapture-page .dc-remove-word-chip__remove {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 18px;
-    height: 18px;
-    padding: 0;
-    border: none;
-    border-radius: 3px;
-    background: transparent;
-    color: #94a3b8;
-    font-size: 14px;
-    line-height: 1;
-    cursor: pointer;
-}
-
-body.datacapture-page .dc-remove-word-chip__remove:hover {
-    background: #e2e8f0;
-    color: #475569;
-}
-
-body.datacapture-page .process-form .form-group .dc-remove-word-chip-input__field,
-body.datacapture-page .dc-remove-word-chip-input .dc-remove-word-chip-input__field,
-body.ec-auth-shell.datacapture-page .dc-remove-word-chip-input .dc-remove-word-chip-input__field {
-    flex: 0 1 auto;
-    display: inline-block;
-    width: auto;
-    min-width: 4ch;
-    max-width: 100%;
-    height: 24px;
-    min-height: 24px;
-    max-height: 24px;
-    margin: 0;
-    padding: 0 !important;
-    border: none !important;
-    border-radius: 0 !important;
-    outline: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    -webkit-appearance: none;
-    appearance: none;
-    color: #334155;
-    font-size: clamp(10px, 0.74vw, 14px);
-    font-weight: 600;
-    line-height: 24px;
-    text-transform: none;
-}
-
-body.datacapture-page .process-form .form-group .dc-remove-word-chip-input__field:focus,
-body.datacapture-page .process-form .form-group .dc-remove-word-chip-input__field:focus-visible,
-body.datacapture-page .dc-remove-word-chip-input .dc-remove-word-chip-input__field:focus,
-body.datacapture-page .dc-remove-word-chip-input .dc-remove-word-chip-input__field:focus-visible,
-body.ec-auth-shell.datacapture-page .dc-remove-word-chip-input .dc-remove-word-chip-input__field:focus,
-body.ec-auth-shell.datacapture-page .dc-remove-word-chip-input .dc-remove-word-chip-input__field:focus-visible {
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-    background: transparent !important;
-}
-
-body.datacapture-page .process-form .form-group .dc-remove-word-chip-input__field::placeholder,
-body.datacapture-page .dc-remove-word-chip-input .dc-remove-word-chip-input__field::placeholder {
-    color: #94a3b8;
-    font-weight: 500;
-}
-
 .replace-arrow {
     color: #666;
     font-weight: bold;
@@ -1066,7 +1001,7 @@ body.datacapture-page .custom-select-button.open {
     display: none;
     max-height: 300px;
     overflow: hidden;
-    margin-top: 2px;
+    margin-top: 1px;
 }
 
 .custom-select-dropdown.show {
@@ -1115,6 +1050,17 @@ body.datacapture-page .custom-select-dropdown.custom-select-dropdown-portal,
 body.datacapture-page .custom-select-dropdown.custom-select-dropdown-portal .custom-select-search,
 .custom-select-dropdown.dc-process-select-portal .custom-select-search {
     flex-shrink: 0;
+    padding: clamp(4px, 0.35vw, 6px) !important;
+}
+
+body.datacapture-page .custom-select-dropdown.custom-select-dropdown-portal .custom-select-search input,
+.custom-select-dropdown.dc-process-select-portal .custom-select-search input {
+    font-size: var(--text-small) !important;
+    font-weight: 700 !important;
+    font-family: var(--font-ui) !important;
+    line-height: 1.35 !important;
+    min-height: clamp(24px, 1.75vw, 28px) !important;
+    padding: clamp(3px, 0.25vw, 5px) clamp(6px, 0.4vw, 8px) !important;
 }
 
 body.datacapture-page .custom-select-dropdown.custom-select-dropdown-portal .custom-select-options,
@@ -1123,6 +1069,16 @@ body.datacapture-page .custom-select-dropdown.custom-select-dropdown-portal .cus
     min-height: 0;
     max-height: none !important;
     overflow-y: auto;
+}
+
+body.datacapture-page .custom-select-dropdown.custom-select-dropdown-portal .custom-select-option,
+.custom-select-dropdown.dc-process-select-portal .custom-select-option {
+    font-size: var(--text-small) !important;
+    font-family: var(--font-ui) !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 700;
 }
 
 .custom-select-option {
@@ -1134,6 +1090,12 @@ body.datacapture-page .custom-select-dropdown.custom-select-dropdown-portal .cus
 
 .custom-select-option:hover {
     background-color: #f0f0f0;
+}
+
+.custom-select-option.keyboard-focus {
+    background-color: var(--select-option-keyboard-focus-bg, #0d60ff);
+    color: var(--select-option-keyboard-focus-text, #ffffff);
+    font-weight: 600;
 }
 
 .custom-select-option.selected {
@@ -1320,73 +1282,6 @@ body.datacapture-page .bottom-section:has(.excel-table-container--group-only) .f
     min-width: 0;
 }
 
-body.datacapture-page .process-form .dc-description-input-wrap {
-    display: flex;
-    align-items: stretch;
-    height: 36px;
-    min-height: 36px;
-    max-height: 36px;
-    border: 1px solid var(--dc-border, #e2e8f0);
-    border-radius: 6px;
-    overflow: hidden;
-    cursor: pointer;
-    box-sizing: border-box;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-body.datacapture-page .process-form .dc-description-input-wrap:hover,
-body.datacapture-page .process-form .dc-description-input-wrap:focus-within {
-    border-color: var(--dc-input-focus-border, #3b82f6);
-    box-shadow: var(--dc-input-focus-shadow, 0 0 0 2px rgba(59, 130, 246, 0.12));
-}
-
-body.datacapture-page .process-form .dc-description-input-wrap input {
-    flex: 1 1 auto;
-    min-width: 0;
-    width: auto;
-    height: 100%;
-    min-height: 0;
-    max-height: none;
-    padding: clamp(6px, 0.35vw, 9px) clamp(8px, 0.63vw, 12px);
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    outline: none;
-    background: #ffffff;
-    cursor: pointer;
-}
-
-body.datacapture-page .process-form .dc-description-add-tile {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 clamp(34px, 2.45vw, 40px);
-    width: clamp(34px, 2.45vw, 40px);
-    align-self: stretch;
-    margin: 0;
-    padding: 0;
-    border: none;
-    border-radius: 0;
-    background: #3b82f6;
-    color: #ffffff;
-    font-size: clamp(14px, 0.95vw, 18px);
-    font-weight: 700;
-    line-height: 1;
-    cursor: pointer;
-    transition: background 0.15s ease;
-    -webkit-tap-highlight-color: transparent;
-}
-
-body.datacapture-page .process-form .dc-description-add-tile:hover {
-    background: #2563eb;
-}
-
-body.datacapture-page .process-form .dc-description-add-tile:focus,
-body.datacapture-page .process-form .dc-description-add-tile:focus-visible {
-    outline: none;
-    background: #2563eb;
-}
-
 /* Modal Styles */
 .modal {
     display: none;
@@ -1487,33 +1382,44 @@ body.datacapture-page .process-form .dc-description-add-tile:focus-visible {
     box-sizing: border-box;
 }
 
-.modal-content.description-selection-modal .modal-header {
+.modal-content.description-selection-modal .modal-header,
+.modal-content.description-selection-modal .description-selection-modal-header.modal-header {
     position: relative;
     flex-shrink: 0;
     margin: 0;
-    padding: var(--desc-modal-pad-block, 3px) var(--desc-modal-pad-inline, 20px) 0;
+    padding: 3px 20px;
+    padding-right: 3rem;
     background: #f8fafc;
-    border-bottom: none;
+    border-bottom: 1px solid #e2e8f0;
     border-radius: 12px 12px 0 0;
     box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
 }
 
 .modal-content.description-selection-modal .modal-header h2 {
     margin: 0;
-    padding: 0;
+    padding: clamp(12px, 0.78vw, 15px) clamp(18px, 1.2vw, 23px);
     background: transparent;
+    border: none;
     border-bottom: none;
-    font-size: var(--text-page-title);
+    font-size: var(--process-form-modal-title-size, var(--text-page-title));
     font-family: var(--font-heading-page);
     font-weight: var(--font-weight-page-title);
     letter-spacing: var(--letter-spacing-page-title);
     color: #1f2937;
     line-height: 1.2;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .modal-content.description-selection-modal .close {
-    right: 1.25rem;
-    top: 1.25rem;
+    position: static;
+    right: auto;
+    top: auto;
+    flex-shrink: 0;
     transform: none;
 }
 
@@ -1896,9 +1802,6 @@ body.datacapture-page .excel-table-scroll-body {
 }
 
 body.datacapture-page .excel-table-scroll-body .excel-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: 2;
     background-color: #f6f8fa;
 }
 
@@ -1907,11 +1810,6 @@ body.datacapture-page .excel-table-scroll-body .excel-table td.row-header {
     left: 0;
     z-index: 1;
     background-color: #f6f8fa;
-}
-
-body.datacapture-page .excel-table-scroll-body .excel-table thead th:first-child {
-    left: 0;
-    z-index: 3;
 }
 
 body.datacapture-page .excel-table-scroll-body .excel-table tbody tr {
@@ -2033,18 +1931,24 @@ body.datacapture-page .excel-table-scroll-body .excel-table tbody td {
 .excel-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 1.4rem;
     font-family: Arial, sans-serif;
 }
 
 .excel-table th,
 .excel-table td {
     border: 1px solid #d0d7de;
-    font-size: clamp(10px, 0.63vw, 12px);
-    padding: clamp(2px, 0.31vw, 6px) clamp(8px, 0.83vw, 16px);
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1.35;
+    padding: clamp(4px, 0.15vw, 6px) clamp(4px, 0.15vw, 6px);
     text-align: center;
     min-width: clamp(30px, 3.49vw, 67px);
+    min-height: calc(1.4rem * 1.35 + 8px);
+    height: auto !important;
+    vertical-align: middle;
     position: relative;
+    white-space: nowrap;
 }
 
 .excel-table th {
@@ -2091,9 +1995,9 @@ body.datacapture-page .excel-table-scroll-body .excel-table tbody td {
 
 .row-header {
     background-color: #f6f8fa !important;
-    font-weight: bold;
+    font-weight: 700;
     color: #24292f;
-    min-width: 30px;
+    min-width: 46px;
 }
 
 .excel-table td[contenteditable="true"]:hover {
@@ -2105,6 +2009,9 @@ body.datacapture-page .excel-table-scroll-body .excel-table tbody td {
     caret-color: #000000;
     /* 添加这行 - 光标黑色 */
     color: #000000;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
     /* 确保文字也是黑色 */
     text-transform: uppercase;
 }
@@ -2153,6 +2060,59 @@ body.datacapture-page .excel-table-scroll-body .excel-table tbody td {
     font-size: clamp(12px, 0.94vw, 18px);
     font-weight: 700;
     color: #0f172a;
+    position: relative;
+}
+
+.dc-table-expand-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    z-index: 30;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid var(--dc-border, #e2e8f0);
+    border-radius: 6px;
+    background: #fff;
+    color: #475569;
+    cursor: pointer;
+    flex-shrink: 0;
+    line-height: 0;
+    touch-action: manipulation;
+}
+
+.dc-table-expand-btn svg {
+    pointer-events: none;
+}
+
+.dc-table-expand-btn:hover {
+    border-color: var(--dc-accent, #2563eb);
+    color: var(--dc-accent, #2563eb);
+    background: var(--dc-accent-soft, #eff6ff);
+}
+
+.dc-table-expand-btn[aria-pressed="true"] {
+    border-color: var(--dc-accent, #2563eb);
+    color: var(--dc-accent, #2563eb);
+    background: var(--dc-accent-soft, #eff6ff);
+}
+
+body.datacapture-page.datacapture-table-expanded .dc-page-toolbar,
+body.datacapture-page.datacapture-table-expanded .top-section {
+    display: none !important;
+}
+
+body.datacapture-page.datacapture-table-expanded .container {
+    gap: 8px;
+}
+
+body.datacapture-page.datacapture-table-expanded .bottom-section {
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .excel-table-header .dc-table-header-main {
@@ -2200,6 +2160,7 @@ body.datacapture-page .excel-table-container--group-only {
     position: relative;
     flex: 0 0 auto;
     margin-left: auto;
+    margin-right: 42px;
 }
 
 .dc-table-size-trigger-row {
@@ -2384,6 +2345,16 @@ body.datacapture-page .excel-table-container--group-only {
     color: #24292f;
     outline: none;
     cursor: pointer;
+}
+
+.dc-table-header-controls .custom-select-wrapper {
+    min-width: 0;
+}
+
+.dc-table-header-controls .custom-select-button.data-capture-type-selector {
+    width: auto;
+    min-width: 10rem;
+    text-align: left;
 }
 
 .data-capture-type-selector:focus {
@@ -2729,5 +2700,29 @@ body.datacapture-page .excel-table-container--group-only {
         margin-bottom: 4px;
     }
 
+}
+
+/* Restore Data Capture form field sizing after global select-unified.css */
+body.ec-auth-shell.datacapture-page .process-form select:not([multiple]):not([size]),
+body.ec-auth-shell.datacapture-page .process-form .custom-select-button {
+    min-height: 36px !important;
+    height: 36px !important;
+    max-height: 36px !important;
+    padding: clamp(6px, 0.35vw, 9px) clamp(28px, 2vw, 36px) clamp(6px, 0.35vw, 9px) clamp(8px, 0.63vw, 12px) !important;
+    font-size: var(--text-small);
+    font-weight: 700 !important;
+    line-height: 1.25 !important;
+    border: 1px solid var(--dc-border, #e2e8f0) !important;
+    border-radius: 6px !important;
+}
+
+body.ec-auth-shell.datacapture-page .process-form .custom-select-option {
+    font-size: var(--text-small) !important;
+    font-weight: 700;
+    line-height: 1.35 !important;
+}
+
+body.ec-auth-shell.datacapture-page .process-form .custom-select-search input {
+    font-size: var(--text-small) !important;
 }
 

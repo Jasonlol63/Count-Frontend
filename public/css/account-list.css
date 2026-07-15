@@ -43,35 +43,14 @@
     overflow: hidden;
 }
 
-#linkAccountModal .account-modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding-right: 4rem;
-}
-
-#linkAccountModal .account-modal-header h2 {
-    padding: clamp(10px, 0.78vw, 14px) 0 clamp(10px, 0.78vw, 14px) 4rem;
-    font-size: var(--text-page-title);
-    flex: 1 1 auto;
-    min-width: 0;
-    margin: 0;
-}
-
-#linkAccountModal .account-close {
-    position: static !important;
-    top: auto !important;
-    right: auto !important;
-    flex-shrink: 0;
-}
+/* Title row: see accountCSS.css (#linkAccountModal .account-modal-header) */
 
 #linkAccountModal .link-account-modal-body {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding-left: 4rem;
-    padding-right: 4rem;
+    padding-left: clamp(1.2rem, 2vw, 1.65rem);
+    padding-right: clamp(1.2rem, 2vw, 1.65rem);
 }
 
 /* 红框区域固定：第 1 行药丸 + 搜索对齐；第 2 行整宽说明 */
@@ -81,8 +60,9 @@
     flex-direction: column;
     align-items: stretch;
     gap: 6px;
-    padding-left: 4rem;
-    padding-right: 4rem;
+    padding-top: clamp(0.85rem, 1.2vw, 1.1rem);
+    padding-left: clamp(1.2rem, 2vw, 1.65rem);
+    padding-right: clamp(1.2rem, 2vw, 1.65rem);
     padding-bottom: 12px;
 }
 
@@ -325,6 +305,29 @@
     align-items: center;
     justify-content: center;
     text-align: center;
+}
+
+.currency-setting-pill.currency-setting-pill-toggle {
+    justify-content: space-between;
+    padding: 6px 8px 6px 12px;
+    gap: 4px;
+}
+
+.currency-setting-pill-toggle .currency-setting-pill-code {
+    flex: 1;
+    text-align: center;
+}
+
+#currencySettingModal .currency-setting-pill-toggle .currency-delete-btn {
+    flex-shrink: 0;
+    color: #dc3545;
+    opacity: 0.85;
+}
+
+#currencySettingModal .currency-setting-pill-toggle .currency-delete-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+    opacity: 1;
 }
 
 .currency-setting-pill.active,
@@ -1024,23 +1027,6 @@ body.account-page .search-container.userlist-search-bar .userlist-search-input {
     body.ec-auth-shell.account-page .container {
         padding-left: var(--layout-main-offset);
         transition: padding-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    /* 主列表：窄屏横向滚动，表头/行共用 inner 宽度 */
-    body.account-page .account-table-wrapper {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    body.account-page .account-list-table-inner {
-        min-width: max(100%, 980px);
-        width: 100%;
-        box-sizing: border-box;
-    }
-
-    body.account-page:not(.account-page--show-all) .account-cards {
-        overflow-x: visible !important;
-        overflow-y: auto !important;
     }
 
     body.account-page .account-toolbar-top-row {

@@ -11,7 +11,7 @@ export default function ConflictModal({ conflict, onResolve, onCancel, t }) {
         </div>
         <div className="own-modal-body">
           <p className="own-modal-desc">
-            {t("idUsedByTwoPartners")}
+            {conflict.data?.same_owner ? t("idAmbiguousLoginOrGroup") : t("idUsedByTwoPartners")}
           </p>
           <div className="own-modal-options">
             <button

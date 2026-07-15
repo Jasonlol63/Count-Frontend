@@ -3,6 +3,7 @@ import { toUpperDisplay, syncEditFormSourcePercent, createFormulaEditFormFromRow
 import { assetUrl } from "../../../../utils/core/apiUrl.js";
 import FormulaVirtualRows, { FormulaVirtualTableHead } from "./FormulaVirtualRows.jsx";
 import { MAINTENANCE_FORMULA_EDIT_ROW_HEIGHT, MAINTENANCE_REPORT_ROW_HEIGHT } from "../../shared/maintenanceReportRowMetrics.js";
+import MaintenanceEllipsisText from "../../shared/MaintenanceEllipsisText.jsx";
 
 const ROW_HEIGHT = MAINTENANCE_REPORT_ROW_HEIGHT;
 const EDIT_ROW_HEIGHT = MAINTENANCE_FORMULA_EDIT_ROW_HEIGHT;
@@ -32,6 +33,7 @@ export default function FormulaMaintenanceTable({
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const selectAllRef = useRef(null);
+  const formulaTextareaRef = useRef(null);
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -45,6 +47,15 @@ export default function FormulaMaintenanceTable({
       setEditForm({});
     }
   }, [listSyncing]);
+
+  useEffect(() => {
+    if (editingId == null) return;
+    const el = formulaTextareaRef.current;
+    if (!(el instanceof HTMLTextAreaElement)) return;
+    // Keep edit textarea fully visible while value changes.
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [editingId, editForm.formula]);
 
   const handleEdit = (row) => {
     setEditingId(row.id);
@@ -64,41 +75,23 @@ export default function FormulaMaintenanceTable({
     }
   };
 
-  const showSkeleton = data.length === 0 && (bootPending || loading || listSyncing);
-  const showEmptyState = data.length === 0 && !showSkeleton;
-
-  if (showSkeleton) {
-    const statusLabel = m.loading;
-    return (
-      <div className="maintenance-list-container maintenance-virtual-table formula-virtual-table">
-        <div className="maintenance-virtual-table-inner formula-virtual-table-inner" role="table">
-          <div className="maintenance-virtual-stale-hint" role="status" aria-live="polite">
-            {statusLabel}
-          </div>
-          <FormulaVirtualTableHead
-            selectAllRef={selectAllRef}
-            selectAllChecked={false}
-            onToggleSelectAll={() => {}}
-            m={m}
-            disableSelectAll
-          />
-          <div className="maintenance-virtual-scroll maintenance-virtual-scroll--body" tabIndex={0}>
-            <div className="maintenance-virtual-empty-loading" aria-hidden />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (showEmptyState) {
+  if (data.length === 0) {
+    const isLoaderActive = bootPending || loading || listSyncing;
     return (
       <div className="empty-state-container" style={{ display: "block" }}>
         <div className="empty-state">
-          <p>{awaitingProcessSelection ? m.selectProcessPrompt : m.noDataAdjustSearch}</p>
+          <p>
+            {isLoaderActive
+              ? m.loading
+              : awaitingProcessSelection
+              ? m.selectProcessPrompt
+              : m.noDataAdjustSearch}
+          </p>
         </div>
       </div>
     );
   }
+
 
   /* 所有公司统一用虚拟 grid 表（与 95 等大列表一致）；勿按条数切回 HTML table */
   const useVirtualList = data.length > 0;
@@ -131,8 +124,11 @@ export default function FormulaMaintenanceTable({
         style={rowStyle}
       >
         <td className="maintenance-table-cell">{row.no}</td>
-        <td className="maintenance-table-cell" title={row.process}>
-          <span className="formula-cell-clamp-2 process-display">{toUpperDisplay(row.process)}</span>
+        <td className="maintenance-table-cell">
+          <MaintenanceEllipsisText
+            value={toUpperDisplay(row.process)}
+            className="formula-cell-clamp-2 process-display"
+          />
         </td>
         <td className="maintenance-table-cell">
           {isEditing ? (
@@ -150,7 +146,10 @@ export default function FormulaMaintenanceTable({
               ))}
             </select>
           ) : (
-            <span className="formula-cell-clamp-2 account-display" title={row.account}>{toUpperDisplay(row.account)}</span>
+            <MaintenanceEllipsisText
+              value={toUpperDisplay(row.account)}
+              className="formula-cell-clamp-2 account-display"
+            />
           )}
         </td>
         <td className="maintenance-table-cell maintenance-cell-currency">{toUpperDisplay(row.currency)}</td>
@@ -164,13 +163,17 @@ export default function FormulaMaintenanceTable({
               style={{ display: "block", width: "100%" }}
             />
           ) : (
-            <span className="formula-cell-clamp-2 source-display" title={row.source}>
-              {toUpperDisplay(row.source)}
-            </span>
+            <MaintenanceEllipsisText
+              value={toUpperDisplay(row.source)}
+              className="formula-cell-clamp-2 source-display"
+            />
           )}
         </td>
-        <td className="maintenance-table-cell" title={row.product}>
-          <span className="formula-cell-clamp-2 product-display">{toUpperDisplay(row.product)}</span>
+        <td className="maintenance-table-cell">
+          <MaintenanceEllipsisText
+            value={toUpperDisplay(row.product)}
+            className="formula-cell-clamp-2 product-display"
+          />
         </td>
         <td className="maintenance-table-cell formula-cell-text">
           {isEditing ? (
@@ -187,24 +190,28 @@ export default function FormulaMaintenanceTable({
               ))}
             </select>
           ) : (
-            <span className="formula-cell-clamp-2 input-method-display" title={row.input_method}>
-              {toUpperDisplay(row.input_method)}
-            </span>
+            <MaintenanceEllipsisText
+              value={toUpperDisplay(row.input_method)}
+              className="formula-cell-clamp-2 input-method-display"
+            />
           )}
         </td>
         <td className="maintenance-table-cell formula-cell-text">
           {isEditing ? (
-            <input
-              type="text"
-              className="formula-input"
+            <textarea
+              ref={isEditing ? formulaTextareaRef : null}
+              className="formula-input formula-input-textarea"
               value={editForm.formula}
               onChange={(e) => setEditForm({ ...editForm, formula: e.target.value })}
               style={{ display: "block", width: "100%" }}
+              rows={2}
             />
           ) : (
-            <span className="formula-cell-clamp-2 formula-display" title={row.formula}>
-              {toUpperDisplay(row.formula)}
-            </span>
+            <MaintenanceEllipsisText
+              value={toUpperDisplay(row.formula)}
+              className="formula-display formula-display--full"
+              alwaysTooltip
+            />
           )}
         </td>
         <td className="maintenance-table-cell formula-cell-text">
@@ -217,9 +224,10 @@ export default function FormulaMaintenanceTable({
               style={{ display: "block", width: "100%" }}
             />
           ) : (
-            <span className="formula-cell-clamp-2 description-display" title={row.description}>
-              {toUpperDisplay(row.description)}
-            </span>
+            <MaintenanceEllipsisText
+              value={toUpperDisplay(row.description)}
+              className="formula-cell-clamp-2 description-display"
+            />
           )}
         </td>
         <td className="maintenance-table-cell maintenance-cell-checkbox">

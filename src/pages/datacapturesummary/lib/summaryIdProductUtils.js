@@ -1,16 +1,7 @@
 /** Id Product text normalization for Summary rows. */
 export function normalizeSummaryIdProductText(text) {
   if (!text || typeof text !== "string") return "";
-  const trimmed = text.trim();
-  if (!trimmed) return "";
-  if (trimmed.indexOf(" - ") >= 0) {
-    return trimmed.replace(/\s+$/, "").trim();
-  }
-  const match = trimmed.match(/^([^(]+)/);
-  if (match) {
-    return match[1].replace(/\s+$/, "").trim();
-  }
-  return trimmed.replace(/\s+$/, "").trim();
+  return text.trim();
 }
 
 export function getSummaryProductValuesFromCell(cell) {

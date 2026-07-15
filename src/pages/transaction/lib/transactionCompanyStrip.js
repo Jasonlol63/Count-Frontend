@@ -5,6 +5,7 @@ import {
   excludeGroupLabelsFromCompanyPicker,
   filterCompaniesWithDisplayId,
   independentCompaniesForPicker,
+  isVirtualGroupLinkCompanyRow,
   sortedUniqueGroupIds,
 } from "../../../utils/company/sharedCompanyFilter.js";
 
@@ -41,10 +42,10 @@ export function buildTransactionCompanyStripRows(snap, { selectedGroup, companyI
   }
 
   if (selectedGroup) {
-    return dedupeOwnerCompaniesByCode(
-      companiesForCompanyPicker(list, selectedGroup, groupIds),
-      preferredId,
+    const nativeOnly = companiesForCompanyPicker(list, selectedGroup, groupIds).filter(
+      (c) => !isVirtualGroupLinkCompanyRow(c),
     );
+    return dedupeOwnerCompaniesByCode(nativeOnly, preferredId);
   }
 
   // No active group pill (default): show companies for the session company’s group (e.g. C168 / AP).

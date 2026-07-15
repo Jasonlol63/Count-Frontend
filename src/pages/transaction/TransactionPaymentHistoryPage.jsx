@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import TransactionHistoryTable from "./components/TransactionHistoryTable.jsx";
+import PaymentHistoryExportPdfModal from "./components/PaymentHistoryExportPdfModal.jsx";
 import { formatHistoryMoney, formatHistoryBalanceMoney } from "./lib/transactionFormat.js";
 import { getHistory, transactionQueryKeys } from "./lib/transactionApi.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
@@ -11,11 +12,15 @@ import {
   resolveHistoryAccountName,
   resolvePaymentHistoryScope,
   paymentHistoryScopeApiParams,
+  stripPaymentHistoryUrlQuery,
 } from "./lib/transactionPaymentHistoryUrl.js";
 import { TRANSACTION_SHOW_DESCRIPTION_COLUMN } from "./lib/transactionPaymentPageUtils.js";
 import "../../../public/css/transaction.css";
 import "../../../public/css/portal-tooltip.css";
+import "../../../public/css/date-range-picker.css";
+import "../../../public/css/report-outlined-fields.css";
 import "./transactionPaymentHistoryPage.css";
+import "./components/PaymentHistoryExportButton.css";
 import { useLoginLang } from "../../utils/i18n/useLoginLang.js";
 import { TRANSACTION_I18N } from "../../translateFile/pages/transactionTranslate.js";
 import { clearInlineScrollLock } from "../../utils/layout/clearInlineScrollLock.js";
@@ -45,12 +50,19 @@ export default function TransactionPaymentHistoryPage() {
     }, 150);
   }, [navigate]);
 
-  const { splitScreen, compactHeaders } = usePaymentHistoryLayoutMode();
+  const { isPopup, splitScreen, compactHeaders } = usePaymentHistoryLayoutMode();
+  const [exportPdfOpen, setExportPdfOpen] = useState(false);
+  const onOpenExportPdf = useCallback(() => setExportPdfOpen(true), []);
+  const onCloseExportPdf = useCallback(() => setExportPdfOpen(false), []);
 
   useLayoutEffect(() => {
+    stripPaymentHistoryUrlQuery();
     document.body.classList.add("dashboard-page", "transaction-page", "transaction-payment-history-page");
-    if (splitScreen) {
+    if (isPopup) {
       document.body.classList.add("transaction-payment-history-page--popup");
+    }
+    if (splitScreen) {
+      document.body.classList.add("transaction-payment-history-page--popup-compact");
     }
     clearInlineScrollLock();
     return () => {
@@ -58,10 +70,11 @@ export default function TransactionPaymentHistoryPage() {
         "transaction-page",
         "transaction-payment-history-page",
         "transaction-payment-history-page--popup",
+        "transaction-payment-history-page--popup-compact",
         "page-ready",
       );
     };
-  }, [splitScreen]);
+  }, [isPopup, splitScreen]);
 
   const initialTitle = useMemo(
     () =>
@@ -86,6 +99,7 @@ export default function TransactionPaymentHistoryPage() {
       currency: scope.currency,
       virtualCompanyCode: scope.virtualCompanyCode,
       subsidiaryAccountsOnly: scopeApi.subsidiaryAccountsOnly,
+      pureTypeSearch: scope.pureTypeSearch,
     }),
     queryFn: ({ signal }) =>
       getHistory({
@@ -95,6 +109,7 @@ export default function TransactionPaymentHistoryPage() {
         dateTo: scope.dateTo,
         currency: scope.currency,
         virtualCompanyCode: scope.virtualCompanyCode,
+        pureTypeSearch: scope.pureTypeSearch,
         signal,
       }),
     enabled: paymentHistoryParamsReady(scope),
@@ -141,21 +156,34 @@ export default function TransactionPaymentHistoryPage() {
         <div className="transaction-modal-content transaction-history-modal transaction-payment-history-panel">
           <div className="transaction-modal-header transaction-payment-history-header">
             <div className="transaction-payment-history-header__brand">
-              <div className="transaction-payment-history-header__icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M7 3h8l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"
-                    stroke="currentColor"
-                    strokeWidth="1.75"
-                    strokeLinejoin="round"
-                  />
-                  <path d="M15 3v5h5" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
-                  <path d="M9 12h6M9 16h6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-                </svg>
-              </div>
               <div className="transaction-payment-history-header__text">
                 <h3 id="modal_title">{title}</h3>
               </div>
+              <button
+                type="button"
+                className="transaction-payment-history-export-btn"
+                aria-label={m.exportPdf}
+                title={m.exportPdf}
+                onClick={onOpenExportPdf}
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path
+                    d="M12 3v10M8 9l4 4 4-4"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span className="transaction-payment-history-export-btn__label">PDF</span>
+              </button>
             </div>
             <button
               type="button"
@@ -190,6 +218,12 @@ export default function TransactionPaymentHistoryPage() {
           </div>
         </div>
       </div>
+      <PaymentHistoryExportPdfModal
+        open={exportPdfOpen}
+        onClose={onCloseExportPdf}
+        scope={scope}
+        accountTitle={title}
+      />
     </div>
   );
 }

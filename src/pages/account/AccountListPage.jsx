@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { notifyCompanySessionUpdated } from "../../utils/company/companySessionEvents.js";
 import { syncCompanySessionApi } from "../../utils/company/companySessionSync.js";
 import { pathnameIs, spaPath } from "../../utils/routing/pageRoutes.js";
+import { replaceBrowserPathOnly } from "../../utils/routing/privateBrowserUrl.js";
 import {
   applyTenantLedgerToParams,
   resolveModalLedgerScope,
@@ -55,52 +56,35 @@ import {
 } from "../../utils/company/useGcFilterWithAllModes.js";
 import GcInlineFilterPanel from "../../components/GcInlineFilterPanel.jsx";
 import { assetUrl, buildApiUrl } from "../../utils/core/apiUrl.js";
-import {
-  createCurrency as createTenantCurrency,
-  deleteCurrency as deleteTenantCurrency,
-  fetchAvailableCurrencies,
-  fetchLinkedAccountsByCurrency,
-  bulkUpdateAccountCurrency,
-} from "../../utils/api/currencyApi.js";
 import "../../../public/css/account-list.css";
 import "../../../public/css/accountCSS.css";
 import "../../../public/css/userlist.css";
+import "../../../public/css/list-badge-scale.css";
 
 // Logic & Constants..
 import {
   toUpper,
   normalizeAlertAmount,
   roleSortOrder,
-  PAGE_SIZE,
   DEFAULT_FORM,
   getAccountModalOrderedRoles,
   getOrderedRoles,
-  ACCOUNT_LEDGER_ROLES,
   normalizeCompanyRow,
   isVirtualGroupLinkCompanyRow,
   buildAccountsFetchKey,
+  buildAccountsUrl,
   buildGroupAccountsUrl,
-  fetchAccountsForCompany,
   fetchMergedAccounts,
   accountListHasMutationScope,
+  isCompanyInAccountListPicker,
   pickDefaultAddCurrencyIds,
   readAccountListGroupFilterOptOut,
   resolveAccountListGroupOnlyFetch,
   resolveAccountListInlinePickerCompanies,
   shouldLoadAccountListData,
+  formatAccountLastLoginDate,
+  formatAccountLastLoginTimeTitle,
 } from "./accountLogic.js";
-import {
-  buildAccountCreateRequest,
-  buildAccountUpdateRequest,
-  accountRowToEditForm,
-  resolveActiveScopeTenantId,
-  tenantIdToPickerCompanyIds,
-  createAccountUser,
-  deleteAccountUser,
-  toggleAccountUserStatus,
-  updateAccountUser,
-  filterAccountListRows,
-} from "./accountListApi.js";
 
 // Components
 import AccountModal from "../../components/AccountModal.jsx";
@@ -111,6 +95,9 @@ import {
   LinkAccountModal,
 } from "./components/accountModals.jsx";
 import {
+  formatAccountAlertDisplay,
+  formatAccountRoleDisplay,
+  formatAccountStatusDisplay,
   formatCurrencyUsageDetail,
   getAccountText,
   isHistoricalOnlyCurrencyDeleteBlock,
@@ -119,14 +106,11 @@ import {
 } from "../../translateFile/pages/accountTranslate.js";
 import { usePartnershipAuditReadOnlyLocked } from "../../utils/audit/partnershipAuditReadOnly.js";
 import { useAuthSession } from "../../context/AuthSessionContext.jsx";
+import { useAutoListPageSize } from "../../hooks/useAutoListPageSize.js";
+import { PAGE_SIZE_MAX, PAGE_SIZE_MIN } from "../../constants/listPageSize.js";
 
 function resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll) {
   return `${scopeKey}|${String(searchTerm || "").trim()}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
-}
-
-/** Unfiltered tenant rows — status/search toggles re-filter client-side (Spring company list). */
-function resolveAccountListRawCacheKey(scopeKey) {
-  return `raw:${scopeKey}`;
 }
 
 function accountRowVisibleAfterStatusChange(newStatus, { showInactive, showAll }) {
@@ -185,17 +169,14 @@ function readAccountListBootGc() {
   }
   const optOut = sessionStorage.getItem(DASHBOARD_GROUP_FILTER_OPT_OUT_KEY) === "1";
   const { selectedGroup, companyId, groupOnly } = readPersistedDashboardGcFilter();
-  if (groupOnly) {
+  if (groupOnly || isDashboardGroupOnlyMode()) {
     return { selectedGroup: optOut ? null : selectedGroup, companyId: null };
-  }
-  const saved = readDashboardSelectedCompanyId();
-  if (isDashboardGroupOnlyMode() && saved != null) {
-    return { selectedGroup: optOut ? null : selectedGroup, companyId: saved };
   }
   const urlCompanyId = readUrlCompanyId();
   if (urlCompanyId != null) {
     return { selectedGroup: optOut ? null : selectedGroup, companyId: urlCompanyId };
   }
+  const saved = readDashboardSelectedCompanyId();
   return {
     selectedGroup: optOut ? null : selectedGroup,
     companyId: saved ?? companyId,
@@ -224,8 +205,9 @@ export default function AccountListPage() {
   const [bootLoading, setBootLoading] = useState(true);
 
   // -- Data --
-  const [accountsRaw, setAccountsRaw] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [companies, setCompanies] = useState(() => initialCachedCompanies);
+  const [roles, setRoles] = useState([]);
   const [currencies, setCurrencies] = useState([]);
   const [companyId, setCompanyId] = useState(() => initialBootGc.companyId);
 
@@ -236,6 +218,7 @@ export default function AccountListPage() {
   const [sortColumn, setSortColumn] = useState("account");
   const [sortDirection, setSortDirection] = useState("asc");
   const [currentPage, setCurrentPage] = useState(1);
+  const listRegionRef = useRef(null);
   const [selectedGroup, setSelectedGroup] = useState(() => initialBootGc.selectedGroup);
   const [selectedDeleteIds, setSelectedDeleteIds] = useState(new Set());
 
@@ -295,14 +278,10 @@ export default function AccountListPage() {
   const onSwitchCompanyRef = useRef(null);
   const gcScopeRef = useRef({});
   const listFiltersRef = useRef({ showInactive: false, showAll: false, searchTerm: "" });
+  const listPaginationScopeRef = useRef("");
   const accountsLenRef = useRef(0);
   listFiltersRef.current = { showInactive, showAll, searchTerm };
-  const filteredAccounts = useMemo(
-    () => filterAccountListRows(accountsRaw, { searchTerm, showInactive, showAll }),
-    [accountsRaw, searchTerm, showInactive, showAll],
-  );
-
-  accountsLenRef.current = filteredAccounts.length;
+  accountsLenRef.current = accounts.length;
 
   const accountModalCurrencies = useMemo(() => {
     const hidden = new Set(hiddenCurrencyIds.map(Number));
@@ -340,7 +319,7 @@ export default function AccountListPage() {
     };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.body.classList.remove("bg");
     document.body.classList.add("account-page");
 
@@ -351,24 +330,15 @@ export default function AccountListPage() {
     };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (showAll) document.body.classList.add("account-page--show-all");
     else document.body.classList.remove("account-page--show-all");
     return () => document.body.classList.remove("account-page--show-all");
   }, [showAll]);
 
   const syncUrl = useCallback(() => {
-    const url = new URL(window.location.href);
-    if (companyId) url.searchParams.set("company_id", String(companyId));
-    else url.searchParams.delete("company_id");
-    if (searchTerm.trim()) url.searchParams.set("search", searchTerm.trim());
-    else url.searchParams.delete("search");
-    if (showInactive) url.searchParams.set("showInactive", "1");
-    else url.searchParams.delete("showInactive");
-    if (showAll) url.searchParams.set("showAll", "1");
-    else url.searchParams.delete("showAll");
-    window.history.replaceState({}, document.title, url.toString());
-  }, [companyId, searchTerm, showInactive, showAll]);
+    replaceBrowserPathOnly();
+  }, []);
 
   const resolveGroupOnlyFetch = useCallback((gcScope) => {
     const { companyId: cid, selectedGroup: sg, groupsAllMode: gAll, groupAllMode: cAll } =
@@ -403,39 +373,58 @@ export default function AccountListPage() {
     [searchTerm, showInactive, showAll, resolveGroupOnlyFetch],
   );
 
+  const resolveListPaginationScopeKey = useCallback(
+    (gcScope) => {
+      if (!gcScope) return "";
+      return resolveAccountsListFetchScopeKey({
+        companyId: gcScope.companyId,
+        selectedGroup: gcScope.selectedGroup,
+        groupsAllMode: gcScope.groupsAllMode,
+        groupAllMode: gcScope.groupAllMode,
+        isListScopeReady: gcScope.isListScopeReady ?? true,
+        groupOnlyMode: resolveGroupOnlyFetch(gcScope),
+      });
+    },
+    [resolveGroupOnlyFetch],
+  );
+
+  const resetAccountListPagination = useCallback(() => {
+    setCurrentPage(1);
+    setSelectedDeleteIds(new Set());
+  }, []);
+
+  const resetPaginationForGcScope = useCallback(
+    (gcScope, { force = false } = {}) => {
+      const scopeKey = resolveListPaginationScopeKey(gcScope);
+      if (!scopeKey) return false;
+      if (!force && scopeKey === listPaginationScopeRef.current) return false;
+      listPaginationScopeRef.current = scopeKey;
+      resetAccountListPagination();
+      return true;
+    },
+    [resolveListPaginationScopeKey, resetAccountListPagination],
+  );
+
   const applyAccountListResult = useCallback(
     (cacheKey, nextAccounts, { silent = false, gcScope = null } = {}) => {
       accountListCacheRef.current.set(cacheKey, nextAccounts);
-      if (gcScope) {
-        const {
-          companyId: cid,
-          selectedGroup: sg,
-          groupsAllMode: gAll,
-          groupAllMode: cAll,
-        } = gcScope;
-        const useGroupOnly = resolveGroupOnlyFetch(gcScope);
-        const scopeKey = resolveAccountScopeKey({
-          companyId: cid,
-          selectedGroup: sg,
-          groupOnly: useGroupOnly,
-        });
-        if (cid != null && Number(cid) > 0) {
-          accountListCacheRef.current.set(resolveAccountListRawCacheKey(scopeKey), nextAccounts);
-        }
-      }
-      setAccountsRaw((prev) => {
+      setAccounts((prev) => {
         if (silent && accountRowsFingerprint(prev) === accountRowsFingerprint(nextAccounts)) {
           return prev;
         }
         return nextAccounts;
       });
       if (!silent) {
-        setSelectedDeleteIds(new Set());
-        setCurrentPage(1);
+        if (gcScope) {
+          listPaginationScopeRef.current = resolveListPaginationScopeKey(gcScope);
+        }
+        resetAccountListPagination();
+      } else if (gcScope) {
+        resetPaginationForGcScope(gcScope);
       }
       if (gcScope) markAccountsFetchKeyApplied(gcScope);
     },
-    [markAccountsFetchKeyApplied, resolveGroupOnlyFetch],
+    [markAccountsFetchKeyApplied, resetAccountListPagination, resetPaginationForGcScope, resolveListPaginationScopeKey],
   );
 
   const matchesLiveListFilters = useCallback((requested) => {
@@ -501,11 +490,14 @@ export default function AccountListPage() {
       const loadPromise = (async () => {
         let nextAccounts = [];
         if (cid) {
-          const json = await fetchAccountsForCompany(cid, {
-            searchTerm,
-            signal: ac.signal,
-            allStatuses: true,
+          const listUrl = buildAccountsUrl(cid, searchTerm, showInactive, showAll, {
+            groupId: sg || null,
           });
+          const res = await fetch(listUrl.toString(), {
+            credentials: "include",
+            signal: ac.signal,
+          });
+          const json = await res.json();
           if (!json.success) {
             throw new Error(json.message || "failedToLoadAccounts");
           }
@@ -579,17 +571,10 @@ export default function AccountListPage() {
         selectedGroup: sg,
         groupOnly: useGroupOnly,
       });
-      const rawCached = accountListCacheRef.current.get(resolveAccountListRawCacheKey(scopeKey));
-      if (rawCached) {
-        setAccountsRaw((prev) =>
-          accountRowsFingerprint(prev) === accountRowsFingerprint(rawCached) ? prev : rawCached,
-        );
-        return true;
-      }
       const cacheKey = resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll);
       const cached = accountListCacheRef.current.get(cacheKey);
       if (!cached) return false;
-      setAccountsRaw((prev) =>
+      setAccounts((prev) =>
         accountRowsFingerprint(prev) === accountRowsFingerprint(cached) ? prev : cached,
       );
       return true;
@@ -601,7 +586,7 @@ export default function AccountListPage() {
     (gcScope, options = {}) => {
       const hit = applyAccountListCache(gcScope, options);
       if (!hit && options.clearOnMiss) {
-        setAccountsRaw([]);
+        setAccounts([]);
       }
       return hit;
     },
@@ -610,6 +595,7 @@ export default function AccountListPage() {
 
   const applySwitchListPreview = useCallback(
     (gcScope, { groupOnly = null } = {}) => {
+      resetPaginationForGcScope(gcScope, { force: true });
       const { companyId: cid, selectedGroup: sg } = gcScope || {};
       const useGroupOnly = groupOnly ?? resolveGroupOnlyFetch(gcScope);
       const scopeKey = resolveAccountScopeKey({
@@ -627,17 +613,14 @@ export default function AccountListPage() {
       });
       if (Array.isArray(routeWarm) && routeWarm.length > 0) {
         accountListCacheRef.current.set(listCacheKey, routeWarm);
-        if (cid != null && Number(cid) > 0) {
-          accountListCacheRef.current.set(resolveAccountListRawCacheKey(scopeKey), routeWarm);
-        }
-        setAccountsRaw((prev) =>
+        setAccounts((prev) =>
           accountRowsFingerprint(prev) === accountRowsFingerprint(routeWarm) ? prev : routeWarm,
         );
         return true;
       }
       return applyAccountListCache(gcScope, { groupOnly: useGroupOnly });
     },
-    [applyAccountListCache, resolveGroupOnlyFetch, searchTerm, showInactive, showAll],
+    [applyAccountListCache, resolveGroupOnlyFetch, resetPaginationForGcScope, searchTerm, showInactive, showAll],
   );
 
   const invalidateAccountListCacheForScope = useCallback(
@@ -655,10 +638,37 @@ export default function AccountListPage() {
     [searchTerm, showInactive, showAll, resolveGroupOnlyFetch],
   );
 
-  const accountLedgerRoles = useMemo(() => getOrderedRoles(ACCOUNT_LEDGER_ROLES), []);
+  const loadRoles = useCallback(async ({ companyId: cid = null, groupId = null } = {}) => {
+    try {
+      const url = new URL(buildApiUrl("api/editdata/editdata_api.php"));
+      const gid = (groupId ?? selectedGroup)
+        ? String(groupId ?? selectedGroup).trim().toUpperCase()
+        : null;
+      const numericCid =
+        cid != null ? Number(cid) : companyId != null ? Number(companyId) : null;
+      const groupOnlyFetch = Boolean(
+        gid && (!Number.isFinite(numericCid) || numericCid <= 0),
+      );
+      if (gid) url.searchParams.set("group_id", gid);
+      if (groupOnlyFetch) {
+        url.searchParams.set("group_only", "1");
+      } else if (Number.isFinite(numericCid) && numericCid > 0) {
+        url.searchParams.set("company_id", String(numericCid));
+      }
+      const res = await fetch(url.toString(), { credentials: "include" });
+      const json = await res.json();
+      if (json?.success && Array.isArray(json?.data?.roles)) {
+        setRoles(json.data.roles);
+      }
+    } catch {
+      /* roles are optional for list; modal refetch on open */
+    }
+  }, [companyId, selectedGroup, sessionMe]);
 
   const fetchAccountsRef = useRef(fetchAccounts);
   fetchAccountsRef.current = fetchAccounts;
+  const loadRolesRef = useRef(loadRoles);
+  loadRolesRef.current = loadRoles;
 
   /** Refetch list after add/edit/delete — must pass gc scope (bare fetchAccounts() is a no-op). */
   const refreshAccountList = useCallback(
@@ -686,7 +696,7 @@ export default function AccountListPage() {
 
     (async () => {
       try {
-        const rows = (await fetchOwnerCompaniesAll()).map(normalizeCompanyRow);
+        const rows = (await fetchOwnerCompaniesAll({ me: sessionMe })).map(normalizeCompanyRow);
         if (cancelled) return;
 
         setCompanies((prev) => {
@@ -701,11 +711,7 @@ export default function AccountListPage() {
         const urlCompanySnapshot = readUrlCompanyId();
         applyLoginScopeToSessionStorageIfNeeded(sessionMe, rows);
         if (urlCompanySnapshot != null) {
-          const restored = new URL(window.location.href);
-          if (restored.searchParams.get("company_id") !== String(urlCompanySnapshot)) {
-            restored.searchParams.set("company_id", String(urlCompanySnapshot));
-            window.history.replaceState({}, document.title, restored.toString());
-          }
+          replaceBrowserPathOnly();
         }
 
         const url = new URL(window.location.href);
@@ -716,11 +722,9 @@ export default function AccountListPage() {
         const persistedGc = readPersistedDashboardGcFilter();
         const savedCompanyId = readDashboardSelectedCompanyId();
         let initialCompanyId = persistedGc.groupOnly ? null : (persistedGc.companyId ?? savedCompanyId);
-        if (persistedGc.groupOnly) {
+        if (persistedGc.groupOnly || isDashboardGroupOnlyMode()) {
           initialCompanyId = null;
           stripCompanyIdFromUrl();
-        } else if (isDashboardGroupOnlyMode()) {
-          persistDashboardGroupOnlyMode(false);
         } else if (hasExplicitUrlCompany) {
           initialCompanyId = urlCompanyNum;
           persistDashboardGroupOnlyMode(false);
@@ -786,7 +790,7 @@ export default function AccountListPage() {
           bootGroup = null;
         }
 
-        let groupOnlyBoot =
+        const groupOnlyBoot =
           initialCompanyId == null &&
           Boolean(bootGroup) &&
           (persistedGc.groupOnly ||
@@ -795,26 +799,18 @@ export default function AccountListPage() {
         let resolvedCompanyId = groupOnlyBoot ? null : initialCompanyId;
 
         const bootGroupIds = sortedUniqueGroupIds(rows);
-
-        if (bootGroup && (resolvedCompanyId == null || groupOnlyBoot)) {
-          const pick = pickDefaultCompanyForGroup(rows, bootGroup, {
-            me: sessionMe,
-            preferredCompanyId: resolvedCompanyId ?? savedCompanyId ?? sessionMe?.company_id,
-            nativeOnly: false,
-          });
-          if (pick?.id != null) {
-            resolvedCompanyId = Number(pick.id);
-            groupOnlyBoot = false;
-            persistDashboardGroupOnlyMode(false);
-          }
-        }
-
         if (
           !groupOnlyBoot &&
           resolvedCompanyId != null &&
-          bootGroup &&
-          !companiesInGroupList(rows, bootGroup).some(
-            (c) => Number(c.id) === Number(resolvedCompanyId),
+          !isCompanyInAccountListPicker(
+            {
+              companies: rows,
+              groupIds: bootGroupIds,
+              selectedGroup: bootGroup,
+              preferredCompanyId: resolvedCompanyId,
+              groupFilterOptOut,
+            },
+            resolvedCompanyId,
           )
         ) {
           resolvedCompanyId = null;
@@ -849,6 +845,7 @@ export default function AccountListPage() {
         setShowInactive(initialShowInactive);
         setShowAll(initialShowAll);
         skipInitialGcSyncRef.current = true;
+        void loadRolesRef.current({ companyId: resolvedCompanyId, groupId: bootGroup });
 
         const syncCompanyId =
           resolvedCompanyId != null && Number.isFinite(Number(resolvedCompanyId))
@@ -921,7 +918,7 @@ export default function AccountListPage() {
 
         if (Array.isArray(warmed) && warmed.length > 0 && listCacheKey && fetchKey) {
           accountListCacheRef.current.set(listCacheKey, warmed);
-          setAccountsRaw(warmed);
+          setAccounts(warmed);
           bootFetchedAccountsKeyRef.current = fetchKey;
         } else if (scopeKey && fetchKey) {
           bootFetchedAccountsKeyRef.current = fetchKey;
@@ -931,14 +928,12 @@ export default function AccountListPage() {
             trustRequestScope: true,
           });
         } else {
-          setAccountsRaw([]);
+          setAccounts([]);
         }
 
         if (cancelled) return;
         if (resolvedCompanyId != null && shouldLoadList) {
-          const urlNow = new URL(window.location.href);
-          urlNow.searchParams.set("company_id", String(resolvedCompanyId));
-          window.history.replaceState({}, document.title, urlNow.toString());
+          replaceBrowserPathOnly();
         }
       } catch {
         if (!cancelled) navigate(spaPath("login"));
@@ -990,6 +985,15 @@ export default function AccountListPage() {
       skipCompanyFetchEffectRef.current = true;
       flushSync(() => {
         setCompanyId(id);
+        resetPaginationForGcScope({
+          companyId: id,
+          selectedGroup: scope?.selectedGroup ?? selectedGroup,
+          groupsAllMode: false,
+          groupAllMode: false,
+          mergeCompanyIds: scope?.mergeCompanyIds ?? [],
+          groupIds: scope?.groupIds ?? [],
+          isListScopeReady: true,
+        }, { force: true });
         applyCacheOrClearAccounts({
           companyId: id,
           selectedGroup: scope?.selectedGroup ?? selectedGroup,
@@ -1156,6 +1160,7 @@ export default function AccountListPage() {
         setGroupAllMode(false);
         setSelectedGroup(g);
         setCompanyId(null);
+        resetPaginationForGcScope(gcScope, { force: true });
         applySwitchListPreview(gcScope, { groupOnly: true });
       });
 
@@ -1169,6 +1174,7 @@ export default function AccountListPage() {
       groupIds,
       invalidateAccountListCacheForScope,
       mergeCompanyIds,
+      resetPaginationForGcScope,
       selectedGroup,
       setGroupAllMode,
       setGroupsAllMode,
@@ -1201,18 +1207,13 @@ export default function AccountListPage() {
     ) {
       return;
     }
+    if (!isCompanyLogin(sessionMe)) return;
     if (!selectedGroup || companyId != null) return;
 
-    const pick = isCompanyLogin(sessionMe)
-      ? pickDefaultSubsidiaryForGroup(companies, selectedGroup, {
-          me: sessionMe,
-          preferredCompanyId: sessionMe?.company_id ?? companyId,
-        })
-      : pickDefaultCompanyForGroup(companies, selectedGroup, {
-          me: sessionMe,
-          preferredCompanyId: readDashboardSelectedCompanyId() ?? sessionMe?.company_id ?? companyId,
-          nativeOnly: false,
-        });
+    const pick = pickDefaultSubsidiaryForGroup(companies, selectedGroup, {
+      me: sessionMe,
+      preferredCompanyId: sessionMe?.company_id ?? companyId,
+    });
     if (!pick?.id) return;
 
     const nextId = Number(pick.id);
@@ -1280,7 +1281,7 @@ export default function AccountListPage() {
       if (nextCompanyId != null) {
         applySwitchListPreview(independentScope, { groupOnly: false });
       } else {
-        setAccountsRaw([]);
+        setAccounts([]);
       }
     });
 
@@ -1354,6 +1355,18 @@ export default function AccountListPage() {
         setGroupAllMode(false);
         setSelectedGroup(g);
         setCompanyId(nextCompanyId);
+        resetPaginationForGcScope(
+          {
+            companyId: nextCompanyId,
+            selectedGroup: g,
+            groupsAllMode: false,
+            groupAllMode: false,
+            mergeCompanyIds,
+            groupIds,
+            isListScopeReady: true,
+          },
+          { force: true },
+        );
         applyCacheOrClearAccounts({
           companyId: nextCompanyId,
           selectedGroup: g,
@@ -1367,9 +1380,7 @@ export default function AccountListPage() {
       persistDashboardGroupFilter(g);
       persistDashboardGroupOnlyMode(false);
       persistDashboardFilterState(g, nextCompanyId, { allowGroupOnly: false });
-      const url = new URL(window.location.href);
-      url.searchParams.set("company_id", String(nextCompanyId));
-      window.history.replaceState({}, document.title, url.toString());
+      replaceBrowserPathOnly();
       void (async () => {
         try {
           await onSwitchCompanyRef.current?.(pick, { viewGroup: g });
@@ -1387,6 +1398,7 @@ export default function AccountListPage() {
       deselectGroupKeepCompany,
       groupIds,
       mergeCompanyIds,
+      resetPaginationForGcScope,
       sessionMe,
       selectedGroup,
       setGroupAllMode,
@@ -1449,15 +1461,14 @@ export default function AccountListPage() {
         if (nextGroup) setSelectedGroup(nextGroup);
         setCompanyId(nextCompanyId);
         gcScopeRef.current = fetchScope;
+        resetPaginationForGcScope(fetchScope, { force: true });
         bootFetchedAccountsKeyRef.current = null;
         if (!applySwitchListPreview(fetchScope)) {
-          setAccountsRaw([]);
+          setAccounts([]);
         }
       });
 
-      const url = new URL(window.location.href);
-      url.searchParams.set("company_id", String(nextCompanyId));
-      window.history.replaceState({}, document.title, url.toString());
+      replaceBrowserPathOnly();
 
       if (nextGroup) persistDashboardGroupFilter(nextGroup);
       else if (effectiveGroup) persistDashboardGroupFilter(effectiveGroup);
@@ -1479,6 +1490,7 @@ export default function AccountListPage() {
       companyId,
       groupIds,
       mergeCompanyIds,
+      resetPaginationForGcScope,
       selectedGroup,
       setGroupAllMode,
       setGroupsAllMode,
@@ -1664,30 +1676,53 @@ export default function AccountListPage() {
             groupsAllMode,
             groupAllMode,
             isListScopeReady,
-            groupOnlyMode: resolveAccountListGroupOnlyFetch(
-              selectedGroup,
-              companyId,
-              groupsAllMode,
-              groupAllMode,
-            ),
+            groupOnlyMode: isDashboardGroupOnlyMode(),
           }),
     [bootLoading, isListScopeReady, groupsAllMode, groupAllMode, companyId, selectedGroup],
   );
 
+  useLayoutEffect(() => {
+    if (bootLoading) return;
+    const filterKey = `${String(searchTerm || "").trim()}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
+    const combined = `${accountsListFetchScopeKey}|${filterKey}`;
+    if (!accountsListFetchScopeKey) return;
+    if (combined === listPaginationScopeRef.current) return;
+    listPaginationScopeRef.current = combined;
+    resetAccountListPagination();
+  }, [
+    bootLoading,
+    accountsListFetchScopeKey,
+    searchTerm,
+    showInactive,
+    showAll,
+    resetAccountListPagination,
+  ]);
+
   useEffect(() => {
     if (bootLoading || groupsAllMode || groupAllMode) return;
     if (companyId == null) return;
-    if (!companies.length) return;
-    const tid = resolveActiveScopeTenantId({ companyId });
-    if (!tid) return;
-    const known = companies.some((c) => Number(c.id) === Number(tid));
-    if (known) return;
+    if (isDashboardGroupOnlyMode()) return;
+    if (
+      isCompanyInAccountListPicker(
+        {
+          companies,
+          groupIds,
+          selectedGroup,
+          preferredCompanyId: companyId,
+          companiesForPickerFromHook: companiesForPicker,
+          groupFilterOptOut: readAccountListGroupFilterOptOut(),
+        },
+        companyId,
+      )
+    ) {
+      return;
+    }
     bumpGcFilterSwitchGen();
     skipCompanyFetchEffectRef.current = true;
     listFetchAbortRef.current?.abort();
     flushSync(() => {
       setCompanyId(null);
-      setAccountsRaw([]);
+      setAccounts([]);
     });
     stripCompanyIdFromUrl();
     persistDashboardSelectedCompany(null);
@@ -1697,6 +1732,7 @@ export default function AccountListPage() {
     bumpGcFilterSwitchGen,
     companyId,
     companies,
+    companiesForPicker,
     groupIds,
     groupsAllMode,
     groupAllMode,
@@ -1708,7 +1744,7 @@ export default function AccountListPage() {
     if (accountsListFetchScopeKey) return;
     if (!isListScopeReady) return;
     listFetchAbortRef.current?.abort();
-    setAccountsRaw([]);
+    setAccounts([]);
     lastAccountsFetchKeyRef.current = "";
   }, [bootLoading, accountsListFetchScopeKey, isListScopeReady]);
 
@@ -1745,12 +1781,10 @@ export default function AccountListPage() {
     postBootEmptyRetryRef.current = false;
     const scope = gcScopeRef.current;
     const cacheHit = applyAccountListCache(scope);
-    const scopeChanged =
-      Boolean(lastAccountsFetchKeyRef.current) && lastAccountsFetchKeyRef.current !== fetchKey;
-    if (!cacheHit && scopeChanged) {
-      setAccountsRaw([]);
+    if (!cacheHit) {
+      setAccounts([]);
     }
-    void fetchAccounts(scope, { silent: true, trustRequestScope: true });
+    void fetchAccounts(scope, { silent: true });
     const settleRetryTimer = window.setTimeout(() => {
       if (!matchesLiveListFilters({ showInactive, showAll, searchTerm })) return;
       if (accountsLenRef.current > 0) return;
@@ -1772,22 +1806,22 @@ export default function AccountListPage() {
       postBootEmptyRetryRef.current = false;
       return;
     }
-    if (postBootEmptyRetryRef.current || !companyId || filteredAccounts.length > 0) return;
+    if (postBootEmptyRetryRef.current || !companyId || accounts.length > 0) return;
     const scope = gcScopeRef.current;
     if (!scope?.isListScopeReady || Number(scope.companyId) !== Number(companyId)) return;
     postBootEmptyRetryRef.current = true;
     lastAccountsFetchKeyRef.current = "";
     void fetchAccounts(scope, { silent: true, trustRequestScope: true });
-  }, [bootLoading, companyId, filteredAccounts.length, fetchAccounts]);
+  }, [bootLoading, companyId, accounts.length, fetchAccounts]);
 
   // -- Computed --
   const sortedAccounts = useMemo(() => {
-    const arr = [...filteredAccounts];
+    const arr = [...accounts];
     arr.sort((a, b) => {
       let base = 0;
       if (sortColumn === "role") {
-        const ao = roleSortOrder(a.role, accountLedgerRoles);
-        const bo = roleSortOrder(b.role, accountLedgerRoles);
+        const ao = roleSortOrder(a.role, roles);
+        const bo = roleSortOrder(b.role, roles);
         base = ao - bo;
       } else if (sortColumn === "alert") {
         base = Number(a.payment_alert || 0) - Number(b.payment_alert || 0);
@@ -1808,12 +1842,15 @@ export default function AccountListPage() {
       return sortDirection === "asc" ? base : -base;
     });
     return arr;
-  }, [filteredAccounts, sortColumn, sortDirection, accountLedgerRoles]);
+  }, [accounts, sortColumn, sortDirection, roles]);
 
   const orderedRoles = useMemo(() => {
-    const extra = form.role && String(form.role).trim() ? [String(form.role).trim()] : [];
-    return getAccountModalOrderedRoles(extra);
-  }, [form.role]);
+    const merged = [...(roles || [])];
+    if (form.role && String(form.role).trim()) {
+      merged.push(String(form.role).trim());
+    }
+    return getAccountModalOrderedRoles(merged);
+  }, [roles, form.role]);
 
   const filteredForMode = useMemo(() => {
     return sortedAccounts;
@@ -1821,12 +1858,49 @@ export default function AccountListPage() {
 
   const accountMutationsBlocked = usePartnershipAuditReadOnlyLocked(sessionMe);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredForMode.length / PAGE_SIZE)), [filteredForMode]);
+  const pageSize = useAutoListPageSize({
+    listRegionRef,
+    enabled: !showAll,
+    rowSelector: ".account-list-row",
+    headerSelector: ".account-list-table-header",
+    paginationSelector: ".account-pagination-container",
+    minRows: PAGE_SIZE_MIN,
+    maxRows: PAGE_SIZE_MAX,
+    stableRowHeight: true,
+    remeasureDeps: [
+      filteredForMode.length,
+      showAll,
+      showInactive,
+      searchTerm,
+      lang,
+      currentPage,
+      bootLoading,
+      companyId,
+      selectedGroup,
+      groupAllMode,
+      groupsAllMode,
+    ],
+  });
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredForMode.length / pageSize)),
+    [filteredForMode.length, pageSize],
+  );
+  const effectivePage = useMemo(
+    () => Math.min(Math.max(1, currentPage), totalPages),
+    [currentPage, totalPages],
+  );
+
+  useEffect(() => {
+    if (showAll) return;
+    setCurrentPage((p) => Math.min(p, totalPages));
+  }, [showAll, totalPages, pageSize]);
+
   const pageRows = useMemo(() => {
     if (showAll) return filteredForMode;
-    const p = Math.min(currentPage, totalPages);
-    return filteredForMode.slice((p - 1) * PAGE_SIZE, p * PAGE_SIZE);
-  }, [filteredForMode, showAll, currentPage, totalPages]);
+    return filteredForMode.slice((effectivePage - 1) * pageSize, effectivePage * pageSize);
+  }, [filteredForMode, showAll, effectivePage, pageSize]);
+  const usePagedFill = !showAll && pageRows.length > 0 && pageRows.length >= pageSize;
 
   /** React scope (instant on pill click) — do not wait for sessionStorage group-only flag. */
   const isGroupOnlyScope = useMemo(
@@ -1850,14 +1924,24 @@ export default function AccountListPage() {
     () => (groupOnlyAccountMode ? groupPickerCompanies : allCompanyButtons),
     [groupOnlyAccountMode, groupPickerCompanies, allCompanyButtons]
   );
-  const activeScopeTenantId = useMemo(
-    () => resolveActiveScopeTenantId({ companyId }),
-    [companyId],
-  );
+  const scopeCompanyId = useMemo(() => {
+    if (companyId) return Number(companyId);
+    if (!groupOnlyAccountMode || !selectedGroup) return null;
+    const groupCode = String(selectedGroup).trim().toUpperCase();
+    const entity = allCompanyButtons.find(
+      (c) => String(c.company_id || "").trim().toUpperCase() === groupCode
+    );
+    return entity?.id ? Number(entity.id) : null;
+  }, [companyId, groupOnlyAccountMode, selectedGroup, allCompanyButtons]);
 
   const hasAccountMutationScope = useMemo(
-    () => accountListHasMutationScope(activeScopeTenantId),
-    [activeScopeTenantId],
+    () =>
+      accountListHasMutationScope(scopeCompanyId, {
+        groupOnly: groupOnlyAccountMode,
+        selectedGroup,
+        canUseGroupLedger: canUseGroupOnlyMode(sessionMe, selectedGroup, companies),
+      }),
+    [scopeCompanyId, groupOnlyAccountMode, selectedGroup, sessionMe, companies],
   );
 
   useEffect(() => {
@@ -1876,7 +1960,7 @@ export default function AccountListPage() {
       const json = await res.json();
       if (json.success) {
         const next = json.data?.newPaymentAlert ?? json.newPaymentAlert;
-        setAccountsRaw(prev => prev.map(a => Number(a.id) === Number(id) ? { ...a, payment_alert: next } : a));
+        setAccounts(prev => prev.map(a => Number(a.id) === Number(id) ? { ...a, payment_alert: next } : a));
       }
     } catch { notify(t("toggleFailed"), "danger"); }
   };
@@ -1887,18 +1971,19 @@ export default function AccountListPage() {
       return;
     }
     try {
-      const row = accountsRaw.find((a) => Number(a.id) === Number(id));
-      const scopeTenantId = resolveActiveScopeTenantId({
-        companyId,
-        scopeTenantId: row?.scope_tenant_id,
-      });
-      if (!scopeTenantId) return notify(t("toggleFailed"), "danger");
-      const updated = await toggleAccountUserStatus({ id, scopeTenantId });
-      const next = updated?.status;
-      if (next) {
-        setAccountsRaw((prev) =>
-          prev.map((a) => (Number(a.id) === Number(id) ? { ...a, status: next } : a)),
-        );
+      const fd = new FormData(); fd.append("id", id);
+      appendAccountScopeParams(fd);
+      const res = await fetch(buildApiUrl("api/accounts/toggle_account_status_api.php"), { method: "POST", body: fd, credentials: "include" });
+      const json = await res.json();
+      if (json.success) {
+        const next = json.newStatus || json.data?.newStatus;
+        setAccounts((prev) => {
+          const updated = prev.map((a) => (Number(a.id) === Number(id) ? { ...a, status: next } : a));
+          const visible = updated.filter((a) =>
+            accountRowVisibleAfterStatusChange(a.status, { showInactive, showAll }),
+          );
+          return visible;
+        });
         lastAccountsFetchKeyRef.current = "";
         refreshAccountList({ silent: true });
       }
@@ -1925,6 +2010,18 @@ export default function AccountListPage() {
 
   const appendCurrencyScopeParams = appendAccountScopeParams;
 
+  const buildCurrencyScopePayload = useCallback((ledgerScope) => {
+    const payload = {};
+    const scope = ledgerScope ?? pageLedgerScope;
+    if (scope.groupId) payload.group_id = scope.groupId;
+    if (scope.ledger === "group") {
+      payload.group_only = true;
+    } else if (scope.companyId) {
+      payload.company_id = scope.companyId;
+    }
+    return payload;
+  }, [pageLedgerScope]);
+
   const appendModalCurrencyScopeParams = useCallback(
     (params, scopeOverride = undefined) => {
       const modalScope =
@@ -1942,36 +2039,34 @@ export default function AccountListPage() {
     return resolveModalLedgerScope(pageLedgerScope, modal);
   }, [pageLedgerScope, modalLedgerScope]);
 
-  const applyModalCompanyFromTenant = useCallback(
-    (tenantId, { groupOnly = false } = {}) => {
-      if (groupOnly && selectedGroup) {
-        const defaultGroupEntity =
-          groupPickerCompanies.find(
-            (c) => String(c.group_id || c.company_id || "") === String(selectedGroup || ""),
-          ) ||
-          groupPickerCompanies[0] ||
-          null;
-        setSelectedCompanyIds(defaultGroupEntity?.id ? [String(defaultGroupEntity.id)] : []);
-        return;
-      }
-      setSelectedCompanyIds(tenantIdToPickerCompanyIds(tenantId));
-    },
-    [groupPickerCompanies, selectedGroup],
-  );
-
   const loadSelectionMeta = async (
     id,
     isEdit,
-    { selectCode = null } = {},
+    { selectCode = null, ledgerScope = undefined, forcePageLedgerScope = false } = {},
   ) => {
+    const scopeForRequest = forcePageLedgerScope
+      ? undefined
+      : ledgerScope !== undefined
+        ? ledgerScope
+        : modalLedgerScopeRef.current ?? modalLedgerScope;
     try {
-      const [curRows] = await Promise.all([
-        fetchAvailableCurrencies({
-          tenantId: activeScopeTenantId,
-          accountId: id || null,
-        }),
+      const currencyParams = new URLSearchParams({ action: "get_available_currencies" });
+      if (id) currencyParams.set("account_id", String(id));
+      if (forcePageLedgerScope) {
+        applyTenantLedgerToParams(currencyParams, pageLedgerScope);
+      } else {
+        appendModalCurrencyScopeParams(currencyParams, scopeForRequest);
+      }
+      const [curRes, compRes] = await Promise.all([
+        fetch(buildApiUrl(`api/accounts/account_currency_api.php?${currencyParams.toString()}`), { credentials: "include" }),
+        fetch(buildApiUrl(`api/accounts/account_company_api.php?action=get_available_companies${id ? `&account_id=${id}` : ""}`), { credentials: "include" }),
       ]);
-      const rows = curRows.map((c) => ({
+      const curJ = await curRes.json(); const compJ = await compRes.json();
+      if (!curJ.success) {
+        notifyApi(curJ.message, "loadLinksFailed", "danger");
+        return;
+      }
+      const rows = curJ.data.map((c) => ({
         id: c.id,
         code: c.code,
         is_linked: !!c.is_linked,
@@ -1982,7 +2077,7 @@ export default function AccountListPage() {
       const wantCode = selectCode ? toUpper(String(selectCode)).trim() : "";
       const matched = wantCode ? rows.find((c) => toUpper(c.code).trim() === wantCode) : null;
       if (isEdit) {
-        const ids = curRows.filter((c) => c.is_linked).map((c) => Number(c.id));
+        const ids = curJ.data.filter((c) => c.is_linked).map((c) => Number(c.id));
         const base = matched ? [...new Set([...ids, Number(matched.id)])] : ids;
         setSelectedCurrencyIds(base);
         setInitialEditCurrencyIds(ids);
@@ -1991,16 +2086,20 @@ export default function AccountListPage() {
           prev.map(Number).includes(Number(matched.id)) ? prev : [...prev, Number(matched.id)],
         );
       } else {
-        setSelectedCurrencyIds(pickDefaultAddCurrencyIds(curRows));
+        setSelectedCurrencyIds(pickDefaultAddCurrencyIds(curJ.data));
       }
-      const rowTenant =
-        id != null
-          ? accountsRaw.find((a) => Number(a.id) === Number(id))?.scope_tenant_id
-          : null;
-      applyModalCompanyFromTenant(
-        resolveActiveScopeTenantId({ companyId, scopeTenantId: rowTenant }),
-        { groupOnly: groupOnlyAccountMode },
-      );
+      if (compJ.success) {
+        const linked = compJ.data.filter(c => c.is_linked).map(c => Number(c.id));
+        if (groupOnlyAccountMode) {
+          const defaultGroupEntity =
+            groupPickerCompanies.find((c) => String(c.group_id || c.company_id || "") === String(selectedGroup || "")) ||
+            groupPickerCompanies[0] ||
+            null;
+          setSelectedCompanyIds(defaultGroupEntity?.id ? [String(defaultGroupEntity.id)] : []);
+        } else {
+          setSelectedCompanyIds(linked.length ? linked : companyId ? [Number(companyId)] : []);
+        }
+      }
     } catch { /* silent */ }
   };
 
@@ -2016,7 +2115,10 @@ export default function AccountListPage() {
     setHiddenCurrencyIds([]);
     syncModalLedgerScope(null);
     setAddModalOpen(true);
-    applyModalCompanyFromTenant(activeScopeTenantId, { groupOnly: groupOnlyAccountMode });
+    if (!groupOnlyAccountMode && companyId) {
+      setSelectedCompanyIds([String(companyId)]);
+    }
+    void loadRoles({ companyId, groupId: selectedGroup });
     loadSelectionMeta(null, false);
   };
 
@@ -2028,7 +2130,7 @@ export default function AccountListPage() {
     if (!hasAccountMutationScope) return;
     syncModalLedgerScope(null);
     setCurrencySettingOpen(true);
-    void loadSelectionMeta(null, false);
+    void loadSelectionMeta(null, false, { forcePageLedgerScope: true });
     if (settingCurrencyId) void loadCurrencyLinks(settingCurrencyId);
   };
 
@@ -2043,38 +2145,39 @@ export default function AccountListPage() {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
-    const row = accountsRaw.find((a) => Number(a.id) === Number(id));
-    if (!row) {
-      notify(t("errorLoadingAccount"), "danger");
-      return;
-    }
-    const editForm = accountRowToEditForm(row);
-    if (!editForm) {
-      notify(t("errorLoadingAccount"), "danger");
-      return;
-    }
-    setIsEditMode(true);
-    setHiddenCurrencyIds([]);
-    const ledgerGroupCode = groupOnlyAccountMode
-      ? String(selectedGroup || "").trim().toUpperCase()
-      : "";
-    syncModalLedgerScope(
-      ledgerGroupCode ? { mode: "group", group_code: ledgerGroupCode } : null,
-    );
-    setForm({
-      ...editForm,
-      account_id: toUpper(editForm.account_id),
-      name: toUpper(editForm.name),
-      remark: toUpper(editForm.remark),
-    });
-    setInitialEditCurrencyIds([]);
-    setSelectedCurrencyIds([]);
-    applyModalCompanyFromTenant(
-      resolveActiveScopeTenantId({ companyId, scopeTenantId: editForm.scope_tenant_id }),
-      { groupOnly: groupOnlyAccountMode },
-    );
-    setEditModalOpen(true);
-    void loadSelectionMeta(id, true);
+    try {
+      const detailUrl = new URL(buildApiUrl("api/accounts/getaccount_api.php"));
+      detailUrl.searchParams.set("id", String(id));
+      appendAccountScopeParams(detailUrl.searchParams);
+      detailUrl.searchParams.set("_", String(Date.now()));
+      const res = await fetch(detailUrl.toString(), {
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+      });
+      const text = await res.text();
+      let json;
+      try {
+        json = text.trim() ? JSON.parse(text) : { success: false };
+      } catch {
+        return notify(t("errorLoadingAccount"), "danger");
+      }
+      if (!json.success) return notifyApi(json.message || json.error, "failedToLoadAccount", "danger");
+      const d = json.data;
+      setIsEditMode(true);
+      setHiddenCurrencyIds([]);
+      const ledger = d.ledger_scope && typeof d.ledger_scope === "object" ? d.ledger_scope : null;
+      const ledgerGroupCode = String(ledger?.group_code || "").trim().toUpperCase();
+      const ledgerScopeForModal =
+        ledger?.mode === "group" && ledgerGroupCode
+          ? { mode: "group", group_code: ledgerGroupCode }
+          : null;
+      syncModalLedgerScope(ledgerScopeForModal);
+      setForm({ id: d.id, account_id: toUpper(d.account_id), name: toUpper(d.name), role: d.role || "", password: d.password || "", remark: toUpper(d.remark), payment_alert: String(d.payment_alert == 1 ? "1" : "0"), alert_type: d.alert_type || d.alert_day || "", alert_start_date: d.alert_start_date || d.alert_specific_date || "", alert_amount: d.alert_amount || "" });
+      await loadRoles({ companyId, groupId: selectedGroup });
+      await loadSelectionMeta(id, true, { ledgerScope: ledgerScopeForModal });
+      setEditModalOpen(true);
+    } catch { notify(t("errorLoadingAccount"), "danger"); }
   };
 
   const confirmDelete = async () => {
@@ -2083,14 +2186,15 @@ export default function AccountListPage() {
       return;
     }
     try {
-      const scopeTenantId = resolveActiveScopeTenantId({ companyId });
-      if (!scopeTenantId) return notify(t("deleteFailed"), "danger");
-      for (const accountId of selectedDeleteIds) {
-        await deleteAccountUser({ id: accountId, scopeTenantId });
-      }
+      const fd = new FormData();
+      selectedDeleteIds.forEach(id => fd.append("ids[]", id));
+      appendAccountScopeParams(fd);
+      const res = await fetch(buildApiUrl("api/accounts/delete_accounts_api.php"), { method: "POST", body: fd, credentials: "include" });
+      const json = await res.json();
+      if (!json.success) return notifyApi(json.message, "deleteFailed", "danger");
       setConfirmDeleteOpen(false);
       setSelectedDeleteIds(new Set());
-      notifyApi(null, "accountsDeletedSuccessfully");
+      notifyApi(json.message, "accountsDeletedSuccessfully");
       refreshAccountList();
     } catch { notify(t("deleteFailed"), "danger"); }
   };
@@ -2106,22 +2210,88 @@ export default function AccountListPage() {
       return;
     }
     const amount = normalizeAlertAmount(form.alert_amount);
-    try {
-      const scopeTenantId = resolveActiveScopeTenantId({ companyId, form });
-      if (!scopeTenantId) return notify(t("saveFailed"), "danger");
-      const formPayload = { ...form, alert_amount: amount };
-      const request = isEditMode
-        ? buildAccountUpdateRequest(formPayload, scopeTenantId, selectedCurrencyIds)
-        : buildAccountCreateRequest(formPayload, scopeTenantId, selectedCurrencyIds);
-      await (isEditMode ? updateAccountUser(request) : createAccountUser(request));
-      setAddModalOpen(false);
-      setEditModalOpen(false);
-      setHiddenCurrencyIds([]);
-      notify(t("accountSavedSuccessfully"));
-      refreshAccountList();
-    } catch (e) {
-      notify(translateAccountApiMessage(lang, e?.message, "saveFailed"), "danger");
+    const fd = new FormData();
+    Object.entries(form).forEach(([k, v]) => fd.append(k, k === "alert_amount" ? amount : (v ?? "")));
+    if (!groupOnlyAccountMode && scopeCompanyId) {
+      fd.set("company_id", String(scopeCompanyId));
     }
+    if (!groupOnlyAccountMode && selectedCompanyIds.length) {
+      fd.set("company_ids", JSON.stringify(selectedCompanyIds));
+    }
+    appendAccountScopeParams(fd);
+    if (!isEditMode && !groupOnlyAccountMode && companyId) {
+      fd.set("company_id", String(companyId));
+      if (selectedCurrencyIds.length) fd.set("currency_ids", JSON.stringify(selectedCurrencyIds));
+    }
+    try {
+      const ep = isEditMode ? "api/accounts/update_api.php" : "api/accounts/addaccountapi.php";
+      const res = await fetch(buildApiUrl(ep), { method: "POST", body: fd, credentials: "include" });
+      const json = await res.json();
+      if (!json.success) return notifyApi(json.message, "saveFailed", "danger");
+      let postSaveCurrencyError = null;
+      if (!isEditMode && json?.data?.id && selectedCurrencyIds.length) {
+        for (const cid of selectedCurrencyIds) {
+          const currencyRes = await fetch(accountCurrencyApiUrl("add_currency"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ account_id: Number(json.data.id), currency_id: Number(cid) }),
+            credentials: "include",
+          });
+          const currencyJson = await currencyRes.json();
+          if (!currencyRes.ok || !currencyJson.success) {
+            postSaveCurrencyError = String(currencyJson?.message || "");
+            break;
+          }
+        }
+      }
+      if (isEditMode && form.id) {
+        const before = new Set(initialEditCurrencyIds.map(Number));
+        const after = new Set(selectedCurrencyIds.map(Number));
+        const toAdd = [...after].filter((id) => !before.has(id));
+        const toRemove = [...before].filter((id) => !after.has(id));
+        for (const cid of toAdd) {
+          const currencyRes = await fetch(accountCurrencyApiUrl("add_currency"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ account_id: Number(form.id), currency_id: Number(cid) }),
+            credentials: "include",
+          });
+          const currencyJson = await currencyRes.json();
+          if (!currencyRes.ok || !currencyJson.success) {
+            postSaveCurrencyError = String(currencyJson?.message || "");
+            break;
+          }
+        }
+        for (const cid of postSaveCurrencyError ? [] : toRemove) {
+          const currencyRes = await fetch(accountCurrencyApiUrl("remove_currency"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ account_id: Number(form.id), currency_id: Number(cid) }),
+            credentials: "include",
+          });
+          const currencyJson = await currencyRes.json();
+          if (!currencyRes.ok || !currencyJson.success) {
+            postSaveCurrencyError = String(currencyJson?.message || "");
+            break;
+          }
+        }
+        setInitialEditCurrencyIds([...after]);
+        if (settingCurrencyId) void loadCurrencyLinks(settingCurrencyId);
+      }
+      setAddModalOpen(false); setEditModalOpen(false);
+      setHiddenCurrencyIds([]);
+      if (postSaveCurrencyError) {
+        notify(
+          t("accountSavedCurrencySyncFailed", {
+            detail: translateAccountApiMessage(lang, postSaveCurrencyError, "saveFailed"),
+          }),
+          "danger",
+        );
+      } else {
+        notify(t("accountSavedSuccessfully"));
+      }
+      refreshAccountList();
+    } catch { notify(t("saveFailed"), "danger"); }
   };
 
   const createCurrency = async () => {
@@ -2140,28 +2310,32 @@ export default function AccountListPage() {
     }
     try {
       const modalScope = currencySettingOpen ? pageLedgerScope : resolveActiveModalLedgerScope();
-      const created = await createTenantCurrency({
-        code,
-        ledgerScope: modalScope,
-        companyId,
-        anchorCompanyId: activeScopeTenantId,
-        selectedCompanyIds: selectedCompanyIds,
-      });
-      const newId = Number(created.id);
-      setCurrencies((prev) => [...prev, { id: newId, code: created.code, is_linked: false }]);
-      setSelectedCurrencyIds((prev) => (prev.map(Number).includes(newId) ? prev : [...prev, newId]));
-      setCurrencyInput("");
-    } catch (err) {
-      const msg = String(err?.response?.message || err?.message || "");
-      if (/already exists|duplicate/i.test(msg)) {
-        await loadSelectionMeta(isEditMode && form.id ? form.id : null, isEditMode, {
-          selectCode: code,
-        });
+      const payload = { code, ...buildCurrencyScopePayload(modalScope) };
+      const res = await fetch(buildApiUrl("api/accounts/create_currency_api.php"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), credentials: "include" });
+      const json = await res.json();
+      if (json.success) {
+        const newId = Number(json.data.id);
+        if (currencySettingOpen) {
+          await loadSelectionMeta(null, false, { forcePageLedgerScope: true, selectCode: code });
+        } else {
+          setCurrencies((prev) => [...prev, { id: newId, code: json.data.code, is_linked: false }]);
+          setSelectedCurrencyIds((prev) => (prev.map(Number).includes(newId) ? prev : [...prev, newId]));
+        }
         setCurrencyInput("");
-        return;
+      } else {
+        const msg = String(json.message || json.error || "");
+        if (/already exists/i.test(msg)) {
+          await loadSelectionMeta(isEditMode && form.id ? form.id : null, isEditMode, {
+            selectCode: code,
+            ledgerScope: currencySettingOpen ? undefined : modalLedgerScopeRef.current ?? modalLedgerScope,
+            forcePageLedgerScope: currencySettingOpen,
+          });
+          setCurrencyInput("");
+          return;
+        }
+        notifyApi(json.message, "createFailed", "danger");
       }
-      notifyApi(msg, "createFailed", "danger");
-    }
+    } catch { notify(t("createFailed"), "danger"); }
   };
 
   const accountCurrencyApiUrl = useCallback(
@@ -2174,15 +2348,33 @@ export default function AccountListPage() {
     [appendModalCurrencyScopeParams, isEditMode, form.id],
   );
 
-  const fetchAccountsUsingCurrency = async (currencyId) => {
+  const fetchAccountsUsingCurrency = async (currencyId, scopeOverride = undefined) => {
     try {
-      const { linkedAccounts, linkedAccountIds } = await fetchLinkedAccountsByCurrency({
-        currencyId,
-        tenantId: activeScopeTenantId,
+      const params = new URLSearchParams({
+        action: "get_linked_accounts_by_currency",
+        currency_id: String(currencyId),
       });
-      if (linkedAccounts.length > 0) return linkedAccounts;
-      const linkedIds = new Set(linkedAccountIds);
-      return accountsRaw
+      if (scopeOverride) {
+        applyTenantLedgerToParams(params, scopeOverride);
+      } else {
+        appendModalCurrencyScopeParams(params);
+      }
+      const res = await fetch(
+        buildApiUrl(`api/accounts/bulk_account_currency_api.php?${params.toString()}`),
+        { method: "POST", credentials: "include" },
+      );
+      const json = await res.json();
+      if (!json.success) return [];
+      const fromApi = Array.isArray(json.data?.linked_accounts) ? json.data.linked_accounts : [];
+      if (fromApi.length > 0) {
+        return fromApi.map((a) => ({
+          id: Number(a.id),
+          name: String(a.name ?? ""),
+          account_id: String(a.account_id ?? ""),
+        }));
+      }
+      const linkedIds = new Set((json.data?.linked_account_ids || []).map(Number));
+      return accounts
         .filter((a) => linkedIds.has(Number(a.id)))
         .map((a) => ({
           id: Number(a.id),
@@ -2216,26 +2408,38 @@ export default function AccountListPage() {
     setSelectedCurrencyIds((prev) => prev.filter((x) => Number(x) !== id));
     setHiddenCurrencyIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
     setCurrencies((prev) => prev.filter((c) => Number(c.id) !== id));
+    setSettingCurrencyId((prev) => {
+      if (Number(prev) === id) {
+        setSettingLinked(new Set());
+        setSettingInitial(new Set());
+        return null;
+      }
+      return prev;
+    });
   }, []);
 
   const requestCurrencyDelete = useCallback(
-    async (currencyId, { force = false } = {}) => {
+    async (currencyId, { force = false, scope = null } = {}) => {
       const id = Number(currencyId);
-      const modalScope = resolveActiveModalLedgerScope();
-      const result = await deleteTenantCurrency({
-        id,
-        ledgerScope: modalScope,
-        companyId,
-        anchorCompanyId: activeScopeTenantId,
-        force,
+      const ledgerScope = scope ?? resolveActiveModalLedgerScope();
+      const deleteUrl = new URL(buildApiUrl("api/accounts/delete_currency_api.php"));
+      applyTenantLedgerToParams(deleteUrl.searchParams, ledgerScope);
+      const deletePayload = { id, ...buildCurrencyScopePayload(ledgerScope) };
+      if (force) deletePayload.force = true;
+      const res = await fetch(deleteUrl.toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(deletePayload),
+        credentials: "include",
       });
+      const json = await res.json();
       return {
-        success: result.success,
-        json: result,
-        msg: result.message,
+        success: Boolean(json.success),
+        json,
+        msg: String(json.message || json.error || ""),
       };
     },
-    [companyId, resolveActiveModalLedgerScope, activeScopeTenantId],
+    [buildCurrencyScopePayload, resolveActiveModalLedgerScope],
   );
 
   const confirmForceCurrencyDelete = useCallback(async () => {
@@ -2243,7 +2447,10 @@ export default function AccountListPage() {
     setForceCurrencyDeletePrompt(null);
     if (!prompt?.id) return;
     try {
-      const { success, msg } = await requestCurrencyDelete(prompt.id, { force: true });
+      const { success, msg } = await requestCurrencyDelete(prompt.id, {
+        force: true,
+        scope: prompt.scope ?? null,
+      });
       if (success) {
         dropCurrencyFromUi(prompt.id);
         notifyApi(msg, "currencyDeleted", "success");
@@ -2254,6 +2461,52 @@ export default function AccountListPage() {
       notify(t("failedDeleteCurrency"), "danger");
     }
   }, [dropCurrencyFromUi, forceCurrencyDeletePrompt, notify, notifyApi, requestCurrencyDelete, t]);
+
+  /** Delete currency from Currency Setting page (no edit-account unlink). */
+  const removeSettingCurrency = async (currencyId) => {
+    if (accountMutationsBlocked) {
+      notify(t("readOnlyActionBlocked"), "danger");
+      return;
+    }
+    const id = Number(currencyId);
+    const currencyRow = currencies.find((c) => Number(c.id) === id);
+    if (currencyRow?.deletable === false) {
+      notify(t("apiCurrencySyncedFromSubsidiary"), "danger");
+      return;
+    }
+    if (settingCurrencyId != null && Number(settingCurrencyId) === id) {
+      notify(t("deselectCurrencyBeforeDelete"), "danger");
+      return;
+    }
+
+    const settingScope = pageLedgerScope;
+    try {
+      const otherAccountsInUse = await fetchAccountsUsingCurrency(id, settingScope);
+      const { success, json, msg } = await requestCurrencyDelete(id, { scope: settingScope });
+      if (success) {
+        dropCurrencyFromUi(id);
+        notifyApi(msg, "currencyDeleted", "success");
+        return;
+      }
+      if (isHistoricalOnlyCurrencyDeleteBlock(msg, otherAccountsInUse)) {
+        const code = currencies.find((c) => Number(c.id) === id)?.code || "";
+        setForceCurrencyDeletePrompt({
+          id,
+          code: toUpper(String(code)),
+          detail: formatCurrencyUsageDetail(lang, msg),
+          scope: settingScope,
+        });
+        return;
+      }
+      const apiData =
+        otherAccountsInUse.length > 0
+          ? { ...(json?.data || {}), accounts_in_use: otherAccountsInUse }
+          : json?.data ?? null;
+      await handleCurrencyDeleteBlocked(id, { ...json, data: apiData }, msg);
+    } catch {
+      notify(t("failedDeleteCurrency"), "danger");
+    }
+  };
 
   /** Permanently delete currency; only when deselected. Unlink from current account if still linked in DB. */
   const removeModalCurrency = async (currencyId) => {
@@ -2350,16 +2603,13 @@ export default function AccountListPage() {
 
   const loadCurrencyLinks = async (curId) => {
     try {
-      const { linkedAccountIds } = await fetchLinkedAccountsByCurrency({
-        currencyId: curId,
-        tenantId: activeScopeTenantId,
-      });
-      const ids = new Set(linkedAccountIds);
-      setSettingLinked(ids);
-      setSettingInitial(new Set(ids));
-    } catch {
-      notify(t("loadLinksFailed"), "danger");
-    }
+      const params = new URLSearchParams({ action: "get_linked_accounts_by_currency", currency_id: String(curId) });
+      appendCurrencyScopeParams(params);
+      const res = await fetch(buildApiUrl(`api/accounts/bulk_account_currency_api.php?${params.toString()}`), { method: "POST", credentials: "include" });
+      const json = await res.json();
+      const ids = new Set((json.data?.linked_account_ids || []).map(Number));
+      setSettingLinked(ids); setSettingInitial(new Set(ids));
+    } catch { notify(t("loadLinksFailed"), "danger"); }
   };
 
   const saveCurrencySetting = async () => {
@@ -2368,17 +2618,16 @@ export default function AccountListPage() {
       return;
     }
     const linked = [], unlinked = [];
-    accountsRaw.forEach(a => {
+    accounts.forEach(a => {
       const id = Number(a.id); const was = settingInitial.has(id), now = settingLinked.has(id);
       if (now && !was) linked.push(id); if (!now && was) unlinked.push(id);
     });
     try {
-      await bulkUpdateAccountCurrency({
-        tenantId: activeScopeTenantId,
-        currencyId: settingCurrencyId,
-        linkedAccountIds: linked,
-        unlinkedAccountIds: unlinked,
-      });
+      const params = new URLSearchParams({ action: "bulk_update" });
+      appendCurrencyScopeParams(params);
+      const res = await fetch(buildApiUrl(`api/accounts/bulk_account_currency_api.php?${params.toString()}`), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currency_id: settingCurrencyId, linked_account_ids: linked, unlinked_account_ids: unlinked }), credentials: "include" });
+      const json = await res.json();
+      if (!res.ok || !json.success) return notifyApi(json.message, "saveFailed", "danger");
       setSettingInitial(new Set(settingLinked));
       setCurrencySettingOpen(false);
       notify(t("currencySettingsSaved"));
@@ -2386,6 +2635,22 @@ export default function AccountListPage() {
       if (editModalOpen && form.id) void loadSelectionMeta(form.id, true);
     } catch { notify(t("saveFailed"), "danger"); }
   };
+
+  const buildLinkScopePayload = useCallback(() => {
+    const payload = {};
+    const gid =
+      (selectedGroup && String(selectedGroup).trim().toUpperCase()) ||
+      (isGroupLogin(sessionMe) ? getLoginIdentifier(sessionMe) : null);
+    if (gid) payload.group_id = gid;
+    if (groupOnlyAccountMode) {
+      payload.group_only = true;
+    } else if (companyId) {
+      payload.company_id = Number(companyId);
+    } else if (scopeCompanyId) {
+      payload.company_id = Number(scopeCompanyId);
+    }
+    return payload;
+  }, [selectedGroup, groupOnlyAccountMode, companyId, scopeCompanyId, sessionMe]);
 
   const openLink = async (id) => {
     if (accountMutationsBlocked) {
@@ -2399,23 +2664,21 @@ export default function AccountListPage() {
       setLinkingAccountId(Number(id));
       setLinkType("bidirectional");
       setLinkSearchTerm("");
-      const allJson = groupOnlyAccountMode && selectedGroup
-        ? await fetch(
-            buildGroupAccountsUrl(selectedGroup, "", false, true, { groupOnly: true }).toString(),
-            { credentials: "include" },
-          ).then((r) => r.json())
-        : await fetchAccountsForCompany(companyId ?? activeScopeTenantId, {
-            searchTerm: "",
-            showInactive: false,
-            showAll: true,
-          });
-      const tenantId = Number(activeScopeTenantId) || Number(companyId) || 0;
-      const linkedUrl = new URL(buildApiUrl("api/account/link/list"));
+      const allUrl = groupOnlyAccountMode && selectedGroup
+        ? buildGroupAccountsUrl(selectedGroup, "", false, true, { groupOnly: true })
+        : buildAccountsUrl(companyId ?? scopeCompanyId, "", false, true);
+      const linkedUrl = new URL(buildApiUrl("api/accounts/account_link_api.php"));
+      linkedUrl.searchParams.set("action", "get_linked_accounts");
       linkedUrl.searchParams.set("account_id", String(id));
-      linkedUrl.searchParams.set("tenant_id", String(tenantId));
-      const [linkedRes] = await Promise.all([
+      const linkScope = buildLinkScopePayload();
+      if (linkScope.group_id) linkedUrl.searchParams.set("group_id", String(linkScope.group_id));
+      if (linkScope.group_only) linkedUrl.searchParams.set("group_only", "1");
+      if (linkScope.company_id) linkedUrl.searchParams.set("company_id", String(linkScope.company_id));
+      const [allRes, linkedRes] = await Promise.all([
+        fetch(allUrl.toString(), { credentials: "include" }),
         fetch(linkedUrl.toString(), { credentials: "include" }),
       ]);
+      const allJson = await allRes.json();
       const linkedJson = await linkedRes.json();
       const pool = Array.isArray(allJson?.data?.accounts) ? allJson.data.accounts : [];
       setLinkAccountsPool(pool);
@@ -2450,17 +2713,20 @@ export default function AccountListPage() {
     }
     if (!linkingAccountId || (!companyId && !(groupOnlyAccountMode && selectedGroup))) return;
     try {
-      const tenantId = Number(activeScopeTenantId) || Number(companyId) || 0;
-      const refUrl = new URL(buildApiUrl("api/account/link/list"));
+      const linkScope = buildLinkScopePayload();
+      const refUrl = new URL(buildApiUrl("api/accounts/account_link_api.php"));
+      refUrl.searchParams.set("action", "get_linked_accounts");
       refUrl.searchParams.set("account_id", String(linkingAccountId));
-      refUrl.searchParams.set("tenant_id", String(tenantId));
+      if (linkScope.group_id) refUrl.searchParams.set("group_id", String(linkScope.group_id));
+      if (linkScope.group_only) refUrl.searchParams.set("group_only", "1");
+      if (linkScope.company_id) refUrl.searchParams.set("company_id", String(linkScope.company_id));
       const refRes = await fetch(refUrl.toString(), { credentials: "include" });
       const refJson = await refRes.json();
       if (!refJson?.success) {
         notifyApi(refJson?.message, "failedSaveAccountLinks", "danger");
         return;
       }
-      const linkScopeCompanyId = Number(refJson?.data?.tenant_id) || tenantId;
+      const linkScopeCompanyId = Number(refJson?.data?.company_id) || Number(linkScope.company_id) || 0;
       if (!Number.isFinite(linkScopeCompanyId) || linkScopeCompanyId <= 0) {
         notify(t("pleaseSelectCompanyFirst"), "danger");
         return;
@@ -2476,41 +2742,45 @@ export default function AccountListPage() {
       const toRemove = [...currentTypeIds].filter((id) => !desiredIds.has(id));
 
       for (const linkedId of toRemove) {
-        const unlinkUrl = new URL(buildApiUrl("api/account/link/pair"));
-        unlinkUrl.searchParams.set("account_id_1", String(linkingAccountId));
-        unlinkUrl.searchParams.set("account_id_2", String(linkedId));
-        unlinkUrl.searchParams.set("tenant_id", String(linkScopeCompanyId));
-
-        await fetch(unlinkUrl.toString(), {
-          method: "DELETE",
+        await fetch(buildApiUrl("api/accounts/account_link_api.php?action=unlink_accounts"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            account_id_1: Number(linkingAccountId),
+            account_id_2: Number(linkedId),
+            company_id: linkScopeCompanyId,
+            ...linkScope,
+          }),
           credentials: "include",
         });
       }
       for (const linkedId of toAdd) {
-        await fetch(buildApiUrl("api/account/link"), {
+        await fetch(buildApiUrl("api/accounts/account_link_api.php?action=link_accounts"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            accountId1: Number(linkingAccountId),
-            accountId2: Number(linkedId),
-            tenantId: linkScopeCompanyId,
-            linkType: linkType.toUpperCase(),
-            sourceAccountId: linkType === "unidirectional" ? Number(linkingAccountId) : null,
+            account_id_1: Number(linkingAccountId),
+            account_id_2: Number(linkedId),
+            company_id: linkScopeCompanyId,
+            ...linkScope,
+            link_type: linkType,
+            source_account_id: linkType === "unidirectional" ? Number(linkingAccountId) : null,
           }),
           credentials: "include",
         });
       }
       if (toAdd.length === 0 && toRemove.length === 0 && desiredIds.size > 0) {
         for (const linkedId of desiredIds) {
-          await fetch(buildApiUrl("api/account/link"), {
-            method: "PUT",
+          await fetch(buildApiUrl("api/accounts/account_link_api.php?action=update_link_type"), {
+            method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              accountId1: Number(linkingAccountId),
-              accountId2: Number(linkedId),
-              tenantId: linkScopeCompanyId,
-              linkType: linkType.toUpperCase(),
-              sourceAccountId: linkType === "unidirectional" ? Number(linkingAccountId) : null,
+              account_id_1: Number(linkingAccountId),
+              account_id_2: Number(linkedId),
+              company_id: linkScopeCompanyId,
+              ...linkScope,
+              link_type: linkType,
+              source_account_id: linkType === "unidirectional" ? Number(linkingAccountId) : null,
             }),
             credentials: "include",
           });
@@ -2560,8 +2830,7 @@ export default function AccountListPage() {
         <div className="content">
           <div className="action-buttons-container">
             <div className="action-buttons">
-              <div className="account-toolbar-top-row">
-                <div className="action-controls-row account-toolbar-primary">
+                <div className="action-controls-row account-toolbar-primary" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <button
                   type="button"
                   className="btn btn-add"
@@ -2621,7 +2890,7 @@ export default function AccountListPage() {
                   </button>
                 </div>
                 </div>
-                <div className="user-toolbar-actions-right">
+                <div className="user-toolbar-actions-right" style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
                   <button
                     type="button"
                     className="btn btn-currency-setting"
@@ -2639,7 +2908,6 @@ export default function AccountListPage() {
                     {t("deleteWithCount", { count: selectedDeleteIds.size })}
                   </button>
                 </div>
-              </div>
             </div>
             <GcInlineFilterPanel
               t={t}
@@ -2661,8 +2929,7 @@ export default function AccountListPage() {
             />
           </div>
 
-          <div className="account-table-wrapper account-list-table">
-            <div className="account-list-table-inner">
+          <div ref={listRegionRef} className="account-table-wrapper account-list-table">
             <div className="account-table-header account-list-table-header">
               <div className="account-header-item">{t("no")}</div>
               {renderSortableHeader(t("account"), "account")}
@@ -2672,42 +2939,81 @@ export default function AccountListPage() {
               {renderSortableHeader(t("status"), "status")}
               {renderSortableHeader(t("lastLogin"), "lastLogin")}
               {renderSortableHeader(t("remark"), "remark")}
-              <div className="account-header-item">{t("action")}</div>
+              <div className="account-header-item account-header-item--action">{t("action")}</div>
             </div>
-            <div className={`account-cards${showAll ? " account-cards--show-all" : ""}`}>
+            <div
+              className={`account-cards${showAll ? " account-cards--show-all" : ""}${usePagedFill ? " account-cards--paged-fill" : ""}`}
+              style={usePagedFill ? { "--account-list-page-size": pageSize } : undefined}
+            >
               {pageRows.map((a, idx) => {
                 const alertOn = String(a.payment_alert) === "1";
                 const isInactive = String(a.status || "").toLowerCase() === "inactive";
                 return (
                   <div className="account-card account-list-row" key={a.id}>
-                    <div className="account-card-item">{showAll ? idx + 1 : (currentPage - 1) * PAGE_SIZE + idx + 1}</div>
+                    <div className="account-card-item">{showAll ? idx + 1 : (effectivePage - 1) * pageSize + idx + 1}</div>
                     <div className="account-card-item">{toUpper(a.account_id)}</div>
                     <div className="account-card-item">{toUpper(a.name)}</div>
-                    <div className="account-card-item"><span className={`account-role-badge account-role-${String(a.role || "").toLowerCase().replace(/\s+/g, "-")}`}>{toUpper(a.role) === "UPLINE" ? t("supplier") : toUpper(a.role)}</span></div>
-                    <div className="account-card-item"><span className={`account-role-badge ${alertOn ? "account-status-active" : "account-status-inactive"}${accountMutationsBlocked ? "" : " status-clickable"}`} onClick={accountMutationsBlocked ? () => notify(t("readOnlyActionBlocked"), "danger") : () => togglePaymentAlert(a.id)} style={accountMutationsBlocked ? { cursor: "not-allowed" } : undefined}>{alertOn ? "ON" : "OFF"}</span></div>
-                    <div className="account-card-item"><span className={`account-role-badge ${isInactive ? "account-status-inactive" : "account-status-active"}${accountMutationsBlocked ? "" : " status-clickable"}`} onClick={accountMutationsBlocked ? () => notify(t("readOnlyActionBlocked"), "danger") : () => toggleAccountStatus(a.id)} style={accountMutationsBlocked ? { cursor: "not-allowed" } : undefined}>{toUpper(a.status)}</span></div>
-                    <div className="account-card-item">{toUpper(a.last_login)}</div>
-                    <div className="account-card-item">{toUpper(a.remark)}</div>
+                    <div className="account-card-item"><span className={`account-role-badge account-role-${String(a.role || "").toLowerCase().replace(/\s+/g, "-")}`}>{formatAccountRoleDisplay(t, a.role)}</span></div>
                     <div className="account-card-item">
-                      <button type="button" className="account-edit-btn" disabled={accountMutationsBlocked} onClick={() => openEdit(a.id)}><img src={assetUrl("images/edit.svg")} alt={t("edit")} /></button>
-                      <button type="button" className="account-edit-btn" disabled={accountMutationsBlocked} onClick={() => openLink(a.id)} style={{ marginLeft: 5 }} title={t("linkAccountTitle")}>
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                      {isInactive && <input type="checkbox" style={{ marginLeft: 10 }} disabled={accountMutationsBlocked} checked={selectedDeleteIds.has(Number(a.id))} onChange={(e) => setSelectedDeleteIds(prev => { const n = new Set(prev); if (e.target.checked) n.add(Number(a.id)); else n.delete(Number(a.id)); return n; })} />}
+                      <label
+                        className={`account-alert-toggle${accountMutationsBlocked ? " is-disabled" : ""}`}
+                        onClick={accountMutationsBlocked ? () => notify(t("readOnlyActionBlocked"), "danger") : undefined}
+                      >
+                        <input
+                          type="checkbox"
+                          className="account-alert-toggle__input"
+                          checked={alertOn}
+                          disabled={accountMutationsBlocked}
+                          aria-label={formatAccountAlertDisplay(t, a.payment_alert)}
+                          onChange={() => togglePaymentAlert(a.id)}
+                        />
+                        <span className="account-alert-toggle__track" aria-hidden="true">
+                          <span className="account-alert-toggle__label account-alert-toggle__label--on">{t("alertOn")}</span>
+                          <span className="account-alert-toggle__label account-alert-toggle__label--off">{t("alertOff")}</span>
+                          <span className="account-alert-toggle__thumb" />
+                        </span>
+                      </label>
+                    </div>
+                    <div className="account-card-item"><span className={`account-role-badge ${isInactive ? "account-status-inactive" : "account-status-active"}${accountMutationsBlocked ? "" : " status-clickable"}`} onClick={accountMutationsBlocked ? () => notify(t("readOnlyActionBlocked"), "danger") : () => toggleAccountStatus(a.id)} style={accountMutationsBlocked ? { cursor: "not-allowed" } : undefined}>{formatAccountStatusDisplay(t, a.status)}</span></div>
+                    <div
+                      className="account-card-item"
+                      title={formatAccountLastLoginTimeTitle(a.last_login) || undefined}
+                    >
+                      {formatAccountLastLoginDate(a.last_login)}
+                    </div>
+                    <div className="account-card-item">{toUpper(a.remark)}</div>
+                    <div className="account-card-item account-card-item--action">
+                      <div className="account-action-tools">
+                        <div className="account-action-tools-bar">
+                        <button type="button" className="btn btn-edit account-edit-btn" disabled={accountMutationsBlocked} onClick={() => openEdit(a.id)} aria-label={t("edit")} title={t("edit")}>
+                          <img src={assetUrl("images/edit.svg")} alt={t("edit")} />
+                        </button>
+                        <button type="button" className="btn account-edit-btn" disabled={accountMutationsBlocked} onClick={() => openLink(a.id)} title={t("linkAccountTitle")} aria-label={t("linkAccountTitle")}>
+                          <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                        </div>
+                        {isInactive && (
+                          <input
+                            type="checkbox"
+                            disabled={accountMutationsBlocked}
+                            checked={selectedDeleteIds.has(Number(a.id))}
+                            onChange={(e) => setSelectedDeleteIds(prev => { const n = new Set(prev); if (e.target.checked) n.add(Number(a.id)); else n.delete(Number(a.id)); return n; })}
+                          />
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
-            </div>
           </div>
           {!showAll && (
             <div className="account-pagination-container">
-              <button className="account-pagination-btn" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>◀</button>
-              <span className="account-pagination-info">{t("paginationOf", { page: currentPage, total: totalPages })}</span>
-              <button className="account-pagination-btn" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>▶</button>
+              <button className="account-pagination-btn" disabled={effectivePage <= 1} onClick={() => setCurrentPage(p => p - 1)}>◀</button>
+              <span className="account-pagination-info">{t("paginationOf", { page: effectivePage, total: totalPages })}</span>
+              <button className="account-pagination-btn" disabled={effectivePage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>▶</button>
             </div>
           )}
         </div>
@@ -2781,7 +3087,7 @@ export default function AccountListPage() {
         onClose={() => setForceCurrencyDeletePrompt(null)}
         t={t}
       />
-      <CurrencySettingModal open={currencySettingOpen} onClose={() => setCurrencySettingOpen(false)} currencies={currencies} settingCurrencyId={settingCurrencyId} setSettingCurrencyId={setSettingCurrencyId} settingLinked={settingLinked} setSettingLinked={setSettingLinked} settingSearch={settingSearch} setSettingSearch={setSettingSearch} settingRole={settingRole} setSettingRole={setSettingRole} onLoadCurrencyLinks={loadCurrencyLinks} onClearCurrencySelection={clearCurrencySettingSelection} onSave={saveCurrencySetting} accounts={accountsRaw} roles={accountLedgerRoles} currencyInput={currencyInput} setCurrencyInput={setCurrencyInput} onCreateCurrency={createCurrency} t={t} />
+      <CurrencySettingModal open={currencySettingOpen} onClose={() => setCurrencySettingOpen(false)} currencies={currencies} settingCurrencyId={settingCurrencyId} setSettingCurrencyId={setSettingCurrencyId} settingLinked={settingLinked} setSettingLinked={setSettingLinked} settingSearch={settingSearch} setSettingSearch={setSettingSearch} settingRole={settingRole} setSettingRole={setSettingRole} onLoadCurrencyLinks={loadCurrencyLinks} onClearCurrencySelection={clearCurrencySettingSelection} onSave={saveCurrencySetting} accounts={accounts} roles={roles} currencyInput={currencyInput} setCurrencyInput={setCurrencyInput} onCreateCurrency={createCurrency} onRemoveCurrency={removeSettingCurrency} t={t} />
       <LinkAccountModal open={linkModalOpen} accounts={linkAccountsPool} currentAccountId={linkingAccountId} selectedIds={selectedLinkedIds} setSelectedIds={setSelectedLinkedIds} linkType={linkType} setLinkType={setLinkType} searchTerm={linkSearchTerm} setSearchTerm={setLinkSearchTerm} onSave={saveLinks} onClose={() => setLinkModalOpen(false)} t={t} />
     </>
   );

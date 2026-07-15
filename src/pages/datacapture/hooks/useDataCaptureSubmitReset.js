@@ -2,13 +2,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { spaPath } from "../../../utils/routing/pageRoutes.js";
 import {
   applyGroupOnlyCaptureRestoreFilter,
-  captureSessionMatchesScope,
-  loadCaptureSession,
+  captureSessionRestorable,
+  loadRestoreCaptureSession,
   saveCaptureSession,
   shouldRestoreFromUrl,
   stripRestoreParamFromUrl,
 } from "../lib/dataCaptureStorage.js";
-import { isGroupOnlyProcessId } from "../lib/dataCaptureGroupOnlyProcesses.js";
+import { isGroupOnlyProcessId, isGroupPayrollDraftProcessId } from "../lib/dataCaptureGroupOnlyProcesses.js";
 import {
   cancelAllScheduledServerDraftSaves,
   flushGroupOnlyTableDraftToServer,
@@ -47,7 +47,6 @@ import { prefetchRouteModule } from "../../../utils/routing/routePrefetch.js";
 import { prefetchSummaryPopulateData } from "../../datacapturesummary/lib/summaryPrefetch.js";
 import { useDataCaptureContext } from "../context/DataCaptureContext.jsx";
 import {
-  applyBridgeCaptureType,
   getBridgeCaptureType,
   toggleBridgeFormatDisplay,
 } from "../lib/dataCaptureBridge.js";
@@ -82,6 +81,7 @@ function buildProcessCapturePayload(form, captureType, currencies, selectedDescr
  */
 export function useDataCaptureSubmitReset({
   captureScope,
+  companies = [],
   form,
   captureType,
   mutationsBlocked = false,
@@ -94,6 +94,7 @@ export function useDataCaptureSubmitReset({
   payrollDraftBucket = null,
   payrollDraftServerSync = true,
   selectedGroup = null,
+  selectedPermission = null,
 }) {
   const { selectedDescriptions, clearSelectedDescriptions, gridRef, gridVersion, replaceGrid } =
     useDataCaptureContext();
@@ -176,7 +177,8 @@ export function useDataCaptureSubmitReset({
     prefetchRouteModule("/datacapturesummary");
     try {
       const processData = buildProcessCapturePayload(form, activeCaptureType, form.currencies, selectedDescriptions);
-      if (groupPayrollUi && isGroupOnlyProcessId(processData.process)) {
+      const isBankCategoryMode = selectedPermission === "Bank";
+      if ((groupPayrollUi || isBankCategoryMode) && isGroupOnlyProcessId(processData.process)) {
         const code =
           form.selectedProcess?.process_id ||
           processData.processCode ||
@@ -209,7 +211,7 @@ export function useDataCaptureSubmitReset({
       if (
         groupPayrollUi &&
         draftBucket &&
-        isGroupOnlyProcessId(form.selectedProcess?.id)
+        isGroupPayrollDraftProcessId(form.selectedProcess?.id)
       ) {
         const draftPayload = {
           tableData: preConvertSnapshot,
@@ -249,10 +251,10 @@ export function useDataCaptureSubmitReset({
 
       markSummaryFreshNavigation();
       if (typeof navigate === "function") {
-        navigate(spaPath("datacapturesummary", { search: "?success=1" }));
+        navigate(spaPath("datacapturesummary"));
         return;
       }
-      window.location.assign(buildSpaPath("datacapturesummary?success=1"));
+      window.location.assign(buildSpaPath("datacapturesummary"));
     } catch (error) {
       console.error("Error submitting data:", error);
       pushDataCaptureNotification(t("failedCaptureData"), "danger");
@@ -260,12 +262,12 @@ export function useDataCaptureSubmitReset({
       submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
-  }, [form, captureType, mutationsBlocked, navigate, t, requireDescriptions, groupPayrollUi, groupLedgerCapture, groupPayrollCapture, payrollDraftBucket, payrollDraftServerSync, selectedGroup, captureScope, selectedDescriptions, gridRef]);
+  }, [form, captureType, mutationsBlocked, navigate, t, requireDescriptions, groupPayrollUi, groupLedgerCapture, groupPayrollCapture, payrollDraftBucket, payrollDraftServerSync, selectedGroup, selectedPermission, captureScope, selectedDescriptions, gridRef]);
 
   const reset = useCallback(() => {
     const draftBucket = payrollDraftBucket || selectedGroup;
     const groupOnlyProcessId =
-      groupPayrollUi && draftBucket && isGroupOnlyProcessId(form.selectedProcess?.id)
+      groupPayrollUi && draftBucket && isGroupPayrollDraftProcessId(form.selectedProcess?.id)
         ? form.selectedProcess.id
         : null;
 
@@ -304,7 +306,8 @@ export function useDataCaptureSubmitReset({
     clearFormatPreviewHtml();
     setFormatGridReady(false);
 
-    applyBridgeCaptureType("1.Text");
+    // Keep current capture type (e.g. stay on 2.Format after Reset).
+    toggleBridgeFormatDisplay();
 
     recomputeSubmitState();
   }, [
@@ -327,11 +330,14 @@ export function useDataCaptureSubmitReset({
     if (restoreInFlightRef.current) return;
     restoreInFlightRef.current = true;
 
-    const session = loadCaptureSession(captureScope);
-    if (!session || !captureSessionMatchesScope(session, captureScope)) {
+    const session = loadRestoreCaptureSession(captureScope, companies);
+    if (!session || !captureSessionRestorable(session, captureScope)) {
+      console.warn("Data Capture restore: no matching session in storage", {
+        scope: captureScope,
+        hasSession: Boolean(session),
+      });
       restoreInFlightRef.current = false;
       getDataCaptureState().isRestoring = false;
-      stripRestoreParamFromUrl();
       return;
     }
 
@@ -369,6 +375,7 @@ export function useDataCaptureSubmitReset({
       await callDataCaptureRuntime("syncRestoreForm", processData);
 
       stripRestoreParamFromUrl();
+      getDataCaptureState().restoreCompleted = true;
     } catch (err) {
       console.error("React restore failed:", err);
     } finally {
@@ -376,7 +383,7 @@ export function useDataCaptureSubmitReset({
       getDataCaptureState().isRestoring = false;
       recomputeSubmitState();
     }
-  }, [captureScope, recomputeSubmitState]);
+  }, [captureScope, companies, recomputeSubmitState]);
 
   const handlersRef = useRef({});
   handlersRef.current = { submit, reset, restoreFromStorage, recomputeSubmitState };

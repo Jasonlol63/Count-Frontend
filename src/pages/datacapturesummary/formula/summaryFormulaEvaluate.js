@@ -1,5 +1,16 @@
 import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
+import { formatNegativeNumbersInFormula } from "../../../shared/formula/formatNegativeNumbersInFormula.js";
 import { removeThousandsSeparators } from "./summaryFormulaParseUtils.js";
+
+/**
+ * Insert explicit `*` for implicit multiplication (e.g. (-735.41)(-735.41) → product).
+ * Adjacent parenthesized factors with no operator between them mean multiply.
+ */
+export function insertImplicitMultiplication(expression) {
+  return String(expression || "")
+    .replace(/\)\(/g, ")*(")
+    .replace(/(\d)\(/g, "$1*(");
+}
 
 export function evaluateMoneyExpression(expression) {
   let expr = removeThousandsSeparators(String(expression || "").trim())
@@ -7,6 +18,10 @@ export function evaluateMoneyExpression(expression) {
     .replace(/\s*\([A-Z]{2,4}\)\s*/g, " ")
     .replace(/\s*\(\s*\)\s*/g, " ")
     .replace(/\s+/g, "");
+
+  // Match formula display: wrap negatives, then treat adjacent )( as multiply.
+  expr = formatNegativeNumbersInFormula(expr);
+  expr = insertImplicitMultiplication(expr);
 
   if (expr === "") return MoneyDecimal.toDecimal("0");
   if (!/^[0-9+\-*/().]+$/.test(expr)) {

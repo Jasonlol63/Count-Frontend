@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
             if (pathname === "/deleted-log.php" || pathname === "/deleted_log.php") {
               const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
               res.statusCode = 302;
-              res.setHeader("Location", `/p/3f5cf41e-53c2-45c5-a2c2-92e26352d8a1${q}`);
+              res.setHeader("Location", `/deleted-log/3f5cf41e-53c2-45c5-a2c2-92e26352d8a1${q}`);
               res.end();
               return;
             }

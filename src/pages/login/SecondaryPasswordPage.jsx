@@ -1,15 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { SECONDARY_VERIFY_I18N } from "../../translateFile/auth/authTranslate.js";
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
+import { SECONDARY_VERIFY_I18N, localizeAuthApiMessage } from "../../translateFile/auth/authTranslate.js";
 import SecondaryVerifyBackButton from "./SecondaryVerifyBackButton.jsx";
 import { useAuthBackground } from "./useAuthBackground.js";
+import {
+  fetchCurrentUser,
+  logoutSession,
+  verifyOwnerSecondaryPassword,
+  verifyUserSecondaryPassword,
+} from "../../utils/auth/authApi.js";
+import { resolveDefaultLandingPath } from "../../utils/auth/sidebarPermissions.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
 
 const VARIANT_CONFIG = {
   owner: {
     expectedUserType: "owner",
-    verifyApi: "auth/verify-owner-secondary-password",
+    verify: verifyOwnerSecondaryPassword,
     shouldRedirectToDashboard(user) {
       return !user.needs_owner_secondary;
     },
@@ -17,9 +23,9 @@ const VARIANT_CONFIG = {
   },
   user: {
     expectedUserType: "user",
-    verifyApi: "auth/verify-user-secondary-password",
-    shouldRedirectToDashboard(user) {
-      return !user.needs_user_secondary;
+    verify: verifyUserSecondaryPassword,
+    shouldRedirectToDashboard() {
+      return false;
     },
     returnAfterWrongUserType: false,
   },
@@ -50,23 +56,21 @@ export default function SecondaryPasswordPage({ variant }) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(buildApiUrl("auth/current-user"), {
-          credentials: "include",
-          cache: "no-store",
-        });
-        const json = await res.json();
-        if (!res.ok || !json?.success || !json?.data) {
+        const { ok, json } = await fetchCurrentUser();
+        if (!ok || !json?.success || !json?.data) {
           if (!cancelled) navigate(spaPath("login"), { replace: true });
           return;
         }
         const user = json.data;
-        const userType = String(user.user_type || "").toLowerCase();
-        if (userType !== config.expectedUserType) {
+        if (String(user.user_type || "").toLowerCase() !== config.expectedUserType) {
           if (!cancelled) navigate(spaPath("login"), { replace: true });
           if (config.returnAfterWrongUserType) return;
         }
         if (config.shouldRedirectToDashboard(user)) {
-          if (!cancelled) navigate(spaPath("dashboard"), { replace: true });
+          if (!cancelled) {
+            const landing = resolveDefaultLandingPath(user);
+            navigate(landing || spaPath("login"), { replace: true });
+          }
         }
       } catch {
         if (!cancelled) navigate(spaPath("login"), { replace: true });
@@ -94,11 +98,7 @@ export default function SecondaryPasswordPage({ variant }) {
   const onBack = async () => {
     try {
       sessionStorage.setItem("ec_skip_session_bootstrap", "1");
-      await fetch(buildApiUrl("auth/logout"), {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-      });
+      await logoutSession();
     } catch {
       // still return to login
     }
@@ -118,19 +118,22 @@ export default function SecondaryPasswordPage({ variant }) {
     setSubmitting(true);
     setErrorMessage("");
     try {
-      const formData = new FormData();
-      formData.append("secondary_password", value);
-      const res = await fetch(buildApiUrl(config.verifyApi), {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-      const json = await res.json();
-      if (res.ok && json?.success) {
+      const { ok, json } = await config.verify(value);
+      if (ok && json?.success) {
+        try {
+          const userRes = await fetchCurrentUser();
+          if (userRes.ok && userRes.json?.success && userRes.json?.data) {
+            const landing = resolveDefaultLandingPath(userRes.json.data);
+            navigate(landing || spaPath("login"), { replace: true });
+            return;
+          }
+        } catch {
+          /* fall through */
+        }
         navigate(spaPath("dashboard"), { replace: true });
         return;
       }
-      setErrorMessage(json?.message || i18n.genericError);
+      setErrorMessage(localizeAuthApiMessage(json?.message, lang) || i18n.genericError);
       inputRef.current?.focus();
     } catch {
       setErrorMessage(i18n.genericError);

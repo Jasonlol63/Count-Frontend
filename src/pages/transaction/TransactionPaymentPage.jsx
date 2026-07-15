@@ -15,13 +15,13 @@ import { useTransactionSync } from "./hooks/useTransactionSync.js";
 import { useTransactionDateRange } from "./hooks/useTransactionDateRange.js";
 import { useTransactionInitialization } from "./hooks/useTransactionInitialization.js";
 import { installTransactionExcelCopy } from "./lib/transactionExcelCopy.js";
-import { getRoleClass } from "./lib/transactionPaymentLogic.js";
+import { getRoleClass, shouldShowTransactionTablesSection } from "./lib/transactionPaymentLogic.js";
 import "../../../public/css/report-outlined-fields.css";
 import "../../../public/css/transaction.css";
 import "../../../public/css/userlist.css";
 import { useLoginLang } from "../../utils/i18n/useLoginLang.js";
 import { getTransactionText, TRANSACTION_I18N } from "../../translateFile/pages/transactionTranslate.js";
-import { transactionScopeApiParams, transactionScopeCacheKey } from "./lib/transactionScope.js";
+import { transactionScopeApiParams } from "./lib/transactionScope.js";
 import { clearInlineScrollLock } from "../../utils/layout/clearInlineScrollLock.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
 
@@ -41,6 +41,17 @@ const ROUTE_BODY_CLASSES_TO_CLEAR = [
   "user-page--show-all",
   "member-winloss-page",
 ];
+
+/** Type Search opens Payment History with full account ledger (not pure-type filtered). */
+const TYPE_SEARCH_FULL_ACCOUNT_LEDGER_TYPES = new Set([
+  "PAYMENT",
+  "CONTRA",
+  "CLAIM",
+  "CLEAR",
+  "RATE",
+  "ADJUSTMENT",
+  "PROFIT",
+]);
 
 export default function TransactionPaymentPage() {
   const [searchParams] = useSearchParams();
@@ -70,6 +81,7 @@ function TransactionPaymentPageMain() {
 
   // 3. Form Logic
   const formSearchRef = useRef(null);
+  const afterSubmitRef = useRef(async () => {});
   const onFormSearch = useCallback((opts) => {
     if (formSearchRef.current) formSearchRef.current(opts);
   }, []);
@@ -78,6 +90,7 @@ function TransactionPaymentPageMain() {
     todayDmy,
     pushToast,
     onSearch: onFormSearch,
+    onAfterSuccessfulSubmit: (opts) => afterSubmitRef.current(opts),
     refreshContraInboxBadge: ui.refreshContraInboxBadge,
     filterSnapshot,
     transactionScope,
@@ -100,6 +113,7 @@ function TransactionPaymentPageMain() {
     t,
   });
   formSearchRef.current = search.runSearch;
+  afterSubmitRef.current = (opts) => search.applySubmitFocusAndRefresh(opts);
 
   // 5. Defaults (useLayoutEffect: must run before passive effects that call runSearch)
   useTransactionInitialization({
@@ -155,14 +169,14 @@ function TransactionPaymentPageMain() {
 
   const applyTransactionBodyClasses = useCallback(() => {
     document.body.classList.remove(...ROUTE_BODY_CLASSES_TO_CLEAR, "bg");
-    document.body.classList.add("dashboard-page", "transaction-page");
+    document.body.classList.add("dashboard-page");
     clearInlineScrollLock();
   }, []);
 
   useLayoutEffect(() => {
     applyTransactionBodyClasses();
     return () => {
-      document.body.classList.remove("transaction-page", "page-ready");
+      document.body.classList.remove("page-ready");
     };
   }, [applyTransactionBodyClasses]);
 
@@ -211,6 +225,16 @@ function TransactionPaymentPageMain() {
     [m],
   );
 
+  const onTypeSearch = useCallback(() => {
+    search.runTypeSearch(form.txType);
+  }, [search.runTypeSearch, form.txType]);
+
+  const onExitTypeSearch = useCallback(async () => {
+    await search.exitTypeSearchAndRefresh();
+    form.setTxDate(todayDmy);
+    form.setRateDate(todayDmy);
+  }, [search.exitTypeSearchAndRefresh, form.setTxDate, form.setRateDate, todayDmy]);
+
   const onSearch = useCallback(() => {
     search.runSearch({ silent: false });
   }, [search.runSearch]);
@@ -228,26 +252,46 @@ function TransactionPaymentPageMain() {
   }, [ui.refreshContraInboxBadge, scopeApi]);
 
   const onApproveContra = useCallback(
-    (opts) => ui.onApproveContra(opts.transactionId, scopeApi, search.runSearch),
-    [ui.onApproveContra, scopeApi, search.runSearch],
+    async (opts) => {
+      const res = await ui.onApproveContra(opts.transactionId, scopeApi);
+      if (!res?.success) return;
+      const codes = [opts.toAccountCode, opts.fromAccountCode]
+        .map((c) => String(c || "").trim().toUpperCase())
+        .filter(Boolean);
+      const accountIds = [];
+      for (const code of codes) {
+        const opt = (data.accountOptions || []).find((a) => {
+          const aid = String(a?.account_id || a?.code || "").toUpperCase().trim();
+          return aid === code;
+        });
+        if (opt?.id) accountIds.push(Number(opt.id));
+      }
+      if (accountIds.length > 0) {
+        await search.applySubmitFocusAndRefresh({
+          accountIds,
+          submitCurrency: opts.currency,
+        });
+      }
+    },
+    [ui.onApproveContra, scopeApi, search.applySubmitFocusAndRefresh, data.accountOptions],
   );
 
   const onRejectContra = useCallback(
-    (opts) => ui.onRejectContra(opts.transactionId, scopeApi),
-    [ui.onRejectContra, scopeApi],
+    (opts) => ui.onRejectContra(opts.transactionId, scopeApi, search.runSearch),
+    [ui.onRejectContra, scopeApi, search.runSearch],
   );
 
   if (forbidden) {
     return <Navigate to={spaPath("dashboard")} replace />;
   }
 
-  const booting = loading || !filterSnapshot;
-  const scopeCacheKey = transactionScopeCacheKey(transactionScope);
-  const scopeDataPending = Boolean(
-    filterSnapshot && scopeCacheKey && data.currencyScopeBundle?.scopeKey !== scopeCacheKey,
-  );
-  const tablesLoading = search.searchLoading || scopeDataPending;
-  const tablesVisible = search.tablesVisible || Boolean(filterSnapshot);
+  // Never paint Loading / empty chrome — tables appear when rows exist.
+  const tablesVisible = shouldShowTransactionTablesSection({
+    showAllCurrencies: search.showAllCurrencies,
+    selectedCurrencies: search.selectedCurrencies,
+    tablePresentation: search.tablePresentation,
+    searchLoading: false,
+  });
 
   return (
     <div className="container-fluid transaction-container">
@@ -265,12 +309,7 @@ function TransactionPaymentPageMain() {
         t={t}
       />
 
-      <main className={`transaction-main${booting ? " transaction-main--booting" : ""}`}>
-        {booting && !search.rawSearchData ? (
-          <div className="transaction-boot-loading" aria-live="polite" aria-busy="true">
-            {m.loadingData}
-          </div>
-        ) : null}
+      <main className="transaction-main">
         {txWlTolBannerActive ? (
           <div
             className="transaction-tx-wl-tol-banner"
@@ -341,7 +380,9 @@ function TransactionPaymentPageMain() {
             setTxConfirm={form.setTxConfirm}
             submitting={form.submitting}
             onSubmitTx={form.onSubmitTx}
-            onSearch={onSearch}
+            onTypeSearch={onTypeSearch}
+            onExitTypeSearch={onExitTypeSearch}
+            typeSearchActive={search.listPresentationModeActive}
             searchLoading={search.searchLoading}
             accountOptions={data.accountOptions}
             currencyOptions={data.currencyOptions}
@@ -371,6 +412,8 @@ function TransactionPaymentPageMain() {
             rateMiddlemanRate={form.rateMiddlemanRate}
             setRateMiddlemanRate={form.setRateMiddlemanRate}
             rateMiddlemanAmount={form.rateMiddlemanAmount}
+            rateMiddlemanInputAmount={form.rateMiddlemanInputAmount}
+            setRateMiddlemanInputAmount={form.setRateMiddlemanInputAmount}
             m={m}
             t={t}
           />
@@ -378,16 +421,29 @@ function TransactionPaymentPageMain() {
 
         <TransactionTablesSection
           tablesVisible={tablesVisible}
-          searchLoading={tablesLoading}
+          searchLoading={false}
           tp={search.tablePresentation}
           searchState={search.searchState}
           getRoleClass={getRoleClass}
           fallbackRoleClass={singleCategoryFallbackRoleClass}
           openHistory={(row) =>
-            ui.onViewHistory(row, search.effectiveDateFrom, search.effectiveDateTo, scopeApi, {
-              selectedCurrencies: search.selectedCurrencies,
-              showAllCurrencies: search.showAllCurrencies,
-            })
+            ui.onViewHistory(
+              row,
+              search.effectiveDateFrom,
+              search.effectiveDateTo,
+              scopeApi,
+              {
+                selectedCurrencies: search.selectedCurrencies,
+                showAllCurrencies: search.showAllCurrencies,
+                pureTypeSearch:
+                  search.typeSearchActive &&
+                  !TYPE_SEARCH_FULL_ACCOUNT_LEDGER_TYPES.has(
+                    String(search.typeSearchFormType || "").toUpperCase(),
+                  )
+                    ? search.typeSearchFormType
+                    : null,
+              },
+            )
           }
           handleBalanceCellClick={form.handleBalanceCellClick}
           m={m}

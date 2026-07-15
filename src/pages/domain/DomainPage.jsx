@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { assetUrl, buildApiUrl } from "../../utils/core/apiUrl.js";
-import { fetchDomainList } from "./domainApi.js";
 import "../../../public/css/domain.css";
 import "../../../public/css/date-range-picker.css";
 import "../../../public/css/accountCSS.css";
 import "../../../public/css/userlist.css";
+import { spaPath } from "../../utils/routing/pageRoutes.js";
 import {
   ROWS_PER_PAGE,
   MAX_VISIBLE_CHIPS,
@@ -19,13 +20,16 @@ import DomainNotification, { showDomainAlert } from "./components/DomainNotifica
 import DomainConfirmModal from "./components/DomainConfirmModal.jsx";
 import DomainFeeModal from "./components/DomainFeeModal.jsx";
 import CompanyExpirationModal from "./components/CompanyExpirationModal.jsx";
+import GroupExpirationModal from "./components/GroupExpirationModal.jsx";
 import DomainFormModal from "./components/DomainFormModal.jsx";
 import { getDomainText } from "../../translateFile/pages/domainTranslate.js";
 import { useAuthSession } from "../../context/AuthSessionContext.jsx";
 import { canAccessC168DomainPages } from "../../utils/company/loginScope.js";
+import { fetchOwnerCompaniesAll, readPersistedDashboardGcFilter } from "../../utils/company/sharedCompanyFilter.js";
 
 export default function DomainPage() {
-  const { me } = useAuthSession();
+  const navigate = useNavigate();
+  const { me, sessionReady } = useAuthSession();
   const [lang, setLang] = useState(() => (localStorage.getItem("login_lang") === "zh" ? "zh" : "en"));
   const t = (key, params) => getDomainText(lang, key, params);
 
@@ -75,6 +79,7 @@ export default function DomainPage() {
   const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
   const [feeModal, setFeeModal] = useState(false);
   const [expModal, setExpModal] = useState(null);       // companies array
+  const [groupExpModal, setGroupExpModal] = useState(null); // groups array
 
   // ── Domain fee price (for share calc + toolbar chips) ─────────────────────
   const [domainPeriodPrices, setDomainPeriodPrices] = useState(null);
@@ -87,33 +92,59 @@ export default function DomainPage() {
     [domainPeriodPrices]
   );
 
-  // ── Initial data load ──────────────────────────────────────────────────────────
+  // ── Initial data load (session from AuthenticatedLayout) ─────────────────────
   useEffect(() => {
+    if (!sessionReady || !me) return;
+
     let cancelled = false;
     (async () => {
       try {
-        const data = await fetchDomainList();
-        if (!cancelled) setDomains(data);
+        let allowed = canAccessC168DomainPages(me);
+        if (!allowed) {
+          const { companyId } = readPersistedDashboardGcFilter();
+          if (companyId != null) {
+            await fetchOwnerCompaniesAll({ me });
+            allowed = canAccessC168DomainPages(me);
+          }
+        }
+        if (!allowed) {
+          navigate(spaPath("dashboard"), { replace: true });
+          return;
+        }
+
+        const r2 = await fetch(buildApiUrl("api/domain/domain_api.php"), {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "list" }),
+        });
+        const j2 = await r2.json();
+        if (!r2.ok || !j2?.success) {
+          if (!cancelled) setLoadError(j2?.message || t("failedToLoadDomainData"));
+          return;
+        }
+        if (!cancelled) setDomains(Array.isArray(j2?.data?.domains) ? j2.data.domains : []);
         refreshFeeSummary();
-      } catch (err) {
-        if (!cancelled) setLoadError(err?.message || t("failedToLoadDomainData"));
+      } catch {
+        if (!cancelled) setLoadError(t("failedToLoadDomainData"));
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sessionReady, me, navigate]);
 
   // ── Fee summary ────────────────────────────────────────────────────────────
   function refreshFeeSummary() {
-    fetch(buildApiUrl("api/domain/list-fee"), {
+    fetch(buildApiUrl("api/domain/domain_api.php"), {
       cache: "no-cache", method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "get_domain_fee_settings" }),
     })
       .then((r) => r.json())
       .then((res) => {
-        if (res.success && res.data && res.data.length > 0) {
-          setDomainPeriodPrices(normalizeDomainFeeSettingsFromApi(res.data[0]));
+        if (res.success && res.data) {
+          setDomainPeriodPrices(normalizeDomainFeeSettingsFromApi(res.data));
         }
       })
       .catch(() => {});
@@ -124,15 +155,13 @@ export default function DomainPage() {
     if (!searchTerm) return domains;
     const term = searchTerm.toLowerCase();
     return domains.filter((d) => {
-      const groups = Array.isArray(d.groups) ? d.groups : [];
-      const companies = Array.isArray(d.companies) ? d.companies : [];
-      const groupStr = groups.map((g) => String(g.code || "").toLowerCase()).join(" ");
-      const compStr = companies.map((c) => String(c.code || "").toLowerCase()).join(" ");
+      const comps = Array.isArray(d.companies_full) ? d.companies_full : [];
+      const compStr = comps.map((c) => String(c.company_id || "").toLowerCase()).join(" ");
       return (
         String(d.owner_code || "").toLowerCase().includes(term) ||
         String(d.name || "").toLowerCase().includes(term) ||
         String(d.email || "").toLowerCase().includes(term) ||
-        groupStr.includes(term) ||
+        String(d.group_ids || "").toLowerCase().includes(term) ||
         compStr.includes(term)
       );
     });
@@ -164,8 +193,8 @@ export default function DomainPage() {
     }
     if (checkedIds.size === 0) { showDomainAlert(t("selectOwnersToDeleteFirst"), "danger"); return; }
 
-    const invalid = domains.filter((d) => checkedIds.has(d.id) && hasProtectedCompany(d.companies));
-    const valid = domains.filter((d) => checkedIds.has(d.id) && !hasProtectedCompany(d.companies));
+    const invalid = domains.filter((d) => checkedIds.has(d.id) && hasProtectedCompany(d.companies_full));
+    const valid = domains.filter((d) => checkedIds.has(d.id) && !hasProtectedCompany(d.companies_full));
 
     if (invalid.length > 0 && valid.length === 0) {
       showDomainAlert(t("cannotDeleteC168Owners"), "danger"); return;
@@ -185,35 +214,18 @@ export default function DomainPage() {
         try {
           const results = await Promise.all(
             valid.map((d) =>
-              fetch(buildApiUrl("api/domain/delete"), {
-                cache: "no-cache",
-                method: "POST",
-                credentials: "include",
+              fetch(buildApiUrl("api/domain/domain_api.php"), {
+                cache: "no-cache", method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: d.id }),
-              }).then(async (r) => {
-                const payload = await r.json().catch(() => ({}));
-                return {
-                  id: d.id,
-                  ok: r.ok && payload?.success === true,
-                  message: payload?.message || "",
-                };
-              })
+                body: JSON.stringify({ action: "delete", id: d.id }),
+              }).then((r) => r.json())
             )
           );
-          const succeeded = results.filter((r) => r.ok);
-          const failed = results.filter((r) => !r.ok);
-          const ok = succeeded.length;
-          const fail = failed.length;
-          if (fail === 0) {
-            showDomainAlert(t("deletedOwnersSuccess", { ok }));
-          } else if (ok === 0) {
-            const detail = failed.map((r) => r.message).filter(Boolean).join(" ");
-            showDomainAlert(detail || t("batchDeleteError"), "danger");
-          } else {
-            showDomainAlert(t("deletionCompleted", { ok, fail }), "danger");
-          }
-          const deletedIds = new Set(succeeded.map((r) => r.id));
+          const ok = results.filter((r) => r.success).length;
+          const fail = results.length - ok;
+          if (fail === 0) showDomainAlert(t("deletedOwnersSuccess", { ok }));
+          else showDomainAlert(t("deletionCompleted", { ok, fail }), "danger");
+          const deletedIds = new Set(valid.map((d) => d.id));
           setDomains((prev) => prev.filter((d) => !deletedIds.has(d.id)));
           setCheckedIds(new Set());
         } catch {
@@ -248,9 +260,27 @@ export default function DomainPage() {
     }
   }
 
-  function handleCompanyBadgeClick(e, companies) {
+  function handleCompanyBadgeClick(e, companiesFull) {
     e.stopPropagation();
-    setExpModal(companies);
+    setExpModal(companiesFull);
+  }
+
+  function resolveGroupsFull(domain) {
+    if (Array.isArray(domain?.groups_full) && domain.groups_full.length > 0) {
+      return domain.groups_full;
+    }
+    const raw = String(domain?.group_ids || "").trim();
+    if (!raw) return [];
+    return raw
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean)
+      .map((group_code) => ({ group_code, expiration_date: null }));
+  }
+
+  function handleGroupBadgeClick(e, groupsFull) {
+    e.stopPropagation();
+    setGroupExpModal(groupsFull);
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -339,56 +369,102 @@ export default function DomainPage() {
           </div>
         </div>
 
-        <div className="table-container">
-          <div className="table-header">
-            <div>{t("no")}</div>
-            <div>{t("ownerCodeWithColon")}</div>
-            <div>{t("nameWithColon")}</div>
-            <div>{t("emailWithColon")}</div>
-            <div>Group ID:</div>
-            <div>{t("companiesWithColon")}</div>
-            <div>{t("createdBy")}</div>
-            <div>{t("action")}</div>
-          </div>
-          <div className="domain-cards" id="domainTableBody">
+        <div className="table-container domain-list-table">
+          <div className="domain-list-table-inner">
+            <div className="table-header domain-list-table-header">
+              <div>{t("no")}</div>
+              <div>{t("ownerCodeWithColon")}</div>
+              <div>{t("nameWithColon")}</div>
+              <div>{t("emailWithColon")}</div>
+              <div>{t("groupIdLabel")}:</div>
+              <div>{t("companiesWithColon")}</div>
+              <div>{t("createdBy")}</div>
+              <div>{t("action")}</div>
+            </div>
+            <div className="domain-cards" id="domainTableBody">
             {pagedDomains.map((domain, idx) => {
               const globalIdx = (safePage - 1) * ROWS_PER_PAGE + idx + 1;
-              const companies = Array.isArray(domain.companies) ? domain.companies : [];
-              const groups = Array.isArray(domain.groups) ? domain.groups : [];
-              const groupDisplay = groups.map((g) => g.code).filter(Boolean).join(", ") || "-";
-              const companyList = companies.map((c) => c.code).filter(Boolean);
+              const companiesFull = Array.isArray(domain.companies_full) ? domain.companies_full : [];
+              const companyList = companiesFull.map((c) => c.company_id).filter(Boolean);
               const visible = companyList.slice(0, MAX_VISIBLE_CHIPS);
               const hidden = companyList.slice(MAX_VISIBLE_CHIPS);
-              const isProtected = hasProtectedCompany(companies);
+              const groupsFull = resolveGroupsFull(domain);
+              const groupList = groupsFull.map((g) => g.group_code).filter(Boolean);
+              const visibleGroups = groupList.slice(0, MAX_VISIBLE_CHIPS);
+              const hiddenGroups = groupList.slice(MAX_VISIBLE_CHIPS);
+              const isProtected = hasProtectedCompany(companiesFull);
 
               return (
-                <div key={domain.id} className="domain-card show-card" data-id={domain.id}>
+                <div key={domain.id} className="domain-card domain-list-row show-card" data-id={domain.id}>
                   <div className="card-item">{globalIdx}</div>
                   <div className="card-item uppercase-text">{domain.owner_code}</div>
-                  <div className="card-item">{domain.name}</div>
-                  <div className="card-item">{domain.email}</div>
-                  <div className="card-item">{groupDisplay}</div>
-                  <div className="card-item companies-column" data-companies={JSON.stringify(companies)}>
-                    {companyList.length === 0 ? "-" : (
-                      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-                        {visible.map((code) => {
-                          const exp = companies.find((c) => c.code === code)?.expiration_date || "";
+                  <div className="card-item card-item--name">{domain.name}</div>
+                  <div className="card-item card-item--email">{domain.email}</div>
+                  <div
+                    className="card-item groups-column"
+                    data-groups={JSON.stringify(groupsFull)}
+                  >
+                    {groupList.length === 0 ? "-" : (
+                      <div className="domain-chip-row">
+                        {visibleGroups.map((gid) => {
+                          const exp = groupsFull.find((g) => g.group_code === gid)?.expiration_date || "";
                           return (
                             <span
-                              key={code}
+                              key={gid}
+                              role="button"
+                              tabIndex={0}
+                              className="domain-company-chip company-badge domain-group-chip"
+                              data-exp={exp || undefined}
+                              onClick={(e) => handleGroupBadgeClick(e, groupsFull)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  handleGroupBadgeClick(e, groupsFull);
+                                }
+                              }}
+                            >
+                              {gid}
+                            </span>
+                          );
+                        })}
+                        {hiddenGroups.length > 0 && (
+                          <button
+                            type="button"
+                            className="domain-company-more chip-more"
+                            title={t("viewMoreGroupsHint")}
+                            aria-label={t("viewMoreGroupsHint")}
+                            onClick={(e) => handleGroupBadgeClick(e, groupsFull)}
+                          >
+                            +{hiddenGroups.length}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div
+                    className="card-item companies-column"
+                    data-companies={JSON.stringify(companiesFull)}
+                  >
+                    {companyList.length === 0 ? "-" : (
+                      <div className="domain-chip-row">
+                        {visible.map((cid) => {
+                          const exp = companiesFull.find((c) => c.company_id === cid)?.expiration_date || "";
+                          return (
+                            <span
+                              key={cid}
                               role="button"
                               tabIndex={0}
                               className="domain-company-chip company-badge"
                               data-exp={exp || undefined}
-                              onClick={(e) => handleCompanyBadgeClick(e, companies)}
+                              onClick={(e) => handleCompanyBadgeClick(e, companiesFull)}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" || e.key === " ") {
                                   e.preventDefault();
-                                  handleCompanyBadgeClick(e, companies);
+                                  handleCompanyBadgeClick(e, companiesFull);
                                 }
                               }}
                             >
-                              {code}
+                              {cid}
                             </span>
                           );
                         })}
@@ -398,7 +474,7 @@ export default function DomainPage() {
                             className="domain-company-more chip-more"
                             title={t("viewMoreCompaniesHint")}
                             aria-label={t("viewMoreCompaniesHint")}
-                            onClick={(e) => handleCompanyBadgeClick(e, companies)}
+                            onClick={(e) => handleCompanyBadgeClick(e, companiesFull)}
                           >
                             +{hidden.length}
                           </button>
@@ -406,11 +482,13 @@ export default function DomainPage() {
                       </div>
                     )}
                   </div>
-                  <div className="card-item uppercase-text">{String(domain.created_by || "-").toUpperCase()}</div>
+                  <div className="card-item uppercase-text">
+                    {String(domain.created_by || "-").toUpperCase()}
+                  </div>
                   <div className="card-item domain-action-cell">
                     <button
                       type="button"
-                      className="btn-edit"
+                      className="btn-edit domain-action-cell__edit"
                       onClick={() => openEditModal(domain)}
                       aria-label={t("edit")}
                     >
@@ -419,17 +497,20 @@ export default function DomainPage() {
                     {!isProtected ? (
                       <input
                         type="checkbox"
-                        className="domain-checkbox"
+                        className="domain-checkbox domain-action-cell__check"
                         value={domain.id}
                         checked={checkedIds.has(domain.id)}
                         aria-label={t("selectOwnerForDelete")}
                         onChange={(e) => handleCheckbox(domain.id, e.target.checked)}
                       />
-                    ) : null}
+                    ) : (
+                      <span className="domain-action-cell__check domain-action-cell__check--empty" aria-hidden="true" />
+                    )}
                   </div>
                 </div>
               );
             })}
+            </div>
           </div>
         </div>
 
@@ -473,7 +554,6 @@ export default function DomainPage() {
           sessionCompanyId={me?.company_id ?? null}
           sessionCompanyCode={String(me?.company_code || "")}
           domainPeriodPrices={domainPeriodPrices}
-          domains={domains}
           onClose={() => setShowDomainForm(false)}
           onSaved={handleDomainSaved}
         />
@@ -503,6 +583,14 @@ export default function DomainPage() {
           lang={lang}
           companies={expModal}
           onClose={() => setExpModal(null)}
+        />
+      )}
+
+      {groupExpModal && (
+        <GroupExpirationModal
+          lang={lang}
+          groups={groupExpModal}
+          onClose={() => setGroupExpModal(null)}
         />
       )}
 

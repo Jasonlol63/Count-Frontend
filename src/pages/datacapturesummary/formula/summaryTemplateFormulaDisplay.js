@@ -6,7 +6,7 @@ import {
   expandDollarFormulaOperators,
   resolveCurrentSourceDataFromTemplate,
 } from "./summaryTemplateSourceData.js";
-import { isMg95ElsonSpecialRow } from "../lib/summaryIdProductDisplay.js";
+import { isMg95ElsonSpecialRow, getProcessValueFromSummaryRow } from "../lib/summaryIdProductDisplay.js";
 import { formatProcessedAmountDisplay } from "../table/summaryRowAmount.js";
 
 function hasMeaningfulFormulaOperators(value) {
@@ -16,8 +16,14 @@ function hasMeaningfulFormulaOperators(value) {
 
 /**
  * Resolve formula display when applying a saved template (legacy applyTemplateToSummaryRow logic).
+ * Outer wrapper ensures every code path returns negative numbers wrapped in parentheses.
  */
-export function resolveTemplateFormulaDisplay({
+export function resolveTemplateFormulaDisplay(params) {
+  const result = resolveTemplateFormulaDisplayCore(params);
+  return result ? formatNegativeNumbersInFormula(result) : result;
+}
+
+function resolveTemplateFormulaDisplayCore({
   row,
   template,
   sourceColumns = "",
@@ -28,7 +34,9 @@ export function resolveTemplateFormulaDisplay({
 }) {
   const savedFormulaDisplay = String(template?.formula_display || template?.formulaDisplay || "").trim();
   const isBatchSelected = template?.batch_selection == 1;
-  const idProduct = row?.productType === "sub" ? row.subIdProduct || row.idProduct : row.idProduct;
+  const idProduct =
+    getProcessValueFromSummaryRow(row) ||
+    (row?.productType === "sub" ? row.subIdProduct || row.idProduct : row.idProduct);
 
   if (isMg95ElsonSpecialRow(row)) {
     const amount = template?.last_processed_amount ?? row?.processedAmount ?? row?.baseProcessedAmount;

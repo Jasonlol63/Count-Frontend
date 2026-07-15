@@ -9,7 +9,6 @@ export default function MemberGridAccountPills({
   linkedAccounts,
   selectedIds,
   onApply,
-  onNotify,
   t,
 }) {
   const accounts = Array.isArray(linkedAccounts) ? linkedAccounts : [];
@@ -25,12 +24,7 @@ export default function MemberGridAccountPills({
   };
 
   const handleToggle = (accountId) => {
-    const next = applyWlGridAccountToggle(accounts, selectedIds, accountId);
-    if (!next.length) {
-      onNotify(t("selectAtLeastOneAccount"), "warning");
-      return;
-    }
-    onApply(next);
+    onApply(applyWlGridAccountToggle(accounts, selectedIds, accountId));
   };
 
   return (

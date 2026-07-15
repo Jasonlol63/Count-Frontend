@@ -2,12 +2,16 @@
  * Grid multi-selection state and clipboard actions.
  */
 import {
-  clearBridgeCells,
   getBridgeCellValue,
   gridHandleCellPaste,
   gridRecomputeSubmitState,
   notifyPasteUser,
 } from "../lib/dataCaptureBridge.js";
+import {
+  buildSyntheticPasteEvent,
+  readClipboardForPaste,
+} from "../paste/core/dataCaptureClipboard.js";
+import { callDataCaptureRuntime } from "../lib/dataCaptureRuntime.js";
 import { hideContextMenu } from "../lib/dataCaptureContextMenu.js";
 
 export const selectedCells = new Set();
@@ -54,13 +58,34 @@ function recomputeSubmitState() {
 }
 
 function cellPosition(cell) {
-  if (!cell?.parentNode?.parentNode) return null;
-  const row = cell.parentNode;
-  const table = row.parentNode;
-  const rowIndex = Array.from(table.children).indexOf(row);
+  if (!cell?.dataset) return null;
+  const rowIndex = Number.parseInt(cell.dataset.row, 10);
   const colIndex = Number.parseInt(cell.dataset.col, 10);
-  if (rowIndex < 0 || !Number.isFinite(colIndex)) return null;
+  if (!Number.isFinite(rowIndex) || !Number.isFinite(colIndex)) return null;
   return { rowIndex, colIndex };
+}
+
+export function getSelectedCellPositions() {
+  return getSelectedCells()
+    .filter((cell) => cell && cell.contentEditable === "true" && cell.closest("#dataTable"))
+    .map((cell) => cellPosition(cell))
+    .filter(Boolean);
+}
+
+export function getSelectedCellBounds() {
+  const positions = getSelectedCellPositions();
+  if (!positions.length) return null;
+
+  const rows = positions.map((p) => p.rowIndex);
+  const cols = positions.map((p) => p.colIndex);
+  return {
+    minRow: Math.min(...rows),
+    maxRow: Math.max(...rows),
+    minCol: Math.min(...cols),
+    maxCol: Math.max(...cols),
+    rowIndices: [...new Set(rows)].sort((a, b) => a - b),
+    colIndices: [...new Set(cols)].sort((a, b) => a - b),
+  };
 }
 
 export function copySelectedCells() {
@@ -106,33 +131,20 @@ export function pasteToSelectedCells() {
   const firstCell = getSelectedCells()[0];
   if (!firstCell) return;
 
-  navigator.clipboard.readText().then((text) => {
-    const mockEvent = {
-      preventDefault() {},
-      clipboardData: { getData: () => text },
-      target: firstCell,
-    };
-    gridHandleCellPaste(mockEvent);
-  }).catch((err) => {
-    console.error("Failed to read from clipboard:", err);
-    notifyPasteUser("Failed to access clipboard", "danger");
-  });
+  readClipboardForPaste()
+    .then(({ text, html }) => {
+      gridHandleCellPaste(buildSyntheticPasteEvent(firstCell, { text, html }));
+    })
+    .catch((err) => {
+      console.error("Failed to read from clipboard:", err);
+      notifyPasteUser("Failed to access clipboard", "danger");
+    });
 
   hideContextMenu();
 }
 
 export function clearSelectedCells() {
-  const positions = getSelectedCells()
-    .filter((cell) => cell && cell.contentEditable === "true" && cell.closest("#dataTable"))
-    .map((cell) => cellPosition(cell))
-    .filter(Boolean);
-
-  if (positions.length) {
-    clearBridgeCells(positions);
-  }
-
-  hideContextMenu();
-  recomputeSubmitState();
+  callDataCaptureRuntime("clearSelectedCellsInGrid");
 }
 
 export function selectAllCells(e) {

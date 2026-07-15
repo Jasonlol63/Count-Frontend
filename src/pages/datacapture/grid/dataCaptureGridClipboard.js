@@ -7,6 +7,10 @@ import {
   gridRecomputeSubmitState,
 } from "../lib/dataCaptureBridge.js";
 import {
+  buildSyntheticPasteEvent,
+  readClipboardForPaste,
+} from "../paste/core/dataCaptureClipboard.js";
+import {
   clearAllSelections,
   getSelectedCellCount,
   getSelectedCells,
@@ -56,17 +60,18 @@ export function pasteToSelectedCells() {
   const firstCell = getSelectedCells()[0];
   if (!firstCell) return;
 
-  navigator.clipboard.readText().then((text) => {
-    const mockEvent = {
-      preventDefault() {},
-      clipboardData: { getData: () => text },
-      target: firstCell,
-    };
-    gridHandleCellPaste(mockEvent);
-  }).catch((err) => {
-    console.error("Failed to read from clipboard:", err);
-    window.showNotification?.("Failed to access clipboard", "danger");
-  });
+  const dispatchPaste = (payload) => {
+    gridHandleCellPaste(buildSyntheticPasteEvent(firstCell, payload));
+  };
+
+  readClipboardForPaste()
+    .then(({ text, html }) => {
+      dispatchPaste({ text, html });
+    })
+    .catch((err) => {
+      console.error("Failed to read from clipboard:", err);
+      window.showNotification?.("Failed to access clipboard", "danger");
+    });
 
   hideContextMenu();
 }

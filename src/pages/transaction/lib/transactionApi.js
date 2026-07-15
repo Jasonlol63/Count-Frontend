@@ -13,6 +13,8 @@ export const transactionQueryKeys = {
     hideZeroBalance,
     categories,
     currencyCodes,
+    typeSearch,
+    typeAccountIds,
   }) => [
     "tx-search",
     {
@@ -26,6 +28,10 @@ export const transactionQueryKeys = {
       hideZeroBalance: !!hideZeroBalance,
       categories: Array.isArray(categories) ? [...categories].sort() : [],
       currencyCodes: Array.isArray(currencyCodes) ? [...currencyCodes].sort() : [],
+      typeSearch: !!typeSearch,
+      typeAccountIds: Array.isArray(typeAccountIds)
+        ? [...typeAccountIds].map((id) => Number(id)).filter((id) => id > 0).sort((a, b) => a - b)
+        : [],
     },
   ],
   categories: () => ["tx-categories"],
@@ -212,6 +218,77 @@ function logTxSearchResponse(body) {
   }
 }
 
+/** All-time account ids that ever had the given form transaction type (PM-aligned). */
+export async function fetchTypeAccountSearch({
+  companyId,
+  viewGroup,
+  groupId,
+  groupAggregate,
+  subsidiaryAccountsOnly,
+  transactionType,
+  signal,
+} = {}) {
+  const params = new URLSearchParams();
+  appendTransactionScope(params, {
+    companyId,
+    viewGroup,
+    groupId,
+    groupAggregate,
+    subsidiaryAccountsOnly,
+  });
+  params.set("transaction_type", String(transactionType || "").toUpperCase().trim());
+
+  const res = await fetch(buildApiUrl(`api/transactions/type_account_search_api.php?${params.toString()}`), {
+    credentials: "include",
+    cache: "no-cache",
+    headers: { "Cache-Control": "no-cache" },
+    signal,
+  });
+  const body = await safeJson(res);
+  if (!body?.success) {
+    throw new Error(body?.message || body?.error || "Type account search failed");
+  }
+  const ids = body?.data?.account_ids;
+  return Array.isArray(ids) ? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0) : [];
+}
+
+/** Type search: one grid row per approved transaction (all history, PM-aligned). */
+export async function fetchTypeTransactionSearch({
+  companyId,
+  viewGroup,
+  groupId,
+  groupAggregate,
+  subsidiaryAccountsOnly,
+  transactionType,
+  currencyCodes,
+  signal,
+} = {}) {
+  const params = new URLSearchParams();
+  appendTransactionScope(params, {
+    companyId,
+    viewGroup,
+    groupId,
+    groupAggregate,
+    subsidiaryAccountsOnly,
+  });
+  params.set("transaction_type", String(transactionType || "").toUpperCase().trim());
+  if (Array.isArray(currencyCodes) && currencyCodes.length > 0) {
+    params.set("currency", currencyCodes.join(","));
+  }
+
+  const res = await fetch(buildApiUrl(`api/transactions/type_transaction_search_api.php?${params.toString()}`), {
+    credentials: "include",
+    cache: "no-cache",
+    headers: { "Cache-Control": "no-cache" },
+    signal,
+  });
+  const body = await safeJson(res);
+  if (!body?.success) {
+    throw new Error(body?.message || body?.error || "Type transaction search failed");
+  }
+  return body?.data ?? null;
+}
+
 export async function searchTransactions({
   companyId,
   viewGroup,
@@ -225,6 +302,9 @@ export async function searchTransactions({
   hideZeroBalance,
   currencyCodes,
   categories,
+  typeSearch,
+  typeAccountIds,
+  typeSearchFormType,
   signal,
 } = {}) {
   const params = new URLSearchParams();
@@ -240,6 +320,19 @@ export async function searchTransactions({
   params.set("show_inactive", showInactive ? "1" : "0");
   params.set("show_capture_only", showCaptureOnly ? "1" : "0");
   params.set("hide_zero_balance", hideZeroBalance ? "1" : "0");
+  if (typeSearch) {
+    params.set("type_search", "1");
+    const ids = Array.isArray(typeAccountIds)
+      ? typeAccountIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+      : [];
+    if (ids.length > 0) {
+      params.set("type_account_ids", ids.join(","));
+    }
+  }
+  const formType = String(typeSearchFormType || "").toUpperCase().trim();
+  if (formType) {
+    params.set("type_search_form_type", formType);
+  }
   if (Array.isArray(currencyCodes) && currencyCodes.length > 0) params.set("currency", currencyCodes.join(","));
   if (Array.isArray(categories) && categories.length > 0) params.set("category", categories.join(","));
 
@@ -292,6 +385,7 @@ export async function getHistory({
   dateTo,
   currency,
   virtualCompanyCode,
+  pureTypeSearch,
   signal,
 } = {}) {
   const params = new URLSearchParams();
@@ -307,6 +401,8 @@ export async function getHistory({
   if (dateTo) params.set("date_to", String(dateTo));
   if (currency) params.set("currency", String(currency));
   if (virtualCompanyCode) params.set("virtual_company_code", String(virtualCompanyCode));
+  const pureType = String(pureTypeSearch || "").toUpperCase().trim();
+  if (pureType) params.set("pure_type_search", pureType);
 
   const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params.toString()}&_t=${Date.now()}`), {
     credentials: "include",

@@ -1,7 +1,8 @@
 import { memo } from "react";
 import MaintenanceCreatedAtDisplay from "../../shared/MaintenanceCreatedAtDisplay.jsx";
+import MaintenanceEllipsisText from "../../shared/MaintenanceEllipsisText.jsx";
 
-function WrapCell({ children, align = "left", className = "", title }) {
+function WrapCell({ value, align = "left", className = "" }) {
   const alignClass =
     align === "center"
       ? "maintenance-virtual-cell--center"
@@ -12,9 +13,8 @@ function WrapCell({ children, align = "left", className = "", title }) {
     <div
       role="cell"
       className={`maintenance-virtual-cell ${alignClass} ${className}`}
-      title={title}
     >
-      <span className="capture-cell-text">{children}</span>
+      <MaintenanceEllipsisText value={value} className="capture-cell-text" />
     </div>
   );
 }
@@ -45,33 +45,24 @@ const CaptureVirtualDataRow = memo(function CaptureVirtualDataRow({
 
   return (
     <div role="row" className={rowClass}>
-      <WrapCell align="left" className="capture-virtual-cell--no" title={String(row.no || index + 1)}>
-        {row.no || index + 1}
-      </WrapCell>
+      <div
+        role="cell"
+        className="maintenance-virtual-cell maintenance-virtual-cell--left capture-virtual-cell--no"
+      >
+        <span className="capture-cell-text">{row.no || index + 1}</span>
+      </div>
       <div
         role="cell"
         className="maintenance-virtual-cell maintenance-virtual-cell--left maintenance-virtual-cell--mono maintenance-virtual-cell--created-at"
       >
         <MaintenanceCreatedAtDisplay value={row.dts_created} />
       </div>
-      <WrapCell align="left" title={row.product || "-"}>
-        {row.product || "-"}
-      </WrapCell>
-      <WrapCell align="left" title={row.process || "-"}>
-        {row.process || "-"}
-      </WrapCell>
-      <WrapCell align="left" className="maintenance-cell-currency" title={row.currency || "-"}>
-        {row.currency || "-"}
-      </WrapCell>
-      <WrapCell align="left" title={row.wl_group || "-"}>
-        {row.wl_group || "-"}
-      </WrapCell>
-      <WrapCell align="left" title={row.submitted_by || "-"}>
-        {row.submitted_by || "-"}
-      </WrapCell>
-      <WrapCell align="left" title={deletedDisplay || "-"}>
-        {deletedDisplay}
-      </WrapCell>
+      <WrapCell value={row.product} />
+      <WrapCell value={row.process} />
+      <WrapCell value={row.currency} className="maintenance-cell-currency" />
+      <WrapCell value={row.wl_group} />
+      <WrapCell value={row.submitted_by} />
+      <WrapCell value={deletedDisplay} />
       <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--center capture-virtual-cell-checkbox">
         <span className="maintenance-checkbox-cell-inner">
           <input

@@ -110,11 +110,14 @@ export const MAINTENANCE_I18N = {
     transactionType: "Transaction Type",
     allTypes: "All Types",
     search: "Search",
-    searchFormulaPlaceholder: "Search formula...",
+    searchFormulaPlaceholder: "Search process, account, product...",
     clearFiltersTitle: "Clear Filters",
     selectAccount: "Select Account",
 
     bankSearchPlaceholder: "e.g. TEST M16(CIMB) / CIMB",
+    paymentSearchPlaceholder: "e.g. ACCOUNT / DESCRIPTION",
+    captureSearchPlaceholder: "e.g. PROCESS / PRODUCT / CURRENCY",
+    transactionSearchPlaceholder: "e.g. PROCESS / ACCOUNT / DESCRIPTION",
 
     edit: "Edit",
     save: "Save",
@@ -226,11 +229,14 @@ export const MAINTENANCE_I18N = {
     transactionType: "交易类型",
     allTypes: "全部类型",
     search: "搜索",
-    searchFormulaPlaceholder: "搜索公式...",
+    searchFormulaPlaceholder: "搜索流程、账户、产品...",
     clearFiltersTitle: "清除筛选",
     selectAccount: "选择账户",
 
     bankSearchPlaceholder: "例如 TEST M16(CIMB) / CIMB",
+    paymentSearchPlaceholder: "例如 账号 / 描述",
+    captureSearchPlaceholder: "例如 流程 / 产品 / 币种",
+    transactionSearchPlaceholder: "例如 流程 / 账号 / 说明",
 
     edit: "编辑",
     save: "保存",

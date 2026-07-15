@@ -29,6 +29,7 @@ import { mapRowsWithAmountRecalc } from "../table/summaryRowAmount.js";
 
 import { pushSummaryNotification } from "../lib/summaryNotify.js";
 import { resolveDataCaptureScopeFromSessionMeta } from "../../datacapture/lib/dataCaptureScope.js";
+import { loadSuppressedRowKeys } from "../lib/summarySuppressedRows.js";
 
 function readCaptureId() {
   try {
@@ -68,6 +69,8 @@ export function useSummaryTableModel({
   const populateStartedRef = useRef(false);
   const populateChainRef = useRef(Promise.resolve());
   const repopulateAttemptRef = useRef(0);
+  /** After first populate on this mount, in-page Refresh may restore draft (rate/formula). */
+  const initialPopulateCompletedRef = useRef(false);
 
   const processMeta = { processId, processCode };
 
@@ -88,7 +91,9 @@ export function useSummaryTableModel({
       setDataPopulating(true);
 
       try {
-        if (freshFromCapture) {
+        const isFirstFreshPopulate = freshFromCapture && !initialPopulateCompletedRef.current;
+
+        if (isFirstFreshPopulate) {
           clearSummaryRefreshDraftStorage(captureScope, processMeta);
         }
 
@@ -105,7 +110,7 @@ export function useSummaryTableModel({
 
         const accounts = await consumePrefetchedAccounts(captureScope);
 
-        if (!freshFromCapture) {
+        if (!isFirstFreshPopulate) {
           const snapshot = loadSummarySessionSnapshotWithFallback(
             captureScope,
             processMeta,
@@ -119,6 +124,7 @@ export function useSummaryTableModel({
             saveSummaryRefreshStatePure(restoredRows, processMeta, captureScope);
             setTableChromeVisible(true);
             document.body.classList.add("page-ready");
+            initialPopulateCompletedRef.current = true;
             return true;
           }
         }
@@ -132,7 +138,7 @@ export function useSummaryTableModel({
           captureScope,
           captureId,
           serverState,
-          freshFromCapture,
+          freshFromCapture: isFirstFreshPopulate,
           loadTemplates: () =>
             consumePrefetchedTemplates({
               captureScope,
@@ -157,6 +163,8 @@ export function useSummaryTableModel({
         if (freshFromCapture && searchParams?.get("success") === "1") {
           stripSummarySuccessParamFromUrl();
         }
+
+        initialPopulateCompletedRef.current = true;
 
         return summaryRowsLookPopulated(populatedRows);
       } catch (error) {
@@ -227,7 +235,11 @@ export function useSummaryTableModel({
 
   useEffect(() => {
     if (!enabled || !hasCaptureData || !tableData || dataPopulating) return;
+    // Auto-repopulate is only for initial bootstrap recovery.
+    // After first successful populate, user edits (e.g. delete/clear) must not be auto-overwritten.
+    if (initialPopulateCompletedRef.current) return;
     if (summaryRowsLookPopulated(rows)) return;
+    if (Array.isArray(rows) && rows.length === 0 && loadSuppressedRowKeys().size > 0) return;
     if (!freshFromCapture && serverStateQueryEnabled && serverStateLoading) return;
     if (repopulateAttemptRef.current >= 3) return;
 

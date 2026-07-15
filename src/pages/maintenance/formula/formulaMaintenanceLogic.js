@@ -1,4 +1,4 @@
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+﻿import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { isC168CompanyCode } from "../../../utils/company/c168CaptureChannel.js";
 import { companiesNativeInGroupList } from "../../../utils/company/sharedCompanyFilter.js";
 import {
@@ -52,7 +52,7 @@ function appendFormulaScopeToParams(params, scope) {
 }
 
 function appendFormulaScopeToPayload(payload, scope, fallbackCompanyId = null) {
-  // Never send company_id: 0 — backend rejects it; group scope resolves from group_id (same as list GET).
+  // Never send company_id: 0 â€” backend rejects it; group scope resolves from group_id (same as list GET).
   if (payload.company_id != null && Number(payload.company_id) <= 0) {
     delete payload.company_id;
   }
@@ -82,15 +82,22 @@ export async function fetchCompanyPermissions(companyCode) {
     return ["Games", "Gambling"];
   }
   const permissions = await fetchCompanyPermissionsRaw(companyCode);
-  const filtered = permissions.filter((p) => p !== "Bank");
-  return filtered.length > 0 ? filtered : ["Games", "Gambling", "Loan", "Rate", "Money"];
+  return permissions.length > 0 ? permissions : ["Games", "Gambling", "Bank", "Loan", "Rate", "Money"];
 }
 
 export { isBankOnlyCategoryCompany } from "../shared/maintenanceCompanyApi.js";
 
-export async function fetchProcesses(companyId, scope = null) {
-  const c168Channel = Boolean(scope?.c168Channel);
-  if (scope && formulaMaintenanceUsesGroupProcesses(scope) && !c168Channel) {
+export async function fetchProcesses(companyId, scope = null, permission = "") {
+  const payrollChannel = Boolean(scope?.c168Channel || scope?.companyPayrollChannel);
+  if (String(permission).toLowerCase() === "bank" || payrollChannel) {
+    return [
+      { id: "PROFIT", process_name: "PROFIT", description: null },
+      { id: "SALARY", process_name: "SALARY", description: null },
+      { id: "COMMISSION", process_name: "COMMISSION", description: null },
+      { id: "BONUS", process_name: "BONUS", description: null },
+    ];
+  }
+  if (scope && formulaMaintenanceUsesGroupProcesses(scope) && !payrollChannel) {
     const apiList = await fetchDomainReportProcesses(scope, { credentials: "include" });
     return mapProcessesForMaintenanceSelect(mapDomainGroupProcesses(apiList), {
       groupPayrollShort: true,
@@ -99,12 +106,19 @@ export async function fetchProcesses(companyId, scope = null) {
   const effectiveId = scope?.scopeCompanyId ?? companyId;
   const rows = await fetchMaintenanceProcesses(effectiveId, { credentials: "include" });
   let mapped = mapProcessesForMaintenanceSelect(rows, { groupPayrollShort: false });
-  if (c168Channel) {
+  if (scope?.c168Channel) {
     mapped = mapped.filter((p) =>
       FORMULA_PAYROLL_PROCESS_CODES.has(String(p.process_name ?? "").trim().toUpperCase()),
     );
   }
   return mapped;
+}
+
+/** Pick Category for formula maintenance (saved localStorage perm when still valid). */
+export function pickFormulaMaintenancePermission(permissions, saved) {
+  const perms = Array.isArray(permissions) ? permissions : [];
+  if (saved && perms.includes(saved)) return saved;
+  return perms.length > 0 ? perms[0] : "";
 }
 
 export async function bootstrapFormulaMaintenanceMeta({ companies, groupId = null }) {
@@ -116,10 +130,9 @@ export async function bootstrapFormulaMaintenanceMeta({ companies, groupId = nul
   const rawPerms = code
     ? await fetchCompanyPermissionsRaw(code)
     : ["Games", "Gambling", "Bank", "Loan", "Rate", "Money"];
-  const companyPerms = rawPerms.filter((p) => p !== "Bank");
+  const companyPerms = rawPerms;
   const savedPerm = code ? localStorage.getItem(`selectedPermission_${code}`) : null;
-  const initialActive =
-    savedPerm && companyPerms.includes(savedPerm) ? savedPerm : companyPerms.length > 0 ? companyPerms[0] : "";
+  const initialActive = pickFormulaMaintenancePermission(companyPerms, savedPerm);
   return { permissions: companyPerms, activePermission: initialActive, rawPerms };
 }
 
@@ -189,7 +202,7 @@ export async function deleteFormulaTemplates(companyId, templateIds, scope = nul
 }
 
 export async function updateSessionCompany(companyId) {
-  const response = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`), {
+  const response = await fetch(buildApiUrl(`auth/switch-tenant?tenant_id=${companyId}`), {
     credentials: "include",
   });
   const result = await response.json();
@@ -230,7 +243,7 @@ export function buildFormulaEditString(base) {
   return String(base ?? "").trim();
 }
 
-/** Formula 编辑框展示 = base +（Source≠1 时）* (source)，与列表 Formula 列一致。 */
+/** Formula ç¼–è¾‘æ¡†å±•ç¤º = base +ï¼ˆSourceâ‰ 1 æ—¶ï¼‰* (source)ï¼Œä¸Žåˆ—è¡¨ Formula åˆ—ä¸€è‡´ã€‚ */
 export function buildEditFormFormulaDisplay(base, sourcePercent) {
   const b = normalizeMaintenanceFormulaInput(base);
   const source = formatSourcePercent(sourcePercent ?? "1");
@@ -260,7 +273,7 @@ export function createFormulaEditFormFromRow(row) {
   };
 }
 
-/** Source 列变更：同步更新 Formula 编辑框里的 * (source) 后缀。 */
+/** Source åˆ—å˜æ›´ï¼šåŒæ­¥æ›´æ–° Formula ç¼–è¾‘æ¡†é‡Œçš„ * (source) åŽç¼€ã€‚ */
 export function syncEditFormSourcePercent(form, newSourcePercent) {
   const base = normalizeMaintenanceFormulaInput(form.formula);
   const source = formatSourcePercent(newSourcePercent);
@@ -303,4 +316,32 @@ export function prepareFormulaRowsForDisplay(rows) {
     _formula: toUpperDisplay(row.formula),
     _description: toUpperDisplay(row.description),
   }));
+}
+
+/** Client-side search across all visible columns (aligned with server-side search). */
+export function filterFormulaRowsBySearch(rows, searchTerm) {
+  const q = String(searchTerm || "").trim().toUpperCase();
+  if (!q || !Array.isArray(rows)) return rows || [];
+  return rows.filter((row) => {
+    const hay = [
+      row?.process,
+      row?._process,
+      row?.account,
+      row?._account,
+      row?.product,
+      row?._product,
+      row?.formula,
+      row?._formula,
+      row?.currency,
+      row?.description,
+      row?._description,
+      row?.source,
+      row?._source,
+      row?.input_method,
+      row?._inputMethod,
+    ]
+      .map((x) => String(x || "").toUpperCase())
+      .join(" ");
+    return hay.includes(q);
+  });
 }

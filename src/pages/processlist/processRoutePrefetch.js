@@ -1,12 +1,6 @@
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { mergeCurrencyCodesWithSavedOrder } from "../../utils/company/currencyDisplayOrder.js";
-import {
-  applyProcessFilters,
-  processListCacheHasEntry,
-  processListCacheHasRows,
-} from "./processListHelpers.js";
-import { fetchProcessListByTenantId } from "./processListApi.js";
-import { normalizeRows as normalizeBankProcessRows } from "../bankprocesslist/lib/bankProcessHelpers.js";
+import { normalizeRows as normalizeGamesProcessRows, processListCacheHasEntry, processListCacheHasRows } from "./processListHelpers.js";
 
 const processListRouteWarmCache = new Map();
 const processListRouteWarmInflight = new Map();
@@ -74,28 +68,48 @@ export async function fetchGamesProcessListSlice(
     return { rows: null, currencyCodes: null };
   }
 
-  const curUrl = new URL(buildApiUrl("api/currency/list"));
-  curUrl.searchParams.set("tenant_id", String(cid));
+  const listUrl = new URL(buildApiUrl("api/processes/processlist_api.php"));
+  listUrl.searchParams.set("permission", "Games");
+  listUrl.searchParams.set("company_id", String(cid));
+  const q = String(search || "").trim();
+  if (q) listUrl.searchParams.set("search", q);
+  if (showInactive) listUrl.searchParams.set("showInactive", "1");
+  if (showAll) listUrl.searchParams.set("showAll", "1");
+
+  const curUrl = buildApiUrl(`api/transactions/get_company_currencies_api.php?company_id=${cid}`);
+  const ordUrl = buildApiUrl(
+    `api/transactions/user_currency_order_api.php?company_id=${cid}&_t=${Date.now()}`,
+  );
 
   try {
     const fetchOpts = { credentials: "include", signal };
-    const [allRows, curRes] = await Promise.all([
-      fetchProcessListByTenantId(cid, signal).catch(() => null),
-      fetch(curUrl.toString(), { ...fetchOpts, method: "POST" }),
+    const [listRes, curRes, ordRes] = await Promise.all([
+      fetch(listUrl.toString(), fetchOpts),
+      fetch(curUrl, fetchOpts),
+      fetch(ordUrl, fetchOpts).catch(() => null),
     ]);
+    const listJson = await listRes.json();
     const curJson = await curRes.json();
+
+    const rows =
+      listRes.ok && listJson?.success && Array.isArray(listJson.data)
+        ? normalizeGamesProcessRows(listJson.data)
+        : null;
 
     let currencyCodes = null;
     if (curRes.ok && curJson?.success && Array.isArray(curJson.data)) {
       const codes = curJson.data.map((r) => String(r.code).toUpperCase());
-      const savedOrder = null; // Fallback to default sorting order
+      let savedOrder = null;
+      if (ordRes) {
+        try {
+          const ordJson = await ordRes.json();
+          savedOrder = ordJson?.data?.order;
+        } catch {
+          /* optional order */
+        }
+      }
       currencyCodes = mergeCurrencyCodesWithSavedOrder(codes, savedOrder);
     }
-
-    // Spring list returns all statuses; filter client-side (default=active, showInactive=inactive).
-    const rows = Array.isArray(allRows)
-      ? applyProcessFilters(allRows, { search, showInactive, showAll })
-      : allRows;
 
     return { rows, currencyCodes };
   } catch (err) {
@@ -160,53 +174,56 @@ export async function resolveBankProcessListRouteCache(companyId, opts = {}) {
 }
 
 /** Warm Bank Process List data before route swap (Games → Bank). */
-export async function prefetchBankProcessListPayload(companyId, { search = "" } = {}) {
+export async function prefetchBankProcessListPayload(companyId, { search = "", signal } = {}) {
   const cid = Number(companyId);
   if (!cid) return { rows: null, currencyCodes: null };
 
-  const listUrl = new URL(buildApiUrl("api/processes/processlist_api.php"));
-  listUrl.searchParams.set("permission", "Bank");
-  listUrl.searchParams.set("company_id", String(cid));
-  listUrl.searchParams.set("showAll", "1");
-  const q = String(search || "").trim();
-  if (q) listUrl.searchParams.set("search", q);
-
-  const curUrl = buildApiUrl(`api/transactions/get_company_currencies_api.php?company_id=${cid}`);
-  const ordUrl = buildApiUrl(
-    `api/transactions/user_currency_order_api.php?company_id=${cid}&_t=${Date.now()}`,
-  );
-
   try {
-    const [listRes, curRes, ordRes] = await Promise.all([
-      fetch(listUrl.toString(), { credentials: "include" }),
-      fetch(curUrl, { credentials: "include" }),
-      fetch(ordUrl, { credentials: "include" }).catch(() => null),
-    ]);
-    const listJson = await listRes.json();
-    const curJson = await curRes.json();
+    const { fetchBankProcessListByTenantId } = await import("../bankprocesslist/bankProcessListApi.js");
+    const rows = await fetchBankProcessListByTenantId(cid, signal);
+    const filtered = search
+      ? rows.filter((r) => {
+          const q = String(search).trim().toUpperCase();
+          if (!q) return true;
+          const hay = [r?.country, r?.bank, r?.type, r?.supplier, r?.card_lower, r?.customer]
+            .map((x) => String(x || "").toUpperCase())
+            .join(" ");
+          return hay.includes(q);
+        })
+      : rows;
 
-    const rows =
-      listRes.ok && listJson?.success && Array.isArray(listJson.data)
-        ? normalizeBankProcessRows(listJson.data)
-        : null;
-
+    // Currencies still optional / PHP until currency order is Spring-only for this page.
     let currencyCodes = null;
-    if (curRes.ok && curJson?.success && Array.isArray(curJson.data)) {
-      const codes = curJson.data.map((r) => String(r.code).toUpperCase());
-      let savedOrder = null;
-      if (ordRes) {
-        try {
-          const ordJson = await ordRes.json();
-          savedOrder = ordJson?.data?.order;
-        } catch {
-          /* optional order */
+    try {
+      const curUrl = buildApiUrl(`api/transactions/get_company_currencies_api.php?company_id=${cid}`);
+      const ordUrl = buildApiUrl(
+        `api/transactions/user_currency_order_api.php?company_id=${cid}&_t=${Date.now()}`,
+      );
+      const [curRes, ordRes] = await Promise.all([
+        fetch(curUrl, { credentials: "include", signal }),
+        fetch(ordUrl, { credentials: "include", signal }).catch(() => null),
+      ]);
+      const curJson = await curRes.json();
+      if (curRes.ok && curJson?.success && Array.isArray(curJson.data)) {
+        const codes = curJson.data.map((r) => String(r.code).toUpperCase());
+        let savedOrder = null;
+        if (ordRes) {
+          try {
+            const ordJson = await ordRes.json();
+            savedOrder = ordJson?.data?.order;
+          } catch {
+            /* optional */
+          }
         }
+        currencyCodes = mergeCurrencyCodesWithSavedOrder(codes, savedOrder);
       }
-      currencyCodes = mergeCurrencyCodesWithSavedOrder(codes, savedOrder);
+    } catch {
+      /* currency meta optional for list */
     }
 
-    return { rows, currencyCodes };
-  } catch {
+    return { rows: filtered, currencyCodes };
+  } catch (err) {
+    if (err?.name === "AbortError") throw err;
     return { rows: null, currencyCodes: null };
   }
 }

@@ -2,32 +2,28 @@
  * Document-level grid keyboard shortcuts — extracted from js/datacapture.js.
  * Re-run: node frontend/scripts/extract-grid-document-keyboard.mjs
  */
+import { hasPasteHistory, undoLastPaste } from "./dataCaptureGridPasteHistory.js";
 import {
   gridClearAllSelections,
+  gridClearSelectedCells,
   gridCopySelectedCells,
   gridGetSelectedCellCount,
   gridGetSelectedCells,
   gridGetTableActive,
-  gridHasPasteHistory,
   gridMoveCaretToEnd,
   gridPasteToSelectedCells,
   gridRecomputeSubmitState,
   gridSelectAllCells,
   gridSetActiveCell,
   gridSetActiveCellWithoutFocus,
-  gridUndoLastPaste,
 } from "../lib/dataCaptureBridge.js";
+
+function undoLastPasteAction() {
+  undoLastPaste();
+}
 
 function isTableActive() {
   return gridGetTableActive();
-}
-
-function hasPasteHistory() {
-  return gridHasPasteHistory();
-}
-
-function undoLastPaste() {
-  gridUndoLastPaste();
 }
 
 function clearAllSelections() {
@@ -82,11 +78,8 @@ const key = (e.key || '').toLowerCase();
     if (!isTableActive() && !isEditingCell) {
         // Allow Ctrl+Z undo even when table is not active (for paste history)
         if ((e.ctrlKey || e.metaKey) && key === 'z' && !e.shiftKey) {
-            // Check if there's paste history to undo
-            if (hasPasteHistory()) {
-                e.preventDefault();
-                undoLastPaste();
-            }
+            e.preventDefault();
+            undoLastPasteAction();
             return;
         }
         // Ignore all other table-related keyboard events when table is not active
@@ -95,6 +88,16 @@ const key = (e.key || '').toLowerCase();
 
     // Ctrl+Z undo (case-insensitive, compatible with Caps Lock)
     if ((e.ctrlKey || e.metaKey) && key === 'z' && !e.shiftKey) {
+        if (hasPasteHistory()) {
+            e.preventDefault();
+            e.stopPropagation();
+            undoLastPasteAction();
+            return;
+        }
+        // In-cell typing undo — let the browser handle contentEditable undo.
+        if (isEditingCell) {
+            return;
+        }
         // 获取事件目标元素（支持文本节点和元素节点）
         const targetElement = e.target.nodeType === Node.TEXT_NODE ? e.target.parentElement : e.target;
 
@@ -118,60 +121,49 @@ const key = (e.key || '').toLowerCase();
 
         // 如果满足任何一个条件，说明在表格内
         if (activeElInTable || targetInTable || hasSelectedCellsInTable || isEditingCell) {
-            // 优先检查是否有粘贴历史记录，如果有就撤销粘贴操作
             if (hasPasteHistory()) {
                 e.preventDefault();
                 e.stopPropagation();
-                undoLastPaste();
+                undoLastPasteAction();
                 return;
             }
 
-            // 如果没有粘贴历史，但有选中的单元格但没有焦点，需要先聚焦到单元格才能执行撤销
-            // 因为浏览器的撤销操作需要元素有焦点
             if (hasSelectedCellsInTable && !activeElInTable && !isEditingCell) {
                 const firstSelectedCell = getSelectedCells()[0];
                 if (firstSelectedCell && firstSelectedCell.contentEditable === 'true') {
-                    // 先聚焦到单元格
                     firstSelectedCell.focus();
-                    // 移动光标到文本末尾，确保焦点正确设置
                     try {
                         const selection = window.getSelection();
                         const range = document.createRange();
                         range.selectNodeContents(firstSelectedCell);
-                        range.collapse(false); // 折叠到末尾
+                        range.collapse(false);
                         selection.removeAllRanges();
                         selection.addRange(range);
-                    } catch (err) {
-                        // 如果设置光标位置失败，继续执行
+                    } catch {
+                        /* ignore */
                     }
 
-                    // 阻止默认行为，稍后手动触发撤销
                     e.preventDefault();
                     e.stopPropagation();
 
-                    // 使用 setTimeout 确保焦点和光标位置已设置完成
                     setTimeout(() => {
-                        // 现在单元格有焦点了，使用 execCommand 执行撤销
                         try {
-                            const success = document.execCommand('undo', false, null);
-                            if (!success) {
-                                // 如果 execCommand 失败，尝试使用 InputEvent 触发撤销
-                                console.log('execCommand undo failed');
-                            }
-                        } catch (err) {
-                            console.error('Error executing undo:', err);
+                            document.execCommand('undo', false, null);
+                        } catch {
+                            /* ignore */
                         }
                     }, 0);
                     return;
                 }
             }
-            // 如果单元格已经有焦点且没有粘贴历史，不阻止默认行为，让浏览器执行撤销操作
+
             return;
         }
 
-        // 如果不在表格内，执行自定义撤销（比如撤销粘贴操作）
-        e.preventDefault();
-        undoLastPaste();
+        if (hasPasteHistory()) {
+            e.preventDefault();
+            undoLastPasteAction();
+        }
         return;
     }
 
@@ -184,6 +176,17 @@ const key = (e.key || '').toLowerCase();
         if (isEditingCell) {
             // When cell is being edited, let cell-level event handler handle it
             // handleCellKeydown will handle and prevent event propagation
+            return;
+        }
+
+        // 任意自定义下拉（如 capture type 1.TEXT/2.FORMAT…）打开或获得焦点时，
+        // 让下拉自身处理上下箭头，避免被表格抢去做单元格导航。
+        const activeInCustomSelect = activeElement && activeElement.closest && (
+            activeElement.closest('.custom-select-button') ||
+            activeElement.closest('.custom-select-dropdown')
+        );
+        const anyCustomSelectOpen = document.querySelector('.custom-select-dropdown.show');
+        if (activeInCustomSelect || anyCustomSelectOpen) {
             return;
         }
 
@@ -204,11 +207,19 @@ const key = (e.key || '').toLowerCase();
         // 检查是否在 currency 或 date 字段中（锁定表格）
         const currencySelect = document.getElementById('capture_currency');
         const dateSelect = document.getElementById('capture_date');
-        const isCurrencyFocused = activeElement === currencySelect;
-        const isDateFocused = activeElement === dateSelect;
+        const currencyDropdown = document.getElementById('capture_currency_dropdown');
+        const dateDropdown = document.getElementById('capture_date_dropdown');
+        const isCurrencyDropdownOpen = currencyDropdown?.classList.contains('show');
+        const isDateDropdownOpen = dateDropdown?.classList.contains('show');
+        const isCurrencyFocused =
+            activeElement === currencySelect ||
+            (currencyDropdown && currencyDropdown.contains(activeElement));
+        const isDateFocused =
+            activeElement === dateSelect ||
+            (dateDropdown && dateDropdown.contains(activeElement));
 
-        // 如果焦点在 currency 或 date 字段上，不处理箭头键
-        if (isCurrencyFocused || isDateFocused) {
+        // 如果焦点在 currency 或 date 字段上，或对应下拉已打开，不处理箭头键
+        if (isCurrencyFocused || isDateFocused || isCurrencyDropdownOpen || isDateDropdownOpen) {
             return;
         }
 
@@ -280,19 +291,13 @@ const key = (e.key || '').toLowerCase();
     } else if (e.key === 'Delete') {
         if (getSelectedCellCount() > 0) {
             e.preventDefault();
-            getSelectedCells().forEach((cell) => {
-                if (cell?.contentEditable === 'true') {
-                    cell.textContent = '';
-                }
-            });
+            gridClearSelectedCells();
             recomputeSubmitState();
         }
     } else if (e.key === 'Backspace') {
         if (!isEditingCell && getSelectedCellCount() > 0) {
             e.preventDefault();
-            getSelectedCells().forEach(cell => {
-                cell.textContent = '';
-            });
+            gridClearSelectedCells();
             recomputeSubmitState();
         }
     } else if (e.ctrlKey && key === 'a') {

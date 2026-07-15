@@ -16,19 +16,20 @@ body.process-page {
     background-blend-mode: screen, screen, multiply, screen, normal;
     color: #334155;
     overflow-x: hidden;
-    overflow-y: hidden;
+    overflow-y: auto;
     position: relative;
 }
 
-/* Games Process List（非 Bank / 非 Show All）：全视口一屏，禁止整页纵向滚动（含普通 desktop） */
+/* Games Process List（非 Bank / 非 Show All）：允许整页纵向滚动 */
 html:has(body.process-page:not(.process-page--bank):not(.process-page--show-all)) {
     height: 100%;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 body.process-page:not(.process-page--bank):not(.process-page--show-all) {
     overflow-x: hidden !important;
-    overflow-y: hidden !important;
+    overflow-y: auto !important;
     height: 100vh !important;
     max-height: 100vh !important;
 }
@@ -36,7 +37,8 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) {
 body.process-page:not(.process-page--bank):not(.process-page--show-all) .container {
     height: 100vh !important;
     max-height: 100vh !important;
-    overflow: hidden !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
     display: flex !important;
     flex-direction: column !important;
     box-sizing: border-box !important;
@@ -47,7 +49,7 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .content
     min-height: 0 !important;
     height: auto !important;
     max-height: none !important;
-    overflow: hidden !important;
+    overflow-y: auto !important;
     display: flex !important;
     flex-direction: column !important;
 }
@@ -137,13 +139,16 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .content
     min-width: clamp(180px, 15vw, 250px);
     width: clamp(180px, 15vw, 250px);
     min-height: clamp(32px, 2.45vw, 38px);
-    gap: clamp(6px, 0.5vw, 10px);
+    /* Flush calendar tile to outer border — no gap (avoids “detached” blue square) */
+    gap: 0;
     padding: 0 clamp(28px, 2.2vw, 36px) 0 0;
     border: 1px solid rgba(148, 163, 184, 0.62);
     border-radius: 12px;
     background: #ffffff;
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
     justify-content: flex-start;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 .process-page .transaction-date-range-group .date-range-picker:hover {
@@ -261,6 +266,44 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .content
     align-items: center;
     gap: 12px;
     flex: 0 0 auto;
+}
+
+/* Games Process toolbar：对齐 Account / User List 字号密度 */
+body.ec-auth-shell.process-page:not(.process-page--bank) .action-buttons .btn {
+    font-size: 1.4rem !important;
+}
+
+body.ec-auth-shell.process-page:not(.process-page--bank) .user-gc-segment {
+    padding: 4px 18px !important;
+    font-size: 1.4rem !important;
+}
+
+body.ec-auth-shell.process-page:not(.process-page--bank) .user-filter-chip {
+    font-size: 1.2rem !important;
+}
+
+body.ec-auth-shell.process-page:not(.process-page--bank) .search-container.userlist-search-bar .userlist-search-input,
+body.ec-auth-shell.process-page:not(.process-page--bank) .search-container.userlist-search-bar .userlist-search-input.search-input {
+    font-size: 1.2rem !important;
+}
+
+/* Bank Process toolbar：与 Account / User List 保持同一字号标准 */
+body.ec-auth-shell.process-page.process-page--bank .action-buttons .btn {
+    font-size: 1.4rem !important;
+}
+
+body.ec-auth-shell.process-page.process-page--bank .user-gc-segment {
+    padding: 4px 18px !important;
+    font-size: 1.4rem !important;
+}
+
+body.ec-auth-shell.process-page.process-page--bank .user-filter-chip {
+    font-size: 1.2rem !important;
+}
+
+body.ec-auth-shell.process-page.process-page--bank .search-container.userlist-search-bar .userlist-search-input,
+body.ec-auth-shell.process-page.process-page--bank .search-container.userlist-search-bar .userlist-search-input.search-input {
+    font-size: 1.2rem !important;
 }
 
 .process-page .process-company-filter {
@@ -677,18 +720,20 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .content
 
 .process-page .bank-status-button {
     width: auto;
-    min-width: 0;
+    min-width: max-content;
     max-width: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 24px;
-    padding: 4px 12px;
-    border-radius: 999px;
+    height: var(--bank-list-pill-height, 20px);
+    min-height: var(--bank-list-pill-height, 20px);
+    padding: 0 8px;
+    border-radius: 6px;
     border: 1px solid #cbd5e1;
-    font-size: clamp(7px, 0.63vw, 12px);
-    font-weight: bolder;
+    font-size: 1.1rem;
+    font-weight: 700;
     line-height: 1.1;
+    letter-spacing: 0.02em;
     text-align: center;
     white-space: nowrap;
     overflow: visible;
@@ -753,15 +798,36 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .content
     display: none;
     flex-direction: column;
     align-items: stretch;
-    padding: 6px;
-    border: 1px solid #dbe3ee;
-    border-radius: 14px;
+    gap: 4px;
+    padding: 7px;
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 12px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(248, 250, 252, 0.98) 100%);
-    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.18);
-    backdrop-filter: blur(10px);
+    box-shadow:
+        0 12px 28px rgba(15, 23, 42, 0.18),
+        0 2px 8px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(8px);
     z-index: 1210;
     box-sizing: border-box;
     white-space: normal;
+    max-height: min(52vh, 260px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.72) transparent;
+}
+
+.process-page .bank-status-menu::-webkit-scrollbar {
+    width: 6px;
+}
+
+.process-page .bank-status-menu::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.72);
+    border-radius: 999px;
+}
+
+.process-page .bank-status-menu::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .process-page .bank-status-menu.bank-status-menu-floating {
@@ -778,31 +844,45 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .content
 }
 
 .process-page .bank-status-option {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 100%;
-    border: none;
+    min-height: 32px;
+    border: 1px solid transparent;
     background: transparent;
-    border-radius: 10px;
-    padding: 8px 10px;
-    font-size: clamp(9px, 0.72vw, 13px);
+    border-radius: 9px;
+    padding: 7px 12px;
+    font-size: clamp(10px, 0.72vw, 13px);
     font-weight: 700;
-    letter-spacing: 0.02em;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
     text-align: center;
+    white-space: nowrap;
     cursor: pointer;
-    transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+    transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.process-page .bank-status-option+.bank-status-option {
-    margin-top: 4px;
-}
-
-.process-page .bank-status-option:hover {
+.process-page .bank-status-option:hover:not(:disabled):not(.selected) {
     background: rgba(59, 130, 246, 0.1);
-    transform: translateY(-1px);
+    border-color: rgba(59, 130, 246, 0.28);
+}
+
+.process-page .bank-status-option.keyboard-focus {
+    background: rgba(59, 130, 246, 0.12);
+    border-color: rgba(59, 130, 246, 0.36);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.16);
+    font-weight: 600;
 }
 
 .process-page .bank-status-option.selected {
-    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.35);
+    border-color: rgba(148, 163, 184, 0.42);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.process-page .bank-status-option:disabled {
+    opacity: 0.6;
+    cursor: wait;
 }
 
 .process-page .bank-status-option[data-value="active"] {
@@ -823,6 +903,31 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .content
 
 .process-page .bank-status-option[data-value="block"] {
     color: #111827;
+}
+
+.process-page .bank-status-option[data-value="active"].selected {
+    background: linear-gradient(180deg, #e9fff1 0%, #d8f9e4 100%);
+    border-color: #9ad9b1;
+}
+
+.process-page .bank-status-option[data-value="inactive"].selected {
+    background: linear-gradient(180deg, #ffe8e8 0%, #ffdede 100%);
+    border-color: #e9b0b0;
+}
+
+.process-page .bank-status-option[data-value="official"].selected {
+    background: linear-gradient(180deg, #fff7df 0%, #fff0c2 100%);
+    border-color: #eccd69;
+}
+
+.process-page .bank-status-option[data-value="e_invoice"].selected {
+    background: linear-gradient(180deg, #fff1e3 0%, #ffe7cf 100%);
+    border-color: #f0ba7f;
+}
+
+.process-page .bank-status-option[data-value="block"].selected {
+    background: linear-gradient(180deg, #f4f6f8 0%, #ebeff3 100%);
+    border-color: #b7c0cc;
 }
 
 /* Action 列表头：文字与勾选格垂直居中 */
@@ -879,10 +984,11 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .content
     border: 0.0625rem solid #e0e0e0;
 }
 
-/* Bank Process（非 Show All）：桌面一屏，禁止整页纵向滚动 */
+/* Bank Process（非 Show All）：锁整页，仅数据区纵向滚动 */
 html:has(body.process-page.process-page--bank:not(.process-page--bank-show-all)) {
     height: 100%;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: hidden;
 }
 
 body.process-page.process-page--bank:not(.process-page--bank-show-all),
@@ -901,7 +1007,8 @@ body.process-page.process-page--bank:not(.process-page--bank-show-all) .ec-page-
     height: 100% !important;
     min-height: 0 !important;
     max-height: 100% !important;
-    overflow: hidden !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
 }
 
 /* Bank Show All：整页可滚动 */
@@ -941,12 +1048,15 @@ body.process-page.process-page--bank.process-page--bank-show-all #root {
     --bank-list-scroll-body-min-height: calc(
         var(--bank-list-scroll-min-visible-rows) * var(--bank-list-data-row-estimate)
     );
-    --bank-list-scrollbar-width: 5px;
-    --bank-list-scrollbar-gutter: 6px;
-    --bank-list-scrollbar-thumb: #6b7280;
-    --bank-list-scrollbar-thumb-hover: #4b5563;
-    --bank-list-scrollbar-thumb-active: #374151;
-    --bank-list-scrollbar-track: #e5e7eb;
+    --bank-list-scrollbar-width: 6px;
+    --bank-list-scrollbar-gutter: 4px;
+    --bank-list-scrollbar-thumb: #b8c0cc;
+    --bank-list-scrollbar-thumb-hover: #94a3b8;
+    --bank-list-scrollbar-thumb-active: #64748b;
+    --bank-list-scrollbar-track: transparent;
+    --bank-list-pagination-offset-bottom: calc(
+        max(10px, env(safe-area-inset-bottom, 0px)) + var(--bank-list-scrollbar-width) + 8px
+    );
 }
 
 .process-page.process-page--bank .container {
@@ -963,7 +1073,8 @@ body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-
     height: 100vh !important;
     max-height: 100vh !important;
     min-height: 0 !important;
-    overflow: hidden !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
     padding-bottom: 0 !important;
 }
 
@@ -992,7 +1103,7 @@ body.process-page.process-page--bank.process-page--bank-show-all .container {
 }
 
 body.process-page.process-page--bank:not(.process-page--bank-show-all) .content {
-    overflow: hidden !important;
+    overflow-y: hidden !important;
 }
 
 body.process-page.process-page--bank.process-page--bank-show-all .content {
@@ -1016,10 +1127,55 @@ body.process-page.process-page--bank.process-page--bank-show-all .content {
 }
 
 body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body,
+body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body {
+    overflow-y: hidden !important;
+}
+
 body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region,
-body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body,
 body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region {
-    overflow: hidden !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--bank-list-scrollbar-thumb) var(--bank-list-scrollbar-track);
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar,
+body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar {
+    width: var(--bank-list-scrollbar-width) !important;
+    height: var(--bank-list-scrollbar-width) !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar-button,
+body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar-button {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar-track,
+body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar-track {
+    background: var(--bank-list-scrollbar-track) !important;
+    border-radius: 999px !important;
+    margin: 0 var(--bank-list-scrollbar-gutter) !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar-thumb,
+body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar-thumb {
+    background: var(--bank-list-scrollbar-thumb) !important;
+    border: none !important;
+    border-radius: 999px !important;
+    min-height: 24px !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar-thumb:hover,
+body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar-thumb:hover {
+    background: var(--bank-list-scrollbar-thumb-hover) !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar-thumb:active,
+body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar-thumb:active {
+    background: var(--bank-list-scrollbar-thumb-active) !important;
 }
 
 body.process-page.process-page--bank.process-page--bank-show-all .bank-process-list-body,
@@ -1045,7 +1201,7 @@ body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-
     max-height: 100%;
     width: 100%;
     align-self: stretch;
-    overflow: hidden !important;
+    overflow-y: hidden !important;
     display: flex;
     flex-direction: column;
     padding-bottom: 52px;
@@ -1088,24 +1244,26 @@ body.process-page.process-page--bank.process-page--bank-show-all .bank-process-l
 
 /* —— Bank virtual table（表头/数据行 subgrid 共用列轨道，铺满宽度无横向滚动）—— */
 .process-page.process-page--bank {
-    --bank-list-cell-padding-y: clamp(4px, 0.4vw, 5px);
+    --bank-list-cell-padding-y: 0;
     --bank-list-cell-padding-x: clamp(6px, 0.65vw, 12px);
-    --bank-list-cell-min-height: clamp(28px, 2.4vw, 30px);
+    --bank-list-cell-min-height: 26px;
+    --bank-list-pill-height: 20px;
     --bank-list-header-row-height: clamp(40px, 2.8vw, 48px);
-    --bank-list-cell-line-height: 1.35;
+    --bank-list-cell-line-height: 1.1;
+    --bank-virtual-table-min-width: 1440px;
     /* Country / Insurance / Customer 列设最小像素宽，保证表头英文标题+排序角标完整显示 */
     --bank-virtual-grid-columns:
         minmax(36px, 0.34fr) minmax(0, 0.62fr) minmax(max-content, 0.44fr)
         minmax(max-content, 1.08fr) minmax(140px, 1.68fr)
         minmax(0, 0.6fr) minmax(max-content, 0.56fr) minmax(max-content, 0.5fr)
         minmax(0, 0.56fr) minmax(0, 0.56fr) minmax(0, 0.56fr)
-        minmax(0, 0.6fr) minmax(0, 0.56fr) max-content;
+        minmax(max-content, 0.6fr) minmax(0, 0.56fr) max-content;
     --bank-virtual-grid-columns-with-select:
         minmax(36px, 0.34fr) minmax(0, 0.62fr) minmax(max-content, 0.44fr)
         minmax(max-content, 1.08fr) minmax(140px, 1.68fr)
         minmax(0, 0.6fr) minmax(max-content, 0.56fr) minmax(max-content, 0.5fr)
         minmax(0, 0.56fr) minmax(0, 0.56fr) minmax(0, 0.56fr)
-        minmax(0, 0.6fr) minmax(0, 0.56fr) max-content max-content;
+        minmax(max-content, 0.6fr) minmax(0, 0.56fr) max-content max-content;
     --bank-virtual-grid-active: var(--bank-virtual-grid-columns);
 }
 
@@ -1117,8 +1275,9 @@ body.process-page.process-page--bank.process-page--bank-show-all .bank-process-l
     display: flex;
     flex-direction: column;
     overflow: visible;
-    overflow-x: hidden;
+    overflow-x: auto;
     overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
 }
 
 .process-page.process-page--bank .bank-virtual-table {
@@ -1128,7 +1287,8 @@ body.process-page.process-page--bank.process-page--bank-show-all .bank-process-l
     min-height: 0;
     height: auto;
     width: 100%;
-    max-width: 100%;
+    min-width: max(100%, var(--bank-virtual-table-min-width, 1440px));
+    max-width: none;
     overflow: visible;
     -webkit-overflow-scrolling: touch;
 }
@@ -1136,7 +1296,7 @@ body.process-page.process-page--bank.process-page--bank-show-all .bank-process-l
 .process-page.process-page--bank .bank-virtual-table-inner {
     min-width: 0;
     width: 100%;
-    max-width: 100%;
+    max-width: none;
     display: grid;
     grid-template-columns: var(--bank-virtual-grid-active);
     grid-template-rows: auto auto;
@@ -1161,7 +1321,7 @@ body.process-page.process-page--bank.process-page--bank-show-all .bank-process-l
     align-items: stretch;
     width: 100%;
     min-width: 0;
-    max-width: 100%;
+    max-width: none;
     box-sizing: border-box;
     gap: 0;
     column-gap: 0;
@@ -1212,7 +1372,7 @@ body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-vir
 body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table {
     flex: 1 1 auto;
     min-height: 0;
-    overflow: hidden !important;
+    overflow-y: hidden !important;
 }
 
 body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table-inner,
@@ -1220,19 +1380,19 @@ body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-
     flex: 1 1 auto;
     min-height: 0;
     grid-template-rows: auto minmax(0, 1fr);
-    overflow: hidden !important;
+    overflow-y: hidden !important;
 }
 
 body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip,
 body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip {
     flex: 1 1 auto;
     max-height: 100%;
-    overflow-x: hidden !important;
-    overflow-y: hidden !important;
+    overflow-x: visible !important;
+    overflow-y: auto !important;
 }
 
 body.process-page.process-page--bank:not(.process-page--bank-show-all) .process-table-wrapper.bank-process-table-region {
-    overflow-x: hidden !important;
+    overflow-x: auto !important;
     overflow-y: hidden !important;
 }
 
@@ -1324,7 +1484,7 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .b
     background: transparent;
     color: #ffffff;
     font-weight: bold;
-    font-size: var(--text-base);
+    font-size: 1.6rem;
     line-height: 1.2;
     padding: var(--bank-list-cell-padding-y) var(--bank-list-cell-padding-x);
     text-align: center;
@@ -1362,7 +1522,7 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .b
 }
 
 .process-page.process-page--bank .bank-virtual-cell {
-    font-size: var(--text-medium);
+    font-size: 1.4rem;
     font-weight: var(--font-weight-bold);
     color: #374151;
     line-height: var(--bank-list-cell-line-height);
@@ -1454,8 +1614,15 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .b
 }
 
 .process-page.process-page--bank .contract-badge {
-    padding: 0 clamp(3px, 0.38vw, 7px);
-    font-size: clamp(8px, 0.64vw, 12px);
+    box-sizing: border-box;
+    height: var(--bank-list-pill-height, 20px);
+    min-height: var(--bank-list-pill-height, 20px);
+    padding: 0 8px;
+    border-radius: 6px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: 0.02em;
 }
 
 /* 标题行外层 div 的 margin 不再缩减，保持与 processlist.php 一致（inline margin: 20px 生效） */
@@ -1500,7 +1667,7 @@ body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-pro
 body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .pagination-container {
     position: fixed !important;
     right: max(40px, env(safe-area-inset-right, 0px)) !important;
-    bottom: max(20px, env(safe-area-inset-bottom, 0px)) !important;
+    bottom: var(--bank-list-pagination-offset-bottom, max(28px, env(safe-area-inset-bottom, 0px))) !important;
     left: auto !important;
     top: auto !important;
     margin: 0 !important;
@@ -1567,7 +1734,8 @@ body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
-    padding-bottom: 52px;
+    /* Keep room for floating pager, but avoid over-reserving a full row. */
+    padding-bottom: 30px;
     box-sizing: border-box;
 }
 
@@ -1719,7 +1887,7 @@ body.process-page.process-page--bank .bank-process-filter-panel {
     transition: grid-template-columns 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-body.process-page.process-page--bank .bank-process-toolbar-primary .userlist-filter-chips--bank-process {
+body.process-page.process-page--bank .bank-process-toolbar-primary .userlist-filter-chips--bank-process:not(.userlist-filter-chips--bank-process-dropdown) {
     flex: 1 1 auto;
     min-width: 0;
     flex-wrap: nowrap;
@@ -1861,7 +2029,7 @@ body.process-page.process-page--bank .bank-process-filter-panel--dropdown {
     flex: none;
     width: max-content;
     min-width: 0;
-    max-width: min(calc(100vw - 16px), calc(100% + 520px));
+    max-width: min(calc(100vw - 16px), 820px);
     overflow: visible;
     pointer-events: none;
     opacity: 0;
@@ -1872,6 +2040,12 @@ body.process-page.process-page--bank .bank-process-filter-panel--dropdown {
         opacity 0.18s ease,
         transform 0.2s cubic-bezier(0.34, 1.2, 0.64, 1),
         visibility 0.18s ease;
+}
+
+body.process-page.process-page--bank .bank-process-filter-panel--dropdown .userlist-filter-chips--bank-process-dropdown {
+    flex-wrap: wrap !important;
+    max-width: 100% !important;
+    overflow-x: visible !important;
 }
 
 body.process-page.process-page--bank .bank-process-filter-panel--dropdown.is-open {
@@ -1996,9 +2170,45 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary
     width: 100% !important;
     min-width: 0 !important;
     max-width: 100% !important;
-    padding-right: clamp(6px, 0.5vw, 10px) !important;
-    gap: clamp(3px, 0.3vw, 5px);
+    padding: 0 clamp(6px, 0.5vw, 10px) 0 0 !important;
+    gap: 0 !important;
     box-sizing: border-box;
+    overflow: hidden !important;
+    border: 1px solid rgba(148, 163, 184, 0.62) !important;
+    border-radius: 12px !important;
+    background: #ffffff !important;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important;
+}
+
+body.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker:hover,
+body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker:hover {
+    border-color: rgba(59, 130, 246, 0.74) !important;
+    background: #ffffff !important;
+    box-shadow: 0 7px 18px rgba(37, 99, 235, 0.13) !important;
+}
+
+body.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker:focus-visible,
+body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker:focus-visible {
+    outline: none;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14) !important;
+}
+
+body.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
+body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    align-self: stretch !important;
+    width: clamp(34px, 2.45vw, 42px) !important;
+    min-width: clamp(34px, 2.45vw, 42px) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    border-radius: 11px 0 0 11px !important;
+    background: #3b82f6 !important;
+    color: #ffffff !important;
+    flex: 0 0 auto !important;
 }
 
 body.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group #date-range-display,
@@ -2010,8 +2220,10 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary
     text-overflow: ellipsis;
     font-size: var(--drp-trigger-text, var(--text-medium));
     font-weight: 700;
+    padding-left: clamp(8px, 0.7vw, 12px);
     padding-right: 0;
-    color: #000000;
+    color: #64748b;
+    text-align: left;
 }
 
 /* 仅有完整日期范围时显示 ×；重新点选日历过程中保持图一样式 */
@@ -2055,7 +2267,7 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary
     transform: none;
 }
 
-/* Bank Process 顶栏日历弹层：与药丸同宽、左对齐 */
+/* Bank Process 顶栏日历弹层（仅窄版 / 无 presets）：与药丸同宽。带 presets 的完整弹层由 processlist.css 控制。 */
 body.process-page.process-page--bank #calendar-popup.calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor,
 body.process-page.process-page--bank #calendar-popup.calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets,
 body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor,
@@ -2071,17 +2283,21 @@ body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popu
 }
 
 body.process-page.process-page--bank #calendar-popup.calendar-popup--match-anchor .transaction-calendar-panel,
-body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .transaction-calendar-panel,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .transaction-calendar-panel,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .transaction-calendar-panel,
 body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--match-anchor .transaction-calendar-panel,
-body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .transaction-calendar-panel {
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .transaction-calendar-panel,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .transaction-calendar-panel {
     padding: 6px 8px 8px;
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
 }
 
-body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-header,
-body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-header {
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-header,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-header,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-header,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-header {
     display: grid;
     grid-template-columns: auto 1fr auto;
     align-items: center;
@@ -2092,8 +2308,10 @@ body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popu
     column-gap: 2px;
 }
 
-body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-month-year,
-body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-month-year {
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-month-year,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-month-year,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-month-year,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-month-year {
     min-height: 26px;
     min-width: 0;
     width: 100%;
@@ -2101,10 +2319,14 @@ body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popu
     overflow: hidden;
 }
 
-body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-month-trigger,
-body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-year-trigger,
-body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-month-trigger,
-body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-year-trigger {
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-month-trigger,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-year-trigger,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-month-trigger,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-year-trigger,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-month-trigger,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-year-trigger,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-month-trigger,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-year-trigger {
     min-width: 0 !important;
     min-height: 24px;
     padding: 3px 4px;
@@ -2112,31 +2334,41 @@ body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popu
     flex: 1 1 0;
 }
 
-body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-nav-btn,
-body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-nav-btn {
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-nav-btn,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-nav-btn,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-nav-btn,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-nav-btn {
     width: clamp(22px, 1.6vw, 26px);
     height: clamp(22px, 1.6vw, 26px);
     flex-shrink: 0;
 }
 
-body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-weekday,
-body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-weekday {
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-weekday,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-weekday,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-weekday,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-weekday {
     font-size: var(--drp-popup-text);
     padding: 2px 0;
 }
 
-body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-day,
-body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-day {
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-day,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-day,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-day,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-day {
     min-height: var(--drp-day-min-h);
     font-size: var(--drp-popup-text);
     font-weight: 700;
     border-radius: 6px;
 }
 
-body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-weekdays,
-body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-days,
-body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-weekdays,
-body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range .calendar-days {
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-weekdays,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-days,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-weekdays,
+body.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-days,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-weekdays,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--no-presets .calendar-days,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-weekdays,
+body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popup--transaction-range.calendar-popup--match-anchor .calendar-days {
     gap: 0;
     width: 100%;
     max-width: 100%;
@@ -2205,15 +2437,18 @@ body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popu
 
     body.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
     body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
-        width: clamp(28px, 2.1vw, 34px);
-        border-radius: 10px 0 0 10px;
+        width: clamp(28px, 2.1vw, 34px) !important;
+        min-width: clamp(28px, 2.1vw, 34px) !important;
+        height: auto !important;
+        min-height: 0 !important;
+        border-radius: 10px 0 0 10px !important;
         font-size: var(--drp-trigger-icon, var(--text-medium));
     }
 
     body.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker,
     body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker {
         min-height: clamp(28px, 2.1vw, 34px);
-        gap: clamp(4px, 0.4vw, 6px);
+        gap: 0 !important;
     }
 
     body.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .transaction-date-range-chevron,
@@ -2299,14 +2534,17 @@ body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popu
     body.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker,
     body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker {
         min-height: var(--bank-toolbar-control-height);
+        gap: 0 !important;
     }
 
+    /* Icon must stretch inside the pill — never match outer control height (breaks border radius) */
     body.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker i.fa-calendar-alt,
     body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
-        width: var(--bank-toolbar-control-height);
-        min-width: var(--bank-toolbar-control-height);
-        height: var(--bank-toolbar-control-height);
-        min-height: var(--bank-toolbar-control-height);
+        width: clamp(34px, 2.45vw, 42px) !important;
+        min-width: clamp(34px, 2.45vw, 42px) !important;
+        height: auto !important;
+        min-height: 0 !important;
+        align-self: stretch !important;
     }
 
     body.process-page.process-page--bank .bank-process-toolbar-primary .search-container.userlist-search-bar.bank-process-search-bar.is-collapsed,
@@ -2357,14 +2595,16 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary
         min-height: 34px;
         padding-top: 0;
         padding-bottom: 0;
+        gap: 0 !important;
     }
 
     body.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker i.fa-calendar-alt {
-        width: 34px;
-        min-width: 34px;
-        height: 34px;
-        min-height: 34px;
-        border-radius: 10px 0 0 10px;
+        width: 34px !important;
+        min-width: 34px !important;
+        height: auto !important;
+        min-height: 0 !important;
+        align-self: stretch !important;
+        border-radius: 10px 0 0 10px !important;
     }
 
     body.process-page.process-page--bank .bank-process-toolbar-primary .transaction-date-range-group .date-range-picker #date-range-display {
@@ -2476,6 +2716,7 @@ body.process-page.process-page--bank .search-container.userlist-search-bar .user
     .process-page.process-page--bank .separator-line {
         margin-bottom: 0px;
     }
+
 }
 
 @media (max-height: 720px) {
@@ -2494,6 +2735,7 @@ body.process-page.process-page--bank .search-container.userlist-search-bar .user
         padding: 0 12px;
         font-size: clamp(8px, 0.7vw, 10px);
     }
+
 }
 
 /* Table Header - copied from accountCSS.css（Bank virtual 表头除外） */
@@ -2507,7 +2749,7 @@ body.process-page.process-page--bank .search-container.userlist-search-bar .user
     margin-top: 12px;
     font-weight: bold;
     color: white;
-    font-size: var(--text-base);
+    font-size: 1.6rem;
     font-family: inherit;
     min-width: 0;
 }
@@ -2821,6 +3063,36 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .b
     overflow-wrap: normal;
 }
 
+body.process-page.process-page--bank .bank-process-table-region .bank-process-cell-text,
+body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .bank-process-cell-text {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+body.process-page.process-page--bank .bank-process-table-region .bank-col-owner .portal-tooltip-anchor,
+body.process-page.process-page--bank .bank-process-table-region .bank-col-supplier .portal-tooltip-anchor,
+body.process-page.process-page--bank .bank-process-table-region .bank-col-bank .portal-tooltip-anchor,
+body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .bank-col-owner .portal-tooltip-anchor,
+body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .bank-col-supplier .portal-tooltip-anchor,
+body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .bank-col-bank .portal-tooltip-anchor {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    flex: 1 1 auto;
+}
+
+body.process-page.process-page--bank .bank-process-table-region .bank-col-bank .portal-tooltip-anchor .bank-cell-display--typed,
+body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .bank-col-bank .portal-tooltip-anchor .bank-cell-display--typed {
+    width: 100%;
+    min-width: 0;
+}
+
 /* Card Owner：列宽与内边距 */
 body.process-page.process-page--bank .bank-process-table-region .bank-col-owner.bank-virtual-th,
 body.process-page.process-page--bank .bank-process-table-region .bank-col-owner.bank-virtual-cell {
@@ -3088,10 +3360,10 @@ body.process-page.process-page--bank .bank-col-status .bank-status-dropdown {
 }
 
 body.process-page.process-page--bank .bank-col-status .bank-status-button {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    flex-shrink: 1;
+    width: max-content;
+    max-width: none;
+    min-width: max-content;
+    flex-shrink: 0;
     box-sizing: border-box;
 }
 
@@ -3115,29 +3387,23 @@ body.process-page.process-page--bank .bank-process-table-region .bank-virtual-da
 @media (max-width: 1699px) {
     .process-page.process-page--bank {
         --bank-list-cell-padding-x: clamp(4px, 0.42vw, 8px);
-        --bank-list-cell-line-height: 1.28;
-        --bank-list-cell-min-height: clamp(28px, 2.6vw, 36px);
+        --bank-list-cell-line-height: 1.1;
+        --bank-list-cell-min-height: 26px;
         --bank-list-header-row-height: clamp(40px, 2.9vw, 48px);
-        --bank-list-data-row-estimate: max(
-            var(--bank-list-cell-min-height),
-            calc(
-                2 * var(--bank-list-cell-padding-y)
-                + 2 * var(--bank-list-cell-line-height) * var(--text-medium, 14px)
-            )
-        );
-        --bank-header-th-font-size: clamp(10px, 0.7vw, 12px);
+        --bank-list-data-row-estimate: var(--bank-list-cell-min-height);
+        --bank-header-th-font-size: 1.6rem;
         --bank-virtual-grid-columns:
             minmax(36px, 0.16fr) minmax(70px, 0.4fr) minmax(max-content, 0.3fr)
             minmax(108px, 0.82fr) minmax(148px, 1.68fr)
             minmax(max-content, 0.4fr) minmax(max-content, 0.34fr) minmax(max-content, 0.32fr)
             minmax(42px, 0.36fr) minmax(46px, 0.36fr) minmax(48px, 0.36fr)
-            minmax(56px, 0.48fr) minmax(90px, 0.54fr) max-content;
+            minmax(max-content, 0.48fr) minmax(90px, 0.54fr) max-content;
         --bank-virtual-grid-columns-with-select:
             minmax(36px, 0.16fr) minmax(70px, 0.4fr) minmax(max-content, 0.3fr)
             minmax(108px, 0.82fr) minmax(148px, 1.68fr)
             minmax(max-content, 0.4fr) minmax(max-content, 0.34fr) minmax(max-content, 0.32fr)
             minmax(42px, 0.36fr) minmax(46px, 0.36fr) minmax(48px, 0.36fr)
-            minmax(56px, 0.48fr) minmax(90px, 0.54fr) max-content max-content;
+            minmax(max-content, 0.48fr) minmax(90px, 0.54fr) max-content max-content;
     }
 
     /* 表头：单行对齐；角标 ↕/▲/▼ 贴列右上，文字同一基线 */
@@ -3175,12 +3441,14 @@ body.process-page.process-page--bank .bank-process-table-region .bank-virtual-da
     }
 
     .process-page.process-page--bank .bank-status-button {
-        width: 100% !important;
-        max-width: 100% !important;
-        min-width: 0 !important;
-        flex-shrink: 1 !important;
-        font-size: clamp(8px, 0.68vw, 10px) !important;
-        padding: 0 6px !important;
+        width: max-content !important;
+        max-width: none !important;
+        min-width: max-content !important;
+        flex-shrink: 0 !important;
+        height: var(--bank-list-pill-height, 20px) !important;
+        min-height: var(--bank-list-pill-height, 20px) !important;
+        font-size: 1.1rem !important;
+        padding: 0 8px !important;
     }
 
     body.process-page.process-page--bank .bank-process-table-region .bank-col-contract.bank-virtual-th,
@@ -3245,6 +3513,33 @@ body.process-page.process-page--bank .bank-process-table-region .bank-virtual-da
         overscroll-behavior: auto;
     }
 
+    /* 小屏 + 非 Show All：改为数据区单层纵向滚动（避免 body 锁滚后无法上下查看数据） */
+    body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body,
+    body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region .process-table-wrapper.bank-process-table-region,
+    body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table,
+    body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table-inner {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+        max-height: 100%;
+        overflow: hidden;
+    }
+
+    body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: 100%;
+        overflow-x: visible;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
     .process-page.process-page--bank .bank-virtual-scroll.process-cards {
         grid-auto-rows: minmax(var(--bank-list-data-row-estimate), auto);
     }
@@ -3262,18 +3557,12 @@ body.process-page.process-page--bank .bank-process-table-region .bank-virtual-da
     }
     .process-page.process-page--bank {
         --bank-list-cell-padding-x: clamp(3px, 0.38vw, 6px);
-        --bank-list-cell-padding-y: clamp(4px, 0.4vw, 5px);
-        --bank-list-cell-line-height: 1.28;
-        --bank-list-cell-min-height: clamp(28px, 2.6vw, 36px);
+        --bank-list-cell-padding-y: 0;
+        --bank-list-cell-line-height: 1.1;
+        --bank-list-cell-min-height: 26px;
         --bank-list-header-row-height: clamp(40px, 2.9vw, 48px);
-        --bank-list-data-row-estimate: max(
-            var(--bank-list-cell-min-height),
-            calc(
-                2 * var(--bank-list-cell-padding-y)
-                + 2 * var(--bank-list-cell-line-height) * var(--text-medium, 14px)
-            )
-        );
-        --bank-header-th-font-size: clamp(9px, 0.65vw, 11px);
+        --bank-list-data-row-estimate: var(--bank-list-cell-min-height);
+        --bank-header-th-font-size: 1.6rem;
         /* 列宽由上方 @2584 统一 media 定义，此处不再覆盖（避免平板 Card Owner 被挤窄） */
     }
 
@@ -3478,11 +3767,14 @@ body.process-page.process-page--bank .bank-process-table-region .bank-virtual-da
         word-break: keep-all !important;
         overflow-wrap: normal !important;
         text-align: center;
-        line-height: 1.2;
+        height: var(--bank-list-pill-height, 20px) !important;
+        min-height: var(--bank-list-pill-height, 20px) !important;
+        font-size: 1.1rem !important;
+        line-height: 1.1 !important;
         overflow: visible;
         text-overflow: clip;
-        padding: 1px clamp(5px, 0.42vw, 8px);
-        font-size: clamp(8px, 0.62vw, 11px);
+        padding: 0 8px !important;
+        font-size: 1.1rem !important;
         box-sizing: border-box;
     }
 
@@ -3562,23 +3854,38 @@ body.process-page.process-page--bank .bank-process-table-region .bank-virtual-da
 
     /* 非 Show All + auto 分页：保留一屏 flex 链与 subgrid（上方 flex:0 / overflow:visible 会破坏窄屏布局） */
     body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        overflow-y: hidden !important;
+    }
+
     body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region,
-    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body,
     body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region {
         flex: 1 1 auto !important;
         min-height: 0 !important;
-        overflow: hidden !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        -webkit-overflow-scrolling: touch;
     }
 
     body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region .process-table-wrapper.bank-process-table-region,
+    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region .process-table-wrapper.bank-process-table-region {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: 100% !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+    }
+
     body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table,
-    body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region .process-table-wrapper.bank-process-table-region,
     body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table {
         flex: 1 1 auto !important;
         min-height: 0 !important;
         height: auto !important;
         max-height: 100% !important;
-        overflow: hidden !important;
+        overflow-y: hidden !important;
     }
 
     body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table-inner,
@@ -3586,7 +3893,7 @@ body.process-page.process-page--bank .bank-process-table-region .bank-virtual-da
         flex: 1 1 auto !important;
         min-height: 0 !important;
         grid-template-rows: auto minmax(0, 1fr) !important;
-        overflow: hidden !important;
+        overflow-y: hidden !important;
     }
 
     body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip,
@@ -3597,8 +3904,8 @@ body.process-page.process-page--bank .bank-process-table-region .bank-virtual-da
         display: grid !important;
         grid-template-columns: subgrid !important;
         grid-template-rows: auto !important;
-        overflow-x: hidden !important;
-        overflow-y: hidden !important;
+        overflow-x: visible !important;
+        overflow-y: auto !important;
     }
 
     body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll.process-cards,
@@ -3625,13 +3932,13 @@ body.process-page.process-page--bank .bank-process-table-region .bank-virtual-da
             minmax(100px, 0.72fr) minmax(72px, 1.05fr)
             minmax(max-content, 0.38fr) minmax(max-content, 0.32fr) minmax(max-content, 0.3fr)
             minmax(40px, 0.34fr) minmax(44px, 0.34fr) minmax(46px, 0.34fr)
-            minmax(52px, 0.46fr) minmax(88px, 0.56fr) max-content;
+            minmax(max-content, 0.46fr) minmax(88px, 0.56fr) max-content;
         --bank-virtual-grid-columns-with-select:
             minmax(36px, 0.14fr) minmax(66px, 0.4fr) minmax(max-content, 0.28fr)
             minmax(100px, 0.72fr) minmax(72px, 1.05fr)
             minmax(max-content, 0.38fr) minmax(max-content, 0.32fr) minmax(max-content, 0.3fr)
             minmax(40px, 0.34fr) minmax(44px, 0.34fr) minmax(46px, 0.34fr)
-            minmax(52px, 0.46fr) minmax(88px, 0.56fr) max-content max-content;
+            minmax(max-content, 0.46fr) minmax(88px, 0.56fr) max-content max-content;
     }
 
     body.process-page.process-page--bank .bank-process-table-region .bank-col-bank.bank-virtual-th,
@@ -3655,8 +3962,11 @@ body.process-page.process-page--bank .bank-process-table-region .bank-virtual-da
     body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .bank-col-contract .contract-badge {
         width: max-content;
         max-width: none;
-        font-size: clamp(8px, 0.6vw, 10px);
-        padding: 1px clamp(4px, 0.35vw, 7px);
+        height: var(--bank-list-pill-height, 20px) !important;
+        min-height: var(--bank-list-pill-height, 20px) !important;
+        font-size: 1.1rem !important;
+        padding: 0 8px !important;
+        line-height: 1.1 !important;
         white-space: nowrap !important;
         word-break: keep-all !important;
         overflow: visible;
@@ -4035,25 +4345,49 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .b
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--bank-action-btn-size);
-    height: var(--bank-action-btn-size);
-    min-width: var(--bank-action-btn-size);
-    min-height: var(--bank-action-btn-size);
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
     padding: 0;
     margin: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: #374151;
     flex-shrink: 0;
+    box-shadow: none;
+    transition: background 0.12s ease;
+}
+
+.process-page.process-page--bank .bank-action-tools .edit-btn:hover:not(:disabled),
+.process-page.process-page--bank .bank-action-tools .remark-action-btn:hover:not(:disabled),
+.process-page.process-page--bank .bank-action-tools .bank-resend-btn:hover:not(:disabled),
+.process-page.process-page--bank .bank-action-tools .bank-resent-btn:hover:not(:disabled) {
+    background: #c5ccd6;
+    color: #1f2937;
+    box-shadow: none;
+    transform: none;
+}
+
+.process-page.process-page--bank .bank-action-tools .edit-btn:active:not(:disabled),
+.process-page.process-page--bank .bank-action-tools .remark-action-btn:active:not(:disabled),
+.process-page.process-page--bank .bank-action-tools .bank-resend-btn:active:not(:disabled),
+.process-page.process-page--bank .bank-action-tools .bank-resent-btn:active:not(:disabled) {
+    background: #b3bbc7;
+    transform: none;
 }
 
 .process-page.process-page--bank .bank-action-tools .edit-btn img,
 .process-page.process-page--bank .bank-action-tools .remark-action-btn svg,
 .process-page.process-page--bank .bank-action-tools .bank-resend-btn svg,
 .process-page.process-page--bank .bank-action-tools .bank-resent-btn svg {
-    width: var(--bank-action-icon-size);
-    height: var(--bank-action-icon-size);
+    width: 16px;
+    height: 16px;
     display: block;
     object-fit: contain;
     color: currentColor;
-    filter: drop-shadow(clamp(0.02px, 0.01vw, 0.1px) 0 0 currentColor) drop-shadow(clamp(-0.05px, -0.01vw, -0.1px) 0 0 currentColor);
+    filter: none;
 }
 
 .process-page .bank-action-tools .remark-action-btn {
@@ -4404,7 +4738,9 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .process
     min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
     padding-bottom: 52px;
     box-sizing: border-box;
 }
@@ -4430,10 +4766,29 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .process
     flex: 1 1 auto;
     min-height: 0;
     max-height: none;
-    overflow: hidden;
+    overflow-x: visible;
+    overflow-y: hidden;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
+}
+
+body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards.process-cards--paged-fill {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(var(--games-process-page-size, 15), minmax(0, 1fr));
+    flex: 1 1 0;
+    min-height: 0;
+    align-content: stretch;
+    align-self: stretch;
+}
+
+body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards.process-cards--paged-fill .games-process-row {
+    flex: unset;
+    min-height: 0;
+    height: 100%;
+    align-items: center;
+    align-self: stretch;
 }
 
 body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-card {
@@ -4502,6 +4857,9 @@ body.process-page.process-page--show-all:not(.process-page--bank) .pagination-co
  * 表头与数据行共用同一套 grid；专用 class 避免 global-13inch User List 9 列规则误伤
  */
 .process-page:not(.process-page--bank) .games-process-table {
+    --list-table-min-width: 980px;
+    --games-process-row-min-height: 26px;
+    --games-process-pill-height: 20px;
     --games-process-grid-cols:
         38px
         minmax(92px, 0.75fr)
@@ -4525,6 +4883,9 @@ body.process-page.process-page--show-all:not(.process-page--bank) .pagination-co
 .process-page:not(.process-page--bank) .games-process-row {
     gap: 8px;
     grid-template-columns: var(--games-process-grid-cols);
+    width: 100%;
+    min-width: max(100%, var(--list-table-min-width, 980px));
+    box-sizing: border-box;
 }
 
 .process-page:not(.process-page--bank) .games-process-table-header {
@@ -4545,6 +4906,14 @@ body.process-page.process-page--show-all:not(.process-page--bank) .pagination-co
     padding: 0 22px;
 }
 
+body.process-page:not(.process-page--bank):not(.process-page--show-all) .games-process-row .card-item,
+body.ec-auth-shell.process-page:not(.process-page--bank):not(.process-page--show-all) .games-process-row .card-item {
+    font-size: 1.4rem !important;
+    font-weight: bold !important;
+    line-height: 1.1 !important;
+    letter-spacing: 0 !important;
+}
+
 /* Status 药丸勿被 card-item 单行裁切（Show All 长列表偶发压扁时仍完整显示） */
 .process-page:not(.process-page--bank) .games-process-row .card-item:has(.role-badge) {
     overflow: visible;
@@ -4554,8 +4923,17 @@ body.process-page.process-page--show-all:not(.process-page--bank) .pagination-co
 }
 
 .process-page:not(.process-page--bank) .games-process-row .role-badge {
+    box-sizing: border-box;
+    height: var(--games-process-pill-height, 20px);
+    padding: 0 8px !important;
+    line-height: 1.1 !important;
+    font-size: 1.1rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em !important;
+    border-radius: 6px !important;
     flex-shrink: 0;
     white-space: nowrap;
+    min-width: max-content !important;
 }
 
 .process-page:not(.process-page--bank) .process-table-wrapper--select-col.games-process-table .games-process-table-header,
@@ -4564,9 +4942,10 @@ body.process-page.process-page--show-all:not(.process-page--bank) .pagination-co
 }
 
 .process-page:not(.process-page--bank) .games-process-row .card-item--action {
-    justify-content: center;
+    justify-content: flex-start;
     padding-left: 0 !important;
     padding-right: 0 !important;
+    overflow: visible;
 }
 
 .process-page:not(.process-page--bank) .process-table-wrapper--select-col .games-process-table-header .header-item--select {
@@ -4595,15 +4974,50 @@ body.process-page.process-page--show-all:not(.process-page--bank) .pagination-co
 }
 
 .process-page:not(.process-page--bank) .games-process-row .card-item--action .btn.btn-edit.edit-btn {
+    box-sizing: border-box;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 0;
+    margin: 0;
     background: transparent;
-    border: transparent;
+    border: none;
+    border-radius: 4px;
+    color: #374151;
     box-shadow: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.12s ease;
+    flex-shrink: 0;
 }
 
-.process-page:not(.process-page--bank) .games-process-row .card-item--action .btn.btn-edit.edit-btn:hover {
-    background: transparent;
+.process-page:not(.process-page--bank) .games-process-row .card-item--action .btn.btn-edit.edit-btn:hover:not(:disabled) {
+    background: #c5ccd6;
+    color: #1f2937;
     box-shadow: none;
     transform: none;
+}
+
+.process-page:not(.process-page--bank) .games-process-row .card-item--action .btn.btn-edit.edit-btn:active:not(:disabled) {
+    background: #b3bbc7;
+    transform: none;
+}
+
+.process-page:not(.process-page--bank) .games-process-row .card-item--action .btn.btn-edit.edit-btn:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+}
+
+.process-page:not(.process-page--bank) .games-process-row .card-item--action .btn.btn-edit.edit-btn img {
+    width: 16px !important;
+    height: 16px !important;
+    display: block;
+    object-fit: contain;
+    flex-shrink: 0;
+    filter: none;
 }
 
 .process-page:not(.process-page--bank) .games-process-table-header .header-item:first-child,
@@ -4722,6 +5136,8 @@ body.process-page > .process-modal {
     letter-spacing: var(--letter-spacing-page-title);
     color: #1f2937;
     line-height: 1.2;
+    background: transparent;
+    border-bottom: none;
 }
 
 .process-page .close {
@@ -4767,7 +5183,7 @@ body.process-page > .process-modal {
     font-family: var(--font-ui) !important;
     border: 1px solid #dbe3ee !important;
     border-radius: 0.52rem !important;
-    min-height: 4rem !important;
+    min-height: var(--process-form-modal-control-min-h, clamp(2.75rem, 2.25vw, 3.25rem)) !important;
     box-sizing: border-box;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
@@ -4784,8 +5200,14 @@ body.process-page > .process-modal {
 }
 
 .process-page .modal .custom-select-option.selected {
-    background-color: #e7f0ff;
-    color: #0D60FF;
+    background-color: #e3f2fd;
+    color: #2563eb;
+    font-weight: 600;
+}
+
+.process-page .modal .custom-select-option.keyboard-focus {
+    background-color: #0d60ff;
+    color: #ffffff;
     font-weight: 600;
 }
 
@@ -4826,9 +5248,9 @@ body.process-page > .process-modal {
 .process-page .process-form.add-grid .add-col > .process-form-section:not(:last-child),
 #addModal .process-form.add-grid .add-col > .process-form-section:not(:last-child),
 #editModal .process-form.add-grid .add-col > .process-form-section:not(:last-child) {
-    margin-bottom: 1rem;
-    padding-bottom: 0.85rem;
-    border-bottom: 1px solid #e8eef5;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0;
+    border-bottom: none;
 }
 
 .process-page .process-form.add-grid .process-form-section-title,
@@ -4872,7 +5294,7 @@ body.process-page > .process-modal {
     letter-spacing: 0.015em;
 }
 
-.process-page .process-form .form-group input,
+.process-page .process-form .form-group input:not(.dc-remove-word-chip-input__field),
 .process-page .process-form .form-group select,
 .process-page .process-form .form-group textarea {
     border-color: #dbe3ee;
@@ -4880,12 +5302,12 @@ body.process-page > .process-modal {
     padding: 0.7rem 0.9rem;
     font-size: var(--text-small);
     font-family: var(--font-ui);
-    min-height: 4rem;
+    min-height: var(--process-form-modal-control-min-h, clamp(2.75rem, 2.25vw, 3.25rem));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
     box-sizing: border-box;
 }
 
-.process-page .process-form .form-group input:focus,
+.process-page .process-form .form-group input:not(.dc-remove-word-chip-input__field):focus,
 .process-page .process-form .form-group select:focus,
 .process-page .process-form .form-group textarea:focus {
     border-color: #0D60FF;
@@ -4963,12 +5385,9 @@ body.process-page > .process-modal {
     align-self: start !important;
 }
 
-.process-page #addModal .process-form.add-grid .add-col:first-child {
-    padding-top: 0.8rem !important;
-}
-
+.process-page #addModal .process-form.add-grid .add-col:first-child,
 .process-page #addModal .process-form.add-grid .add-col:last-child {
-    padding-top: 0.55rem !important;
+    padding-top: calc(var(--space-gap, 0.75rem) * 0.65) !important;
 }
 
 .process-page #addModal .process-form .form-group > label {
@@ -5270,7 +5689,7 @@ body.process-page > .process-modal {
     display: flex;
     flex-direction: row;
     flex-wrap: nowrap;
-    align-items: stretch;
+    align-items: center;
     gap: calc(var(--space-gap, 0.75rem) * 0.65);
     width: 100%;
     min-width: 0;
@@ -5289,9 +5708,9 @@ body.process-page > .process-modal {
 .process-form-modal .btn-multi-process-toggle,
 #addModal .modal-content.process-form-modal .btn-multi-process-toggle {
     flex-shrink: 0;
-    align-self: stretch;
+    align-self: center;
     min-height: var(--process-form-modal-control-min-h, clamp(2.75rem, 2.25vw, 3.25rem));
-    height: auto;
+    height: var(--process-form-modal-control-min-h, clamp(2.75rem, 2.25vw, 3.25rem));
     min-width: clamp(7.25rem, 9vw, 9.75rem);
     padding: 0 calc(var(--space-gap, 0.75rem) * 0.85);
     font-family: var(--font-heading-page);
@@ -5460,7 +5879,7 @@ body.process-page > .process-modal {
     flex: 1 1 0;
     min-width: 0;
     padding: var(--user-gc-segment-padding, 4px clamp(10px, 1.2vw, 18px));
-    font-size: var(--text-medium) !important;
+    font-size: var(--process-form-modal-control-size, var(--text-small)) !important;
     font-weight: var(--font-weight-semibold) !important;
 }
 
@@ -5722,7 +6141,7 @@ body.process-page > .process-modal {
     min-width: 0 !important;
     max-width: 100% !important;
     font-family: var(--font-ui) !important;
-    font-size: var(--text-small) !important;
+    font-size: var(--text-medium) !important;
     font-weight: 400 !important;
     line-height: var(--process-form-modal-multi-item-line-height, 1.35) !important;
     cursor: pointer;
@@ -5819,23 +6238,33 @@ body.process-page > .modal.show:has(.description-selection-modal) {
 .process-page .modal-content.description-selection-modal .modal-header {
     flex-shrink: 0;
     margin: 0;
-    padding: var(--desc-modal-pad-block) var(--desc-modal-pad-inline) 0;
-    background: var(--color-surface);
-    border-bottom: none;
+    padding: 3px 20px;
+    padding-right: 3rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
     border-radius: var(--desc-modal-radius) var(--desc-modal-radius) 0 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
 }
 
 .modal-content.description-selection-modal .description-selection-modal-header h2,
 .modal-content.description-selection-modal .modal-header h2,
 .process-page .modal-content.description-selection-modal .modal-header h2 {
     margin: 0;
-    padding: 0;
-    font-size: var(--desc-modal-title-size);
+    padding: clamp(12px, 0.78vw, 15px) clamp(18px, 1.2vw, 23px);
+    border: none;
+    background: transparent;
+    font-size: var(--process-form-modal-title-size, var(--text-page-title));
     font-family: var(--font-heading-page);
     font-weight: var(--font-weight-page-title);
     letter-spacing: var(--letter-spacing-page-title);
-    color: var(--color-body-strong);
+    color: var(--color-body-strong, #1f2937);
     line-height: 1.2;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .modal-content.description-selection-modal .modal-body,
@@ -6569,6 +6998,18 @@ body.process-page > .modal.show:has(.description-selection-modal) {
     overflow-y: auto;
 }
 
+.process-confirm-error {
+    margin: 0 clamp(20px, 1.67vw, 28px) 20px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    font-size: var(--text-medium);
+    line-height: 1.5;
+    text-align: left;
+}
+
 .process-confirm-actions {
     display: flex;
     gap: 12px;
@@ -7281,14 +7722,14 @@ body.ec-auth-shell #confirmBankResendModal .bank-resend-modal-actions .process-b
     line-height: 1.3;
 }
 
-.process-page #addModal .process-form .form-group input,
+.process-page #addModal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
 .process-page #addModal .process-form .form-group select,
 .process-page #addModal .process-form .form-group textarea {
     font-size: var(--text-small) !important;
     font-family: var(--font-ui) !important;
     line-height: 1.35;
     padding: 0.7rem 0.95rem !important;
-    min-height: 4rem;
+    min-height: var(--process-form-modal-control-min-h, clamp(2.75rem, 2.25vw, 3.25rem));
     border: 1px solid #dbe3ee !important;
     border-radius: 0.52rem !important;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
@@ -7408,12 +7849,9 @@ body.ec-auth-shell #confirmBankResendModal .bank-resend-modal-actions .process-b
     align-self: start !important;
 }
 
-#addModal .process-form.add-grid .add-col:first-child {
-    padding-top: 0.8rem !important;
-}
-
+#addModal .process-form.add-grid .add-col:first-child,
 #addModal .process-form.add-grid .add-col:last-child {
-    padding-top: 0.55rem !important;
+    padding-top: calc(var(--space-gap, 0.75rem) * 0.65) !important;
 }
 
 #addModal .process-form .form-group > label {
@@ -7434,14 +7872,14 @@ body.ec-auth-shell #confirmBankResendModal .bank-resend-modal-actions .process-b
     display: block !important;
 }
 
-#addModal .process-form .form-group input,
+#addModal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
 #addModal .process-form .form-group select,
 #addModal .process-form .form-group textarea {
     font-size: var(--text-small) !important;
     font-family: var(--font-ui) !important;
     line-height: 1.35 !important;
     padding: 0.7rem 0.9rem !important;
-    min-height: 4rem !important;
+    min-height: var(--process-form-modal-control-min-h, clamp(2.75rem, 2.25vw, 3.25rem)) !important;
     border: 1px solid #dbe3ee !important;
     border-radius: 0.52rem !important;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
@@ -7559,12 +7997,9 @@ body.ec-auth-shell #confirmBankResendModal .bank-resend-modal-actions .process-b
     align-self: start !important;
 }
 
-#editModal .process-form.add-grid .add-col:first-child {
-    padding-top: 0.8rem !important;
-}
-
+#editModal .process-form.add-grid .add-col:first-child,
 #editModal .process-form.add-grid .add-col:last-child {
-    padding-top: 0.55rem !important;
+    padding-top: calc(var(--space-gap, 0.75rem) * 0.65) !important;
 }
 
 #editModal .process-form .form-group {
@@ -7581,14 +8016,14 @@ body.ec-auth-shell #confirmBankResendModal .bank-resend-modal-actions .process-b
     margin-bottom: 0.45rem !important;
 }
 
-#editModal .process-form .form-group input,
+#editModal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
 #editModal .process-form .form-group select,
 #editModal .process-form .form-group textarea {
     font-size: var(--text-small) !important;
     font-family: var(--font-ui) !important;
     line-height: 1.35 !important;
     padding: 0.7rem 0.9rem !important;
-    min-height: 4rem !important;
+    min-height: var(--process-form-modal-control-min-h, clamp(2.75rem, 2.25vw, 3.25rem)) !important;
     border: 1px solid #dbe3ee !important;
     border-radius: 0.52rem !important;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
@@ -7683,7 +8118,17 @@ body.process-page.process-page--bank.process-page--bank-show-all .content,
 body.process-page.process-page--bank.process-page--bank-show-all .bank-process-list-body,
 body.process-page.process-page--bank.process-page--bank-show-all .bank-process-list-scroll-region {
     max-height: none !important;
-    overflow: visible !important;
+    overflow-y: visible !important;
+}
+
+body.process-page.process-page--bank.process-page--bank-show-all .content,
+body.process-page.process-page--bank.process-page--bank-show-all .bank-process-list-body {
+    overflow-x: hidden !important;
+}
+
+body.process-page.process-page--bank.process-page--bank-show-all .bank-process-list-scroll-region {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
 }
 
 body.process-page.process-page--bank.process-page--bank-show-all .bank-table-wrapper,
@@ -7691,7 +8136,8 @@ body.process-page.process-page--bank.process-page--bank-show-all .process-table-
     flex: 0 1 auto !important;
     height: auto !important;
     max-height: none !important;
-    overflow: visible !important;
+    overflow-y: visible !important;
+    overflow-x: visible !important;
 }
 
 /* Status 下拉走 portal/fixed，单元格可 hidden 防止胶囊溢出遮挡 Date */
@@ -7731,13 +8177,10 @@ body.process-page.process-page--bank.process-page--bank-show-all .process-table-
 }
 
 .process-page #editModal .process-form.add-grid .add-col:first-child,
-#editModal .process-form.add-grid .add-col:first-child {
-    padding-top: 0.8rem !important;
-}
-
 .process-page #editModal .process-form.add-grid .add-col:last-child,
+#editModal .process-form.add-grid .add-col:first-child,
 #editModal .process-form.add-grid .add-col:last-child {
-    padding-top: 0.55rem !important;
+    padding-top: calc(var(--space-gap, 0.75rem) * 0.65) !important;
 }
 
 .process-page #editModal .day-use-header,
@@ -7829,10 +8272,10 @@ body.process-page.process-page--bank.process-page--bank-show-all .process-table-
 }
 
 /* Edit Process 表单控件与 Account add 一致 */
-.process-page #editModal .process-form .form-group input,
+.process-page #editModal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
 .process-page #editModal .process-form .form-group select,
 .process-page #editModal .process-form .form-group textarea,
-#editModal .process-form .form-group input,
+#editModal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
 #editModal .process-form .form-group select,
 #editModal .process-form .form-group textarea {
     font-size: var(--text-small) !important;
@@ -7891,23 +8334,66 @@ body.process-page > #editModal.modal.show > .modal-content.process-form-modal,
 #editModal .modal-content.process-form-modal .modal-header {
     flex-shrink: 0;
     margin: 0;
-    padding: var(--process-form-modal-pad, var(--space-card));
+    padding: 3px 20px;
     background: var(--color-surface-gray-50, #f8fafc);
-    border-bottom: none;
+    border-bottom: 1px solid #e2e8f0;
     border-radius: var(--process-form-modal-radius, 0.75rem) var(--process-form-modal-radius, 0.75rem) 0 0;
+    box-sizing: border-box;
 }
 
 .process-form-modal .process-form-modal-header h2,
 #addModal .modal-content.process-form-modal .modal-header h2,
 #editModal .modal-content.process-form-modal .modal-header h2 {
     margin: 0;
-    padding: 0;
+    padding: clamp(12px, 0.78vw, 15px) clamp(18px, 1.2vw, 23px);
+    border: none;
+    background: transparent;
     font-size: var(--process-form-modal-title-size, var(--text-page-title));
     font-family: var(--font-heading-page);
     font-weight: var(--font-weight-page-title);
     letter-spacing: var(--letter-spacing-page-title);
     color: var(--color-body-strong, #1f2937);
     line-height: 1.2;
+}
+
+/* Section headings — match Add Account .account-section-header (no left blue bar) */
+.process-form-modal .account-section-header,
+#addModal .modal-content.process-form-modal .account-section-header,
+#editModal .modal-content.process-form-modal .account-section-header {
+    font-size: var(--text-h2);
+    font-weight: 700;
+    font-family: var(--font-heading-page);
+    color: #111827;
+    margin: 0 0 calc(var(--space-gap, 0.75rem) * 0.65) 0;
+    padding-bottom: 0.25rem;
+    border-bottom: 0.125rem solid #e2e8f0;
+    border-left: none;
+    position: relative;
+    line-height: 1.25;
+}
+
+.process-form-modal .account-section-header::after,
+#addModal .modal-content.process-form-modal .account-section-header::after,
+#editModal .modal-content.process-form-modal .account-section-header::after {
+    content: '';
+    position: absolute;
+    bottom: -0.125rem;
+    left: 0;
+    width: 2.5rem;
+    height: 0.125rem;
+    background: linear-gradient(90deg, #007AFF, #0056b3);
+}
+
+.process-form-modal .process-form-section--record .account-section-header,
+#addModal .modal-content.process-form-modal .process-form-section--record .account-section-header,
+#editModal .modal-content.process-form-modal .process-form-section--record .account-section-header {
+    color: #64748b;
+}
+
+.process-form-modal .process-form-section--record .account-section-header::after,
+#addModal .modal-content.process-form-modal .process-form-section--record .account-section-header::after,
+#editModal .modal-content.process-form-modal .process-form-section--record .account-section-header::after {
+    background: linear-gradient(90deg, #94a3b8, #64748b);
 }
 
 .process-form-modal .modal-body,
@@ -7955,24 +8441,25 @@ body.process-page > #editModal.modal.show > .modal-content.process-form-modal,
 .process-form-modal .process-form.add-grid .add-col > .process-form-section:not(:last-child),
 #addModal .modal-content.process-form-modal .process-form.add-grid .add-col > .process-form-section:not(:last-child),
 #editModal .modal-content.process-form-modal .process-form.add-grid .add-col > .process-form-section:not(:last-child) {
-    margin-bottom: calc(var(--space-gap, 0.75rem) * 1.1);
-    padding-bottom: calc(var(--space-gap, 0.75rem) * 0.95);
-    border-bottom: 1px solid var(--color-border, #e8eef5);
+    margin-bottom: calc(var(--space-gap, 0.75rem) * 0.85);
+    padding-bottom: 0;
+    border-bottom: none;
 }
 
 .process-form-modal .process-form-section-title,
 #addModal .modal-content.process-form-modal .process-form-section-title,
 #editModal .modal-content.process-form-modal .process-form-section-title {
     margin: 0 0 calc(var(--space-gap, 0.75rem) * 0.75) 0;
-    padding: 0 0 calc(var(--space-gap, 0.75rem) * 0.45) 0.55rem;
+    padding: 0 0 calc(var(--space-gap, 0.75rem) * 0.45) 0;
     font-size: var(--process-form-modal-section-size, var(--text-h3));
     font-weight: var(--font-weight-semibold);
     font-family: var(--font-heading-page);
     color: var(--color-body-muted, #475569);
     letter-spacing: 0.02em;
     line-height: 1.25;
-    border-left: 3px solid var(--color-primary, #0d60ff);
-    border-bottom: 1px solid var(--color-border-muted, #e2e8f0);
+    border-left: none;
+    border-bottom: 0.125rem solid var(--color-border-muted, #e2e8f0);
+    position: relative;
 }
 
 .process-form-modal .process-form .form-group > label,
@@ -8007,13 +8494,13 @@ body.process-page > #editModal.modal.show > .modal-content.process-form-modal,
     text-transform: uppercase;
 }
 
-.process-form-modal .process-form .form-group input,
+.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
 .process-form-modal .process-form .form-group select,
 .process-form-modal .process-form .form-group textarea,
-#addModal .modal-content.process-form-modal .process-form .form-group input,
+#addModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
 #addModal .modal-content.process-form-modal .process-form .form-group select,
 #addModal .modal-content.process-form-modal .process-form .form-group textarea,
-#editModal .modal-content.process-form-modal .process-form .form-group input,
+#editModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
 #editModal .modal-content.process-form-modal .process-form .form-group select,
 #editModal .modal-content.process-form-modal .process-form .form-group textarea {
     font-size: var(--process-form-modal-control-size, var(--text-small)) !important;
@@ -8027,10 +8514,10 @@ body.process-page > #editModal.modal.show > .modal-content.process-form-modal,
     color: var(--color-body-strong, #1f2937);
 }
 
-.process-form-modal .process-form .form-group input:focus,
+.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field):focus,
 .process-form-modal .process-form .form-group select:focus,
 .process-form-modal .process-form .form-group textarea:focus,
-#addModal .modal-content.process-form-modal .process-form .form-group input:focus,
+#addModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field):focus,
 #addModal .modal-content.process-form-modal .process-form .form-group textarea:focus {
     border-color: var(--color-primary, #0d60ff) !important;
     outline: none;
@@ -8059,6 +8546,8 @@ body.process-page > #editModal.modal.show > .modal-content.process-form-modal,
     font-size: var(--process-form-modal-hint-size, var(--text-small)) !important;
     font-family: var(--font-ui) !important;
     color: var(--color-text-muted, #64748b);
+    display: block;
+    margin-top: calc(var(--space-gap, 0.75rem) * 0.3);
 }
 
 .process-form-modal .selected-descriptions,
@@ -8081,20 +8570,6 @@ body.process-page > #editModal.modal.show > .modal-content.process-form-modal,
     font-size: var(--process-form-modal-control-size, var(--text-small));
     font-family: var(--font-ui);
     font-weight: var(--font-weight-semibold);
-}
-
-.process-form-modal .add-icon,
-#addModal .modal-content.process-form-modal .add-icon {
-    width: clamp(2rem, 2.2vw, 2.35rem);
-    height: clamp(2rem, 2.2vw, 2.35rem);
-    font-size: var(--text-h3);
-    background: var(--btn-add-gradient);
-    box-shadow: var(--shadow-btn-add-page);
-}
-
-.process-form-modal .add-icon:hover:not(:disabled),
-#addModal .modal-content.process-form-modal .add-icon:hover:not(:disabled) {
-    background: var(--btn-add-gradient-hover);
 }
 
 .process-form-modal .process-form-modal-footer.add-actions,
@@ -8258,8 +8733,8 @@ body.process-page > #editModal.modal > .modal-content.process-form-modal,
     }
 
     #editModal .process-form.add-grid .add-col > .process-form-section:not(:last-child) {
-        margin-bottom: 0.45rem !important;
-        padding-bottom: 0.4rem !important;
+        margin-bottom: 0.35rem !important;
+        padding-bottom: 0 !important;
     }
 
     #editModal .process-form-section-title {
@@ -8317,7 +8792,7 @@ body.process-page > #editModal.modal > .modal-content.process-form-modal,
     color: var(--color-body-strong, #0f172a) !important;
 }
 
-#editModal .modal-content.process-form-modal .process-form .form-group input,
+#editModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
 #editModal .modal-content.process-form-modal .process-form .form-group select,
 #editModal .modal-content.process-form-modal .process-form .form-group textarea,
 #editModal .modal-content.process-form-modal .custom-select-button,
@@ -8363,5 +8838,136 @@ body.process-page > #editModal.modal > .modal-content.process-form-modal,
     padding: 16px 40px !important;
     gap: 12px !important;
     border-top: 1px solid #e5e7eb !important;
+}
+
+/* Add/Edit Process modal — unified row spacing (override legacy stacked margins) */
+#addModal .modal-content.process-form-modal .process-form .form-group,
+#editModal .modal-content.process-form-modal .process-form .form-group {
+    margin-bottom: 0 !important;
+}
+
+#addModal .modal-content.process-form-modal .process-form .form-row,
+#editModal .modal-content.process-form-modal .process-form .form-row {
+    margin-bottom: calc(var(--space-gap, 0.75rem) * 0.75) !important;
+    gap: calc(var(--space-gap, 0.75rem) * 0.65) !important;
+}
+
+#addModal .modal-content.process-form-modal .process-form.add-grid .add-col:first-child,
+#addModal .modal-content.process-form-modal .process-form.add-grid .add-col:last-child,
+#editModal .modal-content.process-form-modal .process-form.add-grid .add-col:first-child,
+#editModal .modal-content.process-form-modal .process-form.add-grid .add-col:last-child {
+    padding-top: calc(var(--space-gap, 0.75rem) * 0.65) !important;
+}
+
+#addModal .modal-content.process-form-modal .input-with-checkbox > input[type="text"],
+#editModal .modal-content.process-form-modal .input-with-checkbox > input[type="text"] {
+    min-height: var(--process-form-modal-control-min-h, clamp(2.75rem, 2.25vw, 3.25rem)) !important;
+    height: var(--process-form-modal-control-min-h, clamp(2.75rem, 2.25vw, 3.25rem));
+}
+
+#addModal .modal-content.process-form-modal .day-use-pill-row,
+#editModal .modal-content.process-form-modal .day-use-pill-row {
+    gap: calc(var(--space-gap, 0.75rem) * 0.45);
+}
+
+#addModal .modal-content.process-form-modal .day-use-pill-row .user-gc-inline-label.day-use-pill-heading,
+#editModal .modal-content.process-form-modal .day-use-pill-row .user-gc-inline-label.day-use-pill-heading {
+    margin-bottom: calc(var(--space-gap, 0.75rem) * 0.25);
+    font-size: var(--process-form-modal-label-size, var(--text-medium)) !important;
+    font-weight: var(--font-weight-semibold) !important;
+    font-family: var(--font-heading-page) !important;
+    color: var(--color-body-strong, #0f172a);
+}
+
+#editModal .modal-content.process-form-modal .field-help,
+#editModal .modal-content.process-form-modal .form-row small {
+    display: block;
+    margin-top: calc(var(--space-gap, 0.75rem) * 0.3);
+}
+
+/* First row in each column: Copy From ↔ Remove Word — match label spacing & control top edge */
+#addModal .modal-content.process-form-modal .add-col > .process-form-section:first-child > .form-row:first-of-type .form-group > label,
+#editModal .modal-content.process-form-modal .add-col > .process-form-section:first-child > .form-row:first-of-type .form-group > label {
+    display: block !important;
+    line-height: 1.3 !important;
+    margin-bottom: calc(var(--space-gap, 0.75rem) * 0.45) !important;
+}
+
+#addModal .modal-content.process-form-modal .add-col > .process-form-section:first-child > .account-section-header,
+#editModal .modal-content.process-form-modal .add-col > .process-form-section:first-child > .account-section-header {
+    margin-bottom: calc(var(--space-gap, 0.75rem) * 0.65) !important;
+}
+
+/* Bank 非 Show All（当前策略）：
+ * 1) 交给 auto page size 控制显示行数（不启用表格内纵向滚动）
+ * 2) 保留表格区域横向滚动（小屏可完整查看列）
+ * 3) 其他祖先链 overflow:hidden，防止双滚动
+ */
+html:has(body.process-page.process-page--bank:not(.process-page--bank-show-all)) {
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all),
+body.dashboard-page.process-page.process-page--bank:not(.process-page--bank-show-all),
+body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) {
+    --bank-virtual-table-min-width: 1440px;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    max-height: 100vh !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) #root,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .ec-page-shell,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .ec-page-shell__content,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .container,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .content,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-body,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table-inner {
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table-inner,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll.process-cards,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-data-row {
+    min-width: 0 !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region .process-table-wrapper.bank-process-table-region {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table {
+    min-width: max(100%, var(--bank-virtual-table-min-width, 1440px)) !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip,
+body.ec-auth-shell.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip {
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+    overscroll-behavior: contain;
+}
+
+/* 非 Show All：允许表格区域横向滚动，避免小屏列被压缩 */
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region .process-table-wrapper.bank-process-table-region,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-table-inner {
+    overflow-x: auto !important;
+}
+
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-process-list-scroll-region::-webkit-scrollbar:horizontal,
+body.process-page.process-page--bank:not(.process-page--bank-show-all) .bank-virtual-scroll-clip::-webkit-scrollbar:horizontal {
+    height: 6px !important;
+    display: block !important;
 }
 

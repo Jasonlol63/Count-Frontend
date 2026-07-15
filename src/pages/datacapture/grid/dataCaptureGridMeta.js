@@ -2,12 +2,13 @@
 export const DEFAULT_GRID_ROWS = 26;
 export const DEFAULT_GRID_COLS = 20;
 
-/** Group-only mode (Group selected, no Company): starts at 11×11 (A–K, cols 1–11); rows may grow (L…Z, AA…). */
-export const GROUP_ONLY_GRID_ROWS = 11;
+/** Group payroll UI: same A–Z row span as company capture; cols start at 11 (may grow). */
+export const GROUP_ONLY_GRID_ROWS = DEFAULT_GRID_ROWS;
 export const GROUP_ONLY_GRID_COLS = 11;
 
 /** ZZ row index + 1 in legacy. */
 export const MAX_GRID_ROWS = 702;
+export const MAX_GRID_COLS = 702;
 
 export function resolveDataCaptureGridDimensions(groupOnly) {
   return groupOnly
@@ -34,16 +35,22 @@ export function resolveRestoreGridDimensions(groupOnly, tableData = null) {
   if (!tableData?.rows?.length) {
     return { rows: defaults.rows, cols: defaults.cols };
   }
-  const requiredRows = tableData.rowCount || tableData.rows.length;
+  const requiredRows = Math.max(
+    defaults.rows,
+    tableData.rowCount || tableData.rows.length,
+  );
   const requiredCols = Math.max(
     tableData.colCount
       ? tableData.colCount - 1
       : tableData.headers
         ? tableData.headers.length - 1
         : defaults.cols,
-    15,
+    defaults.cols,
   );
-  return { rows: requiredRows, cols: requiredCols };
+  return {
+    rows: Math.min(requiredRows, MAX_GRID_ROWS),
+    cols: Math.min(requiredCols, MAX_GRID_COLS),
+  };
 }
 
 /** Row header labels: A, B, …, Z, AA, … — same as `getColumnLabel` in `js/datacapture.js`. */

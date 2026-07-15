@@ -3,7 +3,10 @@
  * Company payroll buckets (e.g. company:5 for C168) stay local-only to avoid AP data mixing.
  */
 import { resolveDataCaptureGridDimensions } from "../grid/dataCaptureGridMeta.js";
-import { isGroupOnlyProcessId, selectedProcessFromGroupOnlySession } from "./dataCaptureGroupOnlyProcesses.js";
+import {
+  isGroupPayrollDraftProcessId,
+  selectedProcessFromGroupOnlySession,
+} from "./dataCaptureGroupOnlyProcesses.js";
 import { tableSnapshotHasData } from "./dataCaptureTableSnapshot.js";
 import { applyBridgeCaptureType } from "./dataCaptureBridge.js";
 import { callDataCaptureRuntime, getDataCaptureState } from "./dataCaptureRuntime.js";
@@ -38,7 +41,7 @@ function normalizeDraftBucket(bucketId) {
 
 function normalizeProcessKey(processKey) {
   const p = processKey != null ? String(processKey).trim().toLowerCase() : "";
-  return isGroupOnlyProcessId(p) ? p : null;
+  return isGroupPayrollDraftProcessId(p) ? p : null;
 }
 
 export function normalizeGroupOnlyDraftCurrencyId(currencyId) {

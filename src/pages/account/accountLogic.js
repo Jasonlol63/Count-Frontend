@@ -1,13 +1,9 @@
 /** Account List Logic Helpers */
 
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
+import { formatDmyDash } from "../../utils/date/dateUtils.js";
 import {
-  fetchAccountListByTenantId,
-  filterAccountListRows,
-  resolveAccountListTenantId,
-} from "./accountListApi.js";
-import {
-  companiesInGroupList,
+  companiesForCompanyPicker,
   DASHBOARD_GROUP_FILTER_OPT_OUT_KEY,
   dedupeOwnerCompaniesByCode,
   excludeGroupLabelsFromCompanyPicker,
@@ -36,6 +32,34 @@ export const DEFAULT_FORM = {
 
 export function toUpper(v) {
   return String(v || "").toUpperCase();
+}
+
+function parseAccountLastLogin(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const d = new Date(s.replace(" ", "T"));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Last Login 列：仅展示日期 DD-MM-YYYY */
+export function formatAccountLastLoginDate(raw) {
+  const d = parseAccountLastLogin(raw);
+  if (!d) {
+    const s = String(raw || "").trim();
+    return s || "-";
+  }
+  return formatDmyDash(d);
+}
+
+/** Last Login 悬浮提示：仅时间 HH:MM:SS */
+export function formatAccountLastLoginTimeTitle(raw) {
+  const d = parseAccountLastLogin(raw);
+  if (!d) return "";
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${h}:${min}:${sec}`;
 }
 
 export function normalizeAlertAmount(value) {
@@ -75,16 +99,13 @@ export function getOrderedRoles(roles) {
   return [...out, ...Array.from(map.values()).sort((a, b) => a.localeCompare(b))];
 }
 
-/** 账本账户角色（Add/Edit 弹窗固定列表，不依赖 editdata API） */
-export const ACCOUNT_LEDGER_ROLES = [...ROLE_PRIORITY];
+/** Add/Edit Account modal：DB 未建 role 时仍展示的核心角色 */
+const ACCOUNT_MODAL_FALLBACK_ROLES = ["DEBTOR"];
 
-export function getAccountModalOrderedRoles(extraRoles = []) {
-  const merged = [...ACCOUNT_LEDGER_ROLES];
-  (extraRoles || []).forEach((r) => {
-    const t = String(r || "").trim();
-    if (t && !merged.some((x) => toUpper(x) === toUpper(t))) {
-      merged.push(t);
-    }
+export function getAccountModalOrderedRoles(roles) {
+  const merged = [...(roles || [])];
+  ACCOUNT_MODAL_FALLBACK_ROLES.forEach((role) => {
+    if (!merged.some((r) => toUpper(r) === role)) merged.push(role);
   });
   return getOrderedRoles(merged);
 }
@@ -108,34 +129,15 @@ export function buildAccountsFetchKey(companyId, searchTerm, showInactive, showA
   return `${companyId || ""}|${String(searchTerm || "").trim()}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
 }
 
-/** Spring list URL (POST) — prefer {@link fetchAccountsForCompany}. */
-export function buildAccountsUrl(companyId) {
-  const tid = resolveAccountListTenantId(companyId);
-  return buildApiUrl(`api/account/list?tenant_id=${encodeURIComponent(tid ?? "")}`);
-}
-
-/** POST /api/account/list with client-side filters. */
-export async function fetchAccountsForCompany(
-  companyId,
-  { searchTerm = "", showInactive = false, showAll = false, signal, allStatuses = false } = {},
-) {
-  const tid = resolveAccountListTenantId(companyId);
-  if (!tid) {
-    return { success: false, message: "tenantIdRequired", data: { accounts: [] } };
-  }
-  try {
-    const rows = await fetchAccountListByTenantId(tid, signal);
-    const accounts = allStatuses
-      ? filterAccountListRows(rows, { searchTerm, applyStatusFilter: false })
-      : filterAccountListRows(rows, { searchTerm, showInactive, showAll });
-    return { success: true, data: { accounts } };
-  } catch (e) {
-    return {
-      success: false,
-      message: e?.message || "failedToLoadAccounts",
-      data: { accounts: [] },
-    };
-  }
+export function buildAccountsUrl(companyId, searchTerm, showInactive, showAll, { groupId = null } = {}) {
+  const url = new URL(buildApiUrl("api/accounts/accountlistapi.php"));
+  url.searchParams.set("company_id", String(companyId));
+  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
+  if (gid) url.searchParams.set("group_id", gid);
+  if (String(searchTerm || "").trim()) url.searchParams.set("search", String(searchTerm || "").trim());
+  if (showInactive) url.searchParams.set("showInactive", "1");
+  if (showAll) url.searchParams.set("showAll", "1");
+  return url;
 }
 
 export function buildGroupAccountsUrl(groupId, searchTerm, showInactive, showAll, { groupOnly = true } = {}) {
@@ -173,7 +175,10 @@ export async function fetchMergedAccounts({
   const tasks = [];
   for (const cid of companyIds) {
     tasks.push(
-      fetchAccountsForCompany(cid, { searchTerm, showInactive, showAll, signal }),
+      fetch(buildAccountsUrl(cid, searchTerm, showInactive, showAll).toString(), {
+        credentials: "include",
+        signal,
+      }).then((r) => r.json()),
     );
   }
   for (const gid of groupIds) {
@@ -225,9 +230,13 @@ export function resolveAccountListInlinePickerCompanies({
     return independentPicker();
   }
 
+  if (Array.isArray(companiesForPickerFromHook) && companiesForPickerFromHook.length > 0) {
+    return companiesForPickerFromHook;
+  }
+
   const effectiveGroup = String(selectedGroup).trim().toUpperCase();
   return dedupeOwnerCompaniesByCode(
-    excludeGroupLabelsFromCompanyPicker(companiesInGroupList(companies, effectiveGroup), groupIds),
+    companiesForCompanyPicker(companies, effectiveGroup, groupIds),
     preferredCompanyId,
   );
 }
@@ -252,10 +261,15 @@ export function shouldLoadAccountListData({
   return false;
 }
 
-/** Whether Spring account mutations have a tenant scope (company pill id === tenant.id). */
-export function accountListHasMutationScope(activeTenantId) {
-  const tid = activeTenantId != null ? Number(activeTenantId) : Number.NaN;
-  return Number.isFinite(tid) && tid > 0;
+/** Whether Add / list mutations have a resolvable company or group ledger scope. */
+export function accountListHasMutationScope(
+  scopeCompanyId,
+  { groupOnly = false, selectedGroup = null, canUseGroupLedger = false } = {},
+) {
+  const cid = scopeCompanyId != null ? Number(scopeCompanyId) : Number.NaN;
+  if (Number.isFinite(cid) && cid > 0) return true;
+  const gid = String(selectedGroup || "").trim().toUpperCase();
+  return Boolean(groupOnly && gid && canUseGroupLedger);
 }
 
 export function readAccountListGroupFilterOptOut() {

@@ -13,6 +13,23 @@ export function getCurrencyColor(code, fallbackIndex = 0) {
   return DASHBOARD_CURRENCY_FALLBACK_PALETTE[fallbackIndex % DASHBOARD_CURRENCY_FALLBACK_PALETTE.length];
 }
 
+/** Dual-metric rows → pie/table shape for Currency (net profit) vs Earning tab. */
+export function mapPanelCurrencyRows(rows, view, { useConverted = false } = {}) {
+  const earningTab = view === "earning";
+  return (rows || []).map((row) => {
+    const native = earningTab ? row.earnings : row.netProfit;
+    const converted = earningTab ? row.earningsConverted : row.netProfitConverted;
+    const amount =
+      useConverted && converted != null ? converted : native;
+    return {
+      ...row,
+      earnings: amount,
+      originalEarnings: native,
+      earningsConverted: converted,
+    };
+  });
+}
+
 export function buildEarningsPieSlices(rows, { useConverted = false } = {}) {
   return rows
     .filter((row) => row.earnings != null)
@@ -24,16 +41,18 @@ export function buildEarningsPieSlices(rows, { useConverted = false } = {}) {
           : null
         : row.earnings;
       if (earnings == null) return null;
+      const value = Math.abs(earnings);
+      if (value < 0.0001) return null;
       return {
         code: row.code,
         earnings,
         originalEarnings,
         earningsConverted: row.earningsConverted,
-        value: Math.abs(earnings),
-        fill: getCurrencyColor(row.code),
+        value,
+        fill: getCurrencyColor(row.code, index),
       };
     })
-    .filter((row) => row && row.value > 0)
+    .filter(Boolean)
     .sort((a, b) => b.value - a.value);
 }
 

@@ -1,6 +1,7 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { translateBankProcessApiMessage } from "../../../translateFile/pages/bankProcessTranslate.js";
+import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
 import {
   deriveBankProcessUiStatus,
   normalizeBankIssueFlag,
@@ -20,6 +21,8 @@ function statusLabel(t, key) {
 }
 
 const MENU_GAP = 6;
+const MENU_MIN_WIDTH = 132;
+const MENU_VIEWPORT_GUTTER = 8;
 
 export default function BankProcessStatusControl({
   row,
@@ -41,7 +44,7 @@ export default function BankProcessStatusControl({
       t("statusUpdateFailed")
     );
   const [open, setOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState({ top: 0, bottom: null, left: 0, minWidth: 118 });
+  const [menuPos, setMenuPos] = useState({ top: 0, bottom: null, left: 0, minWidth: MENU_MIN_WIDTH });
   const wrapRef = useRef(null);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
@@ -52,19 +55,23 @@ export default function BankProcessStatusControl({
     const btn = buttonRef.current;
     if (!btn) return;
     const rect = btn.getBoundingClientRect();
+    const minWidth = Math.max(MENU_MIN_WIDTH, Math.round(rect.width));
+    const viewportW = window.innerWidth || document.documentElement?.clientWidth || 0;
+    const maxLeft = Math.max(MENU_VIEWPORT_GUTTER, viewportW - minWidth - MENU_VIEWPORT_GUTTER);
+    const left = Math.min(maxLeft, Math.max(MENU_VIEWPORT_GUTTER, Math.round(rect.left)));
     if (openMenuUp) {
       setMenuPos({
         top: null,
         bottom: Math.round(window.innerHeight - rect.top + MENU_GAP),
-        left: Math.round(rect.left),
-        minWidth: Math.max(118, Math.round(rect.width)),
+        left,
+        minWidth,
       });
     } else {
       setMenuPos({
         top: Math.round(rect.bottom + MENU_GAP),
         bottom: null,
-        left: Math.round(rect.left),
-        minWidth: Math.max(118, Math.round(rect.width)),
+        left,
+        minWidth,
       });
     }
   };
@@ -165,6 +172,15 @@ export default function BankProcessStatusControl({
   const options = ["ACTIVE", "INACTIVE", "OFFICIAL", "E_INVOICE", "BLOCK"];
   const label = statusLabel(t, ui);
 
+  const getItemLabel = useCallback((idx) => statusLabel(t, options[idx]), [options, t]);
+
+  const { highlightIdx, setHighlightIdx, listRef, handleButtonKeyDown, highlightClass } = useListboxKeyboard({
+    open,
+    itemCount: options.length,
+    initialIndex: Math.max(0, options.indexOf(ui)),
+    getItemLabel,
+  });
+
   return (
     <div className={`bank-status-dropdown${open ? " open" : ""}`} ref={wrapRef}>
       <button
@@ -174,13 +190,28 @@ export default function BankProcessStatusControl({
         disabled={pending}
         aria-busy={pending}
         onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          handleButtonKeyDown(e, {
+            isOpen: open,
+            onToggleOpen: () => setOpen(true),
+            onClose: () => setOpen(false),
+            len: options.length,
+            onSelectIndex: (idx) => {
+              const opt = options[idx];
+              if (opt) void apply(opt);
+            },
+          });
+        }}
       >
         {label}
       </button>
       {open
         ? createPortal(
             <div
-              ref={menuRef}
+              ref={(el) => {
+                menuRef.current = el;
+                listRef.current = el;
+              }}
               className={`bank-status-menu bank-status-menu-floating${openMenuUp ? " bank-status-menu-floating--up" : ""}`}
               role="listbox"
               style={{
@@ -196,17 +227,22 @@ export default function BankProcessStatusControl({
                 zIndex: 10020,
               }}
             >
-              {options.map((opt) => {
+              {options.map((opt, idx) => {
                 const optLabel = statusLabel(t, opt);
                 const cur = ui === opt;
                 return (
                   <button
                     key={opt}
                     type="button"
-                    className={`bank-status-option${cur ? " selected" : ""}`}
+                    className={`bank-status-option${cur ? " selected" : ""}${highlightClass(idx)}`}
                     disabled={pending}
+                    role="option"
+                    aria-selected={cur}
                     onClick={() => void apply(opt)}
                     data-value={opt.toLowerCase()}
+                    data-kb-idx={idx}
+                    onMouseEnter={() => setHighlightIdx(idx)}
+                    title={optLabel}
                     style={{ display: "block", width: "100%" }}
                   >
                     {optLabel}

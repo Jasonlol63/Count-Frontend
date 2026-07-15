@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthSession } from "../../context/AuthSessionContext.jsx";
 import { canAccessC168AutoRenew } from "../../utils/company/loginScope.js";
@@ -20,6 +20,7 @@ import {
 } from "./autoRenewTenantSettings.js";
 import { DashboardCalendarPopup } from "../dashboard/components/DashboardCalendarPopup.jsx";
 import ConfirmDeleteModal from "../../components/ConfirmDeleteModal.jsx";
+import PagePillTabSwitch from "../../components/PagePillTabSwitch.jsx";
 import {
   approveAutoRenew,
   AUTO_RENEW_PERIODS,
@@ -38,7 +39,6 @@ import {
   useAutoRenewDateRangeState,
 } from "./hooks/useAutoRenewDateRange.js";
 import {
-  AUTO_RENEW_PAGE_SIZE,
   canApproveRow,
   canDeleteRow,
   filterAutoRenewRows,
@@ -46,12 +46,13 @@ import {
   formatSubmitterAt,
   getAutoRenewApproveDisabledReason,
   getRowDraftValues,
-  paginateRows,
   periodToLabelKey,
   resolveAutoRenewDisplayPrice,
   rowStableKey,
   sortAutoRenewRows,
 } from "./autoRenewPageHelpers.js";
+import { useAutoListPageSize } from "../../hooks/useAutoListPageSize.js";
+import { PAGE_SIZE_MAX, PAGE_SIZE_MIN } from "../../constants/listPageSize.js";
 import "../../../public/css/accountCSS.css";
 import "../../../public/css/userlist.css";
 import "../../../public/css/admin-responsive.css";
@@ -169,6 +170,8 @@ export default function AutoRenewPage() {
   const [approveConfirmRow, setApproveConfirmRow] = useState(null);
   const [settingsModal, setSettingsModal] = useState(null);
   const [commLoadingKey, setCommLoadingKey] = useState(null);
+  const [domainPeriodPrices, setDomainPeriodPrices] = useState(null);
+  const listRegionRef = useRef(null);
 
   const notify = useCallback((message, type = "success") => {
     const id = Date.now();
@@ -176,7 +179,7 @@ export default function AutoRenewPage() {
     setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== id)), 2500);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.body.classList.remove("bg");
     document.body.classList.add("user-page", "auto-renew-page-body");
     return () => {
@@ -185,11 +188,16 @@ export default function AutoRenewPage() {
     };
   }, []);
 
-
+  useEffect(() => {
+    if (!sessionReady || !me || !canAccessC168AutoRenew(me)) return;
+    fetchDomainFeeSettingsForAutoRenew()
+      .then((data) => setDomainPeriodPrices(normalizeDomainFeeSettingsFromApi(data)))
+      .catch(() => {});
+  }, [sessionReady, me]);
 
   const showAll = statusFilter === "all";
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (showAll) {
       document.body.classList.add("user-page--show-all");
       requestAnimationFrame(() => {
@@ -513,9 +521,12 @@ export default function AutoRenewPage() {
       await deleteAutoRenew({
         requestId: row.request_id,
         transactionId: row.transaction_id,
+        entityType: row.entity_type,
       });
-      invalidateTransactionListCache("auto_renew_delete");
-      notify(t("deletedSuccess"), "success");
+      if (row.status === "approved") {
+        invalidateTransactionListCache("auto_renew_delete");
+      }
+      notify(row.status === "rejected" ? t("revertedSuccess") : t("deletedSuccess"), "success");
       await refreshListAfterMutation();
     } catch (err) {
       notify(t("deleteFailed", { message: err.message }), "error");
@@ -537,15 +548,54 @@ export default function AutoRenewPage() {
     () => sortAutoRenewRows(filterAutoRenewRows(rows, { searchTerm }), sortColumn, sortDirection),
     [rows, searchTerm, sortColumn, sortDirection],
   );
+  const showSubmitterColumn = statusFilter === "approved" || statusFilter === "rejected";
 
-  const pagination = useMemo(
-    () => paginateRows(filteredRows, currentPage, AUTO_RENEW_PAGE_SIZE),
-    [filteredRows, currentPage],
+  const pageSize = useAutoListPageSize({
+    listRegionRef,
+    enabled: !showAll,
+    rowSelector: ".auto-renew-table-row",
+    headerSelector: ".auto-renew-table-header",
+    paginationSelector: ".pagination-container",
+    minRows: Math.max(PAGE_SIZE_MIN, 15),
+    maxRows: PAGE_SIZE_MAX,
+    stableRowHeight: true,
+    remeasureDeps: [
+      filteredRows.length,
+      showAll,
+      statusFilter,
+      entityTab,
+      searchTerm,
+      sortColumn,
+      sortDirection,
+      showSubmitterColumn,
+      listRefreshing,
+      bootLoading,
+      lang,
+    ],
+  });
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredRows.length / pageSize)),
+    [filteredRows.length, pageSize],
   );
 
+  const effectivePage = useMemo(
+    () => Math.min(Math.max(1, currentPage), totalPages),
+    [currentPage, totalPages],
+  );
+
+  useEffect(() => {
+    if (showAll) return;
+    setCurrentPage((p) => Math.min(p, totalPages));
+  }, [showAll, totalPages, pageSize]);
+
   const displayRows = useMemo(
-    () => (showAll ? filteredRows : pagination.rows),
-    [showAll, filteredRows, pagination.rows],
+    () => {
+      if (showAll) return filteredRows;
+      const start = (effectivePage - 1) * pageSize;
+      return filteredRows.slice(start, start + pageSize);
+    },
+    [showAll, filteredRows, effectivePage, pageSize],
   );
 
   const renderSortIcon = (column) => (
@@ -626,7 +676,7 @@ export default function AutoRenewPage() {
       );
     }
 
-    if (row.status === "approved" && canDeleteRow(row) && canEditGlobal) {
+    if ((row.status === "approved" || row.status === "rejected") && canDeleteRow(row) && canEditGlobal) {
       return (
         <div className="auto-renew-action-btns">
           <button
@@ -673,8 +723,6 @@ export default function AutoRenewPage() {
     );
   };
 
-  const showSubmitterColumn = statusFilter === "approved" || statusFilter === "rejected";
-
   if (loadError) {
     return (
       <div className="auto-renew-page">
@@ -696,34 +744,39 @@ export default function AutoRenewPage() {
       <div className="container">
         <div className="content">
           <div className="auto-renew-page-header">
-            <div className="page-tabs" role="tablist" aria-label={t("filterGroupLabel")}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={entityTab === "company"}
-                className={`page-tab${entityTab === "company" ? " active" : ""}${tabPendingCounts.company > 0 ? " has-pending-badge" : ""}`}
-                onClick={() => handleEntityTabChange("company")}
-              >
-                <span className="page-tab__label">{t("companyTab")}</span>
-                <TabPendingBadge
-                  count={tabPendingCounts.company}
-                  label={t("tabPendingBadgeCompany", { count: tabPendingCounts.company })}
-                />
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={entityTab === "group"}
-                className={`page-tab${entityTab === "group" ? " active" : ""}${tabPendingCounts.group > 0 ? " has-pending-badge" : ""}`}
-                onClick={() => handleEntityTabChange("group")}
-              >
-                <span className="page-tab__label">{t("groupTab")}</span>
-                <TabPendingBadge
-                  count={tabPendingCounts.group}
-                  label={t("tabPendingBadgeGroup", { count: tabPendingCounts.group })}
-                />
-              </button>
-            </div>
+            <PagePillTabSwitch
+              value={entityTab}
+              onChange={handleEntityTabChange}
+              ariaLabel={t("filterGroupLabel")}
+              options={[
+                {
+                  value: "company",
+                  className: tabPendingCounts.company > 0 ? "has-pending-badge" : "",
+                  children: (
+                    <>
+                      <span className="page-tab__label">{t("companyTab")}</span>
+                      <TabPendingBadge
+                        count={tabPendingCounts.company}
+                        label={t("tabPendingBadgeCompany", { count: tabPendingCounts.company })}
+                      />
+                    </>
+                  ),
+                },
+                {
+                  value: "group",
+                  className: tabPendingCounts.group > 0 ? "has-pending-badge" : "",
+                  children: (
+                    <>
+                      <span className="page-tab__label">{t("groupTab")}</span>
+                      <TabPendingBadge
+                        count={tabPendingCounts.group}
+                        label={t("tabPendingBadgeGroup", { count: tabPendingCounts.group })}
+                      />
+                    </>
+                  ),
+                },
+              ]}
+            />
           </div>
 
           <div className="action-buttons-container">
@@ -796,6 +849,7 @@ export default function AutoRenewPage() {
           )}
 
           <div
+            ref={listRegionRef}
             className={`user-table-wrapper user-list-table auto-renew-table${showSubmitterColumn ? " auto-renew-table--with-submitter" : ""}`}
           >
             <div className="user-list-table-inner auto-renew-table-inner">
@@ -813,14 +867,18 @@ export default function AutoRenewPage() {
                 {showSubmitterColumn ? renderHeader("submitter", t("colSubmitter")) : null}
               </div>
 
-              <div className="user-cards auto-renew-cards" aria-busy={listRefreshing || Boolean(busyRequestId)}>
+              <div
+                className={`user-cards auto-renew-cards${!showAll && displayRows.length > 0 ? " auto-renew-cards--paged-fill" : ""}`}
+                aria-busy={listRefreshing || Boolean(busyRequestId)}
+                style={!showAll && displayRows.length > 0 ? { "--auto-renew-page-size": Math.max(pageSize, displayRows.length, 15) } : undefined}
+              >
                 {displayRows.length === 0 ? (
                   <EmptyState statusFilter={statusFilter} searchTerm={searchTerm} t={t} />
                 ) : (
                   displayRows.map((row, idx) => {
                     const globalIdx = showAll
                       ? idx + 1
-                      : (pagination.page - 1) * AUTO_RENEW_PAGE_SIZE + idx + 1;
+                      : (effectivePage - 1) * pageSize + idx + 1;
                     const isPendingEditable = row.status === "pending" && canEditGlobal && !row.is_payment_deleted;
                     const draft = getRowDraftValues(row, rowDrafts);
                     const displayPrice = resolveAutoRenewDisplayPrice(row, rowDrafts, feeSettings);
@@ -844,12 +902,13 @@ export default function AutoRenewPage() {
                             {formatRemainingForRow(row, t)}
                           </span>
                         </div>
-                        <div className="card-item auto-renew-col-control">
+                        <div className="card-item auto-renew-col-control auto-renew-col-period">
                           {isPendingEditable ? (
                             <select
-                              className="auto-renew-inline-select"
+                              className={`auto-renew-inline-select${draft.period ? " auto-renew-inline-select--filled" : " auto-renew-inline-select--empty"}`}
                               value={draft.period}
                               disabled={rowBusy}
+                              aria-label={t("colPeriod")}
                               onChange={(e) => updateDraft(row.request_id, { period: e.target.value })}
                             >
                               <option value="">{t("selectPeriod")}</option>
@@ -859,8 +918,10 @@ export default function AutoRenewPage() {
                                 </option>
                               ))}
                             </select>
+                          ) : row.period ? (
+                            <span className="auto-renew-period-badge">{t(periodToLabelKey(row.period))}</span>
                           ) : (
-                            <span className="auto-renew-cell-readonly">{row.period ? t(periodToLabelKey(row.period)) : "-"}</span>
+                            <span className="auto-renew-table-muted">—</span>
                           )}
                         </div>
                         <div className="card-item auto-renew-col-control auto-renew-col-control--status">{renderStatusCell(row)}</div>
@@ -882,19 +943,19 @@ export default function AutoRenewPage() {
               <button
                 type="button"
                 className="pagination-btn"
-                disabled={pagination.page <= 1}
+                disabled={effectivePage <= 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 aria-label={t("prevPage")}
               >
                 ◀
               </button>
               <span className="pagination-info">
-                {t("paginationOf", { page: pagination.page, total: pagination.totalPages })}
+                {t("paginationOf", { page: effectivePage, total: totalPages })}
               </span>
               <button
                 type="button"
                 className="pagination-btn"
-                disabled={pagination.page >= pagination.totalPages}
+                disabled={effectivePage >= totalPages}
                 onClick={() => setCurrentPage((p) => p + 1)}
                 aria-label={t("nextPage")}
               >
@@ -912,8 +973,8 @@ export default function AutoRenewPage() {
       {deleteConfirmRow ? (
         <ConfirmDeleteModal
           open
-          title={t("confirmDeleteTitle")}
-          message={t("confirmDelete", { company: deleteConfirmRow.company_code })}
+          title={t(deleteConfirmRow.status === "rejected" ? "confirmRevertTitle" : "confirmDeleteTitle")}
+          message={t(deleteConfirmRow.status === "rejected" ? "confirmRevert" : "confirmDelete", { company: deleteConfirmRow.company_code })}
           cancelLabel={t("cancel")}
           confirmLabel={t("delete")}
           confirmDisabled={Boolean(busyRequestId)}
@@ -956,7 +1017,7 @@ export default function AutoRenewPage() {
         <CompanySettingsModal
           lang={lang}
           company={settingsModal.tenant}
-          domainPeriodPrices={feeSettings}
+          domainPeriodPrices={domainPeriodPrices}
           sessionCompanyId={me?.company_id ?? null}
           sessionCompanyCode={me?.company_code ?? null}
           excludeOwnerId={settingsModal.ownerId}
@@ -971,7 +1032,7 @@ export default function AutoRenewPage() {
         <GroupSettingsModal
           lang={lang}
           group={settingsModal.tenant}
-          domainPeriodPrices={feeSettings}
+          domainPeriodPrices={domainPeriodPrices}
           sessionCompanyId={me?.company_id ?? null}
           sessionCompanyCode={me?.company_code ?? null}
           excludeOwnerId={settingsModal.ownerId}

@@ -54,11 +54,14 @@ export function tenantAccessibleRowToUiTenant(tenant) {
   const native = tenant.nativeParentTenantCode;
 
   return {
+    id: tenant.tenantId,
     tenant_id: tenant.tenantId,
     tenant_code: code,
     company_id: code,
     parent_tenant_code: isGroup ? code.toUpperCase() : parent,
     native_parent_tenant_code: isGroup ? (native || code).toUpperCase() : native ?? parent,
+    group_id: isGroup ? code.toUpperCase() : parent,
+    native_group_id: isGroup ? (native || code).toUpperCase() : native ?? parent,
     expiration_date: tenant.expirationDate,
     tenant_type: tenant.tenantType,
   };

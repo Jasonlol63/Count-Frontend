@@ -217,7 +217,7 @@ export default function CustomerReportPage() {
     let cancelled = false;
     (async () => {
       try {
-        const rows = await fetchOwnerCompaniesAll();
+        const rows = await fetchOwnerCompaniesAll({ me: u });
         if (cancelled) return;
         setCompanies(rows);
 
@@ -463,13 +463,13 @@ export default function CustomerReportPage() {
     try {
       const data = await fetchCustomerReport(reportParams, { signal });
       if (!isReportFetchCurrent(seq)) return;
+      if (!quietRefresh && !data?.data?.length) {
+        notify(t("noDataAdjustSearch"), "info");
+      }
       startTransition(() => {
         setReportData(data);
       });
       setReportSnapshot(REPORT_PAGE_KEY, buildReportSnapshotKey(reportParams), data);
-      if (!data?.data?.length) {
-        notify(t("noDataAdjustSearch"), "info");
-      }
     } catch (err) {
       if (err?.name === "AbortError" || !isReportFetchCurrent(seq)) return;
       const msg = err.message || t("loadReportFailed");

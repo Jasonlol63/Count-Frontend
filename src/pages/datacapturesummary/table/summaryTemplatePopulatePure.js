@@ -77,6 +77,20 @@ function insertSubRowAfter(rows, parentRow, subRow) {
   return next;
 }
 
+function buildSubTemplateApplyKey(parentIdProduct, sub) {
+  const parent = String(sub?.parent_id_product || parentIdProduct || "").trim().toLowerCase();
+  const accountId = sub?.account_id != null ? String(Number(sub.account_id) || 0) : "0";
+  const rowIndex =
+    sub?.row_index != null && sub.row_index !== "" && !Number.isNaN(Number(sub.row_index))
+      ? String(Number(sub.row_index))
+      : "-1";
+  const subOrder =
+    sub?.sub_order != null && sub.sub_order !== "" && !Number.isNaN(Number(sub.sub_order))
+      ? String(Number(sub.sub_order))
+      : "0";
+  return `${parent}|${accountId}|${rowIndex}|${subOrder}`;
+}
+
 function applySubsForParent(rows, parentIdProduct, subTemplates) {
   const appliedIds = new Set();
   let result = rows;
@@ -84,7 +98,7 @@ function applySubsForParent(rows, parentIdProduct, subTemplates) {
   for (const sub of subTemplates) {
     if (!sub) continue;
     const tplId = sub.id != null ? `id:${sub.id}` : null;
-    const fp = `${parentIdProduct}|${sub.account_id}|${sub.sub_order}|${sub.formula_variant}`;
+    const fp = buildSubTemplateApplyKey(parentIdProduct, sub);
     if (appliedIds.has(fp) || (tplId && appliedIds.has(tplId))) continue;
 
     const mainRow = findMainRowForSubTemplatePure(result, parentIdProduct, sub);
@@ -229,8 +243,19 @@ export async function populateSummaryRowsPure({
   }
 
   rows = rows
-    .filter((row) => row.productType !== "sub" || !isParentRowSuppressed(row, rows, suppressed))
-    .map((row) => (isRowSuppressed(row, suppressed) ? clearRowEditableFields(row) : row));
+    .filter((row) => {
+      if (row.productType === "sub") {
+        if (isParentRowSuppressed(row, rows, suppressed)) return false;
+        if (isRowSuppressed(row, suppressed)) return false;
+      }
+      return true;
+    })
+    .map((row) => {
+      if (row.productType === "main" && isRowSuppressed(row, suppressed)) {
+        return clearRowEditableFields(row);
+      }
+      return row;
+    });
 
   rows = sortRowsByRowIndex(rows);
   rows = restoreRateValuesOnRows(rows, captureScope);
@@ -243,19 +268,23 @@ function sortRowsByRowIndex(rows) {
   const subs = rows.filter((r) => r.productType === "sub");
   const sortedMains = [...mains].sort((a, b) => a.rowIndex - b.rowIndex);
   const result = [];
+  const placed = new Set();
   for (const main of sortedMains) {
     result.push(main);
     const mainNorm = normalizeSummaryIdProductText(main.idProduct);
     const childSubs = subs
       .filter(
-        (s) =>
-          normalizeSummaryIdProductText(s.parentIdProduct || "") === mainNorm ||
-          s.parentRowIndex === main.rowIndex
+        (s) => {
+          if (placed.has(s.key)) return false;
+          if (s.parentRowIndex != null) return s.parentRowIndex === main.rowIndex;
+          return normalizeSummaryIdProductText(s.parentIdProduct || "") === mainNorm;
+        }
       )
       .sort((a, b) => (a.subOrder ?? 0) - (b.subOrder ?? 0));
     result.push(...childSubs);
+    childSubs.forEach((s) => placed.add(s.key));
   }
-  const placed = new Set(result.map((r) => r.key));
+  result.forEach((r) => placed.add(r.key));
   for (const row of rows) {
     if (!placed.has(row.key)) result.push(row);
   }

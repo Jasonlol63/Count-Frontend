@@ -10,8 +10,11 @@ import "./styles/app-shell.css";
 import "./styles/maintenanceToolbarUnified.css";
 import "./styles/login-surface-lock.css";
 import "./styles/login-auth-fields.css";
+import "./styles/sidebar-shell-overrides.css";
+import "./styles/sidebar-scroll.css";
 import "../public/css/modal-close-unified.css";
 import "../public/css/confirm-delete-unified.css";
+import "../public/css/select-unified.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {

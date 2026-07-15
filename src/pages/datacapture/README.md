@@ -25,7 +25,8 @@ Pure React SPA — no runtime load of `js/datacapture.js` or other legacy script
 | Row/column CRUD on grid model | `grid/gridRowColumnModel.js` |
 | Format display & format-mode paste | `hooks/useDataCaptureFormat.js`, `format/dataCaptureFormat.js` |
 | Cell paste (orchestration + typed router) | `hooks/useDataCapturePaste.js` → `paste/core/dataCapturePasteHandler.js` |
-| Typed capture paste (VPOWER, WBET, …) | `paste/core/dataCapturePasteHandler.js` (`TYPED_CAPTURE_TYPES`) + `paste/vendors/*` |
+| Universal Smart Paste Engine (flagged) | `paste/engine/` — `SmartPasteOrchestrator`; enable `VITE_SMART_PASTE_UNIVERSAL=1` or `localStorage.SMART_PASTE_UNIVERSAL=1` |
+| Typed capture paste (VPOWER, WBET, …) | `paste/core/dataCapturePasteHandler.js` (`TYPED_CAPTURE_TYPES`) + `paste/vendors/*` (fallback when Universal fails) |
 | Citibet auto-detect / parsers | `paste/core/dataCapturePasteDetect.js`, `paste/vendors/dataCaptureCitibet*.js` |
 | Generic / HTML / text paste | `paste/core/dataCaptureGenericPaste.js`, `paste/core/dataCaptureText*.js` |
 | Clipboard + HTML table helpers | `paste/core/dataCaptureClipboard.js` |
@@ -56,6 +57,7 @@ datacapture/
     dataCaptureRuntime.js      # module-scoped registry (no window.__DC_*)
   paste/
     core/
+    engine/                    # Universal Smart Paste (flag SMART_PASTE_UNIVERSAL)
     vendors/
 ```
 

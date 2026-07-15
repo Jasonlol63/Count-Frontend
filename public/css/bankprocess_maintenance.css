@@ -1177,6 +1177,7 @@ body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .mainten
     white-space: nowrap;
     border-bottom: none;
     min-height: var(--bankprocess-list-cell-min-height);
+    min-width: 0;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -1243,6 +1244,28 @@ body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .mainten
 
 .bankprocess-maintenance-page-root .maintenance-row-deleted .bankprocess-virtual-cell-checkbox {
     text-decoration: none;
+}
+
+.bankprocess-maintenance-page-root .bankprocess-cell-text {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-cell .portal-tooltip-anchor {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    flex: 1 1 auto;
+}
+
+.bankprocess-maintenance-page-root .maintenance-virtual-cell--left .bankprocess-cell-text {
+    text-align: left;
 }
 
 /* 与 Payment Maintenance 一致：静默刷新顶栏细条 + 表体略灰 */

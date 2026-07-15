@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import PortalTooltip from "../../../components/PortalTooltip.jsx";
+import { isTextTruncated } from "../../../utils/dom/isTextTruncated.js";
 
 let collapseActiveExpandedCell = null;
 
@@ -29,7 +30,7 @@ export default function TransactionHistoryEllipsisCell({ value, className = "" }
       setTruncated(false);
       return;
     }
-    setTruncated(el.scrollWidth > el.clientWidth + 1);
+    setTruncated(isTextTruncated(el));
   }, []);
 
   useLayoutEffect(() => {

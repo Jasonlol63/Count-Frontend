@@ -1,5 +1,14 @@
 import { pathnameIs, spaPath } from "../../../utils/routing/pageRoutes.js";
 import { readPersistedDashboardGcFilter } from "../../../utils/company/sharedCompanyFilter.js";
+import { replaceBrowserPathOnly } from "../../../utils/routing/privateBrowserUrl.js";
+
+const PAYMENT_HISTORY_SCOPE_KEY = "ec_payment_history_scope";
+
+export function paymentHistoryTitle({ accountCode, accountName, accountMeta }) {
+  const code = String(accountMeta?.account_id ?? accountCode ?? "").trim();
+  const name = resolveHistoryAccountName({ accountName, accountMeta, accountCode }) || code;
+  return `Payment History - ${code} (${name})`;
+}
 
 export function resolveHistoryAccountName({ accountName, accountMeta, accountCode }) {
   const rowName = String(accountName ?? "").trim();
@@ -8,12 +17,6 @@ export function resolveHistoryAccountName({ accountName, accountMeta, accountCod
   if (!bad(rowName)) return rowName;
   if (!bad(apiName)) return apiName;
   return String(accountMeta?.account_id ?? accountCode ?? "").trim();
-}
-
-export function paymentHistoryTitle({ accountCode, accountName, accountMeta }) {
-  const code = String(accountMeta?.account_id ?? accountCode ?? "").trim();
-  const name = resolveHistoryAccountName({ accountName, accountMeta, accountCode }) || code;
-  return `Payment History - ${code} (${name})`;
 }
 
 function readFilterCompanyId() {
@@ -26,44 +29,35 @@ function readFilterCompanyId() {
   }
 }
 
-/** Merge URL params with dashboard filter — new tab has no React transaction scope state. */
-export function resolvePaymentHistoryScope(searchParams, scopeApi = null) {
-  const parsed = parsePaymentHistoryParams(searchParams);
-  const merged = {
-    companyId: parsed.companyId ?? scopeApi?.companyId,
-    viewGroup: parsed.viewGroup ?? scopeApi?.viewGroup,
-    groupId: parsed.groupId ?? scopeApi?.groupId,
-    groupAggregate: parsed.groupAggregate || scopeApi?.groupAggregate || false,
-    subsidiaryAccountsOnly:
-      parsed.subsidiaryAccountsOnly || scopeApi?.subsidiaryAccountsOnly || false,
-    accountDbId: parsed.accountDbId,
-    accountCode: parsed.accountCode,
-    accountName: parsed.accountName,
-    dateFrom: parsed.dateFrom,
-    dateTo: parsed.dateTo,
-    currency: parsed.currency,
-    virtualCompanyCode: parsed.virtualCompanyCode,
-  };
-
-  if ((!merged.companyId || merged.companyId <= 0) && (merged.subsidiaryAccountsOnly || merged.accountDbId)) {
-    const filterCid = readFilterCompanyId();
-    if (filterCid) merged.companyId = filterCid;
+export function persistPaymentHistoryScope(scope) {
+  if (!scope || typeof sessionStorage === "undefined") return;
+  try {
+    const payload = JSON.stringify(scope);
+    sessionStorage.setItem(PAYMENT_HISTORY_SCOPE_KEY, payload);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(PAYMENT_HISTORY_SCOPE_KEY, payload);
+    }
+  } catch {
+    /* ignore */
   }
-
-  if (!merged.viewGroup && !merged.groupId) {
-    const persisted = readPersistedDashboardGcFilter();
-    const bootGroup = persisted?.selectedGroup || persisted?.sidebarAnchorGroup;
-    if (bootGroup) merged.viewGroup = String(bootGroup).trim().toUpperCase();
-  }
-
-  if (merged.subsidiaryAccountsOnly || (merged.companyId && !merged.groupAggregate)) {
-    merged.subsidiaryAccountsOnly = true;
-  }
-
-  return merged;
 }
 
-export function buildPaymentHistoryUrl({ row, dateFrom, dateTo, scopeApi, opts = {} }) {
+export function readPersistedPaymentHistoryScope() {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    let raw = sessionStorage.getItem(PAYMENT_HISTORY_SCOPE_KEY);
+    if (!raw && typeof localStorage !== "undefined") {
+      raw = localStorage.getItem(PAYMENT_HISTORY_SCOPE_KEY);
+    }
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildPaymentHistoryScopePayload({ row, dateFrom, dateTo, scopeApi, opts = {} }) {
   const params = new URLSearchParams();
   let companyId = scopeApi?.companyId != null ? Number(scopeApi.companyId) : undefined;
   if (!Number.isFinite(companyId) || companyId <= 0) {
@@ -100,10 +94,63 @@ export function buildPaymentHistoryUrl({ row, dateFrom, dateTo, scopeApi, opts =
 
   if (!accountDbId && accountCode) params.set("virtual_company_code", accountCode.toUpperCase());
 
-  params.set("ph", "1");
+  const pureType = String(opts.pureTypeSearch || "").toUpperCase().trim();
 
-  const qs = params.toString();
-  return `${spaPath("transaction")}?${qs}`;
+  return {
+    ...parsePaymentHistoryParams(params),
+    pureTypeSearch: pureType || null,
+  };
+}
+
+/** Merge session scope with legacy URL params (old bookmarks) and dashboard filter. */
+export function resolvePaymentHistoryScope(searchParams, scopeApi = null) {
+  const stored = readPersistedPaymentHistoryScope();
+  const parsed = searchParams ? parsePaymentHistoryParams(searchParams) : {};
+  const merged = {
+    companyId: parsed.companyId ?? stored?.companyId ?? scopeApi?.companyId,
+    viewGroup: parsed.viewGroup ?? stored?.viewGroup ?? scopeApi?.viewGroup,
+    groupId: parsed.groupId ?? stored?.groupId ?? scopeApi?.groupId,
+    groupAggregate: parsed.groupAggregate || stored?.groupAggregate || scopeApi?.groupAggregate || false,
+    subsidiaryAccountsOnly:
+      parsed.subsidiaryAccountsOnly ||
+      stored?.subsidiaryAccountsOnly ||
+      scopeApi?.subsidiaryAccountsOnly ||
+      false,
+    accountDbId: parsed.accountDbId ?? stored?.accountDbId,
+    accountCode: parsed.accountCode ?? stored?.accountCode,
+    accountName: parsed.accountName ?? stored?.accountName,
+    dateFrom: parsed.dateFrom ?? stored?.dateFrom,
+    dateTo: parsed.dateTo ?? stored?.dateTo,
+    currency: parsed.currency ?? stored?.currency,
+    virtualCompanyCode: parsed.virtualCompanyCode ?? stored?.virtualCompanyCode,
+    pureTypeSearch:
+      parsed.pureTypeSearch !== undefined
+        ? parsed.pureTypeSearch || null
+        : stored?.pureTypeSearch ?? null,
+  };
+
+  if ((!merged.companyId || merged.companyId <= 0) && (merged.subsidiaryAccountsOnly || merged.accountDbId)) {
+    const filterCid = readFilterCompanyId();
+    if (filterCid) merged.companyId = filterCid;
+  }
+
+  if (!merged.viewGroup && !merged.groupId) {
+    const persisted = readPersistedDashboardGcFilter();
+    const bootGroup = persisted?.selectedGroup || persisted?.sidebarAnchorGroup;
+    if (bootGroup) merged.viewGroup = String(bootGroup).trim().toUpperCase();
+  }
+
+  if (merged.subsidiaryAccountsOnly || (merged.companyId && !merged.groupAggregate)) {
+    merged.subsidiaryAccountsOnly = true;
+  }
+
+  return merged;
+}
+
+export function buildPaymentHistoryUrl({ row, dateFrom, dateTo, scopeApi, opts = {} }) {
+  const scope = buildPaymentHistoryScopePayload({ row, dateFrom, dateTo, scopeApi, opts });
+  persistPaymentHistoryScope(scope);
+  return spaPath("transaction-payment-history");
 }
 
 export function isPaymentHistoryView(searchParams) {
@@ -136,14 +183,18 @@ export function parsePaymentHistoryParams(searchParams) {
     dateTo: get("date_to"),
     currency: get("currency"),
     virtualCompanyCode: get("virtual_company_code"),
+    pureTypeSearch: get("pure_type_search"),
   };
+}
+
+export function stripPaymentHistoryUrlQuery() {
+  replaceBrowserPathOnly();
 }
 
 export function paymentHistoryParamsReady(params) {
   if (!params?.dateFrom || !params?.dateTo) return false;
   if (!params.accountDbId && !params.virtualCompanyCode) return false;
   if (params.companyId) return true;
-  // Group / aggregate ledger — view_group (or group_id) is enough without company_id.
   if (params.viewGroup || params.groupId || params.groupAggregate) return true;
   return false;
 }

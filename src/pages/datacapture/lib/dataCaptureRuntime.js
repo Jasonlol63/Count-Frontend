@@ -6,10 +6,11 @@
 /** @type {Record<string, unknown>} */
 let runtime = {};
 
-/** @type {{ isRestoring: boolean, isGroupOnlyGrid: boolean }} */
+/** @type {{ isRestoring: boolean, isGroupOnlyGrid: boolean, restoreCompleted: boolean }} */
 const state = {
   isRestoring: false,
   isGroupOnlyGrid: false,
+  restoreCompleted: false,
 };
 
 export function getDataCaptureState() {
@@ -45,4 +46,5 @@ export function resetDataCaptureRuntime() {
   runtime = {};
   state.isRestoring = false;
   state.isGroupOnlyGrid = false;
+  state.restoreCompleted = false;
 }

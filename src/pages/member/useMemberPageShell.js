@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { assetUrl, buildApiUrl } from "../../utils/core/apiUrl.js";
+import { fetchCurrentUser, logoutSession } from "../../utils/auth/authApi.js";
 import { injectStylesheet } from "../../utils/core/injectStylesheet.js";
 import { MAINTENANCE_I18N } from "../../translateFile/pages/maintenanceTranslate.js";
 import { formatMemberRole, getMemberText } from "../../translateFile/pages/memberTranslate.js";
 import { ensureMaintenanceDateRangePicker } from "../../utils/date/dateRangePicker.js";
+import {
+  publishMaintenanceModeEvent,
+  subscribeMaintenanceModeEvent,
+} from "../../utils/maintenance/maintenanceRealtimeBus.js";
 import { useExpirationReminder } from "../../hooks/useExpirationReminder.js";
 import { clearDashboardFilterSession, clearOwnerCompaniesCache } from "../../utils/company/sharedCompanyFilter.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
@@ -37,7 +42,7 @@ const AVATAR_MAP = {
 /**
  * Member page shell: session bootstrap, sidebar avatar, announcements, logout, toasts.
  */
-export function useMemberPageShell({ navigate, initSession, mondayDmy, todayDmy, lang }) {
+export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
   const t = useCallback((key, params) => getMemberText(lang, key, params), [lang]);
 
   const [loading, setLoading] = useState(true);
@@ -83,9 +88,8 @@ export function useMemberPageShell({ navigate, initSession, mondayDmy, todayDmy,
     let cancelled = false;
     (async () => {
       try {
-        const meRes = await fetch(buildApiUrl("api/session/current_user_api.php"), { credentials: "include" });
-        const meJson = await meRes.json();
-        if (!meRes.ok || !meJson.success || !meJson.data) {
+        const { ok, json: meJson } = await fetchCurrentUser();
+        if (!ok || !meJson.success || !meJson.data) {
           navigate(spaPath("login"), { replace: true });
           return;
         }
@@ -103,7 +107,7 @@ export function useMemberPageShell({ navigate, initSession, mondayDmy, todayDmy,
         if (!cancelled) {
           setMe(u);
           setCompanies(Array.isArray(cJson?.data) ? cJson.data : []);
-          initSession(u, u.company_id, mondayDmy, todayDmy);
+          initSession(u, u.company_id, todayDmy, todayDmy);
         }
       } catch {
         if (!cancelled) navigate(spaPath("login"), { replace: true });
@@ -114,13 +118,12 @@ export function useMemberPageShell({ navigate, initSession, mondayDmy, todayDmy,
     return () => {
       cancelled = true;
     };
-  }, [navigate, mondayDmy, todayDmy, initSession]);
+  }, [navigate, todayDmy, initSession]);
 
   const refreshSession = useCallback(async () => {
     try {
-      const meRes = await fetch(buildApiUrl("api/session/current_user_api.php"), { credentials: "include" });
-      const meJson = await meRes.json();
-      if (meRes.ok && meJson.success && meJson.data) {
+      const { ok, json: meJson } = await fetchCurrentUser();
+      if (ok && meJson.success && meJson.data) {
         setMe(meJson.data);
         return meJson.data;
       }
@@ -129,6 +132,51 @@ export function useMemberPageShell({ navigate, initSession, mondayDmy, todayDmy,
     }
     return null;
   }, []);
+
+  useEffect(() => {
+    if (loading || !me) return undefined;
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const { ok, json } = await fetchCurrentUser({ cache: "no-store" });
+        if (!ok && !stopped && (json?.maintenance_mode === true || json?.data?.maintenance_mode === true)) {
+          if (typeof json?.message === "string" && json.message.trim() !== "") {
+            sessionStorage.setItem("ec_maintenance_notice", json.message.trim());
+          }
+          // Tell sibling tabs in the same browser profile to logout immediately.
+          publishMaintenanceModeEvent({
+            enabled: true,
+            message: typeof json?.message === "string" ? json.message : "",
+          });
+          clearDashboardFilterSession();
+          clearOwnerCompaniesCache();
+          window.location.assign(new URL(spaPath("login"), window.location.origin).href);
+        }
+      } catch {
+        // silent: next tick retries
+      }
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 2000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [loading, me]);
+
+  useEffect(() => {
+    if (loading || !me) return undefined;
+    return subscribeMaintenanceModeEvent((event) => {
+      if (!event?.enabled) return;
+      if (typeof event.message === "string" && event.message.trim() !== "") {
+        sessionStorage.setItem("ec_maintenance_notice", event.message.trim());
+      }
+      clearDashboardFilterSession();
+      clearOwnerCompaniesCache();
+      window.location.assign(new URL(spaPath("login"), window.location.origin).href);
+    });
+  }, [loading, me]);
 
   useEffect(() => {
     const onCompanySession = () => {
@@ -198,11 +246,7 @@ export function useMemberPageShell({ navigate, initSession, mondayDmy, todayDmy,
     setLogoutLoading(true);
     try {
       sessionStorage.setItem("ec_skip_session_bootstrap", "1");
-      await fetch(buildApiUrl("auth/logout"), {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-      });
+      await logoutSession();
     } finally {
       clearDashboardFilterSession();
       clearOwnerCompaniesCache();

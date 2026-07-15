@@ -1,22 +1,12 @@
 import { removeTrailingSourcePercentExpression } from "../../../shared/formula/index.js";
-import { evaluateExpression } from "../formula/summaryFormulaEvaluate.js";
-import { removeThousandsSeparators } from "../formula/summaryFormulaParseUtils.js";
 import {
   resolveFormulaTextForCalculation,
   resolveSubmitProcessedAmount,
 } from "../table/summaryRowAmount.js";
-
-function resolveAccountId(row, accounts) {
-  if (row.accountId) return String(row.accountId);
-  const text = String(row.account || "").trim();
-  if (!text || !Array.isArray(accounts)) return null;
-  const found = accounts.find((a) => {
-    const display = String(a.account_display || a.account || a.name || "").trim();
-    const code = String(a.account_code || a.code || "").trim();
-    return display === text || code === text || text.includes(`[${a.id}]`);
-  });
-  return found?.id != null ? String(found.id) : null;
-}
+import {
+  resolveSubmitAccountId,
+  validateSubmitRowGuards,
+} from "./summarySubmitRowGuard.js";
 
 function resolveCurrencyId(row, parsedProcessData) {
   if (row.currencyId) return String(row.currencyId);
@@ -30,8 +20,8 @@ function resolveCurrencyId(row, parsedProcessData) {
 function resolveGlobalRateForSubmit(row, globalRateInput) {
   if (row.rateValue?.trim()) return null;
   if (!row.rateChecked || !globalRateInput?.trim()) return null;
-  const rv = globalRateInput.trim();
-  return rv.startsWith("*") || rv.startsWith("/") ? rv.substring(1) : rv;
+  // Preserve * / operator so backend can store rate_expression distinctly from plain "3"
+  return globalRateInput.trim();
 }
 
 /** Build API submit row objects from React row models. */
@@ -48,7 +38,7 @@ export function buildSubmitRowsFromModel(rows, parsedProcessData, accounts = [],
     const idProduct =
       productType === "sub" && idProductSub ? idProductSub : idProductMain || row.idProduct;
 
-    const accountId = resolveAccountId(row, accounts);
+    const accountId = resolveSubmitAccountId(row, accounts);
     if (!accountId) continue;
 
     const currencyText = String(row.currency || "")
@@ -112,7 +102,7 @@ export function buildSubmitRowsFromModel(rows, parsedProcessData, accounts = [],
   return summaryRows;
 }
 
-export function validateRowsForSubmit(rows) {
+export function validateRowsForSubmit(rows, accounts = [], globalRateInput = "") {
   for (const row of rows) {
     if (row.selectChecked || !row.account?.trim()) continue;
     const hasFormula = Boolean(
@@ -126,5 +116,6 @@ export function validateRowsForSubmit(rows) {
       };
     }
   }
-  return { ok: true };
+
+  return validateSubmitRowGuards(rows, accounts, globalRateInput);
 }

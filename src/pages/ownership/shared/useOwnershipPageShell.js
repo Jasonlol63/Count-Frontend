@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getOwnershipText } from "../../../translateFile/pages/ownershipTranslate.js";
-import { prefetchOwnershipCompanies, peekOwnershipCompaniesCache } from "../ownershipRoutePrefetch.js";
+import { prefetchOwnershipCompanies, peekOwnershipCompaniesCache, invalidateOwnershipCompaniesCache } from "../ownershipRoutePrefetch.js";
 import { getApiMessage, isApiSuccess } from "./ownershipHelpers.js";
 import {
   getOwnershipCurrentMonthKey,
@@ -56,11 +56,12 @@ export function useOwnershipPageShell() {
   }, []);
 
   const fetchCompanies = useCallback(
-    async (monthKey = getOwnershipCurrentMonthKey()) => {
-      const cached = peekOwnershipCompaniesCache(monthKey);
+    async (monthKey = getOwnershipCurrentMonthKey(), { force = false } = {}) => {
+      if (force) invalidateOwnershipCompaniesCache(monthKey);
+      const cached = !force ? peekOwnershipCompaniesCache(monthKey) : null;
       if (!cached) setLoadingList(true);
       try {
-        const json = await prefetchOwnershipCompanies(monthKey);
+        const json = await prefetchOwnershipCompanies(monthKey, { force });
         if (isApiSuccess(json)) setAllCompanies(json.data || []);
         else showToast(getApiMessage(json, "Failed to load companies"), "error");
         setReadOnlyMode(false);

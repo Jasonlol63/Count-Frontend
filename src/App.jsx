@@ -1,6 +1,11 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { lazyWithRetry } from "./utils/routing/lazyWithRetry.js";
-import { LEGACY_PATH_TO_PAGE_KEY, PAGE_ROUTE_UUIDS, spaPath } from "./utils/routing/pageRoutes.js";
+import {
+  PAGE_PATHS,
+  PAGE_ROUTE_UUIDS,
+  PATH_ALIASES_TO_PAGE_KEY,
+  spaPath,
+} from "./utils/routing/pageRoutes.js";
 import LoginPage from "./pages/login/LoginPage.jsx";
 import AuthenticatedLayout from "./components/AuthenticatedLayout.jsx";
 import SecondaryPasswordPage from "./pages/login/SecondaryPasswordPage.jsx";
@@ -110,34 +115,54 @@ const LEGACY_PHP_REDIRECTS = {
   "/auto-renew.php": "auto-renew",
 };
 
+function canonicalRoutePath(pageKey) {
+  return `${PAGE_PATHS[pageKey]}/${PAGE_ROUTE_UUIDS[pageKey]}`;
+}
+
 function pageElement(pageKey) {
   const Component = PAGE_COMPONENTS[pageKey];
   return Component ? <Component /> : null;
 }
 
 export default function App() {
-  const uuidEntries = Object.entries(PAGE_ROUTE_UUIDS);
+  const pathEntries = Object.entries(PAGE_PATHS);
 
   return (
     <Routes>
-      {uuidEntries
+      {pathEntries
         .filter(([pageKey]) => PUBLIC_PAGE_KEYS.has(pageKey))
-        .map(([pageKey, uuid]) => (
-          <Route key={pageKey} path={`/p/${uuid}`} element={pageElement(pageKey)} />
+        .map(([pageKey]) => (
+          <Route key={pageKey} path={canonicalRoutePath(pageKey)} element={pageElement(pageKey)} />
         ))}
 
       <Route element={<AuthenticatedLayout />}>
-        {uuidEntries
+        {pathEntries
           .filter(([pageKey]) => !PUBLIC_PAGE_KEYS.has(pageKey))
-          .map(([pageKey, uuid]) => (
-            <Route key={pageKey} path={`/p/${uuid}`} element={pageElement(pageKey)} />
+          .map(([pageKey]) => (
+            <Route key={pageKey} path={canonicalRoutePath(pageKey)} element={pageElement(pageKey)} />
           ))}
       </Route>
 
-      {Object.entries(LEGACY_PATH_TO_PAGE_KEY).map(([legacyPath, pageKey]) => (
+      {pathEntries.map(([pageKey, path]) => (
         <Route
-          key={`legacy-${legacyPath}`}
-          path={legacyPath}
+          key={`bare-${pageKey}`}
+          path={path}
+          element={<Navigate to={spaPath(pageKey)} replace />}
+        />
+      ))}
+
+      {Object.entries(PAGE_ROUTE_UUIDS).map(([pageKey, uuid]) => (
+        <Route
+          key={`legacy-p-${pageKey}`}
+          path={`/p/${uuid}`}
+          element={<Navigate to={spaPath(pageKey)} replace />}
+        />
+      ))}
+
+      {Object.entries(PATH_ALIASES_TO_PAGE_KEY).map(([aliasPath, pageKey]) => (
+        <Route
+          key={`alias-${aliasPath}`}
+          path={aliasPath}
           element={<Navigate to={spaPath(pageKey)} replace />}
         />
       ))}

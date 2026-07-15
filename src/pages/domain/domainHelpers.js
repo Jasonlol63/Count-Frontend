@@ -1,6 +1,6 @@
 // domainHelpers.js — Pure utility functions extracted from domain.js
 
-import { formatYmd, parseDdMmYyyyToYmd, parseYmd } from "../../utils/date/dateUtils.js";
+import { formatDmyDash, formatYmd, parseDdMmYyyyToYmd, parseYmd } from "../../utils/date/dateUtils.js";
 
 // ★★★ SINGLE_CATEGORY_MODE ★★★
 // true: Company Settings 弹窗中 Permissions 只能选择一个分类（互斥）
@@ -61,13 +61,7 @@ export function calculateExpirationDate(period, startDate = null) {
 
 /** 格式化日期显示 */
 export function formatDate(dateString) {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatDmyDash(dateString);
 }
 
 /** Map days-until-expiration to sidebar urgency class (matches includes/expiration_status.php). */
@@ -141,123 +135,52 @@ export function getPeriodFromDate(expirationDate) {
   return "7days";
 }
 
-// ===================== Spring Boot format helpers =====================
-
-/** UI permission label → feature_module.id (see schema.sql). */
-export const PERMISSION_TO_FEATURE_MODULE_ID = {
-  Games: 1,
-  Bank: 2,
-  Loan: 3,
-  Rate: 4,
-  Money: 5,
-};
-
-const FEATURE_MODULE_NAME_BY_CODE = {
-  GAME: "Games",
-  BANK: "Bank",
-  LOAN: "Loan",
-  RATE: "Rate",
-  MONEY: "Money",
-};
-
-const FEE_SHARE_ROLE_TO_SHARE_TYPE = {
-  profit: "PROFIT",
-  sales: "SALES",
-  cs: "CS",
-  it: "IT",
-};
-
-/** Company Settings permissions → Spring `featureModules` payload. */
-export function permissionNamesToFeatureModules(permissions) {
-  if (!Array.isArray(permissions)) return [];
-  return permissions
-    .map((name) => PERMISSION_TO_FEATURE_MODULE_ID[name])
-    .filter((id) => id != null)
-    .map((id) => ({ id }));
-}
-
-/** Spring `featureModules` → UI permission labels. */
-export function featureModulesToPermissionNames(modules) {
-  if (!Array.isArray(modules)) return [];
-  return modules
-    .map((module) => {
-      const code = String(module?.code ?? "").trim().toUpperCase();
-      if (code && FEATURE_MODULE_NAME_BY_CODE[code]) {
-        return FEATURE_MODULE_NAME_BY_CODE[code];
-      }
-      const name = String(module?.name ?? "").trim();
-      return name || null;
-    })
-    .filter(Boolean);
-}
-
-/** Spring flat fee-share rows → UI grouped object. */
-export function feeShareSpringToUi(allocations) {
-  const grouped = defaultFeeShareAllocations();
-  if (!Array.isArray(allocations)) return grouped;
-
-  for (const row of allocations) {
-    const shareType = String(row?.shareType ?? row?.share_type ?? "").toUpperCase();
-    const role = shareType.toLowerCase();
-    if (!Object.prototype.hasOwnProperty.call(grouped, role)) continue;
-
-    const accountId = parseInt(row?.accountId ?? row?.account_id, 10) || 0;
-    if (accountId === 0) continue;
-
-    grouped[role].push({
-      account_id: accountId,
-      percentage: row?.percentage != null ? parseFloat(row.percentage) : 0,
-    });
-  }
-
-  return grouped;
-}
-
-/** UI grouped fee-share object → Spring flat rows for update-setting. */
-export function feeShareUiToSpring(fsa, tenantId = null) {
-  const out = [];
-
-  for (const [role, shareType] of Object.entries(FEE_SHARE_ROLE_TO_SHARE_TYPE)) {
-    const rows = Array.isArray(fsa?.[role]) ? fsa[role] : [];
-    let sortOrder = 0;
-
-    for (const row of rows) {
-      const accountId = parseInt(row?.account_id, 10) || 0;
-      if (accountId === 0) continue;
-
-      const rawPct = row?.percentage;
-      const percentage =
-        rawPct !== "" && rawPct != null && isFinite(parseFloat(rawPct))
-          ? parseFloat(rawPct)
-          : 0;
-
-      const entry = {
-        shareType,
-        accountId,
-        percentage,
-        ownerType: "owner",
-        sortOrder: sortOrder++,
-      };
-      if (tenantId != null && tenantId > 0) {
-        entry.tenantId = tenantId;
-      }
-      out.push(entry);
-    }
-  }
-
-  return out;
-}
-
 // ===================== Fee Share Helpers =====================
+
+export const DEFAULT_PROFIT_ACCOUNT_CODES = ["C168", "PROFIT"];
 
 export function defaultFeeShareAllocations() {
   return { profit: [], sales: [], cs: [], it: [] };
 }
 
-export function normalizeFeeShareFromServer(raw) {
-  if (Array.isArray(raw)) {
-    return feeShareSpringToUi(raw);
+/** C168 profit-role account for Share % Profit pool (prefer account_id C168). */
+export function resolveDefaultProfitAccountId(accountsProfit) {
+  const list = Array.isArray(accountsProfit) ? accountsProfit : [];
+  for (const code of DEFAULT_PROFIT_ACCOUNT_CODES) {
+    const hit = list.find(
+      (a) => String(a?.account_id ?? "").trim().toUpperCase() === code
+    );
+    const id = hit?.id != null ? parseInt(hit.id, 10) : 0;
+    if (id > 0) return id;
   }
+  const first = list[0];
+  const firstId = first?.id != null ? parseInt(first.id, 10) : 0;
+  return firstId > 0 ? firstId : 0;
+}
+
+export function profitAllocationHasAssignedAccount(fsa) {
+  const profit = Array.isArray(fsa?.profit) ? fsa.profit : [];
+  return profit.some((r) => parseInt(r?.account_id, 10) > 0);
+}
+
+/** When Profit has no account, default to C168 (profit-role account under C168 company). */
+export function applyDefaultProfitAllocation(fsa, accountsProfit) {
+  const base =
+    fsa && typeof fsa === "object"
+      ? {
+          profit: Array.isArray(fsa.profit) ? [...fsa.profit] : [],
+          sales: Array.isArray(fsa.sales) ? [...fsa.sales] : [],
+          cs: Array.isArray(fsa.cs) ? [...fsa.cs] : [],
+          it: Array.isArray(fsa.it) ? [...fsa.it] : [],
+        }
+      : defaultFeeShareAllocations();
+  if (profitAllocationHasAssignedAccount(base)) return base;
+  const aid = resolveDefaultProfitAccountId(accountsProfit);
+  if (!aid) return base;
+  return { ...base, profit: [{ account_id: aid, percentage: "" }] };
+}
+
+export function normalizeFeeShareFromServer(raw) {
   const d = defaultFeeShareAllocations();
   if (!raw || typeof raw !== "object") return d;
   ["profit", "sales", "cs", "it"].forEach((k) => {
@@ -394,52 +317,6 @@ export function groupFromApiRow(row) {
   return g;
 }
 
-/** Spring domain list item group → form state */
-export function groupFromListItem(row) {
-  const code = String(row?.code ?? "").trim().toUpperCase();
-  const g = {
-    id: row?.id || null,
-    group_code: code,
-    expiration_date: row?.expiration_date || null,
-    permissions: featureModulesToPermissionNames(row?.feature_modules ?? row?.featureModules),
-    fee_share_allocations: normalizeFeeShareFromServer(
-      row?.fee_share_allocations ?? row?.feeShareAllocations
-    ),
-    apply_commission_payments_on_domain_save: false,
-  };
-  ensureCompanyFeeShare(g);
-  g.originalExpirationDate = g.expiration_date || null;
-  g.selectedPeriod = null;
-  g.startDate = new Date().toISOString().split("T")[0];
-  g.isExtending = false;
-  return g;
-}
-
-/** Spring domain list item company → form state */
-export function companyFromListItem(row) {
-  const code = String(row?.code ?? "").trim().toUpperCase();
-  const parentCode = String(row?.parent_code ?? "").trim().toUpperCase();
-  const permissions = Array.isArray(row?.category_code) && row.category_code.length
-    ? row.category_code
-    : featureModulesToPermissionNames(row?.feature_modules ?? row?.featureModules);
-  const co = {
-    id: row?.id || null,
-    company_id: code,
-    expiration_date: row?.expiration_date || null,
-    permissions,
-    group_id: parentCode || null,
-    fee_share_allocations: normalizeFeeShareFromServer(
-      row?.fee_share_allocations ?? row?.feeShareAllocations
-    ),
-  };
-  ensureCompanyFeeShare(co);
-  co.originalExpirationDate = co.expiration_date || null;
-  co.selectedPeriod = null;
-  co.startDate = new Date().toISOString().split("T")[0];
-  co.isExtending = false;
-  return co;
-}
-
 export function groupToDomainPayloadEntry(g) {
   const groupCode = String(g.group_code ?? "").trim().toUpperCase();
   const entry = {
@@ -455,66 +332,6 @@ export function groupToDomainPayloadEntry(g) {
     entry.previous_group_code = previousCode;
   }
   return entry;
-}
-
-/** Spring create/update API: tenant row for a group (camelCase). */
-export function groupToTenantSaveEntry(g) {
-  return {
-    code: String(g?.group_code ?? g?.code ?? "").trim().toUpperCase(),
-    tenantType: "GROUP",
-    expirationDate: g?.expirationDate ?? g?.expiration_date ?? null,
-  };
-}
-
-/** Spring create/update API: tenant row for a company (camelCase). */
-export function companyToTenantSaveEntry(c) {
-  const code = String(c?.company_id ?? c?.code ?? "").trim().toUpperCase();
-  const parentCode = String(
-    c?.parentGroupCode ?? c?.parent_code ?? c?.group_id ?? ""
-  ).trim().toUpperCase();
-  return {
-    code,
-    tenantType: "COMPANY",
-    parentGroupCode: parentCode || null,
-    expirationDate: c?.expirationDate ?? c?.expiration_date ?? null,
-  };
-}
-
-/** Build domain list card entry from form state after save. */
-export function buildDomainListEntryFromForm({
-  id,
-  ownerCode,
-  name,
-  email,
-  createdBy = "",
-  groups = [],
-  companies = [],
-}) {
-  return {
-    id,
-    owner_code: String(ownerCode ?? "").trim().toUpperCase(),
-    name: name ?? "",
-    email: email ?? "",
-    created_by: createdBy ?? "",
-    created_at: null,
-    groups: groups.map((g) => ({
-      id: g?.id ?? null,
-      code: String(g?.group_code ?? g?.code ?? "").trim().toUpperCase(),
-      expiration_date: g?.expiration_date ?? null,
-      category_code: Array.isArray(g?.permissions) ? g.permissions : [],
-      fee_share_allocations: normalizeFeeShareFromServer(g?.fee_share_allocations),
-    })),
-    companies: companies
-      .filter((c) => !domainCompanyRowIsGroupEntity(c))
-      .map((c) => ({
-        id: c?.id ?? null,
-        code: String(c?.company_id ?? c?.code ?? "").trim().toUpperCase(),
-        expiration_date: c?.expiration_date ?? null,
-        parent_code: c?.group_id ? String(c.group_id).trim().toUpperCase() : null,
-        category_code: Array.isArray(c?.permissions) ? c.permissions : [],
-        fee_share_allocations: normalizeFeeShareFromServer(c?.fee_share_allocations),
-      })),
-  };
 }
 
 export function tempGroupCode(groupOrCode) {
@@ -725,10 +542,10 @@ export function sumFeeShareRolePercentages(rows) {
 }
 
 /** Check if a card/domain contains protected company C168 */
-export function hasProtectedCompany(companies) {
-  if (!Array.isArray(companies) || companies.length === 0) return false;
-  return companies.some(
-    (c) => String(c.code || "").trim().toUpperCase() === "C168"
+export function hasProtectedCompany(companiesFull) {
+  if (!Array.isArray(companiesFull) || companiesFull.length === 0) return false;
+  return companiesFull.some(
+    (c) => String(c.company_id || "").trim().toUpperCase() === "C168"
   );
 }
 

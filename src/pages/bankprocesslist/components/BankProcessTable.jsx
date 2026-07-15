@@ -6,10 +6,11 @@ import {
   formatBankProcessContractLabel,
   bankProcessContractBadgeKey,
   formatBankMoneyFixed2,
-  formatBankWithTypeDisplay,
   isValidBankMoneyInput,
 } from "../lib/bankProcessHelpers.js";
+import MaintenanceEllipsisText from "../../maintenance/shared/MaintenanceEllipsisText.jsx";
 import BankProcessStatusControl from "./BankProcessStatusControl.jsx";
+import BankProcessTypedBankCell from "./BankProcessTypedBankCell.jsx";
 
 function formatBankMoneyCell(value) {
   const raw = value != null ? String(value).trim() : "";
@@ -103,7 +104,7 @@ export default function BankProcessTable({
 
   const bankColClass = (key) => `bank-col bank-col-${key}`;
 
-  /** <1700px：Bank 最多两行；Card Owner 单行省略 + title 悬停 */
+  /** <1700px：Bank 最多两行；Card Owner 单行省略 + portal tooltip 悬停 */
   const bankNameWrapKeys = new Set(["bank"]);
   /** <1600px：金额/日期/短码强制单行 */
   const bankSingleLineKeys = new Set([
@@ -123,19 +124,7 @@ export default function BankProcessTable({
       bankNameWrapKeys.has(key) ? " bank-virtual-cell--wrap" : ""
     }${bankSingleLineKeys.has(key) ? " bank-virtual-cell--single-line" : ""}${extra ? ` ${extra}` : ""}`;
 
-  const renderBankCell = (bank, type) => {
-    const b = String(bank ?? "").trim();
-    const t = String(type ?? "").trim();
-    const display = formatBankWithTypeDisplay(bank, type);
-    if (display === "-") return "-";
-    if (!t) return display;
-    return (
-      <span className="bank-cell-display bank-cell-display--typed" title={display}>
-        <span className="bank-cell-display__name">{b}</span>
-        <span className="bank-cell-display__type">({t})</span>
-      </span>
-    );
-  };
+  const renderBankCell = (bank, type) => <BankProcessTypedBankCell bank={bank} type={type} />;
 
   const bankHeaderDefs = [
     { key: "no", labelText: t("no"), sortable: false },
@@ -263,14 +252,13 @@ export default function BankProcessTable({
               pageRows.map((r, i) => (
                 <div key={r.id} className="process-card bank-virtual-data-row">
                   <div className={cellClass("no")}>{(showAll ? i : (currentPage - 1) * PAGE_SIZE + i) + 1}</div>
-                  <div className={cellClass("supplier")}>{r.card_lower || "-"}</div>
+                  <div className={cellClass("supplier")}>
+                    <MaintenanceEllipsisText value={r.card_lower} className="bank-process-cell-text" />
+                  </div>
                   <div className={cellClass("ccy")}>{r.country || "-"}</div>
                   <div className={cellClass("bank")}>{renderBankCell(r.bank, r.type)}</div>
-                  <div
-                    className={cellClass("owner")}
-                    title={String(r.supplier || "").trim() || undefined}
-                  >
-                    <span className="bank-owner-text">{r.supplier || "-"}</span>
+                  <div className={cellClass("owner")}>
+                    <MaintenanceEllipsisText value={r.supplier} className="bank-owner-text" />
                   </div>
                   <div className={cellClass("contract", "bank-contract-cell")}>
                     {renderBankContract(r.contract, r.day_start || r.date, r.day_end, lang)}

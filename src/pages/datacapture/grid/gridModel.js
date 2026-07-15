@@ -1,5 +1,6 @@
 import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
 import { getRowLabel } from "./dataCaptureGridMeta.js";
+import { alignSnapshotRow } from "../paste/core/dataCaptureTotalRowAlign.js";
 
 /** Matches legacy `convertBracketedToNegative` in `js/datacapture.js`. */
 export function convertBracketedToNegative(value) {
@@ -57,9 +58,7 @@ function normalizeCellPatch(patch) {
 
 function isPlaceholderIdColumn(value) {
   const trimmed = String(value || "").trim();
-  if (!trimmed) return true;
-  if (/^\d{1,2}$/.test(trimmed)) return true;
-  return FORMAT_LABEL_FIRST_COLUMNS.has(trimmed.toUpperCase());
+  return !trimmed;
 }
 
 function swapRowDataCells(a, b) {
@@ -114,6 +113,12 @@ export function createEmptyGrid(rows = 26, cols = 20) {
   const cells = Array.from({ length: r }, () => Array.from({ length: c }, () => emptyCell()));
   const rowLabels = Array.from({ length: r }, (_, i) => getRowLabel(i));
   return { rows: r, cols: c, cells, rowLabels };
+}
+
+/** Deep clone for paste undo snapshots. */
+export function cloneGrid(grid) {
+  if (!grid) return null;
+  return JSON.parse(JSON.stringify(grid));
 }
 
 export function setCell(grid, rowIndex, colIndex, patch) {
@@ -220,6 +225,12 @@ export function gridToSnapshot(grid, captureType = "1.Text") {
     });
 
     normalizeIdProductColumnForRow(rowData, captureType, rowIndex);
+
+    const alignedRowData = alignSnapshotRow(rowData);
+    if (alignedRowData !== rowData) {
+      rowData.length = 0;
+      alignedRowData.forEach((cell) => rowData.push(cell));
+    }
 
     const dataCols = rowData.length - 1;
     if (dataCols > maxDataCols) maxDataCols = dataCols;

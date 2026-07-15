@@ -63,8 +63,8 @@ body.bg::before {
   position: relative;
   display: flex;
   align-items: stretch;
-  width: 156px;
-  height: 40px;
+  width: 140px;
+  height: 34px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.75);
   background:
@@ -261,9 +261,9 @@ button.sc-login-lang-seg.active {
 .sc-login-role-tab {
   flex: 1;
   min-width: 0;
-  min-height: 46.5px;
+  min-height: 42px;
   box-sizing: border-box;
-  padding: 12px;
+  padding: 10px;
   border: none;
   background: rgba(255, 255, 255, 0.2);
   color: #ffffff;
@@ -283,7 +283,7 @@ button.sc-login-lang-seg.active {
 }
 
 .sc-login-card-content {
-  padding: 18px 20px;
+  padding: 14px 16px;
   min-width: 0;
   font-size: 16px;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -293,7 +293,7 @@ button.sc-login-lang-seg.active {
 .sc-login-form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 11px;
   min-width: 0;
 }
 
@@ -609,12 +609,12 @@ button.sc-login-lang-seg.active {
   }
 
   .sc-login-role-tab {
-    min-height: 52px;
-    padding: 12px 10px;
+    min-height: 44px;
+    padding: 10px;
   }
 
   .sc-login-card-content {
-    padding: 24px 16px;
+    padding: 16px 16px;
   }
 
 }

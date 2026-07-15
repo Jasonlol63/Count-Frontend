@@ -45,6 +45,55 @@ export function parseDdMmYyyyToYmd(str) {
   return `${year}-${month}-${day}`;
 }
 
+function toLocalDate(input) {
+  if (input instanceof Date) {
+    if (Number.isNaN(input.getTime())) return null;
+    const copy = new Date(input);
+    copy.setHours(0, 0, 0, 0);
+    return copy;
+  }
+
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+
+  const ymdHead = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymdHead) {
+    const y = Number(ymdHead[1]);
+    const m = Number(ymdHead[2]);
+    const d = Number(ymdHead[3]);
+    const dt = new Date(y, m - 1, d);
+    if (Number.isNaN(dt.getTime())) return null;
+    dt.setHours(0, 0, 0, 0);
+    return dt;
+  }
+
+  const dmy = raw.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    const year = Number(dmy[3]);
+    const dt = new Date(year, month - 1, day);
+    if (Number.isNaN(dt.getTime())) return null;
+    dt.setHours(0, 0, 0, 0);
+    return dt;
+  }
+
+  const parsed = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
+  if (Number.isNaN(parsed.getTime())) return null;
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+}
+
+/** Format date-like input to DD-MM-YYYY for user-facing text. */
+export function formatDmyDash(input) {
+  const d = toLocalDate(input);
+  if (!d) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
 /**
  * Quick range helper
  */

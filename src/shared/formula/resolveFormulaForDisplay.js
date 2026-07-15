@@ -3,7 +3,11 @@ import {
   removeTrailingSourcePercentExpression,
 } from "./removeTrailingSourcePercent.js";
 import { formatSourcePercent } from "./formatSourcePercent.js";
-import { isMisplacedCommission, isSourceOne } from "./isMisplacedCommission.js";
+import {
+  isDuplicateCoefficientAsSource,
+  isMisplacedCommission,
+  isSourceOne,
+} from "./isMisplacedCommission.js";
 import {
   mergeFormulaOperatorsWithResolvedTail,
   shouldMergeRowTailFromResolvedSources,
@@ -18,12 +22,12 @@ function parseNumeric(value) {
   return Number.isFinite(num) ? num : NaN;
 }
 
-function isValidEffectiveSourceFromParen(parenValue) {
+function isValidEffectiveSourceFromParen(parenValue, formulaText = "") {
   if (parenValue == null || String(parenValue).trim() === "") return false;
   const num = parseNumeric(parenValue);
   if (!Number.isFinite(num)) return false;
   if (isSourceOne(num)) return false;
-  if (isMisplacedCommission(num)) return false;
+  if (isDuplicateCoefficientAsSource(num, formulaText)) return false;
   return true;
 }
 
@@ -34,18 +38,22 @@ function isValidEffectiveSourceFromParen(parenValue) {
 export function resolveEffectiveSourcePercentForRow(row) {
   const enableDb = Number(row?.enable_source_percent ?? 0) ? 1 : 0;
 
-  const fromDisplay = parseTrailingSourceParenValue(row?.formula_display);
-  if (isValidEffectiveSourceFromParen(fromDisplay)) {
+  const formulaDisplay = String(row?.formula_display ?? "");
+  const fromDisplay = parseTrailingSourceParenValue(formulaDisplay);
+  if (isValidEffectiveSourceFromParen(fromDisplay, formulaDisplay)) {
     return { source: formatSourcePercent(fromDisplay), enable: enableDb || 1 };
   }
 
-  const fromLsv = parseTrailingSourceParenValue(row?.last_source_value);
-  if (isValidEffectiveSourceFromParen(fromLsv)) {
+  const lastSourceValue = String(row?.last_source_value ?? "");
+  const fromLsv = parseTrailingSourceParenValue(lastSourceValue);
+  if (isValidEffectiveSourceFromParen(fromLsv, lastSourceValue)) {
     return { source: formatSourcePercent(fromLsv), enable: enableDb || 1 };
   }
 
+  const formulaBody =
+    String(row?.formula_operators ?? "").trim() || lastSourceValue.trim();
   const dbPctRaw = String(row?.source_percent ?? "").trim();
-  if (dbPctRaw !== "" && isMisplacedCommission(dbPctRaw)) {
+  if (dbPctRaw !== "" && isMisplacedCommission(dbPctRaw, formulaBody)) {
     return { source: "1", enable: enableDb };
   }
 
@@ -70,8 +78,11 @@ export function resolveTemplateFormulaBaseAndPercent(row) {
   let base = removeTrailingSourcePercentExpression(raw);
 
   const displayMisplaced = parseTrailingSourceParenValue(row?.formula_display);
-  if (displayMisplaced != null && isMisplacedCommission(displayMisplaced)) {
-    // Trailing *(0.9) on display is misplaced commission, not Source — already stripped from base via removeTrailing
+  if (
+    displayMisplaced != null &&
+    isDuplicateCoefficientAsSource(displayMisplaced, row?.formula_display)
+  ) {
+    // Trailing *(0.9) on display duplicates body *0.9 — not Source; base already stripped via removeTrailing
   }
 
   if (shouldMergeRowTailFromResolvedSources(source)) {

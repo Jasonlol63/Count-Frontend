@@ -10,8 +10,8 @@ import {
   fmtOwnershipPct,
   validateOwnershipRowsForSave,
   mapOwnerApiRows,
+  accountsFromOwnerRows,
   mergeEditorAccounts,
-  normalizeOwnershipAccounts,
   rowsToSavePayload,
   allocationRowsForSave,
 } from "../shared/ownershipRowHelpers.js";
@@ -24,6 +24,7 @@ export function useGroupEarnings(shell) {
     selectedMonth,
     isHistoricalView,
     setHistoryBanner,
+    setConflict,
     lang,
   } = shell;
 
@@ -53,37 +54,8 @@ export function useGroupEarnings(shell) {
         credentials: "include",
       });
       const json = await res.json();
-      if (isApiSuccess(json)) {
-        const raw = json.data || [];
-        const groupsMap = {};
-        
-        // Find all GROUP tenants first
-        raw.forEach((t) => {
-          if (t.tenant_type === "GROUP" && t.tenant_code) {
-            groupsMap[t.tenant_code.toUpperCase()] = {
-              group_id: t.tenant_code,
-              companies: [],
-            };
-          }
-        });
-        
-        // Populate group companies
-        raw.forEach((t) => {
-          if (t.tenant_type === "COMPANY" && t.parent_tenant_code) {
-            const pCode = t.parent_tenant_code.toUpperCase();
-            if (groupsMap[pCode]) {
-              groupsMap[pCode].companies.push({
-                id: t.tenant_id,
-                name: t.tenant_code,
-              });
-            }
-          }
-        });
-        
-        setGeGroups(Object.values(groupsMap));
-      } else {
-        showToast(getApiMessage(json, "Failed to load groups"), "error");
-      }
+      if (isApiSuccess(json)) setGeGroups(json.data || []);
+      else showToast(getApiMessage(json, "Failed to load groups"), "error");
     } catch {
       showToast("Server error", "error");
     } finally {
@@ -114,7 +86,7 @@ export function useGroupEarnings(shell) {
         for (const { gid, oRes } of pairs) {
           if (!isApiSuccess(oRes)) continue;
           const rows = mapOwnerApiRows(oRes.data);
-          next[gid] = { accounts: mergeEditorAccounts([], rows), rows };
+          next[gid] = { accounts: accountsFromOwnerRows(rows), rows };
           if (!bannerSet) {
             const meta = oRes.meta || {};
             setHistoryBanner({
@@ -169,7 +141,7 @@ export function useGroupEarnings(shell) {
           setHistoryBanner(null);
         }
         const rows = mapOwnerApiRows(oRes.status === "success" ? oRes.data : []);
-        const pickerAccounts = normalizeOwnershipAccounts(aRes.status === "success" ? aRes.data : []);
+        const pickerAccounts = aRes.status === "success" ? aRes.data : [];
         const stateAccounts = mergeEditorAccounts(pickerAccounts, rows);
         const nextState = { accounts: stateAccounts, rows };
         setGeStates((prev) => ({
@@ -226,8 +198,30 @@ export function useGroupEarnings(shell) {
   );
 
   const geRemoveRow = useCallback(
-    (gid, idx) => {
+    async (gid, idx) => {
       if (readOnlyMode) return showToast("Read-only: only owner can modify ownership", "error");
+      const st = geStates[gid];
+      if (!st) return;
+      const row = st.rows[idx];
+      if (row?.ownership_id && !isHistoricalView) {
+        try {
+          const body = new FormData();
+          body.append("ownership_id", String(row.ownership_id));
+          const res = await fetch(buildApiUrl("api/ownership/remove_owner_api.php"), {
+            method: "POST",
+            credentials: "include",
+            body,
+          });
+          const json = await res.json();
+          if (!isApiSuccess(json)) {
+            showToast(getApiMessage(json, "Remove failed"), "error");
+            return;
+          }
+        } catch {
+          showToast("Server error", "error");
+          return;
+        }
+      }
       setGeStates((prev) => {
         const cur = prev[gid];
         if (!cur) return prev;
@@ -236,7 +230,7 @@ export function useGroupEarnings(shell) {
         return { ...prev, [gid]: { ...cur, rows } };
       });
     },
-    [readOnlyMode, showToast],
+    [geStates, readOnlyMode, isHistoricalView, showToast],
   );
 
   const geConfirm = useCallback(
@@ -258,11 +252,11 @@ export function useGroupEarnings(shell) {
       setGeSavingGid(groupId);
       try {
         const payload = {
-          tenant_id: groupId,
+          group_id: groupId,
           owners: rowsToSavePayload(rows),
         };
         if (isHistoricalView) payload.month = selectedMonth;
-        const res = await fetch(buildApiUrl("api/ownership/batch-save-ownership"), {
+        const res = await fetch(buildApiUrl("api/ownership/batch_save_group_owners_api.php"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -295,11 +289,11 @@ export function useGroupEarnings(shell) {
         return false;
       }
       try {
-        const res = await fetch(buildApiUrl("api/ownership/link-partner"), {
+        const res = await fetch(buildApiUrl("api/ownership/add_group_external_partner_api.php"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ tenant_id: groupId, login_id: loginId, force_type: forceType }),
+          body: JSON.stringify({ group_id: groupId, login_id: loginId, force_type: forceType }),
         });
         const json = await res.json();
         if (isApiSuccess(json)) {
@@ -308,7 +302,7 @@ export function useGroupEarnings(shell) {
           return true;
         }
         if (isApiConflict(json)) {
-          showToast("Multiple matches found. Please specify login or group ID more precisely.", "error");
+          setConflict({ scope: "group", groupId, loginId, data: json.data });
           return false;
         }
         showToast(getApiMessage(json, "Link partner failed"), "error");
@@ -318,7 +312,7 @@ export function useGroupEarnings(shell) {
         return false;
       }
     },
-    [loadGroupState, adminLocked, showToast],
+    [loadGroupState, adminLocked, setConflict, showToast],
   );
 
   return {

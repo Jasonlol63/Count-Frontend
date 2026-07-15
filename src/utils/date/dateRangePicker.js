@@ -3,6 +3,8 @@
  * `window.changeMonth`, `window.selectQuickRange`, `window.toggleQuickSelectDropdown` for DOM markup (#date-range-picker, #calendar-popup, …).
  */
 const CALENDAR_POPUP_ID = "calendar-popup";
+/** Remember original parent when portaling #calendar-popup to document.body. */
+const calendarPopupHomeParent = new WeakMap();
 /** Bank Process 顶栏：药丸与日历 dropdown 统一宽度下限（须容纳完整 dd/mm/yyyy - dd/mm/yyyy） */
 const BANK_TOOLBAR_CALENDAR_MIN_PX = 292;
 const BANK_TOOLBAR_DATE_RANGE_SAMPLE = "01/01/2026 - 31/12/2026";
@@ -62,18 +64,98 @@ function getBankToolbarUnifiedBlockWidth() {
   return Math.min(Math.max(BANK_TOOLBAR_CALENDAR_MIN_PX, needed), viewportCap);
 }
 
+function getCalendarPopupNodes() {
+  if (typeof document === "undefined") return [];
+  return [...document.querySelectorAll(`[id="${CALENDAR_POPUP_ID}"]`)];
+}
+
+/** Prefer the open popup, otherwise the in-page copy tied to the active picker. */
+function resolveCalendarPopup(pickerEl) {
+  const popups = getCalendarPopupNodes();
+  if (!popups.length) return null;
+
+  const openPopup = popups.find(isCalendarPopupVisuallyOpen);
+  if (openPopup) return openPopup;
+
+  const pageRoot = pickerEl?.closest?.(
+    ".ec-page-shell__content, .dashboard-container, .transaction-container, .container, main, #root",
+  );
+  const inPagePopup = pageRoot?.querySelector?.(`#${CALENDAR_POPUP_ID}`);
+  if (inPagePopup) return inPagePopup;
+
+  const treePopup = popups.find((popup) => popup.parentElement !== document.body);
+  return treePopup || popups[0];
+}
+
+function dedupeStaleCalendarPopups(preferredPopup) {
+  const popups = getCalendarPopupNodes();
+  if (popups.length <= 1) return preferredPopup || popups[0] || null;
+
+  const keep =
+    preferredPopup && popups.includes(preferredPopup)
+      ? preferredPopup
+      : popups.find((popup) => popup.parentElement !== document.body) || popups[0];
+
+  popups.forEach((popup) => {
+    if (popup === keep) return;
+    hideCalendarPopupElement(popup);
+    popup.remove();
+  });
+  return keep;
+}
+
 export function isMaintenanceCalendarOpen() {
-  const popup = document.getElementById(CALENDAR_POPUP_ID);
-  return popup?.getAttribute("data-open") === "true";
+  return getCalendarPopupNodes().some(isCalendarPopupVisuallyOpen);
+}
+
+function isCalendarPopupVisuallyOpen(popup) {
+  if (!popup) return false;
+  if (popup.getAttribute("data-open") === "true") return true;
+  const inlineDisplay = popup.style.display;
+  if (inlineDisplay && inlineDisplay !== "none") return true;
+  return getComputedStyle(popup).display !== "none";
+}
+
+function hideCalendarPopupElement(popup) {
+  if (!popup) return;
+  popup.removeAttribute("data-open");
+  popup.setAttribute("aria-hidden", "true");
+  popup.classList.remove("calendar-popup--match-anchor", "calendar-popup--above-export-modal");
+  popup.style.display = "none";
+
+  const home = calendarPopupHomeParent.get(popup);
+  if (home?.isConnected && popup.parentElement === document.body) {
+    home.appendChild(popup);
+    calendarPopupHomeParent.delete(popup);
+  }
+}
+
+/** Close popup and remove body-portal copies left after SPA route changes. */
+export function resetMaintenanceCalendarPopupOnNavigation() {
+  if (typeof document === "undefined") return;
+
+  getCalendarPopupNodes().forEach((popup) => {
+    hideCalendarPopupElement(popup);
+    if (popup.parentElement === document.body) {
+      popup.remove();
+    }
+  });
+
+  document.body.removeAttribute("data-calendar-open");
+  document.body.style.removeProperty("--bank-toolbar-date-width");
+  const bankFooter = document.getElementById("calendar-popup-bank-footer");
+  if (bankFooter) bankFooter.style.display = "none";
 }
 
 export function closeMaintenanceCalendarPopup() {
-  const popup = document.getElementById(CALENDAR_POPUP_ID);
-  if (!popup || popup.getAttribute("data-open") !== "true") return;
-  popup.removeAttribute("data-open");
-  popup.setAttribute("aria-hidden", "true");
-  popup.classList.remove("calendar-popup--match-anchor");
-  popup.style.display = "none";
+  let closed = false;
+  getCalendarPopupNodes().forEach((popup) => {
+    if (!isCalendarPopupVisuallyOpen(popup)) return;
+    hideCalendarPopupElement(popup);
+    closed = true;
+  });
+  if (!closed) return;
+  document.body.removeAttribute("data-calendar-open");
   document.body.style.removeProperty("--bank-toolbar-date-width");
   const bankFooter = document.getElementById("calendar-popup-bank-footer");
   if (bankFooter) bankFooter.style.display = "none";
@@ -84,11 +166,23 @@ function isCalendarDismissIgnoredTarget(target) {
   return !!(
     target.closest(".date-range-picker") ||
     target.closest(`#${CALENDAR_POPUP_ID}`) ||
+    target.closest(".transaction-calendar-presets") ||
+    target.closest(".transaction-calendar-preset") ||
+    target.closest(".transaction-calendar-panel") ||
     target.closest(".report-date-range-picker-container") ||
+    target.closest(".transaction-payment-history-export-modal") ||
     target.closest(".bank-form-day-picker") ||
     target.closest(".bank-form-datepicker-wrap") ||
     target.closest(".form-datepicker-wrap")
   );
+}
+
+function isPointerInsideCalendarPopup(event) {
+  const popups = getCalendarPopupNodes();
+  if (!popups.length) return false;
+  const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+  if (popups.some((popup) => path.includes(popup))) return true;
+  return isCalendarDismissIgnoredTarget(event.target);
 }
 
 export function bindMaintenanceCalendarDismissListeners() {
@@ -101,7 +195,7 @@ export function bindMaintenanceCalendarDismissListeners() {
 
   const onPointerDown = (e) => {
     if (!isMaintenanceCalendarOpen()) return;
-    if (!isCalendarDismissIgnoredTarget(e.target)) closeMaintenanceCalendarPopup();
+    if (!isPointerInsideCalendarPopup(e)) closeMaintenanceCalendarPopup();
   };
 
   const passiveCapture = { capture: true, passive: true };
@@ -434,6 +528,65 @@ export function ensureMaintenanceDateRangePicker() {
     });
   }
 
+  function bindTransactionCalendarPresetButtons() {
+    const popup = document.getElementById(CALENDAR_POPUP_ID);
+    if (!popup) return;
+    popup.querySelectorAll(".transaction-calendar-preset[data-period-key]").forEach((btn) => {
+      if (btn.dataset.drpPresetBound === "1") return;
+      btn.dataset.drpPresetBound = "1";
+      btn.addEventListener(
+        "click",
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const key = btn.getAttribute("data-period-key");
+          if (key) setQuickRange(key);
+        },
+        { capture: true },
+      );
+    });
+  }
+
+  function inferCalendarNavDelta(btn) {
+    const declared = Number(btn?.dataset?.drpNavDelta);
+    if (declared === -1 || declared === 1) return declared;
+
+    const icon = btn?.querySelector?.("i");
+    if (icon?.classList?.contains("fa-chevron-left")) return -1;
+    if (icon?.classList?.contains("fa-chevron-right")) return 1;
+
+    const header = btn?.closest?.(".calendar-header");
+    const siblings = header ? [...header.querySelectorAll(".calendar-nav-btn")] : [];
+    const idx = siblings.indexOf(btn);
+    if (idx === 0) return -1;
+    if (idx === siblings.length - 1) return 1;
+    return 0;
+  }
+
+  /**
+   * React-rendered popup is moved to document.body at runtime (non-React portal).
+   * Native listeners keep nav arrows working after that move.
+   */
+  function bindCalendarNavButtons() {
+    const popup = document.getElementById(CALENDAR_POPUP_ID);
+    if (!popup) return;
+    popup.querySelectorAll(".calendar-nav-btn").forEach((btn) => {
+      if (btn.dataset.drpNavBound === "1") return;
+      btn.dataset.drpNavBound = "1";
+      btn.addEventListener(
+        "click",
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const delta = inferCalendarNavDelta(btn);
+          if (!delta) return;
+          changeMonth(delta);
+        },
+        { capture: true },
+      );
+    });
+  }
+
   function detectMatchingQuickRange() {
     if (!calendarStartDate || !calendarEndDate) return "";
     const keys = ["today", "yesterday", "thisWeek", "lastWeek", "thisMonth", "lastMonth", "thisYear", "lastYear"];
@@ -750,7 +903,7 @@ export function ensureMaintenanceDateRangePicker() {
     const picker = pickerEl?.closest?.(".date-range-picker") || pickerEl || document.getElementById("date-range-picker");
     if (pickerEl || picker) setActiveRangeBindingFromTrigger(picker || pickerEl);
 
-    const popup = document.getElementById("calendar-popup");
+    const popup = dedupeStaleCalendarPopups(resolveCalendarPopup(picker));
     if (!popup || !picker) return;
 
     const presets = document.querySelector(".transaction-calendar-presets");
@@ -768,6 +921,16 @@ export function ensureMaintenanceDateRangePicker() {
         stashCommittedRangeFromHidden(activeRangeBinding);
       }
       syncRangeStateFromHiddenInputs();
+      // Escape ancestor stacking contexts (e.g. Member Win/Loss filter bar isolation).
+      if (popup.parentElement !== document.body) {
+        calendarPopupHomeParent.set(popup, popup.parentElement);
+        popup.dataset.drpPortal = "true";
+        document.body.appendChild(popup);
+      }
+      popup.classList.toggle(
+        "calendar-popup--above-export-modal",
+        !!picker.closest?.(".transaction-payment-history-export-modal"),
+      );
       let rect = picker.getBoundingClientRect();
       let barWidth = rect.width;
       const bankWrap =
@@ -808,7 +971,11 @@ export function ensureMaintenanceDateRangePicker() {
       }
       if (popup.classList.contains("calendar-popup--transaction-range")) {
         const matchOutlinedShell = !!shell && !bankWrap;
-        if (bankWrap || matchToolbarDateAnchor || matchOutlinedShell) {
+        const showPresets = !activeRangeBinding.hidePresets;
+        const popupWidth = Math.min(Math.max(window.innerWidth * 0.22, 316), 336);
+        const useAnchorWidth =
+          bankWrap || matchToolbarDateAnchor || (matchOutlinedShell && !showPresets);
+        if (useAnchorWidth) {
           const anchorWidth = Math.max(1, Math.round(barWidth));
           popup.classList.add("calendar-popup--match-anchor");
           const popupLeft =
@@ -821,12 +988,11 @@ export function ensureMaintenanceDateRangePicker() {
           popup.style.maxWidth = `${anchorWidth}px`;
         } else {
           popup.classList.remove("calendar-popup--match-anchor");
-          const popupWidth = Math.min(Math.max(window.innerWidth * 0.22, 316), 336);
           const maxLeft = window.innerWidth - popupWidth - 12;
           popup.style.left = `${Math.max(12, Math.min(rect.left, maxLeft))}px`;
           popup.style.width = "";
           popup.style.minWidth = "";
-          popup.style.maxWidth = "";
+          popup.style.maxWidth = "calc(100vw - 24px)";
         }
       } else {
         popup.classList.remove("calendar-popup--match-anchor");
@@ -840,6 +1006,9 @@ export function ensureMaintenanceDateRangePicker() {
       popup.setAttribute("data-open", "true");
       popup.setAttribute("aria-hidden", "false");
       popup.style.display = "block";
+      document.body.setAttribute("data-calendar-open", "true");
+      bindTransactionCalendarPresetButtons();
+      bindCalendarNavButtons();
       initCalendar();
       renderCalendar();
       updateCalendarClearFooter();
@@ -898,8 +1067,15 @@ export function ensureMaintenanceDateRangePicker() {
     if (!quickRange) {
       return;
     }
-    calendarStartDate = quickRange.startDate;
-    calendarEndDate = quickRange.endDate;
+    if (activeRangeBinding.collapseSingleDisplay) {
+      const singleDate = new Date(quickRange.endDate);
+      singleDate.setHours(0, 0, 0, 0);
+      calendarStartDate = singleDate;
+      calendarEndDate = new Date(singleDate);
+    } else {
+      calendarStartDate = quickRange.startDate;
+      calendarEndDate = quickRange.endDate;
+    }
     isSelectingRange = false;
     calendarCurrentDate = new Date(calendarStartDate.getFullYear(), calendarStartDate.getMonth(), 1);
     setMonthControlValue(calendarCurrentDate.getMonth());
@@ -983,6 +1159,8 @@ export function ensureMaintenanceDateRangePicker() {
       updateDateRangeDisplay();
 
       bindDateRangePickers();
+      bindTransactionCalendarPresetButtons();
+      bindCalendarNavButtons();
       bindBankToolbarDatePillResize();
       requestAnimationFrame(() => {
         syncBankToolbarDatePillWidth();

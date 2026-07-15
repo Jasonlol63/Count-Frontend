@@ -1,14 +1,29 @@
 import React from "react";
+import { createPortal } from "react-dom";
+
+function toastVariant(type) {
+  const t = String(type || "success").toLowerCase();
+  if (t === "error" || t === "danger") return "danger";
+  if (t === "warning") return "warning";
+  if (t === "info") return "info";
+  return "success";
+}
 
 export function AnnouncementToast({ notices }) {
-  return (
-    <div id="notificationContainer">
+  if (!notices.length || typeof document === "undefined" || !document.body) return null;
+
+  return createPortal(
+    <div id="accountNotificationContainer" className="account-notification-container">
       {notices.map((n) => (
-        <div key={n.id} className={`notification ${n.type}${n.visible ? " show" : ""}`}>
+        <div
+          key={n.id}
+          className={`account-notification account-notification-${toastVariant(n.type)}${n.visible ? " show" : ""}`}
+        >
           {n.message}
         </div>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }
 

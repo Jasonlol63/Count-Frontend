@@ -5,22 +5,49 @@ import {
   customerReportScopeIsReady,
   resolveCustomerReportScope,
 } from "../../report/shared/reportScope.js";
+import {
+  isBankOnlyCompanyRow,
+  isC168CompanyRow,
+} from "../../../utils/company/c168CaptureChannel.js";
 
 export {
   customerReportScopeIsReady as transactionMaintenanceScopeIsReady,
   customerReportScopeCacheCompanyKey as transactionMaintenanceScopeCacheCompanyKey,
   customerReportScopeCacheKey as transactionMaintenanceScopeCacheKey,
-  resolveCustomerReportScope as resolveTransactionMaintenanceScope,
 };
 
-/** Group entity scope: SALARY / BONUS only (aligned with Capture Maintenance). */
+/** Enrich scope with payroll-channel flags (C168 / bank-only e.g. CX). */
+export function resolveTransactionMaintenanceScope(args) {
+  const base = resolveCustomerReportScope(args);
+  if (!base) return base;
+  const cid = args?.companyId != null ? Number(args.companyId) : Number.NaN;
+  const row = Number.isFinite(cid) && cid > 0
+    ? (args?.companies ?? []).find((c) => Number(c.id) === cid)
+    : null;
+  const c168Channel = Boolean(row && isC168CompanyRow(row));
+  const companyPayrollChannel = Boolean(row && (c168Channel || isBankOnlyCompanyRow(row)));
+  return { ...base, c168Channel, companyPayrollChannel };
+}
+
+/** Group entity, C168, or bank-only company payroll: SALARY / BONUS process list. */
 export function transactionMaintenanceUsesGroupProcesses(scope) {
-  return scope?.mode === "group";
+  if (!scope) return false;
+  if (scope.c168Channel || scope.companyPayrollChannel) return true;
+  return scope.mode === "group";
 }
 
 /** Query params for transaction maintenance search / delete APIs. */
 export function transactionMaintenanceScopeApiParams(scope) {
   if (!scope) return {};
+  // Company payroll channel (C168 / bank-only): company ledger only — never group_only.
+  if (scope.c168Channel || scope.companyPayrollChannel) {
+    const companyId = scope.scopeCompanyId ?? scope.uiCompanyId ?? undefined;
+    return {
+      companyId,
+      viewGroup: scope.viewGroup || scope.groupId || undefined,
+      reportScope: "company",
+    };
+  }
   const base = customerReportScopeApiParams(scope);
   const out = {
     ...base,

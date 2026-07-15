@@ -8,7 +8,6 @@ import { usePartnershipAuditWriteGuard } from "../../../utils/audit/usePartnersh
 import { removeOtherMaintenanceStylesheets } from "../../../utils/maintenance/maintenanceStylesheets.js";
 import { useMaintenanceGroupCompanyFilter } from "../shared/useMaintenanceGroupCompanyFilter.js";
 import { runMaintenanceCompanySwitch } from "../shared/maintenanceCompanySwitch.js";
-import { useMaintenanceBankOnlyGuard } from "../shared/useMaintenanceBankOnlyGuard.js";
 import { useMaintenancePageScrollLock } from "../shared/useMaintenancePageScrollLock.js";
 import { spaPath } from "../../../utils/routing/pageRoutes.js";
 import {
@@ -52,8 +51,10 @@ import {
   deleteFormulaTemplates,
   updateSessionCompany,
   prepareFormulaRowsForDisplay,
+  filterFormulaRowsBySearch,
   formulaRowIdsMatch,
   patchFormulaRowAfterSave,
+  pickFormulaMaintenancePermission,
 } from "./formulaMaintenanceLogic.js";
 import {
   formulaMaintenanceEffectiveCompanyId,
@@ -63,6 +64,7 @@ import {
   formulaMaintenanceUsesGroupProcesses,
   resolveFormulaMaintenanceScope,
 } from "./formulaMaintenanceScope.js";
+import { normalizeMaintenanceSearchInput } from "../shared/maintenanceSearchInput.js";
 
 // Components
 import FormulaMaintenanceFilters from "./components/FormulaMaintenanceFilters.jsx";
@@ -109,10 +111,10 @@ export default function FormulaMaintenancePage() {
 
   // -- Filter State --
   const [companyId, setCompanyId] = useState(null);
-  useMaintenanceBankOnlyGuard(companyId);
   const [companyCode, setCompanyCode] = useState("");
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [selectedProcess, setSelectedProcess] = useState(null);
+  const [textSearch, setTextSearch] = useState("");
   const [activePermission, setActivePermission] = useState("");
   const [processes, setProcesses] = useState([]);
   const [accounts, setAccounts] = useState([]);
@@ -130,6 +132,7 @@ export default function FormulaMaintenancePage() {
   const toastTimerRef = useRef(null);
   const searchDebounceRef = useRef(null);
   const formulaDataFullRef = useRef([]);
+  const formulaDisplayRef = useRef([]);
   const progressiveRafRef = useRef(null);
   const searchSeqRef = useRef(0);
   const listScrollActiveRef = useRef(false);
@@ -138,6 +141,10 @@ export default function FormulaMaintenancePage() {
   const initialFormulaSearchDoneRef = useRef(false);
   const lastSearchQueryKeyRef = useRef("");
   const suppressNextSearchEffectRef = useRef(false);
+  const processAutoOpenedBySearchRef = useRef(false);
+  const textSearchAutoLoadStartedRef = useRef(false);
+  const textSearchRef = useRef("");
+  const selectedProcessRef = useRef(null);
   const skipMetaAfterBootRef = useRef(false);
   const handledMetaScopeKeyRef = useRef("");
   const switchPermsCacheRef = useRef(null);
@@ -165,7 +172,7 @@ export default function FormulaMaintenancePage() {
     switchCompany: (c) => switchCompanyRef.current(c),
     onPrepareCompanySelect: (c) => onPrepareCompanySelectRef.current(c),
     onClearCompany: (...args) => onClearCompanyRef.current(...args),
-    pillCategory: "games",
+    pillCategory: "datacapture",
   });
 
   const formulaScope = useMemo(
@@ -195,8 +202,9 @@ export default function FormulaMaintenancePage() {
           : selectedProcess === ""
             ? "__all__"
             : String(selectedProcess),
+        textSearch.trim().toUpperCase(),
       ]),
-    [formulaScopeKey, activePermission, selectedProcess],
+    [formulaScopeKey, activePermission, selectedProcess, textSearch],
   );
 
   const listQueryEnabled =
@@ -213,6 +221,14 @@ export default function FormulaMaintenancePage() {
   useEffect(() => {
     scopeKeyRef.current = formulaScopeKey;
   }, [formulaScopeKey]);
+
+  useEffect(() => {
+    textSearchRef.current = textSearch;
+  }, [textSearch]);
+
+  useEffect(() => {
+    selectedProcessRef.current = selectedProcess;
+  }, [selectedProcess]);
 
   const [totalRowCount, setTotalRowCount] = useState(0);
   const [listHydrating, setListHydrating] = useState(false);
@@ -283,13 +299,38 @@ export default function FormulaMaintenancePage() {
       cancelAnimationFrame(progressiveRafRef.current);
       progressiveRafRef.current = null;
     }
+    processAutoOpenedBySearchRef.current = false;
+    textSearchAutoLoadStartedRef.current = false;
     formulaDataFullRef.current = [];
+    formulaDisplayRef.current = [];
     setTotalRowCount(0);
     setFormulaData([]);
     setListHydrating(false);
     setListSyncing(false);
+    setTextSearch("");
     resetSelection();
   }, [resetSelection]);
+
+  const applyFormulaListView = useCallback(
+    (fullList, searchTerm = textSearch) => {
+      if (progressiveRafRef.current) {
+        cancelAnimationFrame(progressiveRafRef.current);
+        progressiveRafRef.current = null;
+      }
+
+      const full = prepareFormulaRowsForDisplay(Array.isArray(fullList) ? fullList : []);
+      formulaDataFullRef.current = full;
+      const filtered = filterFormulaRowsBySearch(full, searchTerm).map((row, index) => ({
+        ...row,
+        no: index + 1,
+      }));
+      formulaDisplayRef.current = filtered;
+      setTotalRowCount(filtered.length);
+      setListHydrating(false);
+      startTransition(() => setFormulaData(filtered));
+    },
+    [textSearch],
+  );
 
   useEffect(() => {
     const handleSwitch = (e) => {
@@ -312,24 +353,22 @@ export default function FormulaMaintenancePage() {
   /** 虚拟列表负责大表渲染；一次性写入 state，不显示分批进度 */
   const hydrateFormulaList = useCallback(
     (fullList) => {
-      if (progressiveRafRef.current) {
-        cancelAnimationFrame(progressiveRafRef.current);
-        progressiveRafRef.current = null;
-      }
-
-      const full = prepareFormulaRowsForDisplay(Array.isArray(fullList) ? fullList : []);
-      formulaDataFullRef.current = full;
-      setTotalRowCount(full.length);
-      setListHydrating(false);
       resetSelection();
-      startTransition(() => setFormulaData(full));
+      applyFormulaListView(fullList);
     },
-    [resetSelection],
+    [resetSelection, applyFormulaListView],
   );
+
+  useEffect(() => {
+    if (!listQueryEnabled) return;
+    if (processAutoOpenedBySearchRef.current && !textSearch.trim()) return;
+    applyFormulaListView(formulaDataFullRef.current);
+    resetSelection();
+  }, [textSearch, listQueryEnabled, applyFormulaListView, resetSelection]);
 
   // -- Boot Logic --
   useEffect(() => {
-    if (!sessionReady || !me) return;
+    if (!sessionReady || !me || !bootLoading) return;
 
     let cancelled = false;
     setBootLoading(true);
@@ -347,7 +386,7 @@ export default function FormulaMaintenancePage() {
           return;
         }
 
-        const rows = await fetchOwnerCompaniesAll();
+        const rows = await fetchOwnerCompaniesAll({ me: u });
         if (cancelled) return;
         setCompanies(rows);
 
@@ -413,7 +452,7 @@ export default function FormulaMaintenancePage() {
           if (cancelled) return;
           let procList = [];
           try {
-            procList = bootScope ? await fetchProcesses(null, bootScope) : [];
+            procList = bootScope ? await fetchProcesses(null, bootScope, meta.activePermission) : [];
           } catch (procErr) {
             console.error("Group process list load error:", procErr);
             notify(procErr.message || t("failedLoadProcesses"), "error");
@@ -456,11 +495,14 @@ export default function FormulaMaintenancePage() {
             companyId: initialCompanyId,
           });
 
-          const [rawPerms, procList] = await Promise.all([
-            fetchCompanyPermissionsRaw(code),
-            fetchProcesses(initialCompanyId, bootScope),
-          ]);
+          const rawPerms = await fetchCompanyPermissionsRaw(code);
+          if (cancelled) return;
 
+          const permList = rawPerms;
+          const savedPerm = localStorage.getItem(`selectedPermission_${code}`);
+          const initialActive = pickFormulaMaintenancePermission(permList, savedPerm);
+
+          const procList = await fetchProcesses(initialCompanyId, bootScope, initialActive);
           if (cancelled) return;
 
           const skipCategoryGuard = shouldSkipMaintenanceCategoryGuard({
@@ -473,24 +515,15 @@ export default function FormulaMaintenancePage() {
           });
           if (!skipCategoryGuard) {
             const hasGames = rawPerms.includes("Games") || rawPerms.includes("Gambling");
-            const bankOnly = rawPerms.includes("Bank") && !hasGames;
-            if (bankOnly) {
-              navigate(spaPath("dashboard"), { replace: true });
-              return;
-            }
-            if (!hasGames) {
+            const hasBank = rawPerms.includes("Bank");
+            if (!hasGames && !hasBank) {
               navigate(spaPath("dashboard"), { replace: true });
               return;
             }
           }
 
-          const permList = rawPerms.filter((p) => p !== "Bank");
           setPermissions(permList);
           setProcesses(procList);
-
-          const savedPerm = localStorage.getItem(`selectedPermission_${code}`);
-          const initialActive =
-            savedPerm && permList.includes(savedPerm) ? savedPerm : permList.length > 0 ? permList[0] : "";
           setActivePermission(initialActive);
           switchPermsCacheRef.current = { companyCode: code, perms: permList };
           skipMetaAfterBootRef.current = true;
@@ -568,17 +601,13 @@ export default function FormulaMaintenancePage() {
         } else {
           permList = [];
         }
-        const procList = await fetchProcesses(companyId, scope);
+        const savedPerm = permCode ? localStorage.getItem(`selectedPermission_${permCode}`) : null;
+        const nextPerm = pickFormulaMaintenancePermission(permList, savedPerm);
+        const procList = await fetchProcesses(companyId, scope, nextPerm);
         if (cancelled) return;
         setPermissions(permList);
+        setActivePermission(nextPerm);
         setProcesses(procList);
-
-        const savedPerm = permCode ? localStorage.getItem(`selectedPermission_${permCode}`) : null;
-        if (savedPerm && permList.includes(savedPerm)) {
-          setActivePermission(savedPerm);
-        } else if (permList.length > 0) {
-          setActivePermission(permList[0]);
-        }
 
         setSelectedProcess((prev) => {
           if (prev === null) return prev;
@@ -682,6 +711,7 @@ export default function FormulaMaintenancePage() {
       });
       if (!skipStaleGuard && seq !== searchSeqRef.current) return;
       if (!skipStaleGuard && searchScopeKey !== scopeKeyRef.current) return;
+      if (processAutoOpenedBySearchRef.current && !textSearchRef.current.trim()) return;
 
       setConfirmDelete(false);
       setFormulaDataSourceCompanyId(formulaMaintenanceScopeCacheCompanyKey(effectiveScope));
@@ -700,6 +730,7 @@ export default function FormulaMaintenancePage() {
       if (!skipStaleGuard && searchScopeKey !== scopeKeyRef.current) return;
       notify(err.message, "error");
       formulaDataFullRef.current = [];
+      formulaDisplayRef.current = [];
       setTotalRowCount(0);
       setFormulaData([]);
       resetSelection();
@@ -800,6 +831,13 @@ export default function FormulaMaintenancePage() {
         groupAllMode,
       });
       suppressNextSearchEffectRef.current = true;
+      switchPermsCacheRef.current = null;
+      handledMetaScopeKeyRef.current = buildFormulaMetaEffectKey(
+        formulaMaintenanceScopeCacheKey(nextScope),
+        nextId,
+        c.company_id || "",
+        newGroup,
+      );
       scopeKeyRef.current = formulaMaintenanceScopeCacheKey(nextScope);
       companyIdRef.current = nextId;
       setCompanyId(nextId);
@@ -817,24 +855,58 @@ export default function FormulaMaintenancePage() {
 
   onPrepareCompanySelectRef.current = onPrepareCompanySelect;
 
-  const handleSwitchCompany = async (c) => {
-    if (!c?.id) return;
-    try {
-      const { redirected } = await runMaintenanceCompanySwitch({
-        companyRow: c,
-        viewGroup: c.group_id ? String(c.group_id).toUpperCase().trim() : null,
-        currentPath: location.pathname,
-        navigate,
-        updateSessionCompany,
-        onStay: async () => {
-          notify(t("switchedTo", { company: c.company_id }), "success");
-        },
-      });
-      if (redirected) return;
-    } catch (err) {
-      notify(err.message || t("switchFailed"), "error");
-    }
-  };
+  const handleSwitchCompany = useCallback(
+    async (c) => {
+      if (!c?.id) return;
+      const nextCompanyId = Number(c.id);
+      const code = c.company_id || "";
+      const newGroup = c.group_id ? String(c.group_id).toUpperCase().trim() : null;
+      const savedPerm = localStorage.getItem(`selectedPermission_${code}`);
+
+      try {
+        const { redirected } = await runMaintenanceCompanySwitch({
+          companyRow: c,
+          viewGroup: newGroup,
+          currentPath: location.pathname,
+          navigate,
+          updateSessionCompany,
+          onStay: async () => {
+            const perms = await fetchCompanyPermissions(code);
+            const nextActive = pickFormulaMaintenancePermission(perms, savedPerm);
+            switchPermsCacheRef.current = { companyCode: code, perms };
+            setActivePermission(nextActive);
+            setPermissions(perms);
+
+            const nextScope = resolveFormulaMaintenanceScope({
+              companies,
+              selectedGroup: newGroup,
+              companyId: nextCompanyId,
+              groupsAllMode,
+              groupAllMode,
+            });
+            handledMetaScopeKeyRef.current = buildFormulaMetaEffectKey(
+              formulaMaintenanceScopeCacheKey(nextScope),
+              nextCompanyId,
+              code,
+              newGroup,
+            );
+
+            try {
+              const procList = await fetchProcesses(nextCompanyId, nextScope, nextActive);
+              setProcesses(procList);
+            } catch (procErr) {
+              console.error("Process list load error:", procErr);
+              notify(procErr.message || t("failedLoadProcesses"), "error");
+            }
+          },
+        });
+        if (redirected) return;
+      } catch (err) {
+        notify(err.message || t("switchFailed"), "error");
+      }
+    },
+    [companies, groupsAllMode, groupAllMode, location.pathname, navigate, notify, t],
+  );
 
   switchCompanyRef.current = handleSwitchCompany;
   onClearCompanyRef.current = handleClearCompany;
@@ -854,16 +926,29 @@ export default function FormulaMaintenancePage() {
     clearFormulaList();
     lastSearchQueryKeyRef.current = "";
     setConfirmDelete(false);
+    void (async () => {
+      try {
+        const procList = await fetchProcesses(companyId, formulaScope, p);
+        setProcesses(procList);
+      } catch (err) {
+        console.error("Process list load error:", err);
+        notify(err.message || t("failedLoadProcesses"), "error");
+      }
+    })();
   };
 
   const handleSetSelectedProcess = useCallback(
     (value) => {
       if (value === null || value === undefined) {
+        processAutoOpenedBySearchRef.current = false;
+        textSearchAutoLoadStartedRef.current = false;
         setSelectedProcess(null);
         clearFormulaList();
         lastSearchQueryKeyRef.current = "";
         return;
       }
+      processAutoOpenedBySearchRef.current = false;
+      textSearchAutoLoadStartedRef.current = false;
       setSelectedProcess(value);
       if (!filtersReady || !formulaMaintenanceScopeIsReady(formulaScope)) return;
       suppressNextSearchEffectRef.current = true;
@@ -877,6 +962,50 @@ export default function FormulaMaintenancePage() {
     handleSetSelectedProcess(null);
   }, [handleSetSelectedProcess]);
 
+  const handleTextSearchChange = useCallback(
+    (value) => {
+      const next = normalizeMaintenanceSearchInput(value);
+      textSearchRef.current = next;
+      setTextSearch(next);
+
+      if (!next.trim() && processAutoOpenedBySearchRef.current) {
+        processAutoOpenedBySearchRef.current = false;
+        textSearchAutoLoadStartedRef.current = false;
+        searchSeqRef.current += 1;
+        suppressNextSearchEffectRef.current = true;
+        lastSearchQueryKeyRef.current = "";
+        setSelectedProcess(null);
+        selectedProcessRef.current = null;
+        formulaDataFullRef.current = [];
+        formulaDisplayRef.current = [];
+        setTotalRowCount(0);
+        setFormulaData([]);
+        setLoading(false);
+        setListSyncing(false);
+        resetSelection();
+        return;
+      }
+
+      if (
+        selectedProcessRef.current === null &&
+        next.trim() &&
+        filtersReady &&
+        formulaMaintenanceScopeIsReady(formulaScope)
+      ) {
+        processAutoOpenedBySearchRef.current = true;
+        selectedProcessRef.current = "";
+        setSelectedProcess("");
+        if (!textSearchAutoLoadStartedRef.current) {
+          textSearchAutoLoadStartedRef.current = true;
+          suppressNextSearchEffectRef.current = true;
+          lastSearchQueryKeyRef.current = "";
+          void performSearchRef.current({ process: "" });
+        }
+      }
+    },
+    [filtersReady, formulaScope, resetSelection],
+  );
+
   const isRowSelected = useCallback(
     (id) => {
       if (selectAllActive) return !deselectedIds.has(id);
@@ -886,10 +1015,10 @@ export default function FormulaMaintenancePage() {
   );
 
   const resolveSelectedIds = useCallback(() => {
-    const full = formulaDataFullRef.current;
+    const visible = formulaDisplayRef.current;
     if (selectAllActive) {
-      if (deselectedIds.size === 0) return full.map((r) => r.id);
-      return full.filter((r) => !deselectedIds.has(r.id)).map((r) => r.id);
+      if (deselectedIds.size === 0) return visible.map((r) => r.id);
+      return visible.filter((r) => !deselectedIds.has(r.id)).map((r) => r.id);
     }
     return selectedIds;
   }, [selectAllActive, deselectedIds, selectedIds]);
@@ -996,7 +1125,7 @@ export default function FormulaMaintenancePage() {
       const mergeRow = (row) => patchFormulaRowAfterSave(row, patchOpts);
 
       formulaDataFullRef.current = formulaDataFullRef.current.map(mergeRow);
-      setFormulaData((prev) => prev.map(mergeRow));
+      applyFormulaListView(formulaDataFullRef.current);
       return true;
     } catch (err) {
       notify(err.message || t("saveFailed"), "error");
@@ -1038,7 +1167,10 @@ export default function FormulaMaintenancePage() {
         processes={processes}
         selectedProcess={selectedProcess}
         setSelectedProcess={handleSetSelectedProcess}
+        textSearch={textSearch}
+        onTextSearchChange={handleTextSearchChange}
         companyId={companyId}
+        highlightCompanyCode={companyCode}
         snapGroupIds={snapGroupIds}
         visibleCompanies={visibleCompanies}
         selectedGroup={selectedGroup}
@@ -1084,7 +1216,7 @@ export default function FormulaMaintenancePage() {
         accounts={accounts}
         m={m}
         inputMethodOptions={inputMethodOptions}
-        awaitingProcessSelection={selectedProcess === null}
+        awaitingProcessSelection={selectedProcess === null && !textSearch.trim()}
         bootPending={bootPending}
       />
       </div>

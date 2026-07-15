@@ -3,11 +3,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, "..");
+const root = path.resolve(__dirname, "../..");
 const legacyPath = path.join(root, "js/datacapturesummary.js");
 const outPath = path.join(
   root,
-  "src/pages/datacapturesummary/formula/summaryFormulaReference.js"
+  "frontend/src/pages/datacapturesummary/formula/summaryFormulaReference.js"
 );
 
 const RANGES = [

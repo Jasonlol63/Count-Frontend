@@ -58,6 +58,8 @@ export default function BankProcessListPage() {
     setSearch,
     showAll,
     setShowAll,
+    showActive,
+    setShowActive,
     showInactive,
     setShowInactive,
     showOfficial,
@@ -108,6 +110,7 @@ export default function BankProcessListPage() {
     resendInlineError,
     setResendInlineError,
     resendConfirmDisabled,
+    resendConfirmBlockReason,
     resendLockChecking,
     isBankResendScheduleLockedToday,
     sortColumn,
@@ -187,7 +190,6 @@ export default function BankProcessListPage() {
     loadAccountModalSelectionMeta,
     resetAccountModalToAdd,
     closeAccountModal,
-    fetchAccountDetailJson,
     createAccountModalCurrency,
     removeAccountModalCurrency,
     submitAccountModal,
@@ -247,7 +249,7 @@ export default function BankProcessListPage() {
   const filterToolbarRef = useRef(null);
   const searchBarRef = useRef(null);
   const searchInputRef = useRef(null);
-  const hasActiveFilters = showInactive || showAll || showOfficial || showEInvoice || showBlock;
+  const hasActiveFilters = showActive || showInactive || showAll || showOfficial || showEInvoice || showBlock;
   const isSearchCollapsed = isNarrowToolbar && !searchExpanded && !search.trim();
 
   const {
@@ -286,6 +288,8 @@ export default function BankProcessListPage() {
   const filterChipsProps = useMemo(
     () => ({
       t,
+      showActive,
+      setShowActive,
       showInactive,
       setShowInactive,
       showAll,
@@ -299,6 +303,8 @@ export default function BankProcessListPage() {
     }),
     [
       t,
+      showActive,
+      setShowActive,
       showInactive,
       setShowInactive,
       showAll,
@@ -648,13 +654,13 @@ export default function BankProcessListPage() {
           <BankProcessTable
             tableLoading={tableLoading}
             showAll={showAll}
-            showSelectColumn={showAll || showInactive || showOfficial || showEInvoice || showBlock || hasDeletableRows}
+            showSelectColumn={showAll || showActive || showInactive || showOfficial || showEInvoice || showBlock || hasDeletableRows}
             pageRows={pageRows}
             currentPage={currentPage}
             PAGE_SIZE={PAGE_SIZE}
             selectedIds={selectedIds}
             setSelectedIds={setSelectedIds}
-            showHeaderSelectAll={showAll || showInactive || showOfficial || showEInvoice || showBlock}
+            showHeaderSelectAll={showAll || showActive || showInactive || showOfficial || showEInvoice || showBlock}
             notify={notify}
             fetchRows={fetchRows}
             onBankStatusUpdated={handleBankStatusUpdated}
@@ -758,7 +764,7 @@ export default function BankProcessListPage() {
             }
             if (!ordered.length) return;
             setSelectedCountryChips(ordered);
-            void persistSelectedCountries(ordered);
+            void persistSelectedCountries();
             setForm((f) => {
               const cur = String(f.country || "").trim().toUpperCase();
               const nextCountry = ordered.includes(cur) ? f.country : ordered[0];
@@ -793,7 +799,7 @@ export default function BankProcessListPage() {
             const nextMap = { ...selectedBanksByCountry, [country]: ordered };
             setSelectedBanksByCountry(nextMap);
             setSelectedBankChips(ordered);
-            void persistSelectedBanksByCountry(nextMap);
+            void persistSelectedBanksByCountry();
             setForm((f) => {
               const cur = String(f.bank || "").trim().toUpperCase();
               const nextBank = ordered.includes(cur) ? f.bank : ordered[0];
@@ -830,9 +836,11 @@ export default function BankProcessListPage() {
       {resendModalOpen && (
         <ResendModal
           resendTarget={resendTarget} resendDayStart={resendDayStart}
-          resendDayEnd={resendDayEnd} resendFrequency={resendFrequency} setResendFrequency={setResendFrequency}
+          resendDayEnd={resendDayEnd} setResendDayEnd={setResendDayEnd}
+          resendFrequency={resendFrequency} setResendFrequency={setResendFrequency}
           resendInlineError={resendInlineError} setResendInlineError={setResendInlineError}
           resendConfirmDisabled={resendConfirmDisabled}
+          resendConfirmBlockReason={resendConfirmBlockReason}
           resendLockChecking={resendLockChecking}
           onResend={resendAccountingDue} onClose={() => setResendModalOpen(false)}
           t={t}
@@ -876,17 +884,12 @@ export default function BankProcessListPage() {
         currencyDeleteOnlyWhenDeselected
         t={tAccount}
       />
-      {typeof document !== "undefined"
-        ? createPortal(
-            <DashboardCalendarPopup
-              className="calendar-popup--bank-process-modal"
-              i18n={calendarI18n}
-              periodPresets={periodPresets}
-              dateFrom={dateFrom}
-            />,
-            document.body
-          )
-        : null}
+      <DashboardCalendarPopup
+        className="calendar-popup--bank-process-modal"
+        i18n={calendarI18n}
+        periodPresets={periodPresets}
+        dateFrom={dateFrom}
+      />
       {toast && typeof document !== "undefined" && document.body
         ? createPortal(
             <div

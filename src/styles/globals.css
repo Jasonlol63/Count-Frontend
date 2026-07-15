@@ -108,3 +108,66 @@ body.ec-auth-shell.account-page:not(.account-page--show-all) .content {
 body.ec-auth-shell.process-page:not(.process-page--bank):not(.process-page--show-all) .content {
   min-height: 0 !important;
 }
+
+/* Account List — 全宽度横向滚动安全网（125% 缩放 / 窄屏：列不被压扁） */
+body.ec-auth-shell.account-page .account-table-wrapper {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.ec-auth-shell.account-page .account-list-table-header,
+body.ec-auth-shell.account-page .account-cards {
+  min-width: var(--list-table-min-width, 980px);
+}
+
+body.account-page:not(.account-page--show-all) .account-cards {
+  overflow-x: visible !important;
+  overflow-y: hidden !important;
+}
+
+/* User List — 全宽度横向滚动安全网（与 Account List 同模式） */
+body.ec-auth-shell.user-page .user-table-wrapper {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.ec-auth-shell.user-page .user-list-table-header,
+body.ec-auth-shell.user-page .user-cards {
+  min-width: max(100%, var(--list-table-min-width, 980px));
+}
+
+body.user-page:not(.user-page--show-all) .user-cards {
+  overflow-x: visible !important;
+  overflow-y: hidden !important;
+}
+
+/* Games Process List — 全宽度横向滚动安全网（与 Account List 同模式） */
+body.ec-auth-shell.process-page:not(.process-page--bank) .process-table-wrapper {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.ec-auth-shell.process-page:not(.process-page--bank) .games-process-table-header,
+body.ec-auth-shell.process-page:not(.process-page--bank) .process-cards {
+  min-width: max(100%, var(--list-table-min-width, 980px));
+}
+
+body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards {
+  overflow-x: visible !important;
+  overflow-y: hidden !important;
+}
+
+/* Bank Process List — 多列表格使用局部横向滚动，不压缩到不可读 */
+body.ec-auth-shell.process-page.process-page--bank .bank-process-list-scroll-region,
+body.ec-auth-shell.process-page.process-page--bank .process-table-wrapper.bank-process-table-region {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.ec-auth-shell.process-page.process-page--bank .bank-virtual-table {
+  min-width: max(100%, var(--bank-virtual-table-min-width, 1440px));
+}

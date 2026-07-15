@@ -1,0 +1,137 @@
+/*
+ * Sidebar nav scroll — clip rail hides native scrollbar gutter/shadow on Windows.
+ * Menu pill halo/glow lives in public/css/sidebar.css (post-bundle).
+ */
+body.ec-auth-shell .informationmenu {
+  display: flex;
+  flex-direction: column;
+  overflow: visible !important;
+  /* Extra tail padding allows one more notch of scroll near footer/flyout rows. */
+  --sidebar-menu-scroll-end-pad: 9rem;
+}
+
+body.ec-auth-shell .informationmenu-header {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3;
+}
+
+body.ec-auth-shell .informationmenu-footer {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3;
+}
+
+/* Clip parent — flex:1 rail; overflow hidden trims scrollbar drawn outside menu width */
+.sidebar-scroll-clip {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-x: clip;
+  position: relative;
+  isolation: isolate;
+  background: var(--sidebar-shell-bg, #002d49);
+}
+
+/* Mask any sub-pixel bleed at the sidebar / content seam */
+body.ec-auth-shell .sidebar-scroll-clip::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--sidebar-shell-bg, #002d49);
+  pointer-events: none;
+  z-index: 2;
+}
+
+body.ec-auth-shell .sidebar-scroll-clip {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Scroll container — wider than clip so native scrollbar sits in clipped zone */
+.sidebar-scroll {
+  height: 100%;
+  max-height: 100%;
+  width: calc(100% + var(--sidebar-scrollbar-clip-pad, 24px));
+  max-width: none;
+  padding-right: var(--sidebar-scrollbar-clip-pad, 24px);
+  margin-right: calc(-1 * var(--sidebar-scrollbar-clip-pad, 24px));
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-bottom: var(--sidebar-menu-scroll-end-pad, 7rem);
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+  -ms-overflow-style: none;
+}
+
+body.ec-auth-shell .informationmenu-content {
+  overflow: visible !important;
+  flex: 0 0 auto;
+  min-height: min-content;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--sidebar-menu-scroll-end-pad, 7rem);
+  width: 100%;
+  max-width: 100%;
+}
+
+/* WebKit / legacy — belt-and-suspenders with physical clip */
+.sidebar-scroll::-webkit-scrollbar,
+.sidebar-scroll::-webkit-scrollbar-track,
+.sidebar-scroll::-webkit-scrollbar-thumb,
+.sidebar-scroll::-webkit-scrollbar-corner {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  appearance: none;
+  -webkit-appearance: none;
+  opacity: 0 !important;
+}
+
+/* Desktop-like: no scrollbar shadow on hover/focus — wheel/touch scroll still works */
+body.ec-auth-shell .informationmenu:hover .sidebar-scroll,
+body.ec-auth-shell .sidebar-scroll:hover,
+body.ec-auth-shell .sidebar-scroll:focus-within {
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+  -ms-overflow-style: none !important;
+}
+
+body.ec-auth-shell .informationmenu:hover .sidebar-scroll::-webkit-scrollbar,
+body.ec-auth-shell .sidebar-scroll:hover::-webkit-scrollbar,
+body.ec-auth-shell .sidebar-scroll:focus-within::-webkit-scrollbar,
+body.ec-auth-shell .informationmenu:hover .sidebar-scroll::-webkit-scrollbar-track,
+body.ec-auth-shell .sidebar-scroll:hover::-webkit-scrollbar-track,
+body.ec-auth-shell .sidebar-scroll:focus-within::-webkit-scrollbar-track,
+body.ec-auth-shell .informationmenu:hover .sidebar-scroll::-webkit-scrollbar-thumb,
+body.ec-auth-shell .sidebar-scroll:hover::-webkit-scrollbar-thumb,
+body.ec-auth-shell .sidebar-scroll:focus-within::-webkit-scrollbar-thumb,
+body.ec-auth-shell .informationmenu:hover .sidebar-scroll::-webkit-scrollbar-corner,
+body.ec-auth-shell .sidebar-scroll:hover::-webkit-scrollbar-corner,
+body.ec-auth-shell .sidebar-scroll:focus-within::-webkit-scrollbar-corner {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+
+@media (max-height: 920px) {
+  body.ec-auth-shell .informationmenu {
+    --sidebar-menu-scroll-end-pad: 10.5rem;
+  }
+}

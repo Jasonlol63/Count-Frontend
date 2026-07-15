@@ -22,12 +22,29 @@ export function attachGroupAggregateEarningsFields(mergedSubsidiaries, groupLedg
     parseFloat(mergedSubsidiaries._subsidiary_earnings_total) ||
     parseFloat(mergedSubsidiaries.subsidiary_earnings_total) ||
     0;
+  const ledgerExpenses =
+    parseFloat(groupLedgerPayload?.period_total?.expenses ?? groupLedgerPayload?.expenses) ||
+    0;
+  const ledgerDailyExpenses =
+    groupLedgerPayload?.daily_data?.expenses &&
+    typeof groupLedgerPayload.daily_data.expenses === "object"
+      ? groupLedgerPayload.daily_data.expenses
+      : mergedSubsidiaries?.daily_data?.expenses || {};
   const groupLedgerNetProfit =
     groupLedgerPayload?.group_ledger_net_profit != null
       ? parseFloat(groupLedgerPayload.group_ledger_net_profit) || 0
       : netProfitFromDashboardPayload(groupLedgerPayload);
   return {
     ...mergedSubsidiaries,
+    expenses: ledgerExpenses,
+    period_total: {
+      ...(mergedSubsidiaries?.period_total || {}),
+      expenses: ledgerExpenses,
+    },
+    daily_data: {
+      ...(mergedSubsidiaries?.daily_data || {}),
+      expenses: ledgerDailyExpenses,
+    },
     subsidiary_earnings_total: subsidiaryTotal,
     group_ledger_net_profit: groupLedgerNetProfit,
     group_account_percentage: parseFloat(groupLedgerPayload?.group_account_percentage) || 0,

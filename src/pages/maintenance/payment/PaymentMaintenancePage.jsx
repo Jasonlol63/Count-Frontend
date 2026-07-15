@@ -41,6 +41,7 @@ import {
   updateSessionCompany,
   isPaymentMaintenanceRowSelectable,
 } from "./paymentMaintenanceLogic.js";
+import { notifyTransactionListInvalidated } from "../../transaction/lib/transactionPaymentLogic.js";
 import { useLoginLang } from "../../../utils/i18n/useLoginLang.js";
 import { getMaintenanceText, MAINTENANCE_I18N } from "../../../translateFile/pages/maintenanceTranslate.js";
 
@@ -69,6 +70,7 @@ export default function PaymentMaintenancePage() {
   const [companyCode, setCompanyCode] = useState("");
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [transactionType, setTransactionType] = useState("");
+  const [query, setQuery] = useState("");
   const [activePermission, setActivePermission] = useState("");
   const [currencies, setCurrencies] = useState([]);
   const [selectedCurrency, setSelectedCurrency] = useState(null);
@@ -211,7 +213,7 @@ export default function PaymentMaintenancePage() {
     };
   }, []);
 
-  // Handle sidebar company switch (payload uses company_id from update_company_session_api)
+  // Handle sidebar company switch (payload from auth/switch-tenant)
   useEffect(() => {
     const handleSwitch = (e) => {
       const data = e?.detail;
@@ -256,7 +258,7 @@ export default function PaymentMaintenancePage() {
         }
 
         // Load Companies
-        const rows = await fetchOwnerCompaniesAll();
+        const rows = await fetchOwnerCompaniesAll({ me: u });
         if (cancelled) return;
         setCompanies(rows);
 
@@ -453,6 +455,7 @@ export default function PaymentMaintenancePage() {
           dateFrom,
           dateTo,
           transactionType,
+          query,
           companyId: effectiveScope.scopeCompanyId,
           currency: overrides.currency ?? selectedCurrency,
           scope: effectiveScope,
@@ -489,7 +492,7 @@ export default function PaymentMaintenancePage() {
         }
       }
     },
-    [companies, selectedGroup, companyId, dateFrom, dateTo, transactionType, selectedCurrency, notify, t],
+    [companies, selectedGroup, companyId, dateFrom, dateTo, transactionType, query, selectedCurrency, notify, t],
   );
 
   // Auto-search when filters change（defer 0ms；切换公司已手动 performSearch 时跳过一轮避免重复）
@@ -507,6 +510,7 @@ export default function PaymentMaintenancePage() {
     listQueryEnabled,
     paymentScopeKey,
     transactionType,
+    query,
     dateFrom,
     dateTo,
     selectedCurrency,
@@ -654,10 +658,8 @@ export default function PaymentMaintenancePage() {
               currency: nextCurrency,
             });
           } catch (err) {
-            console.error("Company switch meta/search:", err);
             notify(err.message || t("failedLoadCompanyMetadata"), "error");
           }
-          notify(t("switchedTo", { company: nextCode }), "success");
         },
       });
       if (redirected) return;
@@ -676,6 +678,10 @@ export default function PaymentMaintenancePage() {
     setActivePermission(p);
     localStorage.setItem(`selectedPermission_${companyCode}`, p);
   };
+
+  const handleCurrencySelectAll = useCallback(() => {
+    setSelectedCurrency(null);
+  }, []);
 
   const toggleSelect = useCallback((id) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -717,6 +723,7 @@ export default function PaymentMaintenancePage() {
     setIsDeleteModalOpen(false);
     try {
       await deletePaymentRecords(selectedIds, paymentScope);
+      notifyTransactionListInvalidated("payment_maintenance_delete");
       notify(t("successfullyDeletedN", { n: selectedIds.length }), "success");
       performSearch({ scope: paymentScope });
     } catch (err) {
@@ -752,6 +759,8 @@ export default function PaymentMaintenancePage() {
       <PaymentMaintenanceFilters 
         transactionType={transactionType}
         setTransactionType={setTransactionType}
+        query={query}
+        setQuery={setQuery}
         dateFrom={dateFrom}
         dateTo={dateTo}
         setDateFrom={setDateFrom}
@@ -772,6 +781,7 @@ export default function PaymentMaintenancePage() {
         currencies={currencies}
         selectedCurrency={selectedCurrency}
         setSelectedCurrency={setSelectedCurrency}
+        onCurrencySelectAll={handleCurrencySelectAll}
         onDelete={handleDeleteClick}
         confirmDelete={confirmDelete}
         setConfirmDelete={setConfirmDelete}

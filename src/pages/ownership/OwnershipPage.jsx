@@ -1,4 +1,5 @@
 import React from "react";
+import PagePillTabSwitch from "../../components/PagePillTabSwitch.jsx";
 import "../../../public/css/ownership.css";
 import BulkActionBar from "./company/components/BulkActionBar.jsx";
 import ConflictModal from "./shared/components/ConflictModal.jsx";
@@ -33,37 +34,39 @@ export default function OwnershipPage() {
     <>
       <div className="own-container">
         <div className="own-page-head">
-          <div className="page-tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "account-ownership"}
-              className={`page-tab${activeTab === "account-ownership" ? " active" : ""}`}
-              onClick={() => setActiveTab("account-ownership")}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-              {t("accountOwnership")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "group-earnings"}
-              className={`page-tab${activeTab === "group-earnings" ? " active" : ""}`}
-              onClick={() => setActiveTab("group-earnings")}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                <path d="M2 17l10 5 10-5" />
-                <path d="M2 12l10 5 10-5" />
-              </svg>
-              {t("groupEarnings")}
-            </button>
-          </div>
+          <PagePillTabSwitch
+            value={activeTab}
+            onChange={setActiveTab}
+            options={[
+              {
+                value: "account-ownership",
+                children: (
+                  <>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    {t("accountOwnership")}
+                  </>
+                ),
+              },
+              {
+                value: "group-earnings",
+                children: (
+                  <>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                      <path d="M2 17l10 5 10-5" />
+                      <path d="M2 12l10 5 10-5" />
+                    </svg>
+                    {t("groupEarnings")}
+                  </>
+                ),
+              },
+            ]}
+          />
 
           <OwnershipMonthBar
             selectedMonth={selectedMonth}
@@ -106,7 +109,12 @@ export default function OwnershipPage() {
         onResolve={async (type) => {
           const c = conflict;
           setConflict(null);
-          if (c) await company.linkPartner(c.companyId, c.loginId, type);
+          if (!c) return;
+          if (c.scope === "group") {
+            await group.geLinkPartner(c.groupId, c.loginId, type);
+          } else {
+            await company.linkPartner(c.companyId, c.loginId, type);
+          }
         }}
         onCancel={() => setConflict(null)}
         t={t}

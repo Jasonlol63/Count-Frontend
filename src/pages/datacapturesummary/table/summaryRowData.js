@@ -1,5 +1,6 @@
 import { normalizeSummaryIdProductText } from "../lib/summaryIdProductUtils.js";
-import { evaluateFormulaExpression } from "../formula/summaryFormulaReference.js";
+import { getProcessValueFromSummaryRow } from "../lib/summaryIdProductDisplay.js";
+import { evaluateFormulaExpression, normalizeFormulaBeforeReferenceExpand } from "../formula/summaryFormulaReference.js";
 import { formatNegativeNumbersInFormula } from "../formula/summaryFormulaParseUtils.js";
 import { resolveTemplateFormulaDisplay } from "../formula/summaryTemplateFormulaDisplay.js";
 import {
@@ -132,7 +133,8 @@ function resolveFormulaDisplay(row, formulaOperators) {
   try {
     const evaluated = evaluateFormulaExpression(
       ops,
-      row.productType === "sub" ? row.subIdProduct || row.idProduct : row.idProduct,
+      getProcessValueFromSummaryRow(row) ||
+        (row.productType === "sub" ? row.subIdProduct || row.idProduct : row.idProduct),
       row.clickedColumns || "",
       row.rowIndex
     );
@@ -154,9 +156,12 @@ export function applyMainTemplateToRowModel(row, mainTemplate, templateKey) {
   const sourcePercent = source || "1";
   const enableSourcePercent = enable ? true : sourcePercent.trim() !== "";
   const [resolvedOperators] = resolveTemplateFormulaBaseAndPercent(mainTemplate);
-  const formulaOperators = String(
-    resolvedOperators || mainTemplate.formula_operators || mainTemplate.formulaOperators || ""
-  ).trim();
+  const formulaOperators = normalizeFormulaBeforeReferenceExpand(
+    String(resolvedOperators || mainTemplate.formula_operators || mainTemplate.formulaOperators || "").trim(),
+    row.productType === "sub" ? row.subIdProduct || row.idProduct : row.idProduct,
+    String(mainTemplate.clicked_columns || mainTemplate.clickedColumns || row.clickedColumns || "").trim(),
+    row?.rowIndex ?? null
+  );
   const sourceColumns = String(mainTemplate.source_columns || "").trim();
   const next = {
     ...row,

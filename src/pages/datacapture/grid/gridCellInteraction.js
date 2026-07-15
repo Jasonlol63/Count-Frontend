@@ -5,16 +5,17 @@ import {
   gridAddNewColumn,
   gridAddNewRow,
   gridClearAllSelections,
+  gridClearSelectedCells,
   gridGetSelectedCells,
-  gridHasPasteHistory,
   gridRegisterSelectedCell,
   gridRecomputeSubmitState,
-  gridUndoLastPaste,
   getPasteGridModel,
+  replacePasteGridModel,
   setBridgeTableActive,
-  updateBridgeCell,
 } from "../lib/dataCaptureBridge.js";
-import { MAX_GRID_ROWS } from "./dataCaptureGridMeta.js";
+import { commitGridUndoCheckpoint, undoLastPaste } from "./dataCaptureGridPasteHistory.js";
+import { clearCellsInGrid } from "./gridModel.js";
+import { MAX_GRID_COLS, MAX_GRID_ROWS } from "./dataCaptureGridMeta.js";
 
 /** Pending cell focus after grid row/column append (applied on next grid render). */
 let pendingGridCellFocus = null;
@@ -34,19 +35,39 @@ function takePendingGridCellFocus() {
 }
 
 function cellPosition(cell) {
-  if (!cell?.parentNode?.parentNode) return null;
-  const row = cell.parentNode;
-  const table = row.parentNode;
-  const rowIndex = Array.from(table.children).indexOf(row);
+  if (!cell?.dataset) return null;
+  const rowIndex = Number.parseInt(cell.dataset.row, 10);
   const colIndex = Number.parseInt(cell.dataset.col, 10);
-  if (rowIndex < 0 || !Number.isFinite(colIndex)) return null;
+  if (!Number.isFinite(rowIndex) || !Number.isFinite(colIndex)) return null;
   return { rowIndex, colIndex };
 }
 
+function clearCellsWithUndo(positions) {
+  if (!positions?.length) return;
+  const grid = getPasteGridModel();
+  if (!grid) return;
+  const nextGrid = clearCellsInGrid(grid, positions);
+  replacePasteGridModel(nextGrid);
+  commitGridUndoCheckpoint(nextGrid);
+}
+
+/** clearCellsInGrid expects { row, col }; cellPosition yields { rowIndex, colIndex }. */
+function toClearPosition(pos) {
+  if (!pos) return null;
+  return { row: pos.rowIndex, col: pos.colIndex };
+}
+
 function clearCellModel(cell) {
-  const pos = cellPosition(cell);
+  const selected = getSelectedCells().filter((c) => c?.contentEditable === "true");
+  if (selected.length > 1) {
+    const positions = selected.map(cellPosition).map(toClearPosition).filter(Boolean);
+    clearCellsWithUndo(positions);
+    return;
+  }
+
+  const pos = toClearPosition(cellPosition(cell));
   if (!pos) return;
-  updateBridgeCell(pos.rowIndex, pos.colIndex, { value: "" });
+  clearCellsWithUndo([pos]);
 }
 
 function clearAllSelections() {
@@ -326,6 +347,15 @@ export function moveCaretToClickPosition(cell, clickEvent) {
   }
 }
 
+function hasExpandedTextSelectionInsideCell(cell) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    return false;
+  }
+  const range = selection.getRangeAt(0);
+  return cell.contains(range.startContainer) && cell.contains(range.endContainer);
+}
+
 export function handleCellClick(e, cellEl) {
   const cell = cellEl || e.currentTarget || e.target;
   if (!cell || cell.contentEditable !== "true") return;
@@ -337,15 +367,14 @@ export function handleCellClick(e, cellEl) {
   if (document.activeElement !== cell) {
     cell.focus();
   }
+  if (hasExpandedTextSelectionInsideCell(cell)) {
+    return;
+  }
   moveCaretToClickPosition(cell, e);
 }
 
-function hasPasteHistory() {
-  return gridHasPasteHistory();
-}
-
-function undoLastPaste() {
-  gridUndoLastPaste();
+function undoLastPasteFromHistory() {
+  undoLastPaste();
 }
 
 function getSelectedCells() {
@@ -396,12 +425,9 @@ export function handleCellKeydown(e) {
 
   const key = (e.key || "").toLowerCase();
   if ((e.ctrlKey || e.metaKey) && key === "z" && !e.shiftKey) {
-    if (hasPasteHistory()) {
-      e.preventDefault();
-      e.stopPropagation();
-      undoLastPaste();
-      return;
-    }
+    e.preventDefault();
+    e.stopPropagation();
+    undoLastPasteFromHistory();
     return;
   }
 
@@ -411,6 +437,12 @@ export function handleCellKeydown(e) {
   if (e.key === "Backspace" || e.key === "Delete") {
     const hasFocusForDelete = document.activeElement === cell;
     const isSelected = cell.classList.contains("selected") || getSelectedCells().includes(cell);
+    const hasExpandedSelectionInCell = hasExpandedTextSelectionInsideCell(cell);
+
+    if (hasFocusForDelete && hasExpandedSelectionInCell) {
+      // Keep native contentEditable behavior for partial-text deletion.
+      return;
+    }
 
     if (e.key === "Delete" && (isSelected || hasFocusForDelete)) {
       e.preventDefault();
@@ -464,8 +496,9 @@ export function handleCellKeydown(e) {
       if (nextCell?.contentEditable === "true") {
         setActiveCell(nextCell);
       } else if (!e.shiftKey) {
-        const currentCols = document.querySelectorAll("#tableHeader th").length - 1;
-        if (currentCols < 30) {
+        const grid = getPasteGridModel();
+        const modelCols = grid?.cols ?? document.querySelectorAll("#tableHeader th").length - 1;
+        if (currentColIdx >= modelCols - 1 && modelCols < MAX_GRID_COLS) {
           const newColIndex = addNewColumn();
           if (newColIndex !== null) {
             const newCell = row.children[newColIndex + 1];

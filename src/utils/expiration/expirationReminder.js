@@ -1,4 +1,5 @@
 import { getExpirationReminderText } from "../../translateFile/shell/expirationReminderTranslate.js";
+import { formatDmyDash } from "../date/dateUtils.js";
 
 const STORAGE_KEY = "ec_exp_reminder_dismissed";
 export const EXPIRATION_REMINDER_WINDOW_DAYS = 30;
@@ -39,7 +40,7 @@ function expirationStatusFromDaysLeft(daysLeft) {
   return "normal";
 }
 
-/** Mirror `current_user_api.php` sidebar expiry fields for optimistic UI updates. */
+/** Mirror auth/current-user sidebar expiry fields for optimistic UI updates. */
 export function buildSidebarExpirationFields(expirationDate) {
   if (!expirationDate) {
     return {
@@ -151,7 +152,8 @@ function formatExpirationDate(expirationDate, lang) {
   const parts = expStr.split("-");
   if (parts.length !== 3) return expStr;
   const [y, m, d] = parts;
-  return lang === "zh" ? `${y}年${Number(m)}月${Number(d)}日` : `${d}/${m}/${y}`;
+  if (lang === "zh") return `${y}年${Number(m)}月${Number(d)}日`;
+  return formatDmyDash(expStr) || expStr;
 }
 
 function resolveMessageKey(daysLeft, urgency) {

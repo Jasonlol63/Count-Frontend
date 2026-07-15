@@ -1,6 +1,6 @@
-import { buildApiUrl } from "../core/apiUrl.js";
 import { notifyCompanySessionUpdated } from "./companySessionEvents.js";
 import { rememberCompanySessionFlags } from "./companySessionFlagsCache.js";
+import { switchSessionTenant } from "../auth/authApi.js";
 import {
   notifyDashboardGroupFilterChanged,
   persistDashboardFilterState,
@@ -11,15 +11,15 @@ import {
 /** @type {Map<string, Promise<object>>} */
 const sessionSyncInflight = new Map();
 
-function sessionSyncKey(tenantId, viewGroup) {
-  const id = Number(tenantId);
+function sessionSyncKey(companyId, viewGroup) {
+  const id = Number(companyId);
   const vg = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
   return `${id}|${vg}`;
 }
 
-/** Switch active session tenant via Spring `POST /auth/switch-tenant`. */
-export async function syncCompanySessionApi(tenantId, viewGroup = null, options = {}) {
-  const id = Number(tenantId);
+/** Switch active session tenant via Spring {@code POST /auth/switch-tenant}. */
+export async function syncCompanySessionApi(companyId, viewGroup = null, options = {}) {
+  const id = Number(companyId);
   if (!Number.isFinite(id) || id <= 0) return { success: false };
 
   const key = sessionSyncKey(id, viewGroup);
@@ -31,12 +31,7 @@ export async function syncCompanySessionApi(tenantId, viewGroup = null, options 
 
   const promise = (async () => {
     try {
-      const q = new URLSearchParams({ tenant_id: String(id) });
-      const response = await fetch(buildApiUrl(`auth/switch-tenant?${q.toString()}`), {
-        method: "POST",
-        credentials: "include",
-      });
-      const json = await response.json();
+      const { json } = await switchSessionTenant(id);
       if (json?.success && json?.data) rememberCompanySessionFlags(json.data);
       return json;
     } catch {
@@ -52,20 +47,23 @@ export async function syncCompanySessionApi(tenantId, viewGroup = null, options 
   return promise;
 }
 
-export async function syncCompanySessionAndNotify(tenantId) {
-  const json = await syncCompanySessionApi(tenantId);
+export async function syncCompanySessionAndNotify(companyId) {
+  const json = await syncCompanySessionApi(companyId);
   if (json?.success) notifyCompanySessionUpdated(json.data ?? null);
   return json;
 }
 
 /** Write sessionStorage group/company keys used by Dashboard and other SPA pages. */
-export function persistCrossPageCompanySelection(tenantId, options = {}) {
-  const id = Number(tenantId);
+export function persistCrossPageCompanySelection(companyId, options = {}) {
+  const id = Number(companyId);
   if (!Number.isFinite(id) || id <= 0) return null;
   const { selectedGroup = null, companyRow = null } = options;
   const gid =
     (selectedGroup ? String(selectedGroup).trim().toUpperCase() : null) ||
-    (companyRow?.group_id ? String(companyRow.group_id).trim().toUpperCase() : null);
+    (companyRow?.group_id ? String(companyRow.group_id).trim().toUpperCase() : null) ||
+    (companyRow?.parent_tenant_code
+      ? String(companyRow.parent_tenant_code).trim().toUpperCase()
+      : null);
   if (gid) persistDashboardGroupFilter(gid);
   persistDashboardFilterState(gid, id, { allowGroupOnly: false });
   notifyDashboardGroupFilterChanged(gid, id);
@@ -73,26 +71,25 @@ export function persistCrossPageCompanySelection(tenantId, options = {}) {
 }
 
 /**
- * Keep sessionStorage + session tenant aligned with the active Process/Bank company.
+ * Keep sessionStorage + Spring session tenant aligned with the active Process/Bank tenant.
  * Safe to call when UI already shows the company but cross-page state is stale.
  */
-export async function ensureCrossPageCompanySelection(tenantId, options = {}) {
-  const id = Number(tenantId);
+export async function ensureCrossPageCompanySelection(companyId, options = {}) {
+  const id = Number(companyId);
   if (!Number.isFinite(id) || id <= 0) return false;
 
   const savedId = readDashboardSelectedCompanyId();
-  const sessionTenantId =
-    options.sessionTenantId != null && options.sessionTenantId !== ""
-      ? Number(options.sessionTenantId)
-      : options.sessionCompanyId != null && options.sessionCompanyId !== ""
-        ? Number(options.sessionCompanyId)
-        : null;
+  const sessionCompanyId =
+    options.sessionCompanyId != null && options.sessionCompanyId !== ""
+      ? Number(options.sessionCompanyId)
+      : null;
   const needsPersist = savedId !== id;
   const needsSessionSync =
     options.syncPhpSession !== false &&
-    sessionTenantId != null &&
-    Number.isFinite(sessionTenantId) &&
-    sessionTenantId !== id;
+    options.syncSession !== false &&
+    sessionCompanyId != null &&
+    Number.isFinite(sessionCompanyId) &&
+    sessionCompanyId !== id;
 
   if (!needsPersist && !needsSessionSync) return true;
 

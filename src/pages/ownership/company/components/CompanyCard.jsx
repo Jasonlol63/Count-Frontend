@@ -2,6 +2,7 @@ import React from "react";
 import AccountEditorRow from "../../shared/components/AccountEditorRow.jsx";
 import PartnerLinkSection from "./PartnerLinkSection.jsx";
 import { ownershipRowClientId, maxAllowedOwnershipPct } from "../../shared/ownershipRowHelpers.js";
+import { formatDmyDash } from "../../../../utils/date/dateUtils.js";
 
 export default function CompanyCard({
   comp,
@@ -74,6 +75,10 @@ export default function CompanyCard({
     return "";
   };
 
+  const expirationDisplay = comp.expiration_date
+    ? formatDmyDash(comp.expiration_date) || String(comp.expiration_date).split(" ")[0]
+    : "";
+
   return (
     <div
       id={`card-${id}`}
@@ -105,7 +110,7 @@ export default function CompanyCard({
                   <line x1="8" y1="2" x2="8" y2="6" />
                   <line x1="3" y1="10" x2="21" y2="10" />
                 </svg>
-                {String(comp.expiration_date).split(" ")[0]}
+                {expirationDisplay}
               </>
             ) : null}
           </div>
@@ -201,7 +206,6 @@ export default function CompanyCard({
                     idx={idx}
                     row={row}
                     accounts={st.accounts}
-                    allRows={st.rows}
                     maxPercentage={maxAllowedOwnershipPct(st.rows, idx)}
                     dragContextRef={dragRef}
                     onUpdate={(i, f, v) => onUpdateRow(id, i, f, v)}

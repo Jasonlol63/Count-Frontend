@@ -11,6 +11,7 @@ import {
   isNewIdProductColumnFormat,
   parseIdProductColumnRef,
   removeThousandsSeparators,
+  formatNegativeNumbersInFormula,
 } from "./summaryFormulaParseUtils.js";
 import { getTransformedTableData } from "../lib/summaryFormulaContext.js";
 import { getProcessValueFromSummaryRow } from "../lib/summaryIdProductDisplay.js";
@@ -120,7 +121,7 @@ function buildExpressionFromCellValues(cellValues, formulaOperatorsValue) {
     const operator = operatorsString[i - 1] || "+";
     expression += operator + cellValues[i];
   }
-  return expression;
+  return formatNegativeNumbersInFormula(expression);
 }
 
 export function buildSourceExpressionFromTable(processValue, sourceColumnsValue, formulaOperatorsValue) {
@@ -540,5 +541,5 @@ export function expandDollarFormulaOperators({
     clickedColumns,
     rowIndex
   );
-  return parsed || displayFormula;
+  return formatNegativeNumbersInFormula(parsed || displayFormula);
 }

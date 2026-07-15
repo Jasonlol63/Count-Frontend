@@ -1,8 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProcessModalPortal, { processModalBackdropStyle } from "../../../components/ProcessModalPortal.jsx";
+import RemoveWordChipInput from "../../../components/RemoveWordChipInput.jsx";
 import { toProcessFormUpperInput } from "../processListHelpers.js";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
 import ProcessFormPortalSelect from "./ProcessFormPortalSelect.jsx";
+import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
 
 const DAY_NAME_MAP = {
   "MON": "dayMonday",
@@ -50,12 +52,14 @@ export default function ProcessFormModal({
   editMode,
   form,
   setForm,
+  scopeCompanyId = null,
   currencies,
   days,
   readOnly = false,
   onClose,
   onSubmit,
   onOpenDescriptionPicker,
+  onCopyFromSelect,
   t,
 }) {
   const ro = Boolean(readOnly);
@@ -63,6 +67,7 @@ export default function ProcessFormModal({
   const [copyOpen, setCopyOpen] = useState(false);
   const [copySearch, setCopySearch] = useState("");
   const [currencyOpen, setCurrencyOpen] = useState(false);
+  const copySearchRef = useRef(null);
 
   const copyOptions = useMemo(() => sortedCopyFromOptions(form.existingProcesses), [form.existingProcesses]);
   const filteredCopy = useMemo(() => {
@@ -74,6 +79,31 @@ export default function ProcessFormModal({
     });
   }, [copyOptions, copySearch]);
 
+  const copyListCount = filteredCopy.length + 1;
+
+  const copyKeyboard = useListboxKeyboard({
+    open: copyOpen,
+    itemCount: copyListCount,
+    resetToken: copySearch,
+  });
+
+  const currencyListCount = currencies.length + 1;
+
+  const getCurrencyItemLabel = useCallback(
+    (idx) => {
+      if (idx === 0) return t("clear");
+      const c = currencies[idx - 1];
+      return c ? `${c.code || ""} - ${c.name || ""}` : "";
+    },
+    [currencies, t],
+  );
+
+  const currencyKeyboard = useListboxKeyboard({
+    open: currencyOpen,
+    itemCount: currencyListCount,
+    getItemLabel: getCurrencyItemLabel,
+  });
+
   const multiUseRows = useMemo(() => uniqueProcessesForMultiUse(form.existingProcesses), [form.existingProcesses]);
 
   const descSummary =
@@ -82,8 +112,30 @@ export default function ProcessFormModal({
       : "";
 
   const placeholderBtn = t("selectProcessToCopyFrom");
-  const selectedCopyRow = copyOptions.find((p) => String(p.process_id) === String(form.copy_from));
+  const selectedCopyRow = copyOptions.find(
+    (p) =>
+      String(p.process_id) === String(form.copy_from) ||
+      String(p.process_name || "") === String(form.copy_from),
+  );
   const selectedCurrency = currencies.find((c) => String(c.id) === String(form.currency_id));
+
+  useEffect(() => {
+    if (!copyOpen) {
+      setCopySearch("");
+      return undefined;
+    }
+    const frame = window.requestAnimationFrame(() => copySearchRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [copyOpen]);
+
+  const applyCopyFromSelection = useCallback(
+    (processId) => {
+      setCopyOpen(false);
+      setCopySearch("");
+      void onCopyFromSelect?.(processId ?? "");
+    },
+    [onCopyFromSelect],
+  );
 
   return (
     <ProcessModalPortal>
@@ -100,7 +152,7 @@ export default function ProcessFormModal({
             <div className="process-form add-grid">
             <div className="add-col">
               <div className="process-form-section">
-                <h3 className="process-form-section-title">{t("processFormSectionBasic")}</h3>
+                <h3 className="account-section-header">{t("processFormSectionBasic")}</h3>
               {!editMode && (
                 <div className="form-row">
                   <div className="form-group">
@@ -110,6 +162,34 @@ export default function ProcessFormModal({
                       onOpenChange={setCopyOpen}
                       disabled={ro}
                       hasSearch
+                      onButtonKeyDown={(e) => {
+                        if (
+                          !copyOpen &&
+                          e.key.length === 1 &&
+                          !e.ctrlKey &&
+                          !e.metaKey &&
+                          !e.altKey
+                        ) {
+                          e.preventDefault();
+                          setCopySearch(e.key.toUpperCase());
+                          setCopyOpen(true);
+                          return;
+                        }
+                        copyKeyboard.handleButtonKeyDown(e, {
+                          isOpen: copyOpen,
+                          onToggleOpen: () => setCopyOpen(true),
+                          onClose: () => setCopyOpen(false),
+                          len: copyListCount,
+                          onSelectIndex: (idx) => {
+                            if (idx === 0) {
+                              applyCopyFromSelection("");
+                            } else {
+                              const p = filteredCopy[idx - 1];
+                              if (p) applyCopyFromSelection(String(p.process_id ?? ""));
+                            }
+                          },
+                        });
+                      }}
                       displayLabel={
                         selectedCopyRow
                           ? `${selectedCopyRow.process_name || t("unknown")} - ${selectedCopyRow.description_name || t("noDescription")}`
@@ -120,52 +200,58 @@ export default function ProcessFormModal({
                         <>
                           <div className="custom-select-search">
                             <input
+                              ref={copySearchRef}
                               type="text"
                               placeholder={t("searchProcess")}
                               autoComplete="off"
                               value={copySearch}
                               disabled={ro}
-                              onChange={(e) => setCopySearch(e.target.value)}
+                              onChange={(e) => setCopySearch(e.target.value.toUpperCase())}
+                              onKeyDown={(e) => {
+                                copyKeyboard.handleListKeyDown(e, {
+                                  len: copyListCount,
+                                  onSelectIndex: (idx) => {
+                                    if (idx === 0) {
+                                      applyCopyFromSelection("");
+                                    } else {
+                                      const p = filteredCopy[idx - 1];
+                                      if (p) applyCopyFromSelection(String(p.process_id ?? ""));
+                                    }
+                                  },
+                                  onClose: () => setCopyOpen(false),
+                                });
+                              }}
                             />
                           </div>
                           <div
+                            ref={copyKeyboard.listRef}
                             className="custom-select-options"
                             style={{ flex: "1 1 auto", minHeight: 0, maxHeight: optionsMaxHeight }}
                           >
                             <div
-                              className="custom-select-option"
+                              className={`custom-select-option${copyKeyboard.highlightClass(0)}`}
                               role="button"
-                              tabIndex={0}
-                              onClick={() => {
-                                setForm((prev) => ({ ...prev, copy_from: "" }));
-                                setCopyOpen(false);
-                                setCopySearch("");
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  setForm((prev) => ({ ...prev, copy_from: "" }));
-                                  setCopyOpen(false);
-                                  setCopySearch("");
-                                }
-                              }}
+                              data-kb-idx={0}
+                              onMouseEnter={() => copyKeyboard.setHighlightIdx(0)}
+                              onClick={() => applyCopyFromSelection("")}
                             >
                               {t("clear")}
                             </div>
-                            {filteredCopy.map((p) => (
+                            {filteredCopy.map((p, idx) => {
+                              const kbIdx = idx + 1;
+                              return (
                               <div
                                 key={`${p.process_id}_${p.description_name || ""}`}
-                                className="custom-select-option"
+                                className={`custom-select-option${copyKeyboard.highlightClass(kbIdx)}`}
                                 role="button"
-                                tabIndex={0}
-                                onClick={() => {
-                                  setForm((prev) => ({ ...prev, copy_from: String(p.process_id ?? "") }));
-                                  setCopyOpen(false);
-                                  setCopySearch("");
-                                }}
+                                data-kb-idx={kbIdx}
+                                onMouseEnter={() => copyKeyboard.setHighlightIdx(kbIdx)}
+                                onClick={() => applyCopyFromSelection(String(p.process_id ?? ""))}
                               >
                                 {`${p.process_name || t("unknown")} - ${p.description_name || t("noDescription")}`}
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </>
                       )}
@@ -202,6 +288,7 @@ export default function ProcessFormModal({
                         aria-pressed={Boolean(form.is_multi_process)}
                         onClick={() => {
                           const next = !form.is_multi_process;
+                          const prevCopyFrom = form.copy_from;
                           setForm((prev) => ({
                             ...prev,
                             is_multi_process: next,
@@ -209,6 +296,9 @@ export default function ProcessFormModal({
                             selected_processes: next ? prev.selected_processes : [],
                             process_name: next ? "" : prev.process_name,
                           }));
+                          if (next && prevCopyFrom) {
+                            void onCopyFromSelect?.(prevCopyFrom);
+                          }
                         }}
                       >
                         {t("multiProcess")}
@@ -306,19 +396,29 @@ export default function ProcessFormModal({
                     {editMode ? t("description") : t("descriptionRequired")}
                   </label>
                   <div
-                    className={`input-with-icon${ro ? "" : " input-with-icon--opens-picker"}`}
+                    className={`description-input-wrap dc-description-input-wrap${ro ? "" : " description-input-wrap--interactive"}`}
+                    role={ro ? undefined : "button"}
+                    tabIndex={ro ? undefined : 0}
+                    title={t("chooseDescription")}
                     onClick={() => !ro && onOpenDescriptionPicker()}
+                    onKeyDown={(e) => {
+                      if (!ro && (e.key === "Enter" || e.key === " ")) {
+                        e.preventDefault();
+                        onOpenDescriptionPicker();
+                      }
+                    }}
                   >
                     <input
                       id={editMode ? "edit_description" : "add_description"}
                       readOnly
                       required={!editMode}
+                      tabIndex={-1}
                       value={descSummary}
                       placeholder={t("clickToSelectDescriptions")}
                     />
                     <button
                       type="button"
-                      className="add-icon"
+                      className="description-add-tile dc-description-add-tile"
                       aria-label={t("chooseDescription")}
                       disabled={ro}
                       onClick={(e) => {
@@ -353,51 +453,65 @@ export default function ProcessFormModal({
                     onOpenChange={setCurrencyOpen}
                     disabled={ro}
                     displayLabel={selectedCurrency ? selectedCurrency.code : t("selectCurrency")}
+                    onButtonKeyDown={(e) => {
+                      currencyKeyboard.handleButtonKeyDown(e, {
+                        isOpen: currencyOpen,
+                        onToggleOpen: () => setCurrencyOpen(true),
+                        onClose: () => setCurrencyOpen(false),
+                        len: currencyListCount,
+                        onSelectIndex: (idx) => {
+                          if (idx === 0) {
+                            setForm((prev) => ({ ...prev, currency_id: "" }));
+                            setCurrencyOpen(false);
+                          } else {
+                            const c = currencies[idx - 1];
+                            if (c) {
+                              setForm((prev) => ({ ...prev, currency_id: String(c.id) }));
+                              setCurrencyOpen(false);
+                            }
+                          }
+                        },
+                      });
+                    }}
                   >
                     {({ optionsMaxHeight }) => (
                       <div
+                        ref={currencyKeyboard.listRef}
                         className="custom-select-options"
                         style={{ flex: "1 1 auto", minHeight: 0, maxHeight: optionsMaxHeight }}
                       >
                         <div
-                          className={`custom-select-option${!form.currency_id ? " selected" : ""}`}
+                          className={`custom-select-option${!form.currency_id ? " selected" : ""}${currencyKeyboard.highlightClass(0)}`}
                           role="button"
-                          tabIndex={0}
+                          data-kb-idx={0}
+                          onMouseEnter={() => currencyKeyboard.setHighlightIdx(0)}
                           onClick={() => {
                             setForm((prev) => ({ ...prev, currency_id: "" }));
                             setCurrencyOpen(false);
                           }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              setForm((prev) => ({ ...prev, currency_id: "" }));
-                              setCurrencyOpen(false);
-                            }
-                          }}
                         >
                           {t("selectCurrency")}
                         </div>
-                        {currencies.map((c) => (
+                        {currencies.map((c, idx) => {
+                          const kbIdx = idx + 1;
+                          return (
                           <div
                             key={c.id}
                             className={`custom-select-option${
                               String(c.id) === String(form.currency_id) ? " selected" : ""
-                            }`}
+                            }${currencyKeyboard.highlightClass(kbIdx)}`}
                             role="button"
-                            tabIndex={0}
+                            data-kb-idx={kbIdx}
+                            onMouseEnter={() => currencyKeyboard.setHighlightIdx(kbIdx)}
                             onClick={() => {
                               setForm((prev) => ({ ...prev, currency_id: String(c.id) }));
                               setCurrencyOpen(false);
                             }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                setForm((prev) => ({ ...prev, currency_id: String(c.id) }));
-                                setCurrencyOpen(false);
-                              }
-                            }}
                           >
                             {c.code}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </ProcessFormPortalSelect>
@@ -408,7 +522,7 @@ export default function ProcessFormModal({
 
               {editMode && (
                 <div className="process-form-section process-form-section--record">
-                  <h3 className="process-form-section-title">{t("processFormSectionRecord")}</h3>
+                  <h3 className="account-section-header">{t("processFormSectionRecord")}</h3>
                   <div className="form-row">
                     <div className="form-group">
                       <label>{t("dtsModified")}</label>
@@ -438,16 +552,19 @@ export default function ProcessFormModal({
 
             <div className="add-col">
               <div className="process-form-section">
-                <h3 className="process-form-section-title">{t("processFormSectionTextReplace")}</h3>
+                <h3 className="account-section-header">{t("processFormSectionTextReplace")}</h3>
               <div className="form-row">
-                <div className="form-group">
-                  <label>{t("removeWords")}</label>
-                  <input
+                <div className="form-group process-form-remove-word-group">
+                  <label htmlFor={editMode ? "edit_remove_words" : "add_remove_words"}>{t("removeWords")}</label>
+                  <RemoveWordChipInput
+                    id={editMode ? "edit_remove_words" : "add_remove_words"}
+                    name="remove_word"
                     value={form.remove_word}
-                    disabled={ro}
-                    onChange={(e) => setForm((prev) => ({ ...prev, remove_word: toProcessFormUpperInput(e.target.value) }))}
+                    onChange={(next) => setForm((prev) => ({ ...prev, remove_word: next }))}
+                    processId={editMode && form.id ? form.id : null}
+                    scopeCompanyId={scopeCompanyId}
                     placeholder={t("enterWordsToRemove")}
-                    style={{ textTransform: "uppercase" }}
+                    disabled={ro}
                   />
                   <small className="field-help">{t("removeWordsHelp")}</small>
                 </div>
@@ -481,7 +598,7 @@ export default function ProcessFormModal({
               </div>
 
               <div className="process-form-section">
-                <h3 className="process-form-section-title">{t("processFormSectionScheduleNotes")}</h3>
+                <h3 className="account-section-header">{t("processFormSectionScheduleNotes")}</h3>
               <div className="form-row">
                 <div className="form-group">
                   <div className="day-use-pill-row">

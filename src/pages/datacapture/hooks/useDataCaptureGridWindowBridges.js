@@ -44,8 +44,11 @@ import {
 import { setTableActive, isTableActive } from "../grid/dataCaptureGridMeta.js";
 import {
   clearPasteHistory,
+  commitPasteGridCheckpoint,
+  finalizePasteWithOptionalConvert,
   hasPasteHistory,
   pushPasteHistory,
+  resetPasteUndoCheckpoints,
   undoLastPaste,
 } from "../grid/dataCaptureGridPasteHistory.js";
 import { registerDataCaptureRuntime, unregisterDataCaptureRuntime } from "../lib/dataCaptureRuntime.js";
@@ -80,6 +83,9 @@ export function useDataCaptureGridWindowBridges() {
       clearPasteHistory,
       hasPasteHistory,
       undoLastPaste,
+      commitPasteGridCheckpoint,
+      finalizePasteWithOptionalConvert,
+      resetPasteUndoCheckpoints,
       handleCellMousedown: handleCellMouseDown,
       handleCellMouseover: handleCellMouseOver,
       handleMouseUp,

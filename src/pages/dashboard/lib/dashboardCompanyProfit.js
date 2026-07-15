@@ -62,10 +62,26 @@ export function normalizeSubsidiaryEarningsByCompany(apiRows) {
         group_equity_pct: groupEquityPct,
         account_pct: parseFloat(row.account_pct) || 0,
         group_share: groupShare,
+        company_earning: parseFloat(row.company_earning) || 0,
         my_earning: parseFloat(row.my_earning) || 0,
       };
     })
     .filter((row) => row.company_id);
+}
+
+/**
+ * All-group dashboard: Earning tab only includes companies under groups where the viewer has ownership.
+ * When enabledGroupIds is omitted, rows are unchanged (single-group scope).
+ */
+export function filterCompanyBreakdownRowsForEarningsGroups(rows, enabledGroupIds) {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  if (enabledGroupIds == null) return rows;
+  if (!Array.isArray(enabledGroupIds) || !enabledGroupIds.length) return [];
+  const enabled = new Set(
+    enabledGroupIds.map((g) => String(g || "").trim().toUpperCase()).filter(Boolean)
+  );
+  if (!enabled.size) return [];
+  return rows.filter((row) => enabled.has(String(row.group_id || "").trim().toUpperCase()));
 }
 
 /** Single-subsidiary group ledger: earnings tab row = full group-aggregate earnings (matches KPI card). */
@@ -81,6 +97,9 @@ export function applySingleSubsidiaryGroupEarningsRows(rows, dashboardData, opti
 export function buildCompanyNetProfitRowFromPayload(companyRow, data, viewGroup = "") {
   if (!companyRow || !data) return null;
   const netProfit = netProfitFromDashboardPayload(data);
+  const profit = parseFloat(data?.period_total?.profit ?? data?.profit) || 0;
+  const earningMultiplier = resolveGroupAllCompanyEarningsMultiplier(data);
+  const companyEarnings = netProfit * earningMultiplier;
   const nativeG = companyRow?.group_id ? String(companyRow.group_id).trim().toUpperCase() : "";
   const linkG = companyRow?.link_source_group
     ? String(companyRow.link_source_group).trim().toUpperCase()
@@ -92,12 +111,32 @@ export function buildCompanyNetProfitRowFromPayload(companyRow, data, viewGroup 
     company_pk: parseInt(companyRow?.id, 10) || null,
     company_id: companyId,
     group_id: groupId,
+    profit,
     net_profit: netProfit,
+    // Group All KPI Profit should use all-company Profit (not Net Profit).
+    company_earning: profit,
     group_equity_pct: parseFloat(data.group_equity_percentage) || 0,
     account_pct: parseFloat(data.group_account_percentage) || 0,
     group_share: netProfit,
-    my_earning: 0,
+    // Group All KPI Earnings should sum per-company earnings by ownership.
+    my_earning: companyEarnings,
   };
+}
+
+function resolveGroupAllCompanyEarningsMultiplier(data) {
+  if (!data?.has_ownership_setup) return 0;
+  const directPct = parseFloat(data.ownership_percentage) || 0;
+  if (directPct > 0) return directPct / 100;
+  const linkMul = parseFloat(data._link_multiplier || 0) || 0;
+  const hasLinkOwnership = linkMul > 0 && linkMul !== 1;
+  if (hasLinkOwnership) {
+    const groupAccountPct = parseFloat(data.group_account_percentage) || 0;
+    const viewerGroupShare = groupAccountPct > 0 ? groupAccountPct / 100 : 1;
+    return linkMul * viewerGroupShare;
+  }
+  const groupEquityPct = parseFloat(data.group_equity_percentage) || 0;
+  if (groupEquityPct > 0) return groupEquityPct / 100;
+  return 0;
 }
 
 export function buildCompanyNetProfitRowsFromPairs(pairs, viewGroupFallback = "") {

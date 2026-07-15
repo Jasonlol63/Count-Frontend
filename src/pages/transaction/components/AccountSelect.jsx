@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
 
 export function AccountSelect({
   placeholder,
@@ -10,12 +11,11 @@ export function AccountSelect({
   selectedCategories,
   ariaLabelledBy,
   ariaLabel,
+  searchPlaceholder = "Search account...",
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
-  const [highlightIdx, setHighlightIdx] = useState(-1);
   const searchRef = useRef(null);
-  const optionsContainerRef = useRef(null);
   const containerRef = useRef(null);
 
   const filtered = useMemo(() => {
@@ -28,6 +28,12 @@ export function AccountSelect({
     if (!q) return rows;
     return rows.filter((r) => String(r.display_text || "").toUpperCase().includes(q));
   }, [options, filter, selectedCategories]);
+
+  const { highlightIdx, setHighlightIdx, listRef, handleListKeyDown, highlightClass } = useListboxKeyboard({
+    open,
+    itemCount: filtered.length,
+    resetToken: filter,
+  });
 
   useEffect(() => {
     if (!open) return undefined;
@@ -43,31 +49,17 @@ export function AccountSelect({
   useEffect(() => {
     if (open) {
       setTimeout(() => searchRef.current?.focus(), 0);
-      setHighlightIdx(-1);
     } else {
       setFilter("");
-      setHighlightIdx(-1);
     }
   }, [open]);
 
-  useEffect(() => {
-    setHighlightIdx(-1);
-  }, [filter]);
-
-  useEffect(() => {
-    setHighlightIdx((hi) => {
-      if (hi < 0) return hi;
-      return hi >= filtered.length ? -1 : hi;
-    });
-  }, [filtered.length]);
-
-  useEffect(() => {
-    if (!open || highlightIdx < 0 || !optionsContainerRef.current) return;
-    const node = optionsContainerRef.current.querySelector(`[data-opt-idx="${highlightIdx}"]`);
-    node?.scrollIntoView({ block: "nearest" });
-  }, [highlightIdx, open, filtered]);
-
   const displayText = value?.display_text ? value.display_text : placeholder;
+
+  const pick = (opt) => {
+    onChange(opt);
+    setOpen(false);
+  };
 
   return (
     <div className="custom-select-wrapper" ref={containerRef}>
@@ -94,11 +86,11 @@ export function AccountSelect({
           <input
             ref={searchRef}
             type="text"
-            placeholder="Search account..."
+            placeholder={searchPlaceholder}
             autoComplete="off"
             disabled={disabled}
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => setFilter(e.target.value.toUpperCase())}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
                 setOpen(false);
@@ -109,41 +101,28 @@ export function AccountSelect({
                 onChange?.(null);
                 return;
               }
-              const len = filtered.length;
-              if (len === 0) return;
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setHighlightIdx((hi) => (hi < 0 ? 0 : (hi + 1) % len));
-              } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setHighlightIdx((hi) => (hi <= 0 ? len - 1 : hi - 1));
-              } else if (e.key === "Enter") {
-                e.preventDefault();
-                const pick = highlightIdx >= 0 ? filtered[highlightIdx] : filtered[0];
-                if (pick) {
-                  onChange(pick);
-                  setOpen(false);
-                }
-              }
+              handleListKeyDown(e, {
+                len: filtered.length,
+                onSelectIndex: (idx) => {
+                  const opt = filtered[idx];
+                  if (opt) pick(opt);
+                },
+                onClose: () => setOpen(false),
+              });
             }}
           />
         </div>
-        <div className="custom-select-options" ref={optionsContainerRef}>
+        <div className="custom-select-options" ref={listRef}>
           {filtered.length === 0 ? (
             <div className="custom-select-no-results">No results</div>
           ) : (
             filtered.map((opt, idx) => (
               <div
                 key={opt.id}
-                data-opt-idx={idx}
-                className={`custom-select-option${String(value?.id) === String(opt.id) ? " selected" : ""}${
-                  highlightIdx === idx && highlightIdx >= 0 ? " keyboard-focus" : ""
-                }`}
+                data-kb-idx={idx}
+                className={`custom-select-option${String(value?.id) === String(opt.id) ? " selected" : ""}${highlightClass(idx)}`}
                 onMouseEnter={() => setHighlightIdx(idx)}
-                onClick={() => {
-                  onChange(opt);
-                  setOpen(false);
-                }}
+                onClick={() => pick(opt)}
               >
                 {opt.display_text}
               </div>

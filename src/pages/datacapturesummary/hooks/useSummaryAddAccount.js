@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { accountModalOverlayZIndex } from "../../../components/ProcessModalPortal.jsx";
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import {
-  createCurrency as createTenantCurrency,
-  deleteCurrency as deleteTenantCurrency,
-  fetchAvailableCurrencies,
-  resolveCurrencyTenantIdFromScope,
-} from "../../../utils/api/currencyApi.js";
 import { fetchOwnerCompaniesAll } from "../../../utils/company/sharedCompanyFilter.js";
 import {
   applyTenantLedgerToParams,
@@ -187,33 +181,27 @@ export function useSummaryAddAccount({
 
   const loadSelectionMeta = useCallback(async (accountId) => {
     const ctx = ledgerCtxRef.current;
-    const anchorCompanyId =
-      ctx.groupOnlyAccountMode && ctx.selectedGroup
-        ? companyButtons.find(
-            (c) =>
-              String(c.company_id || c.group_id || "")
-                .trim()
-                .toUpperCase() === String(ctx.selectedGroup).trim().toUpperCase(),
-          )?.id ?? null
-        : null;
+    const currencyParams = new URLSearchParams({ action: "get_available_currencies" });
+    if (accountId) currencyParams.set("account_id", String(accountId));
+    applyTenantLedgerToParams(currencyParams, ctx.pageLedgerScope);
 
     const companyUrl = accountId
       ? `api/accounts/account_company_api.php?action=get_available_companies&account_id=${accountId}`
       : "api/accounts/account_company_api.php?action=get_available_companies";
 
-    const [curRows, compRes] = await Promise.all([
-      fetchAvailableCurrencies({
-        ledgerScope: ctx.pageLedgerScope,
-        companyId: ctx.companyId,
-        anchorCompanyId,
-        accountId,
+    const [curRes, compRes] = await Promise.all([
+      fetch(buildApiUrl(`api/accounts/account_currency_api.php?${currencyParams.toString()}`), {
+        credentials: "include",
       }),
       fetch(buildApiUrl(companyUrl), { credentials: "include" }),
     ]);
+    const curJ = await curRes.json();
     const compJ = await compRes.json();
 
-    setCurrencies(curRows.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked })));
-    setSelectedCurrencyIds(pickDefaultAddCurrencyIds(curRows));
+    if (curJ.success && Array.isArray(curJ.data)) {
+      setCurrencies(curJ.data.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked })));
+      setSelectedCurrencyIds(pickDefaultAddCurrencyIds(curJ.data));
+    }
     if (compJ.success && Array.isArray(compJ.data)) {
       const linked = compJ.data.filter((c) => c.is_linked).map((c) => Number(c.id));
       if (ctx.groupOnlyAccountMode) {
@@ -229,7 +217,7 @@ export function useSummaryAddAccount({
         setSelectedCompanyIds(linked.length ? linked : cid ? [Number(cid)] : []);
       }
     }
-  }, [companyButtons, groupPickerCompanies]);
+  }, [groupPickerCompanies]);
 
   const resetToAdd = useCallback(() => {
     const ctx = ledgerCtxRef.current;
@@ -281,53 +269,53 @@ export function useSummaryAddAccount({
       const code = toUpper(currencyInput).trim();
       if (!code) return;
       const ctx = ledgerCtxRef.current;
-      const anchorCompanyId =
-        ctx.groupOnlyAccountMode && ctx.selectedGroup
-          ? companyButtons.find(
-              (c) =>
-                String(c.company_id || c.group_id || "")
-                  .trim()
-                  .toUpperCase() === String(ctx.selectedGroup).trim().toUpperCase(),
-            )?.id ?? null
-          : null;
-      const tenantId = resolveCurrencyTenantIdFromScope({
-        ledgerScope: ctx.pageLedgerScope,
-        companyId: ctx.companyId,
-        anchorCompanyId,
-        selectedCompanyIds,
-      });
-      if (!tenantId) {
-        emitNotify(t("pleaseSelectCompanyFirst"), "danger");
-        return;
+      const payload = { code };
+      if (ctx.pageLedgerScope?.groupId) payload.group_id = ctx.pageLedgerScope.groupId;
+      if (ctx.pageLedgerScope?.ledger === LEDGER_GROUP) {
+        payload.group_only = true;
+      } else if (ctx.pageLedgerScope?.companyId) {
+        payload.company_id = ctx.pageLedgerScope.companyId;
+      } else {
+        const targetCompany = selectedCompanyIds[0] || ctx.companyId;
+        if (!targetCompany) {
+          emitNotify(t("pleaseSelectCompanyFirst"), "danger");
+          return;
+        }
+        payload.company_id = targetCompany;
       }
       try {
-        const created = await createTenantCurrency({
-          code,
-          ledgerScope: ctx.pageLedgerScope,
-          companyId: ctx.companyId,
-          anchorCompanyId,
-          selectedCompanyIds,
+        const res = await fetch(buildApiUrl("api/accounts/create_currency_api.php"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          credentials: "include",
         });
-        setCurrencies((prev) => [...prev, { id: created.id, code: created.code, is_linked: false }]);
+        const json = await res.json();
+        if (!json.success || !json.data) {
+          emitNotify(apiMsg(json, "createFailed"), "danger");
+          return;
+        }
+        setCurrencies((prev) => [...prev, { id: json.data.id, code: json.data.code, is_linked: false }]);
         setCurrencyInput("");
-      } catch (err) {
-        emitNotify(apiMsg(err?.response, "createFailed"), "danger");
+      } catch {
+        emitNotify(t("createFailed"), "danger");
       }
     },
-    [apiMsg, companyButtons, currencyInput, emitNotify, selectedCompanyIds, t],
+    [apiMsg, currencyInput, emitNotify, selectedCompanyIds, t],
   );
 
   const removeCurrency = useCallback(
     async (cid) => {
-      const ctx = ledgerCtxRef.current;
       try {
-        const result = await deleteTenantCurrency({
-          id: cid,
-          ledgerScope: ctx.pageLedgerScope,
-          companyId: ctx.companyId,
+        const res = await fetch(buildApiUrl("api/accounts/delete_currency_api.php"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: cid }),
+          credentials: "include",
         });
-        if (!result.success) {
-          emitNotify(apiMsg({ message: result.message }, "failedDeleteCurrency"), "danger");
+        const json = await res.json();
+        if (!json.success) {
+          emitNotify(apiMsg(json, "failedDeleteCurrency"), "danger");
           return;
         }
         setCurrencies((prev) => prev.filter((c) => Number(c.id) !== Number(cid)));

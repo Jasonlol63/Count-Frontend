@@ -92,10 +92,27 @@ export function getFirstSelectedGridCell() {
   return callDataCaptureRuntime("getSelectedCells")?.[0] ?? null;
 }
 
-export function recordPasteHistory(changes) {
-  if (changes?.length > 0) {
-    callDataCaptureRuntime("pushPasteHistory", changes);
+export function recordPasteHistory(entry) {
+  if (!entry) return;
+  if (entry?.type === "grid" && entry.snapshot) {
+    callDataCaptureRuntime("pushPasteHistory", entry);
+    return;
   }
+  if (Array.isArray(entry) && entry.length > 0) {
+    callDataCaptureRuntime("pushPasteHistory", entry);
+  }
+}
+
+export function commitPasteGridCheckpoint() {
+  callDataCaptureRuntime("commitPasteGridCheckpoint");
+}
+
+export function finalizePasteWithOptionalConvert(successCount, options) {
+  callDataCaptureRuntime("finalizePasteWithOptionalConvert", successCount, options);
+}
+
+export function resetPasteUndoCheckpoints(grid) {
+  callDataCaptureRuntime("resetPasteUndoCheckpoints", grid);
 }
 
 export function recomputeSubmitStateAfterPaste() {

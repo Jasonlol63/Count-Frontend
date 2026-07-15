@@ -11,7 +11,7 @@ function applyTextTransformations(text, removeWord, replaceWordFrom, replaceWord
 
   if (removeWord && removeWord.trim() !== "") {
     const wordsToRemove = removeWord
-      .split(";")
+      .split(/[,;]+/)
       .map((word) => word.trim())
       .filter((word) => word !== "");
     wordsToRemove.forEach((word) => {

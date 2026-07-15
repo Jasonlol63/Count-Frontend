@@ -13,17 +13,17 @@ export {
   resolveCustomerReportScope as resolveFormulaMaintenanceScope,
 };
 
-/** Group entity or C168 company payroll: SALARY / BONUS / COMMISSION process list. */
+/** Group entity or company payroll channel (C168 / bank-only): SALARY / BONUS / COMMISSION / PROFIT. */
 export function formulaMaintenanceUsesGroupProcesses(scope) {
   if (!scope) return false;
-  if (scope.c168Channel) return true;
+  if (scope.c168Channel || scope.companyPayrollChannel) return true;
   return scope.mode === "group";
 }
 
 /** Query params for formula maintenance list / update / delete APIs. */
 export function formulaMaintenanceScopeApiParams(scope) {
   if (!scope) return {};
-  if (scope.c168Channel) {
+  if (scope.c168Channel || scope.companyPayrollChannel) {
     const companyId = scope.scopeCompanyId ?? scope.uiCompanyId ?? undefined;
     return {
       companyId,

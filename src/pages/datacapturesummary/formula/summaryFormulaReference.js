@@ -3,6 +3,7 @@
  * Regenerate: node frontend/scripts/extract-summary-formula-reference.mjs
  */
 import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
+import { parseTrailingSourceParenValue } from "../../../shared/formula/removeTrailingSourcePercent.js";
 import { evaluateExpression } from "./summaryFormulaEvaluate.js";
 import { parseIdProductColumnRef, removeThousandsSeparators } from "./summaryFormulaParseUtils.js";
 import { normalizeSummaryIdProductText } from "../lib/summaryIdProductUtils.js";
@@ -552,11 +553,124 @@ function getColumnValueFromCellReference(cellReference, processValue, rowIndexOv
 // Example: "[iphsp3 : 4] + [iphsp3 : 2]" -> "17 + 42"
 // Also supports cell references: "A4 + A3" -> "17 + 42"
 
+function normalizeNumericTokenForCompare(value) {
+    const s = String(value ?? '').trim().replace(/,/g, '');
+    if (s === '') return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Remove redundant literal multiplier after $N when it duplicates column N's value.
+ * e.g. ...*$9*0.6720623 when col 9 is 0.6720623 → ...*$9
+ */
+export function stripRedundantLiteralAfterDollarRefs(
+    formula,
+    processValueOverride = null,
+    clickedCellRefsOverride = undefined,
+    rowIndexOverride = null
+) {
+    const s = String(formula || '').trim();
+    const m = s.match(/^(.*)\$(\d+)\*([0-9.]+)\s*$/);
+    if (!m) return s;
+
+    const processValue = processValueOverride != null && String(processValueOverride).trim() !== ''
+        ? String(processValueOverride).trim()
+        : null;
+    if (!processValue) return s;
+
+    const prefix = m[1];
+    const columnNumber = parseInt(m[2], 10);
+    const literal = m[3];
+    const litNum = normalizeNumericTokenForCompare(literal);
+    if (litNum == null || Number.isNaN(columnNumber) || columnNumber <= 0) return s;
+
+    const dataColumnIndex = columnNumber - 1;
+    let columnValue = null;
+
+    let clickedCellRefs = '';
+    if (clickedCellRefsOverride === undefined) {
+        const formulaInput = document.getElementById('formula');
+        clickedCellRefs = (formulaInput ? (formulaInput.getAttribute('data-clicked-cell-refs') || '') : '').trim();
+    } else {
+        clickedCellRefs = String(clickedCellRefsOverride || '').trim();
+    }
+
+    if (clickedCellRefs) {
+        const refs = clickedCellRefs.split(/\s+/).filter((r) => r.trim() !== '');
+        for (const ref of refs) {
+            const parsed = parseIdProductColumnRef(ref);
+            if (!parsed || parsed.dataColumnIndex !== dataColumnIndex) continue;
+            columnValue = getCellValueByIdProductAndColumn(
+                parsed.idProduct,
+                parsed.dataColumnIndex,
+                parsed.rowLabel,
+                parsed.captureRowIndex
+            );
+            if (columnValue !== null) break;
+        }
+    }
+
+    if (columnValue === null) {
+        columnValue = getCellValueByIdProductAndColumn(
+            processValue,
+            dataColumnIndex,
+            null,
+            rowIndexOverride
+        );
+    }
+
+    const cellNum = normalizeNumericTokenForCompare(columnValue);
+    if (cellNum != null && Math.abs(cellNum - litNum) < 1e-6) {
+        return `${prefix}$${columnNumber}`;
+    }
+    return s;
+}
+
+/** Trim formula before $/[id:n] expand/evaluate — preserve user-entered multipliers as-is (PHP parity). */
+export function normalizeFormulaBeforeReferenceExpand(
+    formula,
+    _processValueOverride = null,
+    _clickedCellRefsOverride = undefined,
+    _rowIndexOverride = null
+) {
+    return String(formula || '').trim();
+}
+
+/** After $/[id:n] expansion — no dedup; stacked identical multipliers are intentional. */
+export function normalizeFormulaAfterReferenceExpand(expr) {
+    return String(expr || '').trim();
+}
+
+/**
+ * Resolve a `$N` reference against the current editing row by column number,
+ * independent of whether the captured row exposes an alphabetic row label.
+ * Primary path reads the data column directly; row-label lookup is a fallback.
+ */
+function resolveCurrentRowDollarValue(processValue, columnNumber, rowIndexOverride = null) {
+    if (!processValue || !(columnNumber > 0)) return null;
+    const dataColumnIndex = columnNumber - 1;
+    const direct = getCellValueByIdProductAndColumn(processValue, dataColumnIndex, null, rowIndexOverride);
+    if (direct !== null) return direct;
+    const rowLabel = getRowLabelFromProcessValue(processValue, rowIndexOverride);
+    if (rowLabel) {
+        return getColumnValueFromCellReference(rowLabel + columnNumber, processValue, rowIndexOverride);
+    }
+    return null;
+}
+
 export function parseReferenceFormula(formula, processValueOverride = null, clickedCellRefsOverride = undefined, rowIndexOverride = null) {
     try {
         if (!formula || formula.trim() === '') {
             return '';
         }
+
+        formula = normalizeFormulaBeforeReferenceExpand(
+            formula,
+            processValueOverride,
+            clickedCellRefsOverride,
+            rowIndexOverride
+        );
 
         // Get process value from form
         const processInput = document.getElementById('process');
@@ -605,7 +719,7 @@ export function parseReferenceFormula(formula, processValueOverride = null, clic
                 if (!isNaN(numericValue) && numericValue < 0) {
                     // 检查前一个字符，确定是否需要括号
                     const charBefore = bracketMatch.index > 0 ? parsedFormula[bracketMatch.index - 1] : '';
-                    const needsParentheses = bracketMatch.index === 0 || /[+\-*/\(\s]/.test(charBefore);
+                    const needsParentheses = bracketMatch.index === 0 || /[+\-*/)(\s]/.test(charBefore);
 
                     if (needsParentheses) {
                         // 保留负号，然后用括号包裹：-264.34 -> (-264.34)
@@ -698,13 +812,9 @@ export function parseReferenceFormula(formula, processValueOverride = null, clic
                         }
                     }
 
-                    // 如果从引用中找不到值，回退到使用当前编辑的 id_product
+                    // 如果从引用中找不到值，回退到按当前编辑行的列号直接取值（不依赖行标签）
                     if (columnValue === null) {
-                        const rowLabel = getRowLabelFromProcessValue(processValue, rowIndexOverride);
-                        if (rowLabel) {
-                            const columnReference = rowLabel + dollarMatch.columnNumber;
-                            columnValue = getColumnValueFromCellReference(columnReference, processValue, rowIndexOverride);
-                        }
+                        columnValue = resolveCurrentRowDollarValue(processValue, dollarMatch.columnNumber, rowIndexOverride);
                     }
 
                     if (columnValue !== null) {
@@ -716,7 +826,7 @@ export function parseReferenceFormula(formula, processValueOverride = null, clic
                         if (!isNaN(numericValue) && numericValue < 0) {
                             // Check if the character before $数字 is an operator or at the start
                             const charBefore = dollarMatch.index > 0 ? parsedFormula[dollarMatch.index - 1] : '';
-                            const needsParentheses = dollarMatch.index === 0 || /[+\-*/\(\s]/.test(charBefore);
+                            const needsParentheses = dollarMatch.index === 0 || /[+\-*/)(\s]/.test(charBefore);
                             if (needsParentheses) {
                                 replacementValue = `(${columnValue})`;
                             }
@@ -733,39 +843,35 @@ export function parseReferenceFormula(formula, processValueOverride = null, clic
                     }
                 }
             } else {
-                // 如果没有 data-clicked-cell-refs，使用原来的逻辑
-                const rowLabel = getRowLabelFromProcessValue(processValue, rowIndexOverride);
-                if (rowLabel) {
-                    for (let i = 0; i < dollarMatches.length; i++) {
-                        const dollarMatch = dollarMatches[i];
-                        // Convert $数字 to cell reference (e.g., $2 -> A2)
-                        const columnReference = rowLabel + dollarMatch.columnNumber;
-                        const columnValue = getColumnValueFromCellReference(columnReference, processValue, rowIndexOverride);
+                // 无 data-clicked-cell-refs（例如用户手动输入 $6）：按当前编辑行的列号直接取值，
+                // 不再依赖行标签存在，否则捕获行没有 A/B/C 行标签时 $数字 无法解析。
+                for (let i = 0; i < dollarMatches.length; i++) {
+                    const dollarMatch = dollarMatches[i];
+                    const columnValue = resolveCurrentRowDollarValue(processValue, dollarMatch.columnNumber, rowIndexOverride);
 
-                        if (columnValue !== null) {
-                            // Replace $数字 with actual value
-                            // IMPORTANT: If value is negative, wrap it in parentheses to avoid syntax errors like -5861.14--1416.03
-                            // 重要：如果值是负数，用括号包裹，避免出现 -5861.14--1416.03 这样的语法错误
-                            let replacementValue = String(columnValue);
-                            const numericValue = parseFloat(columnValue);
-                            if (!isNaN(numericValue) && numericValue < 0) {
-                                // Check if the character before $数字 is an operator or at the start
-                                const charBefore = dollarMatch.index > 0 ? parsedFormula[dollarMatch.index - 1] : '';
-                                const needsParentheses = dollarMatch.index === 0 || /[+\-*/\(\s]/.test(charBefore);
-                                if (needsParentheses) {
-                                    replacementValue = `(${columnValue})`;
-                                }
+                    if (columnValue !== null) {
+                        // Replace $数字 with actual value
+                        // IMPORTANT: If value is negative, wrap it in parentheses to avoid syntax errors like -5861.14--1416.03
+                        // 重要：如果值是负数，用括号包裹，避免出现 -5861.14--1416.03 这样的语法错误
+                        let replacementValue = String(columnValue);
+                        const numericValue = parseFloat(columnValue);
+                        if (!isNaN(numericValue) && numericValue < 0) {
+                            // Check if the character before $数字 is an operator or at the start
+                            const charBefore = dollarMatch.index > 0 ? parsedFormula[dollarMatch.index - 1] : '';
+                            const needsParentheses = dollarMatch.index === 0 || /[+\-*/)(\s]/.test(charBefore);
+                            if (needsParentheses) {
+                                replacementValue = `(${columnValue})`;
                             }
-                            parsedFormula = parsedFormula.substring(0, dollarMatch.index) +
-                                replacementValue +
-                                parsedFormula.substring(dollarMatch.index + dollarMatch.fullMatch.length);
-                        } else {
-                            // If value not found, replace with 0
-                            console.warn(`Cell value not found for $${dollarMatch.columnNumber} (${columnReference})`);
-                            parsedFormula = parsedFormula.substring(0, dollarMatch.index) +
-                                '0' +
-                                parsedFormula.substring(dollarMatch.index + dollarMatch.fullMatch.length);
                         }
+                        parsedFormula = parsedFormula.substring(0, dollarMatch.index) +
+                            replacementValue +
+                            parsedFormula.substring(dollarMatch.index + dollarMatch.fullMatch.length);
+                    } else {
+                        // If value not found, replace with 0
+                        console.warn(`Cell value not found for $${dollarMatch.columnNumber}`);
+                        parsedFormula = parsedFormula.substring(0, dollarMatch.index) +
+                            '0' +
+                            parsedFormula.substring(dollarMatch.index + dollarMatch.fullMatch.length);
                     }
                 }
             }
@@ -812,7 +918,7 @@ export function parseReferenceFormula(formula, processValueOverride = null, clic
                 if (!isNaN(numericValue) && numericValue < 0) {
                     // 检查前一个字符，确定是否需要括号
                     const charBefore = ref.index > 0 ? parsedFormula[ref.index - 1] : '';
-                    const needsParentheses = ref.index === 0 || /[+\-*/\(\s]/.test(charBefore);
+                    const needsParentheses = ref.index === 0 || /[+\-*/)(\s]/.test(charBefore);
 
                     if (needsParentheses) {
                         // 保留负号，然后用括号包裹：-264.34 -> (-264.34)
@@ -860,7 +966,7 @@ export function parseReferenceFormula(formula, processValueOverride = null, clic
                     // 检查前一个字符，确定是否需要括号
                     const matchIndex = parsedFormula.indexOf(fullMatch);
                     const charBefore = matchIndex > 0 ? parsedFormula[matchIndex - 1] : '';
-                    const needsParentheses = matchIndex === 0 || /[+\-*/\(\s]/.test(charBefore);
+                    const needsParentheses = matchIndex === 0 || /[+\-*/)(\s]/.test(charBefore);
 
                     if (needsParentheses) {
                         // 保留负号，然后用括号包裹：-264.34 -> (-264.34)
@@ -876,7 +982,7 @@ export function parseReferenceFormula(formula, processValueOverride = null, clic
             }
         }
 
-        return parsedFormula;
+        return normalizeFormulaAfterReferenceExpand(parsedFormula);
     } catch (error) {
         console.error('Error parsing reference formula:', error);
         return formula; // Return original if parsing fails
@@ -942,183 +1048,64 @@ export function evaluateFormulaExpression(formula, processValueOverride = null, 
     }
 }
 
-function hasBinaryAdditiveAtDepthZero(prefix) {
-    if (!prefix || typeof prefix !== 'string') return false
-    const str = prefix.replace(/\s+/g, '')
-    let depth = 0
-    for (let i = 0; i < str.length; i++) {
-        const c = str[i]
-        if (c === '(') {
-            depth++
-            continue
-        }
-        if (c === ')') {
-            depth--
-            continue
-        }
-        if (depth !== 0) continue
-        if (c === '+') {
-            if (i === 0) continue
-            const prev = str[i - 1]
-            if ('(*/^+-'.includes(prev)) continue
-            if (/[0-9.)]/.test(prev)) return true
-            continue
-        }
-        if (c === '-') {
-            if (i === 0) continue
-            const prev = str[i - 1]
-            if (prev === '(' || '*/^+-'.includes(prev)) continue
-            if (/[0-9.)]/.test(prev)) return true
-        }
-    }
-    return false
-}
-
-// 仅当尾段乘子与当前 Source 数值相同时才剥掉，避免「公式里已乘 Source、外面再乘 Source」叠两层。
-// 不再按 (0,1] 盲剥，否则会误删用户刻意写的 *0.2（Source=1 时）。
-// 与 Source 同值时仍用 hasBinaryAdditiveAtDepthZero，避免误剥加法表达式末尾项上的占成。
-function stripTrailingEmbeddedCommissionFactors(expr, sourceDecimal, options) {
-    if (!expr || typeof expr !== 'string') return ''
-    const stripDuplicateOfSource = options && options.stripDuplicateOfSource === true
-    let src
-    try {
-        src = MoneyDecimal.toDecimal(sourceDecimal)
-    } catch (_) {
-        return expr.trim()
-    }
-    if (!stripDuplicateOfSource || sourceDecimal == null) {
-        return expr.trim()
-    }
-    let s = expr.trim().replace(/\s+/g, '')
-    const maxIter = 24
-    for (let i = 0; i < maxIter && s.length > 0; i++) {
-        const mParen = s.match(/^(.*)\*\(([0-9.]+)\)$/)
-        if (mParen) {
-            const v = MoneyDecimal.toDecimal(mParen[2], 0)
-            if (v.minus(src).abs().lt('0.0001')) {
-                const nextPrefix = mParen[1].trim()
-                if (hasBinaryAdditiveAtDepthZero(nextPrefix)) {
-                    break
-                }
-                s = nextPrefix
-                continue
-            }
-        }
-        const mStar = s.match(/^(.*)\*([0-9.]+)$/)
-        if (mStar) {
-            const v = MoneyDecimal.toDecimal(mStar[2], 0)
-            if (v.minus(src).abs().lt('0.0001')) {
-                const nextPrefix = mStar[1].trim()
-                if (hasBinaryAdditiveAtDepthZero(nextPrefix)) {
-                    break
-                }
-                s = nextPrefix
-                continue
-            }
-        }
-        break
-    }
-    return s
-}
-
 export function calculateFormulaResultFromExpression(formula, sourcePercentValue, inputMethod = '', enableInputMethod = false, enableSourcePercent = true, processValueForRefs = null, clickedCellRefsOverride = undefined, rowIndexOverride = null) {
     try {
         if (!formula) {
             return 0;
         }
 
-        // 先解析 $/[id:n]；仅当尾段与 Source 同值时才剥，避免与 Source 叠乘，且不剥用户手写的 *0.2（Source≈1 时）
-        const afterRefs = parseReferenceFormula(String(formula).trim(), processValueForRefs, clickedCellRefsOverride, rowIndexOverride)
+        // Expand $/[id:n] refs, then evaluate the full formula body.
+        const afterRefs = parseReferenceFormula(
+            String(formula).trim(),
+            processValueForRefs,
+            clickedCellRefsOverride,
+            rowIndexOverride
+        );
 
-        let shouldStripDuplicateOfSource = false
-        let sourceDecimalForStrip = 1
-        if (enableSourcePercent && sourcePercentValue && sourcePercentValue.trim() !== '') {
-            try {
-                const sanitizedForStrip = removeThousandsSeparators(sourcePercentValue.trim())
-                const sp = MoneyDecimal.toDecimal(evaluateExpression(sanitizedForStrip), 0)
-                if (sp.minus(1).abs().gte('0.0001')) {
-                    shouldStripDuplicateOfSource = true
-                    sourceDecimalForStrip = sp.toString()
-                }
-            } catch (e) { /* ignore */ }
-        }
+        // Evaluate the full formula as entered; do not strip trailing factors that match Source.
+        // Stacking identical multipliers (e.g. *0.10*0.10) is intentional; Source column multiply
+        // is skipped separately via alreadyHasSource when the formula tail already matches Source.
+        const formulaBody = afterRefs.trim();
+        let expressionForEvaluation = formulaBody;
+        if (enableSourcePercent) {
+            const sourcePercentExpr = String(sourcePercentValue || "").trim();
+            if (sourcePercentExpr !== "") {
+                const sanitizedSourcePercent = removeThousandsSeparators(sourcePercentExpr);
+                const decimalValue = MoneyDecimal.toDecimal(
+                    evaluateExpression(sanitizedSourcePercent),
+                    0
+                );
 
-        // IMPORTANT: 只在启用 Source % 时才剥末尾乘子，避免 1000*0.18*(0.14) 再乘 Source 叠三层
-        // 当 Source % 未启用时，公式末尾的 *(0.12) 等是用户手写的公式结构（先乘除后加减），
-        // 不能剥掉，否则会破坏运算符优先级（例如 a+b*c*(0.12) 被错误计算为 (a+b*c)*0.12）
-        let strippedBody, formulaResult;
-        if (!enableSourcePercent) {
-            // Source % 未启用：直接对完整公式求值，保留所有乘子，确保运算优先级正确
-            strippedBody = afterRefs.trim();
-            formulaResult = evaluateFormulaExpression(strippedBody, processValueForRefs, clickedCellRefsOverride, rowIndexOverride);
-            // Apply input method transformation if enabled
-            let result = formulaResult;
-            if (enableInputMethod && inputMethod) {
-                result = applyInputMethodTransformation(result, inputMethod);
-            }
-            console.log('Formula result calculated from expression (source percent disabled, no strip):', result);
-            return result;
-        }
-        // Source % 启用时才剥与 Source 同值的末尾乘子，防止与 Source % 重复叠乘
-        strippedBody = stripTrailingEmbeddedCommissionFactors(afterRefs.trim(), sourceDecimalForStrip, { stripDuplicateOfSource: shouldStripDuplicateOfSource })
-        formulaResult = evaluateFormulaExpression(strippedBody, processValueForRefs, clickedCellRefsOverride, rowIndexOverride);
-
-        // If enableSourcePercent is true but sourcePercentValue is empty, treat as 1 (100%)
-        // IMPORTANT: Empty sourcePercentValue should be treated as 1 (100%), not 0, to avoid incorrect 0 results
-        if (!sourcePercentValue || sourcePercentValue.trim() === '') {
-            // Treat empty source percent as 1 (100%), so result = formulaResult * 1 = formulaResult
-            let result = formulaResult;
-            // Apply input method transformation if enabled
-            if (enableInputMethod && inputMethod) {
-                result = applyInputMethodTransformation(result, inputMethod);
-            }
-            console.log('Formula result calculated from expression (source percent is empty, treated as 1):', result);
-            return result;
-        }
-
-        // Source percent is now in decimal format (e.g., 1 = 100%, 0.5 = 50%)
-        // Evaluate the source percent expression directly (no need to divide by 100)
-        const sourcePercentExpr = sourcePercentValue.trim();
-        const sanitizedSourcePercent = removeThousandsSeparators(sourcePercentExpr);
-        const decimalValue = MoneyDecimal.toDecimal(evaluateExpression(sanitizedSourcePercent), 0);
-
-        // If source is 1, don't multiply (multiplying by 1 has no effect)
-        // If formula已经含与 Source 相同的尾段，不再乘（用剥完后的式子判断，与 evaluate 输入一致）
-        const formulaTrimmed = (strippedBody || '').trim().replace(/\s+/g, '');
-        const srcNorm = sourcePercentExpr.replace(/\s+/g, '');
-        let alreadyHasSource = formulaTrimmed.endsWith('*(' + srcNorm + ')') || formulaTrimmed.endsWith('*' + srcNorm);
-        if (!alreadyHasSource && formulaTrimmed.endsWith(')')) {
-            const lastClose = formulaTrimmed.length - 1;
-            let depth = 1;
-            let i = lastClose - 1;
-            while (i >= 0 && depth > 0) {
-                if (formulaTrimmed[i] === ')') depth++;
-                else if (formulaTrimmed[i] === '(') { depth--; if (depth === 0) break; }
-                i--;
-            }
-            if (depth === 0 && i >= 0) {
-                const beforeParen = formulaTrimmed.substring(0, i).trimEnd();
-                const trailingExpr = formulaTrimmed.substring(i + 1, lastClose);
-                if (beforeParen.endsWith('*') && trailingExpr && /^[0-9+\-*/().\s]+$/.test(trailingExpr.replace(/\s/g, ''))) {
-                    try {
-                        const trailingVal = MoneyDecimal.toDecimal(evaluateExpression(trailingExpr), 0);
-                        if (trailingVal.minus(decimalValue).abs().lt('0.0001')) {
-                            alreadyHasSource = true;
+                if (!decimalValue.minus(1).abs().lt("0.0001")) {
+                    // Keep source inside one arithmetic expression so precedence is consistent
+                    // (multiply/divide before add/subtract), instead of multiplying at the end.
+                    let alreadyHasSource = false;
+                    const trailingSourceExpr = parseTrailingSourceParenValue(formulaBody);
+                    if (trailingSourceExpr != null) {
+                        try {
+                            const trailDec = MoneyDecimal.toDecimal(
+                                evaluateExpression(removeThousandsSeparators(trailingSourceExpr)),
+                                0
+                            );
+                            alreadyHasSource = decimalValue.minus(trailDec).abs().lt("0.0001");
+                        } catch {
+                            alreadyHasSource = false;
                         }
-                    } catch (e) { /* ignore */ }
+                    }
+
+                    if (!alreadyHasSource) {
+                        expressionForEvaluation = `${formulaBody}*(${sanitizedSourcePercent})`;
+                    }
                 }
             }
         }
 
-        let result;
-        if (decimalValue.minus(1).abs().lt('0.0001')) {
-            result = formulaResult; // Don't multiply by 1
-        } else if (alreadyHasSource) {
-            result = formulaResult; // Formula already contains *(source), don't multiply again
-        } else {
-            // Calculate: formula result * source percent (already in decimal format)
-            result = MoneyDecimal.mul(formulaResult, decimalValue).toString();
-        }
+        let result = evaluateFormulaExpression(
+            expressionForEvaluation,
+            processValueForRefs,
+            clickedCellRefsOverride,
+            rowIndexOverride
+        );
 
         // Apply input method transformation if enabled
         if (enableInputMethod && inputMethod) {

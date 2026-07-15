@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import ReportDatePicker from "../common/ReportDatePicker.jsx";
 import ReportGcFilterPanel from "../shared/ReportGcFilterPanel.jsx";
+import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
 
 const QUICK_RANGE_KEYS = ["today", "yesterday", "thisWeek", "lastWeek", "thisMonth", "lastMonth", "thisYear", "lastYear"];
 
@@ -53,6 +54,12 @@ export default function DomainReportFilters({
     });
   }, [processes, processSearch, t, isGroupScope]);
 
+  const { highlightIdx, setHighlightIdx, listRef, handleListKeyDown, handleButtonKeyDown, highlightClass } = useListboxKeyboard({
+    open: processDropdownOpen,
+    itemCount: filteredProcesses.length,
+    resetToken: processSearch,
+  });
+
   const selectedProcessLabel = useMemo(() => {
     if (!processId) return isGroupScope ? t("selectProcess") : t("allProcess");
     const found = processes.find((p) => String(p.id) === String(processId));
@@ -81,6 +88,21 @@ export default function DomainReportFilters({
                   aria-labelledby="report-process-outlined-label"
                   className={`custom-select-button ${processDropdownOpen ? "open" : ""}`}
                   onClick={() => setProcessDropdownOpen(!processDropdownOpen)}
+                  onKeyDown={(e) => {
+                    handleButtonKeyDown(e, {
+                      isOpen: processDropdownOpen,
+                      onToggleOpen: () => setProcessDropdownOpen(true),
+                      onClose: () => setProcessDropdownOpen(false),
+                      len: filteredProcesses.length,
+                      onSelectIndex: (idx) => {
+                        const p = filteredProcesses[idx];
+                        if (p) {
+                          setProcessId(p.id);
+                          setProcessDropdownOpen(false);
+                        }
+                      },
+                    });
+                  }}
                 >
                   {selectedProcessLabel}
                 </button>
@@ -93,16 +115,31 @@ export default function DomainReportFilters({
                           placeholder={t("searchProcess")}
                           autoComplete="off"
                           value={processSearch}
-                          onChange={(e) => setProcessSearch(e.target.value)}
+                          onChange={(e) => setProcessSearch(e.target.value.toUpperCase())}
                           autoFocus
+                          onKeyDown={(e) => {
+                            handleListKeyDown(e, {
+                              len: filteredProcesses.length,
+                              onSelectIndex: (idx) => {
+                                const p = filteredProcesses[idx];
+                                if (p) {
+                                  setProcessId(p.id);
+                                  setProcessDropdownOpen(false);
+                                }
+                              },
+                              onClose: () => setProcessDropdownOpen(false),
+                            });
+                          }}
                         />
                       </div>
                     )}
-                    <div className="custom-select-options">
-                      {filteredProcesses.map(p => (
+                    <div className="custom-select-options" ref={listRef}>
+                      {filteredProcesses.map((p, idx) => (
                         <div
                           key={p.id || "all"}
-                          className={`custom-select-option ${String(p.id) === String(processId) ? "selected" : ""}`}
+                          className={`custom-select-option ${String(p.id) === String(processId) ? "selected" : ""}${highlightClass(idx)}`}
+                          data-kb-idx={idx}
+                          onMouseEnter={() => setHighlightIdx(idx)}
                           onClick={() => { setProcessId(p.id); setProcessDropdownOpen(false); }}
                         >
                           {p.display_text}

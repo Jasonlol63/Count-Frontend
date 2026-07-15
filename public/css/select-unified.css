@@ -1,0 +1,267 @@
+/**
+ * Unified select / custom dropdown — lightweight, no JS, minimal paint cost.
+ * Loaded via main.jsx + AuthenticatedLayout (after page bundles where possible).
+ * Intentional page overrides (report-outlined-inner, transaction-add-section) use !important and win when loaded later.
+ */
+
+:root {
+  --select-border: #dbe3ee;
+  --select-border-focus: #3b82f6;
+  --select-focus-ring: 0 0 0 2px rgba(59, 130, 246, 0.12);
+  --select-radius: 6px;
+  --select-bg: #ffffff;
+  --select-text: #374151;
+  --select-muted: #94a3b8;
+  --select-option-hover: #f1f5f9;
+  --select-option-selected: #e3f2fd;
+  --select-option-selected-text: #2563eb;
+  --select-option-keyboard-focus-bg: #0d60ff;
+  --select-option-keyboard-focus-text: #ffffff;
+  --select-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* ── Native <select> (closed trigger) ── */
+body.ec-auth-shell select:not([multiple]):not([size]) {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  box-sizing: border-box !important;
+  width: 100%;
+  min-height: 32px !important;
+  padding: 6px 30px 6px 12px !important;
+  border: 1px solid var(--select-border) !important;
+  border-radius: var(--select-radius) !important;
+  background-color: var(--select-bg) !important;
+  background-image: var(--select-chevron) !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+  background-size: 12px !important;
+  color: var(--select-text) !important;
+  font-family: var(--font-ui) !important;
+  line-height: 1.4 !important;
+  cursor: pointer !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+body.ec-auth-shell select:not([multiple]):not([size]):focus-visible {
+  outline: none !important;
+  border-color: var(--select-border-focus) !important;
+  box-shadow: var(--select-focus-ring) !important;
+}
+
+body.ec-auth-shell select:not([multiple]):not([size]):disabled {
+  background-color: #f1f5f9 !important;
+  color: var(--select-muted) !important;
+  cursor: not-allowed !important;
+  opacity: 0.85 !important;
+}
+
+body.ec-auth-shell select option {
+  padding: 6px 10px;
+  color: var(--select-text);
+  background: #fff;
+}
+
+/* ── Custom select trigger ── */
+body.ec-auth-shell .custom-select-wrapper {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+body.ec-auth-shell .custom-select-button {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-height: 32px !important;
+  padding: 6px 30px 6px 12px !important;
+  border: 1px solid var(--select-border) !important;
+  border-radius: var(--select-radius) !important;
+  background: var(--select-bg) !important;
+  color: var(--select-text) !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  font-family: var(--font-ui) !important;
+  line-height: 1.4 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  position: relative !important;
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+body.ec-auth-shell .custom-select-button:focus-visible,
+body.ec-auth-shell .custom-select-button.open {
+  border-color: var(--select-border-focus) !important;
+  box-shadow: var(--select-focus-ring) !important;
+}
+
+body.ec-auth-shell .custom-select-button::after {
+  content: '' !important;
+  position: absolute !important;
+  right: 10px !important;
+  top: 50% !important;
+  width: 12px !important;
+  height: 12px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  transform: translateY(-50%) !important;
+  background: var(--select-chevron) center / 12px no-repeat !important;
+  pointer-events: none !important;
+}
+
+body.ec-auth-shell .custom-select-button.open::after {
+  transform: translateY(-50%) rotate(180deg) !important;
+}
+
+body.ec-auth-shell .custom-select-button:disabled,
+body.ec-auth-shell .custom-select-button:disabled:hover {
+  background: #f1f5f9 !important;
+  color: var(--select-muted) !important;
+  cursor: not-allowed !important;
+  opacity: 0.85 !important;
+}
+
+/* ── Custom select panel ── */
+body.ec-auth-shell .custom-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: none;
+  max-height: 280px;
+  overflow: hidden;
+  margin-top: 1px !important;
+  background: var(--select-bg) !important;
+  border: 1px solid var(--select-border) !important;
+  border-radius: var(--select-radius) !important;
+  box-shadow: var(--select-shadow) !important;
+}
+
+body.ec-auth-shell .custom-select-dropdown.show {
+  display: block;
+}
+
+body.ec-auth-shell .custom-select-dropdown.custom-select-dropdown-above {
+  margin-top: 0 !important;
+  margin-bottom: 1px !important;
+}
+
+body.ec-auth-shell .custom-select-dropdown.custom-select-dropdown-portal {
+  display: flex !important;
+  flex-direction: column;
+  box-sizing: border-box;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+body.ec-auth-shell .custom-select-search {
+  padding: 8px !important;
+  border-bottom: 1px solid #eef2f7 !important;
+  position: sticky;
+  top: 0;
+  background: var(--select-bg) !important;
+  z-index: 1;
+}
+
+body.ec-auth-shell .custom-select-search input {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  min-height: 30px !important;
+  padding: 2px 6px !important;
+  border: 1px solid var(--select-border) !important;
+  border-radius: 4px !important;
+  font-size: 1.2rem !important;
+  font-family: var(--font-ui) !important;
+  color: var(--select-text) !important;
+  background: #fff !important;
+  text-transform: uppercase !important;
+}
+
+body.ec-auth-shell .custom-select-search input::placeholder {
+  text-transform: uppercase !important;
+}
+
+body.ec-auth-shell .custom-select-search input:focus-visible {
+  outline: none !important;
+  border-color: var(--select-border-focus) !important;
+  box-shadow: var(--select-focus-ring) !important;
+}
+
+body.ec-auth-shell .custom-select-options {
+  max-height: 240px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.ec-auth-shell .custom-select-option {
+  padding: 8px 12px !important;
+  cursor: pointer !important;
+  color: var(--select-text) !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  line-height: 1.35 !important;
+}
+
+body.ec-auth-shell .custom-select-option:hover:not(.keyboard-focus) {
+  background-color: var(--select-option-hover) !important;
+  color: var(--select-text) !important;
+}
+
+body.ec-auth-shell .custom-select-option.keyboard-focus {
+  background-color: var(--select-option-keyboard-focus-bg) !important;
+  color: var(--select-option-keyboard-focus-text) !important;
+  font-weight: 600 !important;
+}
+
+body.ec-auth-shell .custom-select-option.selected {
+  background-color: var(--select-option-selected) !important;
+  color: var(--select-option-selected-text) !important;
+  font-weight: 600 !important;
+}
+
+body.ec-auth-shell .custom-select-option:last-child {
+  border-bottom: none !important;
+}
+
+body.ec-auth-shell .custom-select-no-results {
+  padding: 12px !important;
+  text-align: center !important;
+  color: var(--select-muted) !important;
+  font-size: inherit !important;
+}
+
+body.ec-auth-shell .custom-select-button.simple-select-button--placeholder {
+  color: var(--select-muted) !important;
+}
+
+body.ec-auth-shell .custom-select-option--disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Outlined filter shell: border on shell, not trigger */
+body.ec-auth-shell .report-outlined-inner .custom-select-button {
+  margin: 0 !important;
+  border: none !important;
+  border-radius: inherit !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  min-height: clamp(32px, 2.25vw, 36px) !important;
+}
+
+body.ec-auth-shell .report-outlined-inner .custom-select-button:focus-visible,
+body.ec-auth-shell .report-outlined-inner .custom-select-button.open {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.ec-auth-shell select:not([multiple]):not([size]),
+  body.ec-auth-shell .custom-select-button {
+    transition: none !important;
+  }
+}

@@ -100,10 +100,10 @@ body.bg::before {
 
 
 
-/* Main Container — 与 .login-card 450px 对齐，避免子卡比容器宽 */
+/* Main Container — 与 .login-card 同宽，避免子卡比容器宽 */
 .login-container {
     width: 100%;
-    max-width: min(450px, 92vw);
+    max-width: min(var(--login-shell-width, 380px), 92vw);
     margin: 0 auto;
     position: relative;
     z-index: 2;
@@ -113,7 +113,7 @@ body.bg::before {
 .login-card {
     display: flex;
     justify-content: center;
-    width: 450px;
+    width: var(--login-shell-width, 380px);
     max-width: 100%;
     background: rgba(255, 255, 255, 0.95);
     border-radius: 0 0 20px 20px;
@@ -280,8 +280,8 @@ body.bg .login-container .input-group input {
     min-width: 0;
     width: 100%;
     max-width: 100%;
-    min-height: 46.5px;
-    padding: 12px 25px 12px 46px;
+    min-height: 42px;
+    padding: 10px 22px 10px 42px;
     border-width: 2px;
     border-style: solid;
     border-color: var(--login-bg-end);
@@ -316,46 +316,66 @@ body.bg .login-container .input-group input::placeholder {
     font-weight: 400;
 }
 
-/* TAC Container */
+/* TAC Container — input + SEND split pill (matches other fields) */
 .tac-container {
     display: flex;
-    align-items: center;
+    align-items: stretch;
+    width: 100%;
 }
 
 .tac-container .input-group {
     flex: 1;
+    min-width: 0;
 }
 
-.tac-container input {
-    border-radius: 50px 0 0 50px;
-    border-right: none;
-    padding: 12px 25px 12px 46px;
+body.bg .login-container .tac-container .input-group input {
+    border-radius: var(--login-radius-pill) 0 0 var(--login-radius-pill);
+    border-right-width: 0;
+    min-height: 46.5px;
+    box-shadow: none;
+}
+
+body.bg .login-container .tac-container .input-group input:focus {
+    border-right-width: 0;
+    animation: pulse 0.3s ease-out;
+}
+
+body.bg .login-container .tac-container:focus-within .tac-btn {
+    border-color: var(--login-bg-start);
 }
 
 .tac-btn {
+    flex-shrink: 0;
+    align-self: stretch;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: -2px;
+    min-height: 46.5px;
+    padding: 0 clamp(20px, 5vw, 30px);
     background: linear-gradient(135deg, #004ff9, #56ccf2);
     color: white;
-    border: 2px solid #004ff9;
-    padding: clamp(9px, 2.5vw, 13px) clamp(20px, 6vw, 30px);
-    border-radius: 0 50px 50px 0;
+    border: 2px solid var(--login-bg-end);
+    border-left: none;
+    border-radius: 0 var(--login-radius-pill) var(--login-radius-pill) 0;
     cursor: pointer;
     font-size: clamp(12px, 3vw, 14px);
     font-weight: 600;
-    transition: all 0.3s ease;
+    line-height: 1;
+    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
     white-space: nowrap;
     text-transform: uppercase;
 }
 
-.tac-btn:hover {
+.tac-btn:hover:not(:disabled) {
     background: linear-gradient(135deg, #56ccf2, #004ff9);
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0, 79, 249, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 79, 249, 0.25);
 }
 
 .tac-btn:disabled {
     background: #ccc;
+    border-color: #ccc;
     cursor: not-allowed;
-    transform: none;
     box-shadow: none;
 }
 

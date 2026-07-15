@@ -43,7 +43,7 @@ function DataCaptureGrid({ engineReady = false }) {
     );
   }
 
-  const gridStructureKey = `dc-grid-${grid.rows}-${grid.cols}-v${gridVersion}`;
+  const gridStructureKey = `dc-grid-${grid.rows}-${grid.cols}`;
 
   return (
     <table className="excel-table" id="dataTable" key={gridStructureKey}>

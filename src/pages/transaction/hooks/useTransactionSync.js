@@ -1,11 +1,32 @@
 import { useEffect } from "react";
-import { TX_LIST_INVALIDATE_LS_KEY, TX_DATA_CHANGED_EVENT, buildTxListSessionKey } from "../lib/transactionPaymentLogic.js";
+import {
+  TX_LIST_INVALIDATE_LS_KEY,
+  TX_LIST_INVALIDATE_HANDLED_KEY,
+  TX_DATA_CHANGED_EVENT,
+  buildTxListSessionKey,
+} from "../lib/transactionPaymentLogic.js";
 import { clearTxSearchCache } from "../../../utils/transaction/transactionSearchCache.js";
 import {
   transactionScopeApiParams,
   transactionScopeCacheCompanyKey,
   transactionScopeIsReady,
 } from "../lib/transactionScope.js";
+
+function readInvalidateHandledTs() {
+  try {
+    return parseInt(sessionStorage.getItem(TX_LIST_INVALIDATE_HANDLED_KEY) || "0", 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function markInvalidateHandled(ts) {
+  try {
+    sessionStorage.setItem(TX_LIST_INVALIDATE_HANDLED_KEY, String(ts));
+  } catch {
+    /* ignore */
+  }
+}
 
 export function useTransactionSync({
   filterSnapshot,
@@ -26,6 +47,7 @@ export function useTransactionSync({
 }) {
   useEffect(() => {
     let retryTimer = null;
+    let refreshInFlight = false;
     const queueRetry = () => {
       if (retryTimer) return;
       retryTimer = setTimeout(() => {
@@ -36,7 +58,8 @@ export function useTransactionSync({
 
     const refreshFromInvalidate = () => {
       const invalidateTs = parseInt(localStorage.getItem(TX_LIST_INVALIDATE_LS_KEY) || "0", 10) || 0;
-      if (!invalidateTs || invalidateTs <= lastSearchCommitMsRef.current) return;
+      const handledTs = readInvalidateHandledTs();
+      if (!invalidateTs || invalidateTs <= handledTs) return;
       if (!effectiveDateFrom || !effectiveDateTo) {
         queueRetry();
         return;
@@ -45,6 +68,8 @@ export function useTransactionSync({
         queueRetry();
         return;
       }
+      if (refreshInFlight) return;
+      refreshInFlight = true;
       clearTxSearchCache();
       try {
         const key = buildTxListSessionKey({
@@ -62,7 +87,16 @@ export function useTransactionSync({
       } catch {
         /* ignore */
       }
-      void runSearch?.({ silent: true });
+      void Promise.resolve(runSearch?.({ silent: true, forceRefresh: true }))
+        .then(() => {
+          markInvalidateHandled(invalidateTs);
+          if (lastSearchCommitMsRef) {
+            lastSearchCommitMsRef.current = Date.now();
+          }
+        })
+        .finally(() => {
+          refreshInFlight = false;
+        });
     };
 
     const onVis = () => {
@@ -76,6 +110,8 @@ export function useTransactionSync({
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("storage", onStorage);
     window.addEventListener(TX_DATA_CHANGED_EVENT, refreshFromInvalidate);
+    // Same-tab navigate-back: apply pending invalidate immediately (don't wait for 5s poll).
+    refreshFromInvalidate();
     const poll = setInterval(() => {
       if (document.visibilityState !== "visible") return;
       refreshFromInvalidate();

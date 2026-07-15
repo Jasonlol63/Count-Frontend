@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { accountCompanyPickerZIndex, accountModalOverlayZIndex } from "../../../components/ProcessModalPortal.jsx";
+import SimpleSelect from "../../../components/SimpleSelect.jsx";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
 
 /** Inline so first paint is 3-column even if extracted CSS applies one frame late */
@@ -38,11 +39,11 @@ function getPermissionLabel(key, t) {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-/** Large screens: inline checklist; laptop/tablet: same UI inside permission picker modal */
-function PermissionChecklist({ className, permissionsLocked, permDisabledMap, permSelected, setPermSelected, t }) {
+/** Shared permission checklist used by the picker dialog. */
+function PermissionChecklist({ className, permissionsLocked, permDisabledMap, visiblePermissionKeys, permSelected, setPermSelected, t }) {
   return (
     <div className={className}>
-      {PERMISSION_KEYS.map((key) => (
+      {visiblePermissionKeys.map((key) => (
         <div key={key} className="permission-item" style={{ opacity: permDisabledMap[key] ? 0.6 : 1 }}>
           <label className="permission-label">
             <input
@@ -73,7 +74,7 @@ function PermissionChecklist({ className, permissionsLocked, permDisabledMap, pe
   );
 }
 
-function PermissionBulkActions({ className, permissionsLocked, permDisabledMap, setPermSelected, t }) {
+function PermissionBulkActions({ className, permissionsLocked, permDisabledMap, visiblePermissionKeys, setPermSelected, t }) {
   return (
     <div className={className}>
       <button
@@ -82,7 +83,7 @@ function PermissionBulkActions({ className, permissionsLocked, permDisabledMap, 
         disabled={permissionsLocked}
         onClick={() => {
           const n = new Set();
-          PERMISSION_KEYS.forEach((k) => {
+          visiblePermissionKeys.forEach((k) => {
             if (!permDisabledMap[k]) n.add(k);
           });
           setPermSelected(n);
@@ -133,18 +134,15 @@ const userModalColStyle = {
   overflow: "hidden",
 };
 import {
-  PERMISSION_KEYS,
   PERMISSION_ICONS,
-  ALL_ROLE_OPTIONS,
-  formatRoleLabel,
   normRole,
   getAvailableRolesForCreation,
   getAvailableRolesForEdit,
   roleHasReadOnlyToggle,
   canInteractWithReadOnlyToggle,
   isUserModalPageReadOnlyLock,
-  rowIsOwnerShadow,
 } from "../userListLogic.js";
+import { formatUserRoleDisplay } from "../../../translateFile/pages/userListTranslate.js";
 import { sanitizeEmailInput } from "../../../utils/input/emailValidation.js";
 
 export default function UserModal({
@@ -160,6 +158,7 @@ export default function UserModal({
   loginDisabled,
   fieldLocks,
   permDisabledMap,
+  visiblePermissionKeys,
   permSelected,
   setPermSelected,
   modalCompanies,
@@ -193,6 +192,26 @@ export default function UserModal({
   const [bulkSelectionSettling, setBulkSelectionSettling] = useState(false);
   const bulkSelectionTimerRef = useRef(null);
   const { submitting, guardSubmit } = useSubmitGuard(open);
+
+  const roleOptions = useMemo(() => {
+    if (editingRow?.is_owner_shadow) {
+      return [{ value: "owner", label: formatUserRoleDisplay(t, "owner") }];
+    }
+    const list = isEditMode
+      ? getAvailableRolesForEdit(currentUserRole, editingRow?.role)
+      : getAvailableRolesForCreation(currentUserRole);
+    const opts = list.map((opt) => ({
+      value: opt.value,
+      label: formatUserRoleDisplay(t, opt.value),
+    }));
+    if (isEditMode && form.role && !list.find((x) => x.value === form.role)) {
+      opts.push({
+        value: form.role,
+        label: formatUserRoleDisplay(t, form.role),
+      });
+    }
+    return opts;
+  }, [isEditMode, currentUserRole, editingRow, form.role, t]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -301,17 +320,6 @@ export default function UserModal({
     return () => document.removeEventListener("keydown", onKey);
   }, [permissionPickerOpen]);
 
-  useEffect(() => {
-    if (!permissionPickerOpen) return undefined;
-    const mq = window.matchMedia("(min-width: 1201px)");
-    const closeIfDesktop = () => {
-      if (mq.matches) setPermissionPickerOpen(false);
-    };
-    closeIfDesktop();
-    mq.addEventListener("change", closeIfDesktop);
-    return () => mq.removeEventListener("change", closeIfDesktop);
-  }, [permissionPickerOpen]);
-
   const accountIdList = useMemo(() => modalAccounts.map((x) => Number(x.id)), [modalAccounts]);
   const processIdList = useMemo(() => modalProcesses.map((x) => Number(x.id)), [modalProcesses]);
 
@@ -380,14 +388,13 @@ export default function UserModal({
   );
 
   const showProcessColumn = dualTenantPicker ? selectedCompanyIds.length > 0 : !groupPickerMode;
-  const isOwnerShadowRow = rowIsOwnerShadow(editingRow);
 
   const selectedPermissionLabels = useMemo(
-    () => PERMISSION_KEYS.filter((k) => permSelected.has(k)).map((k) => getPermissionLabel(k, t)),
-    [permSelected, t]
+    () => visiblePermissionKeys.filter((k) => permSelected.has(k)).map((k) => getPermissionLabel(k, t)),
+    [visiblePermissionKeys, permSelected, t]
   );
 
-  const readOnlyToggleVisible = !isOwnerShadowRow && roleHasReadOnlyToggle(form.role);
+  const readOnlyToggleVisible = !editingRow?.is_owner_shadow && roleHasReadOnlyToggle(form.role);
   const readOnlyToggleCanInteract = canInteractWithReadOnlyToggle(currentUserRole, form.role);
   const pageReadOnlyLock =
     Boolean(sessionMutationsBlocked) ||
@@ -400,14 +407,15 @@ export default function UserModal({
     setCompanySearchQuery("");
   }, [open, pageReadOnlyLock]);
 
-  const permissionsLocked = fieldLocks.sidebar || !!isOwnerShadowRow || pageReadOnlyLock;
-  const showSecondaryPassword = isC168Company || !!isOwnerShadowRow;
+  const permissionsLocked = fieldLocks.sidebar || !!editingRow?.is_owner_shadow || pageReadOnlyLock;
+  const accountProcessLocked = !!fieldLocks.accountProcess || !!editingRow?.is_owner_shadow || pageReadOnlyLock;
+  const showSecondaryPassword = isC168Company || !!editingRow?.is_owner_shadow;
 
   const userModalShell = (
     <div id="userModal" className="modal" style={{ display: open ? "block" : "none", zIndex: accountModalOverlayZIndex }} aria-hidden={!open}>
       <div className={`modal-content user-modal-content${isEditMode ? " edit-mode" : ""}`}>
         <div className="modal-header-bar">
-          <h2 id="modalTitle">{isEditMode ? (isOwnerShadowRow ? t("editOwner") : t("editUser")) : t("addUser")}</h2>
+          <h2 id="modalTitle">{isEditMode ? (editingRow?.is_owner_shadow ? t("editOwner") : t("editUser")) : t("addUser")}</h2>
           <button type="button" className="btn-back" onClick={onClose}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
@@ -421,17 +429,15 @@ export default function UserModal({
               <h3 className="user-modal-col-title">{t("userInformation")}</h3>
               <form id="userForm" onSubmit={guardSubmit(onSave)}>
               <div className="user-info-grid">
-                <div className="user-info-field-row">
-                  <div className="form-group user-info-field">
-                    <label htmlFor="login_id">{t("loginId")} *</label>
-                    <input
-                      id="login_id"
-                      required
-                      disabled={loginDisabled || pageReadOnlyLock}
-                      value={form.login_id}
-                      onChange={(e) => setForm((f) => ({ ...f, login_id: e.target.value.toUpperCase() }))}
-                    />
-                  </div>
+                <div className="form-group user-info-field">
+                  <label htmlFor="login_id">{t("loginId")} *</label>
+                  <input
+                    id="login_id"
+                    required
+                    disabled={loginDisabled || pageReadOnlyLock}
+                    value={form.login_id}
+                    onChange={(e) => setForm((f) => ({ ...f, login_id: e.target.value.toUpperCase() }))}
+                  />
                 </div>
                 {showSecondaryPassword ? (
                   <div className="form-group user-info-field password-row-container password-row-container--split">
@@ -466,25 +472,18 @@ export default function UserModal({
                   </div>
                   <div className="form-group user-info-field">
                     <label htmlFor="role">{t("roleRequired")}</label>
-                    <select id="role" required disabled={roleSelectDisabled || fieldLocks.role || pageReadOnlyLock} value={form.role} onChange={(e) => {
-                      const v = e.target.value;
-                      setForm((f) => ({ ...f, role: v }));
-                      applyPermTemplate(v, true);
-                    }}>
-                      <option value="">{t("selectRole")}</option>
-                      {isOwnerShadowRow ? (
-                        <option value="owner">Owner</option>
-                      ) : (
-                        <>
-                          {(isEditMode ? getAvailableRolesForEdit(currentUserRole, editingRow?.role) : getAvailableRolesForCreation(currentUserRole)).map((o) => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                          {isEditMode && form.role && !getAvailableRolesForEdit(currentUserRole, editingRow?.role).find((x) => x.value === form.role) ? (
-                            <option value={form.role}>{formatRoleLabel(form.role)}</option>
-                          ) : null}
-                        </>
-                      )}
-                    </select>
+                    <SimpleSelect
+                      id="role"
+                      value={form.role}
+                      onChange={(v) => {
+                        setForm((f) => ({ ...f, role: v }));
+                        applyPermTemplate(v, true);
+                      }}
+                      options={roleOptions}
+                      placeholder={t("selectRole")}
+                      disabled={roleSelectDisabled || fieldLocks.role || pageReadOnlyLock}
+                      required
+                    />
                   </div>
                 </div>
                 <div className="form-group user-info-field">
@@ -515,7 +514,7 @@ export default function UserModal({
                         id="user-modal-company-open-btn"
                         type="button"
                         className="user-modal-company-open-btn"
-                        disabled={fieldLocks.company || !!isOwnerShadowRow || pageReadOnlyLock}
+                        disabled={fieldLocks.company || !!editingRow?.is_owner_shadow || pageReadOnlyLock}
                         onClick={() => {
                           setCompanySearchQuery("");
                           setCompanyPickerOpen(true);
@@ -595,6 +594,7 @@ export default function UserModal({
                     className="permissions-container"
                     permissionsLocked={permissionsLocked}
                     permDisabledMap={permDisabledMap}
+                    visiblePermissionKeys={visiblePermissionKeys}
                     permSelected={permSelected}
                     setPermSelected={setPermSelected}
                     t={t}
@@ -603,6 +603,7 @@ export default function UserModal({
                     className="permissions-actions user-modal-col-actions"
                     permissionsLocked={permissionsLocked}
                     permDisabledMap={permDisabledMap}
+                    visiblePermissionKeys={visiblePermissionKeys}
                     setPermSelected={setPermSelected}
                     t={t}
                   />
@@ -620,7 +621,7 @@ export default function UserModal({
                         type="checkbox"
                         id={`acc-${a.id}`}
                         checked={selectedAccountIds.has(Number(a.id))}
-                        disabled={!!isOwnerShadowRow || pageReadOnlyLock}
+                        disabled={accountProcessLocked}
                         onChange={(e) => {
                           setSelectedAccountIds((prev) => {
                             const n = new Set(prev);
@@ -637,8 +638,8 @@ export default function UserModal({
                   ))}
                 </div>
                 <div className="account-control-buttons user-modal-col-actions">
-                  <button type="button" className="btn-account-control" disabled={!!isOwnerShadowRow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedAccountIds(new Set(accountIdList)))}>{t("selectAll")}</button>
-                  <button type="button" className="btn-clearall" disabled={!!isOwnerShadowRow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedAccountIds(new Set()))}>{t("clearAll")}</button>
+                  <button type="button" className="btn-account-control" disabled={accountProcessLocked} onClick={() => runBulkSelection(() => setSelectedAccountIds(new Set(accountIdList)))}>{t("selectAll")}</button>
+                  <button type="button" className="btn-clearall" disabled={accountProcessLocked} onClick={() => runBulkSelection(() => setSelectedAccountIds(new Set()))}>{t("clearAll")}</button>
                 </div>
               </div>
 
@@ -652,7 +653,7 @@ export default function UserModal({
                           type="checkbox"
                           id={`proc-${p.id}`}
                           checked={selectedProcessIds.has(Number(p.id))}
-                          disabled={!!isOwnerShadowRow || pageReadOnlyLock}
+                          disabled={accountProcessLocked}
                           onChange={(e) => {
                             setSelectedProcessIds((prev) => {
                               const n = new Set(prev);
@@ -668,8 +669,8 @@ export default function UserModal({
                     ))}
                   </div>
                   <div className="account-control-buttons user-modal-col-actions">
-                    <button type="button" className="btn-account-control" disabled={!!isOwnerShadowRow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedProcessIds(new Set(processIdList)))}>{t("selectAll")}</button>
-                    <button type="button" className="btn-clearall" disabled={!!isOwnerShadowRow || pageReadOnlyLock} onClick={() => runBulkSelection(() => setSelectedProcessIds(new Set()))}>{t("clearAll")}</button>
+                    <button type="button" className="btn-account-control" disabled={accountProcessLocked} onClick={() => runBulkSelection(() => setSelectedProcessIds(new Set(processIdList)))}>{t("selectAll")}</button>
+                    <button type="button" className="btn-clearall" disabled={accountProcessLocked} onClick={() => runBulkSelection(() => setSelectedProcessIds(new Set()))}>{t("clearAll")}</button>
                   </div>
                 </div>
             ) : null}
@@ -749,7 +750,7 @@ export default function UserModal({
                 <button
                   type="button"
                   className="user-modal-company-picker-select-all"
-                  disabled={fieldLocks.company || !!isOwnerShadowRow || modalCompanies.length === 0 || pageReadOnlyLock}
+                  disabled={fieldLocks.company || !!editingRow?.is_owner_shadow || modalCompanies.length === 0 || pageReadOnlyLock}
                   onClick={() => {
                     if (dualTenantPicker && setSelectedGroupIds) {
                       setSelectedGroupIds(pickerGroupRows.map((c) => Number(c.id)));
@@ -772,7 +773,7 @@ export default function UserModal({
                           const id = Number(c.id);
                           const label = String(c?.group_id || c?.company_id || "").trim().toUpperCase();
                           const checked = selectedGroupIds.includes(id);
-                          const rowDisabled = fieldLocks.company || !!isOwnerShadowRow || pageReadOnlyLock;
+                          const rowDisabled = fieldLocks.company || !!editingRow?.is_owner_shadow || pageReadOnlyLock;
                           return (
                             <li key={`g-${c.id}`} className="user-modal-company-picker-row">
                               <label className={checked ? "user-modal-company-picker-label is-checked" : "user-modal-company-picker-label"}>
@@ -801,7 +802,7 @@ export default function UserModal({
                           const id = Number(c.id);
                           const label = getCompanyPickerLabel(c);
                           const checked = selectedCompanyIds.includes(id);
-                          const rowDisabled = fieldLocks.company || !!isOwnerShadowRow || pageReadOnlyLock;
+                          const rowDisabled = fieldLocks.company || !!editingRow?.is_owner_shadow || pageReadOnlyLock;
                           return (
                             <li key={`c-${c.id}`} className="user-modal-company-picker-row">
                               <label className={checked ? "user-modal-company-picker-label is-checked" : "user-modal-company-picker-label"}>
@@ -830,7 +831,7 @@ export default function UserModal({
                       const id = Number(c.id);
                       const label = getCompanyPickerLabel(c);
                       const checked = selectedCompanyIds.includes(id);
-                      const rowDisabled = fieldLocks.company || !!isOwnerShadowRow || pageReadOnlyLock;
+                      const rowDisabled = fieldLocks.company || !!editingRow?.is_owner_shadow || pageReadOnlyLock;
                       return (
                         <li key={c.id} className="user-modal-company-picker-row">
                           <label className={checked ? "user-modal-company-picker-label is-checked" : "user-modal-company-picker-label"}>
@@ -911,7 +912,7 @@ export default function UserModal({
                         disabled={permissionsLocked}
                         onClick={() => {
                           const n = new Set();
-                          PERMISSION_KEYS.forEach((k) => {
+                          visiblePermissionKeys.forEach((k) => {
                             if (!permDisabledMap[k]) n.add(k);
                           });
                           setPermSelected(n);
@@ -933,6 +934,7 @@ export default function UserModal({
                     className="permissions-container user-modal-permission-picker-perms"
                     permissionsLocked={permissionsLocked}
                     permDisabledMap={permDisabledMap}
+                    visiblePermissionKeys={visiblePermissionKeys}
                     permSelected={permSelected}
                     setPermSelected={setPermSelected}
                     t={t}

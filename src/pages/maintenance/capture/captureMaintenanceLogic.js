@@ -1,4 +1,4 @@
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+﻿import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { isC168CompanyCode } from "../../../utils/company/c168CaptureChannel.js";
 import { companiesNativeInGroupList } from "../../../utils/company/sharedCompanyFilter.js";
 import {
@@ -50,15 +50,23 @@ export async function fetchCompanyPermissions(companyCode) {
 }
 
 export async function fetchProcesses(companyId, scope = null) {
-  const c168Channel = Boolean(scope?.c168Channel);
-  if (scope && captureMaintenanceUsesGroupProcesses(scope) && !c168Channel) {
+  const payrollChannel = Boolean(scope?.c168Channel || scope?.companyPayrollChannel);
+  if (payrollChannel) {
+    return [
+      { id: "PROFIT", process_name: "PROFIT", description: null },
+      { id: "SALARY", process_name: "SALARY", description: null },
+      { id: "COMMISSION", process_name: "COMMISSION", description: null },
+      { id: "BONUS", process_name: "BONUS", description: null },
+    ];
+  }
+  if (scope && captureMaintenanceUsesGroupProcesses(scope) && !payrollChannel) {
     const apiList = await fetchDomainReportProcesses(scope, { credentials: "include" });
     return mapProcessesForMaintenanceSelect(mapDomainGroupProcesses(apiList));
   }
   const effectiveId = scope?.scopeCompanyId ?? companyId;
   const rows = await fetchMaintenanceProcesses(effectiveId, { credentials: "include" });
   let mapped = mapProcessesForMaintenanceSelect(rows);
-  if (c168Channel) {
+  if (payrollChannel) {
     const payrollCodes = new Set(GROUP_ONLY_PROCESS_CODES);
     mapped = mapped.filter((p) =>
       payrollCodes.has(String(p.process_name ?? "").trim().toUpperCase()),
@@ -87,10 +95,10 @@ export async function bootstrapCaptureMaintenanceMeta({ companies, groupId = nul
 
 /**
  * Search capture data
- * @param {AbortSignal} [options.signal] — 切换公司等场景取消过时请求，避免列表闪动与竞态
+ * @param {AbortSignal} [options.signal] â€” åˆ‡æ¢å…¬å¸ç­‰åœºæ™¯å–æ¶ˆè¿‡æ—¶è¯·æ±‚ï¼Œé¿å…åˆ—è¡¨é—ªåŠ¨ä¸Žç«žæ€
  */
 export async function searchCaptureData(
-  { dateFrom, dateTo, process, category, scope },
+  { dateFrom, dateTo, process, category, query, scope },
   options = {},
 ) {
   const { signal } = options;
@@ -102,6 +110,9 @@ export async function searchCaptureData(
   }
   if (category) {
     params.append("category", category);
+  }
+  if (query?.trim()) {
+    params.set("q", query.trim().toUpperCase());
   }
   appendScopeToParams(params, scope);
 
@@ -153,7 +164,7 @@ export async function deleteCaptureItems({ items, dateFrom, dateTo, scope }) {
  * Update session company
  */
 export async function updateSessionCompany(companyId) {
-  const response = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`), {
+  const response = await fetch(buildApiUrl(`auth/switch-tenant?tenant_id=${companyId}`), {
     credentials: "include",
   });
   const result = await response.json();

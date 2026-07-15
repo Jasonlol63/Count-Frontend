@@ -8,7 +8,7 @@ import {
 function buildTemplateUrl(captureScope) {
   const params = new URLSearchParams({ action: "save_template" });
   appendDataCaptureScopeParams(params, captureScope);
-  return buildApiUrl(`api/datacapture_summary/summary_api.php?${params.toString()}`);
+  return buildApiUrl(`api/datacapture_summary/summary_templates_api.php?${params.toString()}`);
 }
 
 export function buildTemplateKey(row) {

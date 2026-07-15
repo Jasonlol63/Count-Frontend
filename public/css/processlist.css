@@ -1,11 +1,9 @@
-﻿/* Input formatting - 统一管理输入框格式 */
+/* Input formatting - 统一管理输入框格式 */
 #add_process_id,
 #new_description_name,
-#add_remove_words,
 #add_replace_word_from,
 #add_replace_word_to,
 #add_remarks,
-#edit_remove_words,
 #edit_replace_word_from,
 #edit_replace_word_to,
 #edit_remarks {
@@ -1369,7 +1367,7 @@
 
 .accounting-due-inbox-grid-cell {
     min-width: 0;
-    font-size: var(--accounting-due-text-cell);
+    font-size: var(--text-small);
     font-weight: var(--font-weight-semibold);
     color: var(--color-body-strong);
     line-height: 1.35;
@@ -1392,6 +1390,8 @@
 .accounting-due-inbox-grid-cell--no,
 .accounting-due-inbox-grid-cell--date,
 .accounting-due-inbox-grid-cell--period,
+.accounting-due-inbox-grid-cell--frequency,
+.accounting-due-inbox-grid-cell--owner,
 .accounting-due-inbox-grid-cell--bank,
 .accounting-due-inbox-grid-cell--contract {
     justify-content: center;
@@ -1404,18 +1404,9 @@
     padding-right: 0 !important;
 }
 
-.accounting-due-inbox-grid-cell--head.accounting-due-inbox-grid-cell--owner {
-    justify-content: center;
-    text-align: center;
-}
-
-.accounting-due-inbox-grid-cell--owner {
-    justify-content: flex-start;
-    text-align: left;
-}
-
 .accounting-due-inbox-grid-cell--date,
-.accounting-due-inbox-grid-cell--period {
+.accounting-due-inbox-grid-cell--period,
+.accounting-due-inbox-grid-cell--frequency {
     white-space: nowrap;
 }
 
@@ -1424,6 +1415,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.accounting-due-owner-text {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
 }
 
 .accounting-due-inbox-grid-cell input[type="checkbox"] {
@@ -1802,9 +1802,6 @@ body.ec-auth-shell .process-page #addBankModal .bank-actions .btn-cancel:hover {
 
 /* Laptop screens: compact the form spacing */
 @media (max-height: 820px) {
-    #addBankModal .bank-form-fields-scroll .bank-form-row + .bank-form-row {
-        margin-top: 12px;
-    }
     #addBankModal .bank-form-fields-scroll .bank-form-row {
         gap: 20px;
     }
@@ -1837,22 +1834,55 @@ body.ec-auth-shell .process-page #addBankModal .bank-actions .btn-cancel:hover {
     min-height: 0;
 }
 
-.bank-form-row+.bank-form-row {
-    margin-top: 20px;
-}
-
 .bank-form-row-last {
-    min-height: 160px;
+    align-items: stretch;
+    min-height: 0;
 }
 
-/* 右侧 Remark 区域拉伸至与左侧 Selected Profit Sharing 底部对齐 */
+.bank-form-row-last .bank-form-cell-left {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.bank-form-row-last .bank-form-cell-left .bank-day-start-frequency-wrap {
+    flex: 0 0 auto;
+    margin-bottom: 12px !important;
+}
+
+.bank-form-row-last .bank-form-cell-left .bank-profit-sharing-container {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin-top: 0;
+}
+
+#addBankModal .bank-form-row-last .bank-profit-sharing-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+}
+
+#addBankModal .bank-form-row-last .bank-profit-sharing-list:has(.no-profit-sharing) {
+    display: flex;
+    flex-direction: column;
+}
+
+#addBankModal .bank-form-row-last .no-profit-sharing {
+    flex: 1 1 auto;
+    justify-content: center;
+}
+
+/* 左侧 Selected Profit Sharing 拉伸至与右侧 Record（DTS Created）底部对齐 */
 .bank-form-row-last .bank-form-cell-right {
     display: flex;
     flex-direction: column;
 }
 
 .bank-form-row-last .bank-form-cell-right .bank-remark-wrap {
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -1921,6 +1951,127 @@ body.ec-auth-shell .process-page #addBankModal .bank-remark-actions .bank-note-o
     min-height: 2.5em;
 }
 
+.bank-form-row-last .bank-form-cell-right .bank-form-section--record {
+    flex: 0 0 auto;
+    margin-top: 12px;
+    width: 100%;
+}
+
+#addBankModal .bank-form-section--record .account-section-header {
+    font-size: var(--text-h2);
+    font-weight: 700;
+    font-family: var(--font-heading-page);
+    color: #64748b;
+    margin: 0 0 calc(var(--space-gap, 0.75rem) * 0.65) 0;
+    padding-bottom: 0.25rem;
+    border-bottom: 0.125rem solid #e2e8f0;
+    border-left: none;
+    position: relative;
+    line-height: 1.25;
+    text-align: left;
+}
+
+#addBankModal .bank-form-section--record .account-section-header::after {
+    content: '';
+    position: absolute;
+    bottom: -0.125rem;
+    left: 0;
+    width: 2.5rem;
+    height: 0.125rem;
+    background: linear-gradient(90deg, #94a3b8, #64748b);
+}
+
+#addBankModal .bank-form-dts-readonly {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 2px;
+    padding: 8px 10px;
+    min-height: clamp(2.5rem, 2.25vw, 3rem);
+    background-color: #f8fafc;
+    border: 1px solid #dbe3ee;
+    border-radius: 0.42rem;
+    color: #1f2937;
+    font-size: var(--text-small);
+    font-family: var(--font-ui);
+    line-height: 1.35;
+}
+
+#addBankModal .bank-form-dts-readonly span {
+    min-width: 0;
+}
+
+#addBankModal .bank-form-dts-readonly-user {
+    font-weight: 600;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+@media (max-width: 900px) {
+    #addBankModal .bank-form-row {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    #addBankModal .bank-form-row-last {
+        min-height: 0;
+        align-items: start;
+    }
+
+    #addBankModal .bank-form-row-last .bank-form-cell-left .bank-profit-sharing-container {
+        flex: 0 0 auto;
+        display: block;
+    }
+
+    #addBankModal .bank-form-row-last .bank-profit-sharing-list {
+        flex: 0 0 auto;
+        max-height: 180px;
+    }
+
+    #addBankModal .bank-form-row-last .bank-profit-sharing-list:has(.no-profit-sharing) {
+        display: block;
+    }
+
+    #addBankModal .bank-form-row-last .no-profit-sharing {
+        flex: 0 0 auto;
+        justify-content: flex-start;
+    }
+
+    #addBankModal .bank-form-row-last .bank-form-cell-right .bank-remark-wrap {
+        flex: 0 0 auto;
+    }
+
+    #addBankModal .bank-row-two-cols {
+        grid-template-columns: 1fr;
+    }
+
+    #addBankModal .bank-form-dts-readonly {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+
+    #addBankModal .bank-form-dts-readonly-user {
+        text-align: left;
+        width: 100%;
+    }
+}
+
+@media (max-width: 600px) {
+    #addBankModal .bank-remark-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #addBankModal .bank-remark-actions .bank-note-open-btn {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
 .bank-form-cell {
     display: flex;
     flex-direction: column;
@@ -1980,9 +2131,10 @@ body.ec-auth-shell .process-page #addBankModal .bank-remark-actions .bank-note-o
     overflow: visible;
 }
 
-/* Bank Add/Edit Process：主/分区副标题保持原色；字段小标题黑色；输入内容与 Day start/end 占位同色 */
+/* Bank Add/Edit Process：主/分区副标题保持原色；字段小标题黑色；已输入内容为黑色；占位符灰色 */
 #addBankModal .bank-form {
-    --bank-form-field-text: #94a3b8;
+    --bank-form-field-text: #0f172a;
+    --bank-form-placeholder-text: #94a3b8;
 }
 
 #addBankModal .bank-form .form-group label,
@@ -2002,9 +2154,12 @@ body.ec-auth-shell .process-page #addBankModal .bank-remark-actions .bank-note-o
 #addBankModal .bank-form .bank-chinese,
 #addBankModal .bank-form .no-profit-sharing,
 #addBankModal .bank-form .no-profit-sharing p,
-#addBankModal .bank-form .ps-account-name,
-#addBankModal .bank-form .ps-amount-value,
 #addBankModal .bank-form .bank-remark-filled-hint {
+    color: var(--bank-form-placeholder-text) !important;
+}
+
+#addBankModal .bank-form .ps-account-name,
+#addBankModal .bank-form .ps-amount-value {
     color: var(--bank-form-field-text) !important;
 }
 
@@ -2021,13 +2176,19 @@ body.ec-auth-shell .process-page #addBankModal .bank-remark-actions .bank-note-o
     color: var(--bank-form-field-text) !important;
 }
 
-#addBankModal .bank-form .bank-input::placeholder {
-    color: var(--bank-form-field-text) !important;
+#addBankModal .bank-form .bank-input::placeholder,
+#addBankModal .bank-form .bank-form-datepicker-input::placeholder {
+    color: var(--bank-form-placeholder-text) !important;
     opacity: 1;
 }
 
+#addBankModal .bank-form .custom-select-button.simple-select-button--placeholder,
+#addBankModal .bank-form .account-select-with-buttons .custom-select-button.simple-select-button--placeholder {
+    color: var(--bank-form-placeholder-text) !important;
+}
+
 #addBankModal .bank-form .custom-select-button::after {
-    color: var(--bank-form-field-text) !important;
+    color: var(--bank-form-placeholder-text) !important;
 }
 
 #addBankModal .bank-form .ps-amount-value {
@@ -2357,7 +2518,7 @@ body.process-page .calendar-popup-clear-btn:disabled {
 #addBankModal .bank-form .bank-form-datepicker-wrap--disabled .bank-form-datepicker-input,
 #confirmBankResendModal .bank-form-datepicker-wrap--disabled .bank-form-datepicker-input {
     background: #eceff3 !important;
-    color: var(--bank-form-field-text, #94a3b8) !important;
+    color: var(--bank-form-placeholder-text, #94a3b8) !important;
     cursor: not-allowed !important;
     opacity: 1;
     box-shadow: none;
@@ -2868,6 +3029,7 @@ body.process-page .custom-select-dropdown.custom-select-dropdown-portal .custom-
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 700;
 }
 
 body.process-page .custom-select-dropdown.custom-select-dropdown-portal .custom-select-no-results,
@@ -3021,6 +3183,12 @@ body.process-page .custom-select-dropdown.custom-select-dropdown-portal .custom-
 
 .custom-select-option:hover {
     background-color: #f0f0f0;
+}
+
+.custom-select-option.keyboard-focus {
+    background-color: var(--select-option-keyboard-focus-bg, #0d60ff);
+    color: var(--select-option-keyboard-focus-text, #ffffff);
+    font-weight: 600;
 }
 
 .custom-select-option.selected {

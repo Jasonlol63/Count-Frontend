@@ -1,6 +1,7 @@
 ﻿import { memo } from "react";
 import { formatAmount, toUpperDisplay } from "../bankprocessMaintenanceLogic.js";
 import MaintenanceCreatedAtDisplay from "../../shared/MaintenanceCreatedAtDisplay.jsx";
+import MaintenanceEllipsisText from "../../shared/MaintenanceEllipsisText.jsx";
 
 const BankprocessVirtualDataRow = memo(function BankprocessVirtualDataRow({
   row,
@@ -34,29 +35,38 @@ const BankprocessVirtualDataRow = memo(function BankprocessVirtualDataRow({
       >
         <MaintenanceCreatedAtDisplay value={row.dts_created} />
       </div>
-      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left bankprocess-virtual-cell--wrap">
-        <span className="bankprocess-cell-clamp-2">{row.account || "-"}</span>
+      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left">
+        <MaintenanceEllipsisText value={row.account} className="bankprocess-cell-text" />
       </div>
-      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left bankprocess-virtual-cell--wrap">
-        <span className="bankprocess-cell-clamp-2">{toUpperDisplay(row.from_account)}</span>
+      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left">
+        <MaintenanceEllipsisText
+          value={toUpperDisplay(row.from_account)}
+          className="bankprocess-cell-text text-uppercase"
+        />
       </div>
       <div
         role="cell"
         className="maintenance-virtual-cell maintenance-virtual-cell--left maintenance-cell-currency-amount"
       >
-        {amountDisplay}
+        <MaintenanceEllipsisText value={amountDisplay} className="bankprocess-cell-text" />
       </div>
       <div
         role="cell"
-        className="maintenance-virtual-cell maintenance-virtual-cell--left bankprocess-virtual-cell--wrap bankprocess-virtual-cell--description text-uppercase"
+        className="maintenance-virtual-cell maintenance-virtual-cell--left bankprocess-virtual-cell--description text-uppercase"
       >
-        <span className="bankprocess-cell-clamp-2">{toUpperDisplay(row.description)}</span>
+        <MaintenanceEllipsisText
+          value={toUpperDisplay(row.description)}
+          className="bankprocess-cell-text text-uppercase"
+        />
       </div>
-      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left bankprocess-virtual-cell--wrap text-uppercase">
-        <span className="bankprocess-cell-clamp-2">{toUpperDisplay(row.remark)}</span>
+      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left text-uppercase">
+        <MaintenanceEllipsisText
+          value={toUpperDisplay(row.remark)}
+          className="bankprocess-cell-text text-uppercase"
+        />
       </div>
-      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left bankprocess-virtual-cell--wrap">
-        <span className="bankprocess-cell-clamp-2">{row.created_by || "-"}</span>
+      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left">
+        <MaintenanceEllipsisText value={row.created_by} className="bankprocess-cell-text" />
       </div>
       <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left bankprocess-virtual-cell-checkbox">
         <input
@@ -73,5 +83,3 @@ const BankprocessVirtualDataRow = memo(function BankprocessVirtualDataRow({
 });
 
 export default BankprocessVirtualDataRow;
-
-

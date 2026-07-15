@@ -1,47 +1,26 @@
-import {
+﻿import {
   getSiteBasePath,
   pathnameToPageKey,
   resolveCanonicalSpaPath,
   spaPath,
 } from "../routing/pageRoutes.js";
 
+/**
+ * Build absolute API URL. Non-auth modules may still rewrite legacy PHP paths to Spring.
+ * Auth/login/logout/session: call `utils/auth/authApi.js` directly — do not use PHP session paths.
+ */
 export function buildApiUrl(pathAndQuery) {
   const base = window.location.origin + getSiteBasePath();
   const raw = String(pathAndQuery || "").replace(/^\//, "");
 
-  // Redirect legacy PHP auth endpoints to Spring Boot API.
   const rewritten = (() => {
-    if (raw.startsWith("api/session/current_user_api.php")) return "auth/current-user";
-    if (raw.startsWith("api/session/login_api.php")) return "auth/login";
-    if (raw.startsWith("api/session/verify_owner_secondary_password_api.php")) {
-      return "auth/verify-owner-secondary-password";
-    }
-    if (raw.startsWith("api/session/verify_user_secondary_password_api.php")) {
-      return "auth/verify-user-secondary-password";
-    }
-    if (raw.startsWith("api/session/logout_api.php")) return "auth/logout";
     if (raw.startsWith("api/transactions/get_owner_companies_api.php")) {
       const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
       return `auth/tenant-accessible${q}`;
     }
-    if (raw.startsWith("api/session/update_company_session_api.php")) {
-      const qIndex = raw.indexOf("?");
-      if (qIndex >= 0) {
-        const params = new URLSearchParams(raw.slice(qIndex + 1));
-        const tenantId = params.get("company_id") ?? params.get("tenant_id");
-        const next = new URLSearchParams();
-        if (tenantId) next.set("tenant_id", tenantId);
-        const qs = next.toString();
-        return qs ? `auth/switch-tenant?${qs}` : "auth/switch-tenant";
-      }
-      return "auth/switch-tenant";
-    }
-    if (raw.startsWith("api/users/send_reset_tac_api.php")) return "auth/send-reset-tac";
-    if (raw.startsWith("api/users/reset_password_api.php")) return "auth/reset-password";
     if (raw.startsWith("api/subscription/auto_renew_api.php")) {
       return "api/auto-renew/list";
     }
-    // Redirect legacy PHP ownership endpoints to Spring Boot API
     if (raw.startsWith("api/ownership/get_companies_api.php")) {
       const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
       return `auth/tenant-accessible${q}`;
@@ -52,7 +31,7 @@ export function buildApiUrl(pathAndQuery) {
     }
     if (raw.startsWith("api/ownership/get_owners_api.php")) {
       const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-      const params = new URLSearchParams(q);
+      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
       const companyId = params.get("company_id");
       const month = params.get("month");
       const newParams = new URLSearchParams();
@@ -62,7 +41,7 @@ export function buildApiUrl(pathAndQuery) {
     }
     if (raw.startsWith("api/ownership/get_group_owners_api.php")) {
       const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-      const params = new URLSearchParams(q);
+      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
       const groupId = params.get("group_id");
       const month = params.get("month");
       const newParams = new URLSearchParams();
@@ -72,17 +51,16 @@ export function buildApiUrl(pathAndQuery) {
     }
     if (raw.startsWith("api/ownership/get_available_accounts_api.php")) {
       const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-      const params = new URLSearchParams(q);
+      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
       const companyId = params.get("company_id");
       return `api/ownership/available-accounts?tenant_id=${companyId || ""}`;
     }
     if (raw.startsWith("api/ownership/get_group_available_accounts_api.php")) {
       const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-      const params = new URLSearchParams(q);
+      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
       const groupId = params.get("group_id");
       return `api/ownership/available-accounts?tenant_id=${groupId || ""}`;
     }
-    // Announcement page — fully migrated to Spring Boot.
     if (raw.startsWith("api/announcements/announcement_list_api.php")) {
       return "api/announcement/listAnnouncement";
     }
@@ -150,7 +128,6 @@ export function buildSpaPath(pathAndQuery) {
     ? spaPath(pageKey, { search, hash })
     : resolveCanonicalSpaPath(normalized, { search, hash }) || normalized;
 
-  // UUID and legacy SPA paths are site-root absolute (/p/... or /login).
   if (canonical.startsWith("/")) {
     return canonical;
   }

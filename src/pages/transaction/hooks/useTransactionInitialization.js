@@ -91,7 +91,13 @@ export function useTransactionInitialization({
     activeForm.setRateDate((v) => v || todayDmy);
 
     if (!scopeCacheKey || currencyScopeBundle.scopeKey !== scopeCacheKey) return;
-    if (currencyScopeBundle.rows.length === 0) return;
+    if (currencyScopeBundle.rows.length === 0) {
+      if (transactionScope?.mode === "group") {
+        activeSearch.setShowAllCurrencies(false);
+        activeSearch.setSelectedCurrencies([]);
+      }
+      return;
+    }
 
     const rows = currencyScopeBundle.rows;
     const codes = rows.map((x) => String(x.code || x.currency || "").toUpperCase().trim()).filter(Boolean);
@@ -136,7 +142,7 @@ export function useTransactionInitialization({
     let nextShowAll = false;
     let nextSel = [];
 
-    if (saved?.showAll) {
+    if (saved?.showAll && codes.length >= 2) {
       nextShowAll = true;
       nextSel = [];
     } else if (saved?.currencies?.length) {

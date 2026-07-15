@@ -1,7 +1,16 @@
 import React from "react";
 import ProcessModalPortal, { processModalBackdropStyle } from "../../../components/ProcessModalPortal.jsx";
 
-export default function ProcessDeleteConfirmModal({ open, count, onCancel, onConfirm, deleting, confirmDisabled, t }) {
+export default function ProcessDeleteConfirmModal({
+  open,
+  count,
+  onCancel,
+  onConfirm,
+  deleting,
+  confirmDisabled,
+  errorMessage = "",
+  t,
+}) {
   if (!open) return null;
   const disableConfirm = Boolean(deleting || confirmDisabled);
   return (
@@ -22,6 +31,11 @@ export default function ProcessDeleteConfirmModal({ open, count, onCancel, onCon
         <p className="process-confirm-message">
           {t("confirmDeleteMessage", { count })}
         </p>
+        {errorMessage ? (
+          <div className="process-confirm-error" role="alert">
+            {errorMessage}
+          </div>
+        ) : null}
         <div className="process-confirm-actions">
           <button type="button" className="process-btn process-btn-cancel confirm-cancel" onClick={onCancel} disabled={deleting}>
             {t("cancel")}

@@ -33,7 +33,7 @@ function parseAddCount(text, max) {
 }
 
 /**
- * Group-only add row/column control — Apply appends rows/cols; reset restores 11×11.
+ * Group-only add row/column control — Apply appends rows/cols; reset restores default A–Z × 11 cols.
  */
 export default function GroupOnlyTableSizeControl({ t, engineReady = false }) {
   const { gridRef, gridVersion } = useDataCaptureContext();

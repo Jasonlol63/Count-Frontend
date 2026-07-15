@@ -37,6 +37,7 @@ import {
   toggleBankprocessMaintenanceBatchSelection,
   updateSessionCompany,
 } from "./bankprocessMaintenanceLogic.js";
+import { notifyTransactionListInvalidated } from "../../transaction/lib/transactionPaymentLogic.js";
 import { useLoginLang } from "../../../utils/i18n/useLoginLang.js";
 import { getMaintenanceText, MAINTENANCE_I18N } from "../../../translateFile/pages/maintenanceTranslate.js";
 
@@ -145,7 +146,7 @@ export default function BankprocessMaintenancePage() {
     setBootLoading(true);
     (async () => {
       try {
-        const allRows = await fetchOwnerCompaniesAll();
+        const allRows = await fetchOwnerCompaniesAll({ me });
         const compRows = allRows.filter((c) => c.company_id);
         if (cancelled) return;
 
@@ -451,9 +452,7 @@ export default function BankprocessMaintenancePage() {
         currentPath: location.pathname,
         navigate,
         updateSessionCompany: (id) => updateSessionCompany(Number(id)),
-        onStay: async () => {
-          notify(t("switchedTo", { company: targetCompany.company_id }), "success");
-        },
+        onStay: async () => {},
       });
       if (redirected) return;
     } catch (err) {
@@ -564,13 +563,7 @@ export default function BankprocessMaintenancePage() {
     setIsDeleteModalOpen(false);
     try {
       const result = await deleteBankprocessData(selectedIds);
-      try {
-        const ts = String(Date.now());
-        localStorage.setItem("count168_tx_invalidate_ts", ts);
-        window.dispatchEvent(new CustomEvent("tx-data-changed", { detail: { ts, source: "bankprocess_maintenance_delete" } }));
-      } catch {
-        // ignore
-      }
+      notifyTransactionListInvalidated("bankprocess_maintenance_delete");
       notify(t("successfullyDeletedBankProcessN", { n: selectedIds.length }), "success");
       setSelectedIds([]);
       setConfirmDelete(false);

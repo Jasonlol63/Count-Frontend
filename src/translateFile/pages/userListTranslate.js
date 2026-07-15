@@ -3,7 +3,6 @@ import { createGetText, toLocale } from "../shared/i18nHelpers.js";
 export const USER_LIST_I18N = {
   en: {
     failedToLoadUsers: "Failed to load users",
-    companyScopeRequired: "Company scope is required to load users",
     couldNotSwitchCompany: "Could not switch company",
     companySwitchFailed: "Company switch failed",
     noPermissionCreateAccounts: "You do not have permission to create new accounts",
@@ -36,6 +35,17 @@ export const USER_LIST_I18N = {
     email: "Email",
     role: "Role",
     status: "Status",
+    statusActive: "ACTIVE",
+    statusInactive: "INACTIVE",
+    rolePartnership: "Partnership",
+    roleAdmin: "Admin",
+    roleManager: "Manager",
+    roleSupervisor: "Supervisor",
+    roleAccountant: "Accountant",
+    roleAudit: "Audit",
+    roleCustomerService: "Customer Service",
+    roleCompany: "Company",
+    roleOwner: "Owner",
     lastLogin: "Last Login",
     createdBy: "Created By",
     action: "Action",
@@ -126,6 +136,8 @@ export const USER_LIST_I18N = {
     apiOnlyOwnerCanDeleteOwner: "Only the owner can delete owner records",
     apiCannotDeleteSameRole: "You cannot delete accounts with the same role level",
     apiCannotDeleteHigherRole: "You cannot delete accounts with higher role level",
+    apiCannotToggleSameRole: "You cannot toggle status of accounts with the same role level",
+    apiCannotToggleHigherRole: "You cannot toggle status of accounts with higher role level",
     apiDeleteUserFailed: "Failed to delete user",
     apiCompanyUpdated: "Company updated",
     apiNoPermissionAccessCompany: "No permission to access this company",
@@ -134,7 +146,6 @@ export const USER_LIST_I18N = {
   },
   zh: {
     failedToLoadUsers: "加载用户失败",
-    companyScopeRequired: "需要选择公司范围才能加载用户",
     couldNotSwitchCompany: "无法切换公司",
     companySwitchFailed: "公司切换失败",
     noPermissionCreateAccounts: "您没有权限创建新账号",
@@ -167,6 +178,17 @@ export const USER_LIST_I18N = {
     email: "邮箱",
     role: "角色",
     status: "状态",
+    statusActive: "启用",
+    statusInactive: "停用",
+    rolePartnership: "合伙",
+    roleAdmin: "管理员",
+    roleManager: "经理",
+    roleSupervisor: "主管",
+    roleAccountant: "会计",
+    roleAudit: "审计",
+    roleCustomerService: "客服",
+    roleCompany: "公司",
+    roleOwner: "所有者",
     lastLogin: "最后登录",
     createdBy: "创建者",
     action: "操作",
@@ -257,6 +279,8 @@ export const USER_LIST_I18N = {
     apiOnlyOwnerCanDeleteOwner: "只有 owner 本人可以删除 owner 记录",
     apiCannotDeleteSameRole: "不能删除同级角色的账号",
     apiCannotDeleteHigherRole: "不能删除更高角色级别的账号",
+    apiCannotToggleSameRole: "不能切换同级角色的账号状态",
+    apiCannotToggleHigherRole: "不能切换更高角色级别的账号状态",
     apiDeleteUserFailed: "删除用户失败",
     apiCompanyUpdated: "公司已更新",
     apiNoPermissionAccessCompany: "无权限访问该公司",
@@ -280,8 +304,7 @@ const USER_LIST_API_MESSAGE_KEYS = {
   [normApiMessage("User deleted successfully")]: "apiUserDeleted",
   [normApiMessage("Users retrieved successfully")]: "saved",
   [normApiMessage("Unauthorized access")]: "apiUnauthorized",
-  [normApiMessage("Invalid Tenant Id!")]: "companyScopeRequired",
-  [normApiMessage("tenantIdRequired")]: "companyScopeRequired",
+  [normApiMessage("Invalid request")]: "apiInvalidRequest",
   [normApiMessage("You do not have permission to create new accounts")]: "noPermissionCreateAccounts",
   [normApiMessage("只读账号无法执行此操作")]: "readOnlyActionBlocked",
   [normApiMessage("Read-only account: this action is not allowed.")]: "readOnlyActionBlocked",
@@ -312,6 +335,8 @@ const USER_LIST_API_MESSAGE_KEYS = {
   [normApiMessage("只有owner本人可以删除owner记录")]: "apiOnlyOwnerCanDeleteOwner",
   [normApiMessage("You cannot delete accounts with the same role level")]: "apiCannotDeleteSameRole",
   [normApiMessage("You cannot delete accounts with higher role level")]: "apiCannotDeleteHigherRole",
+  [normApiMessage("You cannot toggle status of accounts with the same role level")]: "apiCannotToggleSameRole",
+  [normApiMessage("You cannot toggle status of accounts with higher role level")]: "apiCannotToggleHigherRole",
   [normApiMessage("状态更新成功")]: "statusUpdated",
   [normApiMessage("Status updated")]: "statusUpdated",
   [normApiMessage("Toggle failed")]: "toggleFailed",
@@ -369,6 +394,33 @@ export function translateUserListApiMessage(lang, apiMessage, fallbackKey = "", 
   }
 
   return message || (fallbackKey ? getUserListText(locale, fallbackKey, params) : "");
+}
+
+const USER_ROLE_I18N_KEYS = {
+  partnership: "rolePartnership",
+  admin: "roleAdmin",
+  manager: "roleManager",
+  supervisor: "roleSupervisor",
+  accountant: "roleAccountant",
+  audit: "roleAudit",
+  "customer service": "roleCustomerService",
+  company: "roleCompany",
+  owner: "roleOwner",
+};
+
+/** User list table / modal: localized role badge */
+export function formatUserRoleDisplay(t, role) {
+  const key = USER_ROLE_I18N_KEYS[String(role || "").trim().toLowerCase()];
+  if (key) return t(key);
+  return String(role || "").toUpperCase();
+}
+
+/** User list table: localized status badge */
+export function formatUserStatusDisplay(t, status) {
+  const s = String(status || "").trim().toLowerCase();
+  if (s === "active") return t("statusActive");
+  if (s === "inactive") return t("statusInactive");
+  return String(status || "").toUpperCase();
 }
 
 export const getUserListText = createGetText(USER_LIST_I18N);

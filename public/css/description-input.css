@@ -1,0 +1,136 @@
+/* Shared Description field: input + flush blue + tile (DataCapture style) */
+.description-input-wrap,
+.dc-description-input-wrap {
+    display: flex;
+    align-items: stretch;
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--description-input-border, #e2e8f0);
+    border-radius: 6px;
+    overflow: hidden;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.description-input-wrap--interactive,
+.dc-description-input-wrap {
+    cursor: pointer;
+}
+
+.description-input-wrap--interactive:hover,
+.description-input-wrap--interactive:focus-within,
+.dc-description-input-wrap:hover,
+.dc-description-input-wrap:focus-within {
+    border-color: var(--description-input-focus-border, #3b82f6);
+    box-shadow: var(--description-input-focus-shadow, 0 0 0 2px rgba(59, 130, 246, 0.12));
+}
+
+.description-input-wrap input,
+.dc-description-input-wrap input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    padding: clamp(6px, 0.35vw, 9px) clamp(8px, 0.63vw, 12px);
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    outline: none;
+    background: #ffffff;
+}
+
+.description-input-wrap--interactive input,
+.dc-description-input-wrap input {
+    cursor: pointer;
+}
+
+.description-add-tile,
+.dc-description-add-tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 clamp(34px, 2.45vw, 40px);
+    width: clamp(34px, 2.45vw, 40px);
+    align-self: stretch;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: #3b82f6;
+    color: #ffffff;
+    font-size: clamp(14px, 0.95vw, 18px);
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.description-add-tile:hover:not(:disabled),
+.dc-description-add-tile:hover {
+    background: #2563eb;
+}
+
+.description-add-tile:focus,
+.description-add-tile:focus-visible,
+.dc-description-add-tile:focus,
+.dc-description-add-tile:focus-visible {
+    outline: none;
+    background: #2563eb;
+}
+
+.description-add-tile:disabled,
+.dc-description-add-tile:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* DataCapture page: fixed control height */
+body.datacapture-page .process-form .dc-description-input-wrap,
+body.datacapture-page .process-form .description-input-wrap {
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
+}
+
+/* Process form modal: match modal control sizing */
+.process-form-modal .description-input-wrap,
+.process-form-modal .dc-description-input-wrap,
+#addModal .modal-content.process-form-modal .description-input-wrap,
+#addModal .modal-content.process-form-modal .dc-description-input-wrap,
+#editModal .modal-content.process-form-modal .description-input-wrap,
+#editModal .modal-content.process-form-modal .dc-description-input-wrap {
+    min-height: var(--process-form-modal-control-min-h, clamp(2.75rem, 2.25vw, 3.25rem));
+    border-radius: calc(var(--process-form-modal-radius, 0.75rem) * 0.55);
+    border-color: var(--color-border-muted, #dbe3ee);
+}
+
+.process-form-modal .description-input-wrap input,
+.process-form-modal .dc-description-input-wrap input,
+#addModal .modal-content.process-form-modal .description-input-wrap input,
+#addModal .modal-content.process-form-modal .dc-description-input-wrap input,
+#editModal .modal-content.process-form-modal .description-input-wrap input,
+#editModal .modal-content.process-form-modal .dc-description-input-wrap input {
+    font-size: var(--process-form-modal-control-size, var(--text-small)) !important;
+    font-family: var(--font-ui) !important;
+    background-color: var(--color-surface-gray-50, #f8fafc);
+}
+
+.process-form-modal .description-input-wrap--interactive:hover,
+.process-form-modal .description-input-wrap--interactive:focus-within,
+.process-form-modal .dc-description-input-wrap:hover,
+.process-form-modal .dc-description-input-wrap:focus-within,
+#addModal .modal-content.process-form-modal .description-input-wrap--interactive:hover,
+#addModal .modal-content.process-form-modal .description-input-wrap--interactive:focus-within,
+#addModal .modal-content.process-form-modal .dc-description-input-wrap:hover,
+#addModal .modal-content.process-form-modal .dc-description-input-wrap:focus-within,
+#editModal .modal-content.process-form-modal .description-input-wrap--interactive:hover,
+#editModal .modal-content.process-form-modal .description-input-wrap--interactive:focus-within,
+#editModal .modal-content.process-form-modal .dc-description-input-wrap:hover,
+#editModal .modal-content.process-form-modal .dc-description-input-wrap:focus-within {
+    border-color: var(--color-primary, #0d60ff) !important;
+    box-shadow: 0 0 0 2px rgba(13, 96, 255, 0.12);
+}

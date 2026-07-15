@@ -2,9 +2,10 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 /**
- * Vite copies public/css → dist/css at build time.
+ * Vite copies frontend/public/css → frontend/dist/css at build time.
  * Keep those files in dist so production can serve /frontend/dist/css/* when only
- * dist/ is deployed. Do not delete dist/css or rewrite links to /public/css/.
+ * frontend/dist is deployed (Hostinger). Do not delete dist/css or rewrite links
+ * to /frontend/public/css/ — that path requires a separate public/ deploy.
  */
 const distCssDir = resolve(process.cwd(), "dist", "css");
 const styleCss = resolve(distCssDir, "style.css");

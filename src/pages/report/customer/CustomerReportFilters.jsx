@@ -1,6 +1,7 @@
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import ReportDatePicker from "../common/ReportDatePicker.jsx";
 import ReportGcFilterPanel from "../shared/ReportGcFilterPanel.jsx";
+import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
 
 const QUICK_RANGE_KEYS = ["today", "yesterday", "thisWeek", "lastWeek", "thisMonth", "lastMonth", "thisYear", "lastYear"];
 
@@ -35,7 +36,6 @@ export default function CustomerReportFilters({
   monthLabels,
   weekdaysShort,
 }) {
-  const [accountSearch, setAccountSearch] = useState("");
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
 
   const accountDropdownRef = useRef(null);
@@ -48,15 +48,22 @@ export default function CustomerReportFilters({
     return () => document.removeEventListener("mousedown", handle);
   }, []);
 
-  const filteredAccounts = useMemo(() => {
-    if (!accountSearch.trim()) return accounts;
-    const s = accountSearch.toLowerCase();
-    return accounts.filter(a =>
-      (a.account_id || "").toLowerCase().includes(s) ||
-      (a.name || "").toLowerCase().includes(s) ||
-      (a.display_text || "").toLowerCase().includes(s)
-    );
-  }, [accounts, accountSearch]);
+  const listItemCount = accounts.length > 0 ? accounts.length + 1 : 1;
+
+  const getItemLabel = useCallback(
+    (idx) => {
+      if (idx === 0) return t("allAccounts");
+      const a = accounts[idx - 1];
+      return a ? (a.display_text || `${a.account_id} - ${a.name}`) : "";
+    },
+    [accounts, t],
+  );
+
+  const { highlightIdx, setHighlightIdx, listRef, handleButtonKeyDown, highlightClass } = useListboxKeyboard({
+    open: accountDropdownOpen,
+    itemCount: listItemCount,
+    getItemLabel,
+  });
 
   const selectedAccountLabel = useMemo(() => {
     if (!accountId) return t("allAccounts");
@@ -85,40 +92,54 @@ export default function CustomerReportFilters({
                   aria-labelledby="report-account-outlined-label"
                   className={`custom-select-button ${accountDropdownOpen ? "open" : ""}`}
                   onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
+                  onKeyDown={(e) => {
+                    handleButtonKeyDown(e, {
+                      isOpen: accountDropdownOpen,
+                      onToggleOpen: () => setAccountDropdownOpen(true),
+                      onClose: () => setAccountDropdownOpen(false),
+                      len: listItemCount,
+                      onSelectIndex: (idx) => {
+                        if (idx === 0) {
+                          setAccountId("");
+                          setAccountDropdownOpen(false);
+                        } else {
+                          const a = accounts[idx - 1];
+                          if (a) {
+                            setAccountId(a.id);
+                            setAccountDropdownOpen(false);
+                          }
+                        }
+                      },
+                    });
+                  }}
                 >
                   {selectedAccountLabel}
                 </button>
                 {accountDropdownOpen && (
                   <div className="custom-select-dropdown show">
-                    <div className="custom-select-search">
-                      <input
-                        type="text"
-                        placeholder={t("searchAccount")}
-                        autoComplete="off"
-                        value={accountSearch}
-                        onChange={(e) => setAccountSearch(e.target.value)}
-                        autoFocus
-                      />
-                    </div>
-                    <div className="custom-select-options">
+                    <div className="custom-select-options" ref={listRef}>
                       <div
-                        className={`custom-select-option ${!accountId ? "selected" : ""}`}
+                        className={`custom-select-option ${!accountId ? "selected" : ""}${highlightClass(0)}`}
+                        data-kb-idx={0}
+                        onMouseEnter={() => setHighlightIdx(0)}
                         onClick={() => { setAccountId(""); setAccountDropdownOpen(false); }}
                       >
                         {t("allAccounts")}
                       </div>
-                      {filteredAccounts.map(a => (
+                      {accounts.map((a, idx) => {
+                        const kbIdx = idx + 1;
+                        return (
                         <div
                           key={a.id}
-                          className={`custom-select-option ${String(a.id) === String(accountId) ? "selected" : ""}`}
+                          className={`custom-select-option ${String(a.id) === String(accountId) ? "selected" : ""}${highlightClass(kbIdx)}`}
+                          data-kb-idx={kbIdx}
+                          onMouseEnter={() => setHighlightIdx(kbIdx)}
                           onClick={() => { setAccountId(a.id); setAccountDropdownOpen(false); }}
                         >
                           {a.display_text || `${a.account_id} - ${a.name}`}
                         </div>
-                      ))}
-                      {filteredAccounts.length === 0 && (
-                        <div className="custom-select-no-results">{t("noResultsFound")}</div>
-                      )}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

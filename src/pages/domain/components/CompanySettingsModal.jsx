@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
-import { updateTenantSetting } from "../domainApi.js";
+import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { notifySessionRefreshRequested } from "../../../utils/company/companySessionEvents.js";
 import { showDomainAlert } from "./DomainNotification.jsx";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
@@ -20,6 +20,7 @@ import {
   normalizeFeeShareFromServer,
   ensureCompanyFeeShare,
   isFeeShareAllocationsEmpty,
+  applyDefaultProfitAllocation,
   pruneEmptyShareRows,
   sumFeeShareRolePercentages,
   computeShareTotals,
@@ -157,10 +158,33 @@ export default function CompanySettingsModal({
   const sharePickerCompanyCode = "C168";
 
   const loadAccounts = useCallback(() => {
-    // 暂时注销 PHP 获取 share 接口，避免报错
-    setShareAccounts([]);
-    setShareAccountsProfit([]);
-  }, []);
+    fetch(buildApiUrl("api/domain/domain_api.php"), {
+      cache: "no-cache",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "get_company_share_settings",
+        // 账户下拉始终来自 C168；Group 不传 group_code，避免误用集团账本账户列表
+        company_id: isGroup ? sharePickerCompanyCode : company.company_id,
+      }),
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        const accounts = res.success && Array.isArray(res.data?.accounts) ? res.data.accounts : [];
+        const profitAccounts =
+          res.success && Array.isArray(res.data?.accounts_profit) ? res.data.accounts_profit : [];
+        setShareAccounts(accounts);
+        setShareAccountsProfit(profitAccounts);
+        setFsa((prev) => {
+          let next = prev;
+          if (res.success && res.data?.company_exists && isFeeShareAllocationsEmpty(prev)) {
+            next = normalizeFeeShareFromServer(res.data.allocations);
+          }
+          return applyDefaultProfitAllocation(next, profitAccounts);
+        });
+      })
+      .catch(() => { setShareAccounts([]); setShareAccountsProfit([]); });
+  }, [company.company_id, isGroup]);
 
   // Load share accounts from API
   useEffect(() => {
@@ -170,11 +194,19 @@ export default function CompanySettingsModal({
       return;
     }
 
-    // 已经由大弹窗传入了初始 permissions 列表，不再重复向旧 PHP 请求
     if (!Array.isArray(initCompany.permissions) || initCompany.permissions.length === 0) {
-      setPermissions([]);
-    } else {
-      setPermissions(initCompany.permissions);
+      fetch(buildApiUrl("api/domain/domain_api.php"), {
+        cache: "no-cache",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get_company_permissions", company_id: company.company_id }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          const perms = data.success && Array.isArray(data.data?.permissions) ? data.data.permissions : [];
+          setPermissions(perms);
+        })
+        .catch(() => setPermissions([]));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -247,6 +279,30 @@ export default function CompanySettingsModal({
       }
     }
 
+    try {
+      const payload = {
+        action: "validate_domain_code",
+        code: newCode,
+      };
+      if (excludeOwnerId !== undefined && excludeOwnerId !== null && excludeOwnerId !== "") {
+        payload.exclude_owner_id = Number(excludeOwnerId);
+      }
+      const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        showDomainAlert(json.message || t("operationFailed"), "danger");
+        return null;
+      }
+    } catch {
+      showDomainAlert(t("validateDomainCodeUnavailable"), "danger");
+      return null;
+    }
+
     return newCode;
   }
 
@@ -275,7 +331,7 @@ export default function CompanySettingsModal({
       isExtending: false,
       originalExpirationDate: null,
     }));
-    setFsa(defaultFeeShareAllocations());
+    setFsa(applyDefaultProfitAllocation(defaultFeeShareAllocations(), shareAccountsProfit));
     setChargeOnSave(false);
     setExpandedCards({});
     if (isGroup) {
@@ -292,17 +348,19 @@ export default function CompanySettingsModal({
     const apiEntityCode = originalEntityCode;
 
     if (commissionOnly) {
-      if (!company.id) {
-        showDomainAlert(t("shareSaveFailed"), "danger");
-        return;
-      }
       try {
-        const json = await updateTenantSetting({
-          id: company.id,
-          code: apiEntityCode,
-          ownerId: excludeOwnerId,
-          feeShareAllocations: cleanFsa,
+        const action = isGroup ? "save_group_share_settings" : "save_company_share_settings";
+        const payload = isGroup
+          ? { action, group_code: apiEntityCode, fee_share_allocations: cleanFsa }
+          : { action, company_id: apiEntityCode, fee_share_allocations: cleanFsa };
+        const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
+          cache: "no-cache",
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         });
+        const json = await res.json();
         if (!json.success) {
           showDomainAlert(json.message || t("shareSaveFailed"), "danger");
           return;
@@ -350,21 +408,34 @@ export default function CompanySettingsModal({
         apply_commission_payments_on_domain_save: chargeOnSave,
       };
 
-      if (persistImmediately && company.id) {
+      if (persistImmediately) {
         try {
-          const json = await updateTenantSetting({
-            id: company.id,
-            code: newEntityCode,
-            ownerId: excludeOwnerId,
-            expirationDate: expDate || null,
-            permissions: [],
-            feeShareAllocations: cleanFsa,
+          const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
+            cache: "no-cache",
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "save_group_tenant_settings",
+              group_code: apiEntityCode,
+              expiration_date: expDate || null,
+              fee_share_allocations: cleanFsa,
+              apply_commission_payments: chargeOnSave,
+            }),
           });
+          const json = await res.json();
           if (!json.success) {
-            showDomainAlert(json.message || t("shareSaveFailed"), "danger");
-            return;
+            const msg = json.message || "";
+            if (msg.includes("not found") || msg.includes("save the domain first")) {
+              showDomainAlert(t("groupUpdatedShareAfterSave"));
+            } else {
+              showDomainAlert(msg || t("shareSaveFailed"), "danger");
+              return;
+            }
+          } else {
+            const hint = chargeOnSave ? t("feePostsHint") : "";
+            showDomainAlert(t("groupUpdatedSuccess") + hint);
           }
-          showDomainAlert(t("groupUpdatedSuccess"));
           onSave(updated);
           notifySessionRefreshRequested();
         } catch {
@@ -379,47 +450,74 @@ export default function CompanySettingsModal({
       return;
     }
 
-    const updatedCo = {
-      ...company,
-      company_id: newEntityCode,
-      ...renameFields,
-      expiration_date: expDate,
-      selectedPeriod: period || company.selectedPeriod,
-      startDate,
-      isExtending: company.isExtending,
-      originalExpirationDate: company.originalExpirationDate,
-      permissions: [...permissions],
-      fee_share_allocations: cleanFsa,
-      apply_commission_payments_on_domain_save: chargeOnSave,
-    };
+    const permReq = fetch(buildApiUrl("api/domain/domain_api.php"), {
+      cache: "no-cache",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update_company_permissions",
+        company_id: apiEntityCode,
+        permissions,
+        expiration_date: expDate || null,
+      }),
+    }).then((r) => r.json());
 
-    if (persistImmediately && company.id) {
-      try {
-        const json = await updateTenantSetting({
-          id: company.id,
-          code: newEntityCode,
-          ownerId: excludeOwnerId,
-          expirationDate: expDate || null,
-          permissions,
-          feeShareAllocations: cleanFsa,
-        });
-        if (!json.success) {
-          showDomainAlert(json.message || t("permissionsSaveFailed"), "danger");
+    const shareReq = fetch(buildApiUrl("api/domain/domain_api.php"), {
+      cache: "no-cache",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "save_company_share_settings",
+        company_id: apiEntityCode,
+        fee_share_allocations: cleanFsa,
+        apply_commission_payments: chargeOnSave,
+      }),
+    }).then((r) => r.json());
+
+    Promise.all([permReq, shareReq])
+      .then(([permData, shareData]) => {
+        if (!permData.success) {
+          showDomainAlert(permData.message || t("permissionsSaveFailed"), "danger");
           return;
         }
-        showDomainAlert(t("companyUpdatedSuccess"));
-        onSave(updatedCo);
+        if (!shareData.success) {
+          const msg = shareData.message || "";
+          if (msg.includes("not found") || msg.includes("Save the domain first")) {
+            showDomainAlert(t("companyUpdatedShareAfterSave"));
+          } else {
+            showDomainAlert(msg || t("shareSaveFailed"), "danger");
+            return;
+          }
+        } else {
+          const hint = chargeOnSave ? t("feePostsHint") : "";
+          showDomainAlert(t("companyUpdatedSuccess") + hint);
+        }
+        onSave({
+          ...company,
+          company_id: newEntityCode,
+          ...renameFields,
+          expiration_date: expDate,
+          selectedPeriod: period || company.selectedPeriod,
+          startDate,
+          isExtending: company.isExtending,
+          originalExpirationDate: company.originalExpirationDate,
+          permissions: [...permissions],
+          fee_share_allocations: cleanFsa,
+          apply_commission_payments_on_domain_save: chargeOnSave,
+        });
         notifySessionRefreshRequested();
-      } catch {
+      })
+      .catch(() => {
         showDomainAlert(t("serverUnreachableChangesKept"), "danger");
-        onSave(updatedCo);
-      }
-      return;
-    }
-
-    showDomainAlert(t("companyUpdatedShareAfterSave"));
-    onSave(updatedCo);
-    notifySessionRefreshRequested();
+        onSave({
+          ...company,
+          company_id: newEntityCode,
+          ...renameFields,
+          permissions: [...permissions],
+          fee_share_allocations: pruneEmptyShareRows(fsa),
+          apply_commission_payments_on_domain_save: chargeOnSave,
+        });
+      });
   }
 
   // ─── Share % helpers（周期变更时按 Price 中对应金额重算，含 C168 行） ─────
