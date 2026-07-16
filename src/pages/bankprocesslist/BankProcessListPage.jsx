@@ -662,6 +662,7 @@ export default function BankProcessListPage() {
             setSelectedIds={setSelectedIds}
             showHeaderSelectAll={showAll || showActive || showInactive || showOfficial || showEInvoice || showBlock}
             notify={notify}
+            tenantId={companyId}
             fetchRows={fetchRows}
             onBankStatusUpdated={handleBankStatusUpdated}
             loadAccountingInbox={loadAccountingInbox}

@@ -54,14 +54,14 @@ import {
   isBankResendDayStartBackendErrorMessage,
   notifyTransactionDataChanged,
   bankProcessStatusTargetPatch,
+  normalizeBankProcessStatus,
+  normalizeBankIssueFlag,
   resolveTenantIsBankOnly,
   parseProfitSharingToRows,
   serializeProfitSharingRows,
   calcBankNetProfitDisplay,
   formatBankMoneyFixed2,
-  formatProfitSharingStringFixed2,
   EMPTY_BANK_FORM,
-  buildBankDtsFormFields,
   parseBankContractRentalMonthsForDayEnd,
   contractBillingEndYmdForBankForm,
   matchesCurrentBankFilters,
@@ -73,11 +73,13 @@ import {
   accountingDuePeriodType,
   accountingDueBillingMonth,
   accountingDueRowKey,
+  buildAccountingDueSkipItem,
   checkBankResendLockFromBackend,
   isBankResendScheduleLockedToday,
   isResendDayStartDuplicateInAccountingDue,
   normalizeBankResendDayStartYmd,
   resolveBankProcessListTenantId,
+  bankProcessListRowToEditForm,
 } from "../lib/bankProcessHelpers.js";
 import {
   dedupeCompanyRowsForSwitcher,
@@ -88,6 +90,7 @@ import {
   prefetchGamesProcessListPayload,
   resolveBankProcessListRouteCache,
   warmBankProcessListRouteCache,
+  invalidateBankProcessListRouteCache,
 } from "../../processlist/processRoutePrefetch.js";
 import {
   deleteBankCountry,
@@ -111,7 +114,16 @@ import {
   deleteCurrency,
   fetchAvailableCurrencies,
 } from "../../../utils/api/currencyApi.js";
-import { addBankProcess, buildAddBankProcessRequest } from "../bankProcessListApi.js";
+import {
+  addBankProcess,
+  buildAddBankProcessRequest,
+  buildUpdateBankProcessRequest,
+  fetchAccountingDueInbox,
+  skipAccountingDue,
+  updateBankProcess,
+  deleteBankProcess,
+  updateBankProcessRemark,
+} from "../bankProcessListApi.js";
 
 function resolveBankProcessListCacheKey(companyId, search) {
   return `company:${Number(companyId)}|${String(search || "").trim()}`;
@@ -119,7 +131,14 @@ function resolveBankProcessListCacheKey(companyId, search) {
 
 function bankProcessRowsFingerprint(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return "0";
-  return rows.map((r) => Number(r.id)).join(",");
+  // Include status/issue_flag so silent refetch after update-status replaces rows
+  // (id-only fingerprint kept stale ACTIVE after DB already had INACTIVE).
+  return rows
+    .map(
+      (r) =>
+        `${Number(r?.id)}:${normalizeBankProcessStatus(r?.status)}:${normalizeBankIssueFlag(r?.issue_flag)}`,
+    )
+    .join("|");
 }
 
 function resolveBankProcessBootCurrency() {
@@ -1148,6 +1167,7 @@ export function useBankProcessListPage() {
   const fetchRows = useCallback(
     async (opts = {}) => {
       const silent = !!opts.silent;
+      const forceReplace = !!opts.forceReplace;
       const preservePage = !!opts.preservePage;
       const preserveSelection = !!opts.preserveSelection;
       const cid = opts.companyId != null ? Number(opts.companyId) : Number(companyId);
@@ -1174,7 +1194,11 @@ export function useBankProcessListPage() {
           currencyCodes: slice.currencyCodes,
         });
         setRows((prev) => {
-          if (silent && bankProcessRowsFingerprint(prev) === bankProcessRowsFingerprint(nextRows)) {
+          if (
+            silent &&
+            !forceReplace &&
+            bankProcessRowsFingerprint(prev) === bankProcessRowsFingerprint(nextRows)
+          ) {
             return prev;
           }
           return nextRows;
@@ -1252,22 +1276,15 @@ export function useBankProcessListPage() {
 
   const loadAccountingInbox = useCallback(async (opts = {}) => {
     const silent = !!opts.silent;
-    const restoreDismissed = !!opts.restoreDismissed;
+    const restoreSkipped = !!(opts.restoreSkipped || opts.restoreDismissed);
     const cid = Number(companyId);
     if (!Number.isFinite(cid) || cid <= 0) return;
     const fetchGen = ++accountingInboxFetchGenRef.current;
     if (!silent) setAccountingLoading(true);
     try {
-      const url = new URL(buildApiUrl("api/processes/process_accounting_inbox_api.php"));
-      url.searchParams.set("company_id", String(cid));
-      if (restoreDismissed) {
-        url.searchParams.set("restore_dismissed", "1");
-      }
-      const res = await fetch(url.toString(), { credentials: "include", cache: "no-cache" });
-      const json = await res.json();
+      const list = await fetchAccountingDueInbox(cid, undefined, { restoreSkipped });
       if (fetchGen !== accountingInboxFetchGenRef.current) return;
       if (Number(companyIdRef.current) !== cid) return;
-      const list = Array.isArray(json?.data) ? json.data : [];
       setAccountingRows(list);
       if (!silent) {
         setAccountingSelected(new Set(list.filter((x) => !x.already_posted_today).map((x) => accountingDueRowKey(x)).filter(Boolean)));
@@ -1306,19 +1323,24 @@ export function useBankProcessListPage() {
 
   const handleBankStatusUpdated = useCallback(
     (row, target, opts = {}) => {
-      const id = row?.id;
-      if (id == null) return;
+      const id = Number(row?.id);
+      if (!Number.isFinite(id) || id <= 0) return;
       const backgroundSync = opts.backgroundSync !== false;
       const patch = bankProcessStatusTargetPatch(row, target);
       setRows((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
+        prev.map((r) => (Number(r.id) === id ? { ...r, ...patch } : r))
       );
       if (!backgroundSync) return;
+      const cid = Number(companyIdRef.current);
+      if (Number.isFinite(cid) && cid > 0) {
+        invalidateBankProcessListRouteCache(cid);
+        bankProcessListCacheRef.current.delete(resolveBankProcessListCacheKey(cid, search));
+      }
       notifyTransactionDataChanged("bank-process-list-react-status");
-      void fetchRows({ silent: true, preservePage: true, preserveSelection: true });
+      void fetchRows({ silent: true, forceReplace: true, preservePage: true, preserveSelection: true });
       void loadAccountingInbox({ silent: true });
     },
-    [fetchRows, loadAccountingInbox]
+    [fetchRows, loadAccountingInbox, search]
   );
 
   // Badge uses accountingRows; sync PHP session first (when needed) so inbox matches the visible company.
@@ -1754,42 +1776,39 @@ export function useBankProcessListPage() {
 
   const openEdit = async (rowId) => {
     try {
-      const url = new URL(buildApiUrl("api/processes/processlist_api.php"));
-      url.searchParams.set("action", "get_process");
-      url.searchParams.set("id", String(rowId));
-      url.searchParams.set("permission", "Bank");
-      const res = await fetch(url.toString(), { credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success || !json.data) return notify(apiMsg(json, "failedLoadBankProcess"), "danger");
-      const d = json.data;
-      const nextForm = {
-        id: String(d.id || ""),
-        country: d.country || "", bank: d.bank || "", type: d.type || "", name: d.name || "",
-        card_merchant_id: d.card_merchant_id ? String(d.card_merchant_id) : "",
-        customer_id: d.customer_id ? String(d.customer_id) : "",
-        profit_account_id: d.profit_account_id ? String(d.profit_account_id) : "",
-        contract: d.contract || "",
-        insurance: d.insurance ?? "",
-        cost: d.cost != null && d.cost !== "" ? formatBankMoneyFixed2(d.cost) : "",
-        price: d.price != null && d.price !== "" ? formatBankMoneyFixed2(d.price) : "",
-        profit: d.profit != null && d.profit !== "" ? formatBankMoneyFixed2(d.profit) : "",
-        profit_sharing: formatProfitSharingStringFixed2(d.profit_sharing || ""),
-        day_start: d.day_start ? String(d.day_start).slice(0, 10) : "",
-        day_end: d.day_end ? String(d.day_end).slice(0, 10) : "",
-        day_end_monthly_cap_enabled:
-          bankProcessFrequencyNormalized(d.day_start_frequency) === "1st_of_every_month" &&
-          (d.day_end_monthly_cap_enabled === 1 ||
-            d.day_end_monthly_cap_enabled === true ||
-            String(d.day_end_monthly_cap_enabled) === "1"),
-        day_start_frequency: bankProcessFrequencyNormalized(d.day_start_frequency),
-        status: d.status || "active", remark: d.remark || "", sop: d.sop || "",
-        ...buildBankDtsFormFields(d),
-      };
+      const id = Number(rowId);
+      const row =
+        (Array.isArray(rows) ? rows : []).find((r) => Number(r?.id) === id) ||
+        (Array.isArray(rowsRef.current) ? rowsRef.current : []).find((r) => Number(r?.id) === id);
+      if (!row) {
+        notify(t("failedLoadBankProcess"), "danger");
+        return;
+      }
+
+      let accs = accounts;
+      if (!Array.isArray(accs) || accs.length === 0) {
+        const tid = resolveBankProcessListTenantId(companyId);
+        if (tid) {
+          try {
+            accs = await fetchAccountListByTenantId(tid);
+          } catch {
+            accs = [];
+          }
+        }
+      }
+
+      const nextForm = bankProcessListRowToEditForm(row, accs);
+      if (!nextForm) {
+        notify(t("failedLoadBankProcess"), "danger");
+        return;
+      }
       seedContractSyncKeys(nextForm);
       setEditMode(true);
       setForm(nextForm);
       setModalOpen(true);
-    } catch { notify(t("failedLoadBankProcess"), "danger"); }
+    } catch {
+      notify(t("failedLoadBankProcess"), "danger");
+    }
   };
 
   const submitForm = async (e) => {
@@ -1869,60 +1888,30 @@ export function useBankProcessListPage() {
       return;
     }
 
-    // Edit still PHP until update-bank-process exists on Spring.
-    let normalizedFreq;
-    if (isOnceSubmit) normalizedFreq = "once";
-    else if (rawFreq === "week") normalizedFreq = "week";
-    else if (rawFreq === "day") normalizedFreq = "day";
-    else if (rawFreq === "monthly") normalizedFreq = "monthly";
-    else normalizedFreq = "1st_of_every_month";
-    const moneyNormalized = {
-      ...form,
-      cost: formatBankMoneyFixed2(form.cost),
-      price: formatBankMoneyFixed2(form.price),
-      profit: calcBankNetProfitDisplay(form.cost, form.price, form.profit_sharing),
-      profit_sharing: formatProfitSharingStringFixed2(form.profit_sharing),
-    };
-    const fd = new FormData();
-    Object.entries(moneyNormalized).forEach(([k, v]) => {
-      if (k === "id" && !editMode) return;
-      if (k === "day_end_monthly_cap_enabled") return;
-      if (k === "day_start_frequency") {
-        fd.append(k, normalizedFreq);
-        return;
-      }
-      if (isOnceSubmit && (k === "day_end" || k === "contract" || k === "insurance")) {
-        fd.append(k, "");
-        return;
-      }
-      if (isWeekSubmit && (k === "day_end" || k === "contract")) {
-        fd.append(k, "");
-        return;
-      }
-      if (isDaySubmit && (k === "day_end" || k === "contract")) {
-        fd.append(k, "");
-        return;
-      }
-      fd.append(k, v ?? "");
-    });
-    fd.append("day_end_monthly_cap_enabled", dayEndMonthlyCapEnabled ? "1" : "0");
-    if (companyId) fd.append("company_id", String(companyId));
-    fd.append("permission", "Bank");
+    const tid = resolveBankProcessListTenantId(companyId);
+    if (!tid) {
+      notify(t("missingCompanyContext"), "danger");
+      return;
+    }
+    if (!Number(form.id)) {
+      notify(t("failedLoadBankProcess"), "danger");
+      return;
+    }
+
     try {
-      const res = await fetch(buildApiUrl("api/processes/processlist_api.php?action=update_process"), {
-        method: "POST",
-        body: fd,
-        credentials: "include",
+      const request = buildUpdateBankProcessRequest({
+        form,
+        tenantId: tid,
+        accounts,
       });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "saveFailed"), "danger");
+      await updateBankProcess(request);
       notify(t("bankProcessUpdated"));
       notifyTransactionDataChanged("bank-process-list-react");
       setModalOpen(false);
       void fetchRows();
       void loadAccountingInbox({ silent: true });
-    } catch {
-      notify(t("saveFailed"), "danger");
+    } catch (err) {
+      notify(apiMsg({ message: err?.message }, "saveFailed"), "danger");
     }
   };
 
@@ -1951,35 +1940,43 @@ export function useBankProcessListPage() {
     if (guardWrite()) return;
     const selected = accountingRows.filter((r) => accountingDeleteSelected.has(accountingDueRowKey(r)));
     if (selected.length === 0) return notify(t("tickDeleteRows"), "warning");
+    const items = selected.map((r) => buildAccountingDueSkipItem(r)).filter(Boolean);
+    if (items.length === 0) return notify(t("deleteDueFailed"), "danger");
     try {
-      const fd = new FormData();
-      selected.forEach((r) => {
-        fd.append("ids[]", r.id); fd.append("period_types[]", accountingDuePeriodType(r)); fd.append("billing_months[]", accountingDueBillingMonth(r));
-      });
-      const res = await fetch(buildApiUrl("api/processes/dismiss_accounting_due_api.php"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "deleteDueFailed"), "danger");
-      notify(apiMsg(json, "removedFromDue"));
-      await loadAccountingInbox();
+      await skipAccountingDue(items);
+      notify(t("removedFromDue"));
+      setAccountingDeleteSelected(new Set());
+      await loadAccountingInbox({ silent: true });
       await fetchRows();
       if (resendModalOpen) void refreshResendConfirmLock();
       notifyTransactionDataChanged("bank-process-list-react");
-    } catch { notify(t("deleteDueFailed"), "danger"); }
+    } catch (err) {
+      notify(apiMsg({ message: err?.message }, "deleteDueFailed"), "danger");
+    }
   };
 
   const saveRemarkModal = async () => {
     if (guardWrite()) return;
     if (!remarkRow) return;
+    const tid = resolveBankProcessListTenantId(companyId);
+    if (!tid) return notify(t("missingCompanyContext"), "danger");
     try {
-      const fd = new FormData(); fd.append("id", String(remarkRow.id)); fd.append("remark", remarkDraft);
-      const res = await fetch(buildApiUrl("api/processes/update_bank_remark_api.php"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "remarkUpdateFailed"), "danger");
-      setRows((prev) => prev.map((r) => (Number(r.id) === Number(remarkRow.id) ? { ...r, remark: remarkDraft } : r)));
+      const savedRemark = await updateBankProcessRemark({
+        id: remarkRow.id,
+        tenantId: tid,
+        remark: remarkDraft,
+      });
+      const displayRemark = savedRemark ?? "";
+      setRows((prev) =>
+        prev.map((r) => (Number(r.id) === Number(remarkRow.id) ? { ...r, remark: displayRemark } : r)),
+      );
       notifyTransactionDataChanged("bank-process-list-react");
       notify(t("remarkUpdated"));
-      setRemarkModalOpen(false); setRemarkRow(null);
-    } catch { notify(t("remarkUpdateFailed"), "danger"); }
+      setRemarkModalOpen(false);
+      setRemarkRow(null);
+    } catch (err) {
+      notify(apiMsg({ message: err?.message }, "remarkUpdateFailed"), "danger");
+    }
   };
 
   const resendAccountingDue = async () => {
@@ -2042,22 +2039,31 @@ export function useBankProcessListPage() {
       setDeleteConfirmOpen(false);
       return;
     }
+    const tid = resolveBankProcessListTenantId(companyId);
+    if (!tid) {
+      notify(t("missingCompanyContext"), "danger");
+      return;
+    }
     setDeleteSubmitting(true);
     try {
-      const res = await fetch(buildApiUrl("api/processes/delete_processes_api.php"), {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({ ids: Array.from(selectedIds), permission: "Bank" }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "deleteFailed"), "danger");
-      const n = json?.data?.deleted ?? selectedIds.size;
-      notify(n === 1 ? t("processDeletedOne") : t("processDeletedMany", { count: n }), "success");
+      const ids = Array.from(selectedIds);
+      let deleted = 0;
+      for (const id of ids) {
+        await deleteBankProcess({ id, tenantId: tid });
+        deleted += 1;
+      }
+      notify(deleted === 1 ? t("processDeletedOne") : t("processDeletedMany", { count: deleted }), "success");
+      invalidateBankProcessListRouteCache(tid);
+      bankProcessListCacheRef.current.delete(resolveBankProcessListCacheKey(tid, search));
       notifyTransactionDataChanged("bank-process-list-react");
       setDeleteConfirmOpen(false);
       setSelectedIds(new Set());
-      fetchRows();
-    } catch { notify(t("deleteFailed"), "danger"); }
-    finally { setDeleteSubmitting(false); }
+      void fetchRows({ forceReplace: true });
+    } catch (err) {
+      notify(apiMsg({ message: err?.message }, "deleteFailed"), "danger");
+    } finally {
+      setDeleteSubmitting(false);
+    }
   };
 
   const allCompanyButtons = useMemo(() => dedupeCompanyRowsForSwitcher(companies, companyId), [companies, companyId]);

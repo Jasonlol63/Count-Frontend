@@ -2,11 +2,8 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { createPortal } from "react-dom";
 import { translateBankProcessApiMessage } from "../../../translateFile/pages/bankProcessTranslate.js";
 import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
-import {
-  deriveBankProcessUiStatus,
-  normalizeBankIssueFlag,
-  normalizeBankProcessStatus,
-} from "../lib/bankProcessHelpers.js";
+import { deriveBankProcessUiStatus } from "../lib/bankProcessHelpers.js";
+import { updateBankProcessStatus } from "../bankProcessListApi.js";
 
 const STATUS_LABEL_KEYS = {
   ACTIVE: "statusActive",
@@ -26,20 +23,26 @@ const MENU_VIEWPORT_GUTTER = 8;
 
 export default function BankProcessStatusControl({
   row,
+  tenantId,
   onUpdated,
   notify: doNotify,
-  buildApiUrl: apiUrl,
   t,
   lang,
   /** When true, menu opens above the pill (used for last rows near table footer). */
   openMenuUp = false,
 }) {
-  const apiMsg = (json) =>
+  const apiMsg = (errOrJson) =>
     translateBankProcessApiMessage(
       lang,
       {
-        message: json?.message ?? json?.error,
-        errorCode: json?.data && typeof json.data === "object" && !Array.isArray(json.data) ? json.data.error : undefined,
+        message:
+          typeof errOrJson === "string"
+            ? errOrJson
+            : errOrJson?.message ?? errOrJson?.error,
+        errorCode:
+          errOrJson?.data && typeof errOrJson.data === "object" && !Array.isArray(errOrJson.data)
+            ? errOrJson.data.error
+            : undefined,
       },
       t("statusUpdateFailed")
     );
@@ -100,29 +103,16 @@ export default function BankProcessStatusControl({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  const postIssueFlag = async (id, issueFlag) => {
-    const fd = new FormData();
-    fd.append("id", String(id));
-    fd.append("issue_flag", issueFlag);
-    const res = await fetch(apiUrl("api/processes/update_bank_issue_flag_api.php"), { method: "POST", body: fd, credentials: "include" });
-    return res.json();
-  };
-
-  const postToggle = async (id) => {
-    const fd = new FormData();
-    fd.append("id", String(id));
-    fd.append("permission", "Bank");
-    const res = await fetch(apiUrl("api/processes/toggle_process_status_api.php"), { method: "POST", body: fd, credentials: "include" });
-    return res.json();
-  };
-
   const [pending, setPending] = useState(false);
 
   const apply = async (target) => {
     if (pending) return;
-    const id = row.id;
-    const st = normalizeBankProcessStatus(row?.status);
-    const hasFlag = !!normalizeBankIssueFlag(row.issue_flag);
+    if (target === ui) {
+      setOpen(false);
+      return;
+    }
+    const id = row?.id;
+    const tid = tenantId ?? row?.tenant_id;
     const prevUi = deriveBankProcessUiStatus(row);
     setPending(true);
     onUpdated(target, { backgroundSync: false });
@@ -131,39 +121,12 @@ export default function BankProcessStatusControl({
       doNotify(message, tone);
     };
     try {
-      if (target === "ACTIVE") {
-        if (hasFlag) {
-          const j = await postIssueFlag(id, "");
-          if (!j.success) return fail(apiMsg(j));
-        }
-        if (st !== "active") {
-          const j = await postToggle(id);
-          if (!j.success) return fail(apiMsg(j));
-        }
-      } else if (target === "INACTIVE") {
-        if (hasFlag) {
-          const j = await postIssueFlag(id, "");
-          if (!j.success) return fail(apiMsg(j));
-        }
-        if (st === "active") {
-          const j = await postToggle(id);
-          if (!j.success) return fail(apiMsg(j));
-        }
-      } else if (target === "OFFICIAL") {
-        const j = await postIssueFlag(id, "official");
-        if (!j.success) return fail(apiMsg(j));
-      } else if (target === "E_INVOICE") {
-        const j = await postIssueFlag(id, "e_invoice");
-        if (!j.success) return fail(apiMsg(j));
-      } else if (target === "BLOCK") {
-        const j = await postIssueFlag(id, "block");
-        if (!j.success) return fail(apiMsg(j));
-      }
+      await updateBankProcessStatus({ id, tenantId: tid, status: target });
       doNotify(t("statusUpdated"), "success");
       onUpdated(target, { backgroundSync: true });
       setOpen(false);
-    } catch {
-      fail(t("statusUpdateFailed"));
+    } catch (err) {
+      fail(apiMsg(err?.message ? { message: err.message } : err));
     } finally {
       setPending(false);
     }

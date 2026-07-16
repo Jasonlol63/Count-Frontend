@@ -189,7 +189,13 @@ export function normalizeBankProcessListItemFromSpring(item) {
   const id = Number(item.id ?? bp.id ?? bp.bp_id);
   if (!Number.isFinite(id) || id <= 0) return null;
 
-  const statusRaw = bp.status ?? item.status;
+  const statusRaw =
+    item.status ??
+    item.Status ??
+    bp.status ??
+    bp.Status ??
+    (item.bankProcess && item.bankProcess.status) ??
+    (item.bank_process && item.bank_process.status);
   const { status, issue_flag } = splitSpringBankProcessStatus(statusRaw);
   const dayStart = ymdFromSpringDate(bp.dayStart ?? bp.day_start);
   const dayEnd = ymdFromSpringDate(bp.dayEnd ?? bp.day_end);
@@ -197,6 +203,28 @@ export function normalizeBankProcessListItemFromSpring(item) {
   const supplierName = item.supplierAccountName ?? item.supplier_account_name;
   const customerCode = item.customerAccountCode ?? item.customer_account_code;
   const customerName = item.customerAccountName ?? item.customer_account_name;
+
+  const sharesRaw = Array.isArray(item.shares) ? item.shares : [];
+  const shares = sharesRaw
+    .map((s) => {
+      if (!s || typeof s !== "object") return null;
+      const accountId = Number(s.accountId ?? s.account_id);
+      if (!Number.isFinite(accountId) || accountId <= 0) return null;
+      const amount = s.amount ?? null;
+      const sortOrder = Number(s.sortOrder ?? s.sort_order);
+      return {
+        accountId,
+        amount,
+        sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const createdBy = bp.createdBy ?? bp.created_by ?? "";
+  const updatedBy = bp.updatedBy ?? bp.updated_by ?? "";
+  const createdAt = formatSpringDateTimeDisplay(bp.createdAt ?? bp.created_at);
+  const updatedAt = formatSpringDateTimeDisplay(bp.updatedAt ?? bp.updated_at);
 
   return {
     id,
@@ -228,6 +256,68 @@ export function normalizeBankProcessListItemFromSpring(item) {
     company_account_id: bp.companyAccountId ?? bp.company_account_id ?? null,
     country_id: bp.countryId ?? bp.country_id ?? null,
     bank_option_id: bp.bankOptionId ?? bp.bank_option_id ?? null,
+    shares,
+    created_by: createdBy,
+    modified_by: updatedBy,
+    dts_created: createdAt,
+    dts_modified: updatedAt,
+  };
+}
+
+/** Spring LocalDateTime / string → display string for form audit fields. */
+function formatSpringDateTimeDisplay(value) {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") return value.replace("T", " ").slice(0, 19);
+  if (Array.isArray(value) && value.length >= 3) {
+    const [y, m, d, hh = 0, mm = 0, ss = 0] = value;
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")} ${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+  }
+  return String(value);
+}
+
+/**
+ * Build Edit modal form from a normalized list row (no get_process API).
+ * @param {object} row normalized list row
+ * @param {object[]} [accounts]
+ */
+export function bankProcessListRowToEditForm(row, accounts = []) {
+  if (!row || row.id == null) return null;
+  const frequency = bankProcessFrequencyNormalized(row.frequency || row.day_start_frequency);
+  const dayEnd = row.day_end ? String(row.day_end).slice(0, 10) : "";
+  const shareRows = Array.isArray(row.shares)
+    ? row.shares.map((s) => {
+        const acc = (accounts || []).find((a) => Number(a.id) === Number(s.accountId));
+        return {
+          accountId: s.accountId != null ? String(s.accountId) : "",
+          accountLabel: acc?.account_id || acc?.name || (s.accountId != null ? String(s.accountId) : ""),
+          amount: s.amount != null && s.amount !== "" ? formatBankMoneyFixed2(s.amount) : "",
+        };
+      })
+    : parseProfitSharingToRows(row.profit_sharing, accounts);
+
+  return {
+    id: String(row.id || ""),
+    country: row.country || "",
+    bank: row.bank || "",
+    type: row.type || row.card_owner_type || "",
+    name: row.card_owner || row.name || row.supplier || "",
+    card_merchant_id: row.supplier_account_id != null ? String(row.supplier_account_id) : "",
+    customer_id: row.customer_account_id != null ? String(row.customer_account_id) : "",
+    profit_account_id: row.company_account_id != null ? String(row.company_account_id) : "",
+    contract: row.contract || "",
+    insurance: row.insurance != null && row.insurance !== "" ? formatBankMoneyFixed2(row.insurance) : "",
+    cost: row.cost != null && row.cost !== "" ? formatBankMoneyFixed2(row.cost) : "",
+    price: row.price != null && row.price !== "" ? formatBankMoneyFixed2(row.price) : "",
+    profit: row.profit != null && row.profit !== "" ? formatBankMoneyFixed2(row.profit) : "",
+    profit_sharing: serializeProfitSharingRows(shareRows, accounts),
+    day_start: row.day_start ? String(row.day_start).slice(0, 10) : "",
+    day_end: dayEnd,
+    day_end_monthly_cap_enabled: frequency === "1st_of_every_month" && !!dayEnd,
+    day_start_frequency: frequency,
+    status: row.status || "active",
+    remark: row.remark || "",
+    sop: row.sop || "",
+    ...buildBankDtsFormFields(row),
   };
 }
 
@@ -507,7 +597,7 @@ export function isResendDayStartDuplicateInAccountingDue(rows, processId, daySta
   const pid = Number(processId);
   if (!Number.isFinite(pid) || pid <= 0) return false;
   return (Array.isArray(rows) ? rows : []).some((r) => {
-    if (Number(r?.id) !== pid || r?.already_posted_today) return false;
+    if (Number(r?.bankProcessId ?? r?.id) !== pid || r?.already_posted_today) return false;
     const billStart = normalizeBankResendDayStartYmd(r?.billing_period_start);
     if (billStart === ymd) return true;
     if (r?.is_resend_monthly_reopen) {
@@ -670,7 +760,10 @@ export function parseProfitSharingToRows(s, accounts) {
     const amount = parseFloat(t.slice(dash + 3).trim());
     if (!label || Number.isNaN(amount)) continue;
     const acc = (accounts || []).find(
-      (a) => String(a.account_id || "").toLowerCase() === label.toLowerCase() || String(a.name || "").toLowerCase() === label.toLowerCase()
+      (a) =>
+        String(a.account_id || "").toLowerCase() === label.toLowerCase() ||
+        String(a.name || "").toLowerCase() === label.toLowerCase() ||
+        String(a.id) === label
     );
     out.push({
       accountId: acc ? String(acc.id) : "",
@@ -715,11 +808,11 @@ export function bankProcessStatusTargetPatch(row, target) {
     case "INACTIVE":
       return { status: "inactive", issue_flag: "" };
     case "OFFICIAL":
-      return { issue_flag: "official" };
+      return { status: "active", issue_flag: "official" };
     case "E_INVOICE":
-      return { issue_flag: "e_invoice" };
+      return { status: "active", issue_flag: "e_invoice" };
     case "BLOCK":
-      return { issue_flag: "block" };
+      return { status: "active", issue_flag: "block" };
     default:
       return {};
   }
@@ -778,10 +871,13 @@ export function buildBankDtsFormFields(d) {
 
 /** @returns {'monthly'|'week'|'day'|'once'|'1st_of_every_month'} */
 export function bankProcessFrequencyNormalized(v) {
-  if (v === "monthly") return "monthly";
-  if (v === "week") return "week";
-  if (v === "day") return "day";
-  if (v === "once") return "once";
+  const s = String(v || "").trim().toLowerCase();
+  // Spring BankProcess.Frequency enum names
+  if (s === "monthly") return "monthly";
+  if (s === "week") return "week";
+  if (s === "day") return "day";
+  if (s === "once") return "once";
+  if (s === "first_of_every_month" || s === "1st_of_every_month") return "1st_of_every_month";
   return "1st_of_every_month";
 }
 
@@ -940,8 +1036,15 @@ export const contractBillingEndYmdForBankForm = (startYmd, termMonths, frequency
   return subtractOneDayFromYmd(exclusiveCal) || null;
 };
 
-/** Matches legacy processlist.js / bank_process_list.js Accounting Due row period_types. */
+/**
+ * Accounting Due row period type.
+ * Spring `AccountingDueDTO.periodType` (e.g. FIRST_MONTH / PARTIAL_FIRST_MONTH /
+ * FULL_MONTH / DAY_END_TAIL) is authoritative; legacy PHP boolean flags are kept
+ * as a fallback only for any row shape not yet migrated off PHP.
+ */
 export function accountingDuePeriodType(r) {
+  const spring = String(r?.periodType || "").trim().toLowerCase();
+  if (spring) return spring;
   if (r.is_once_one_off) return "once_one_off";
   if (r.is_weekly) return "weekly";
   if (r.is_daily && r.is_daily_consolidated) return "daily_consolidated";
@@ -951,20 +1054,41 @@ export function accountingDuePeriodType(r) {
   if (r.is_resend_monthly_reopen) return "resend_monthly_reopen";
   if (r.is_partial_first_month) return "partial_first_month";
   if (r.is_day_end_tail) return "day_end_tail";
-  return "monthly";
+  return "full_month";
 }
 
-/** Accounting Due 入账/删除时传给后端的 billing_months[] 锚点。 */
+/** Accounting Due 锚点日期：Spring `postedDate`（= dayStart 首月 / 当月 1 号其他月）。 */
 export function accountingDueBillingMonth(r) {
+  const posted = String(r?.postedDate || "").trim();
+  if (posted) return posted;
   if (r.is_daily || r.is_daily_consolidated) {
     return String(r.monthly_billing_month || r.daily_billing_start || "").trim();
   }
   return String(r.weekly_billing_start || r.monthly_billing_month || "").trim();
 }
 
+/** Map an Accounting Due inbox row → Spring skip request item. */
+export function buildAccountingDueSkipItem(row) {
+  const bankProcessId = Number(row?.bankProcessId ?? row?.id);
+  if (!Number.isFinite(bankProcessId) || bankProcessId <= 0) return null;
+
+  const postedDate = String(row?.postedDate ?? accountingDueBillingMonth(row) ?? "").trim();
+  if (!postedDate) return null;
+
+  const periodType = String(row?.periodType || accountingDuePeriodType(row) || "")
+    .trim()
+    .toUpperCase();
+  if (!periodType) return null;
+
+  const billingStart = String(row?.billingStart ?? row?.billing_period_start ?? "").trim() || null;
+  const billingEnd = String(row?.billingEnd ?? row?.billing_period_end ?? "").trim() || null;
+
+  return { bankProcessId, postedDate, periodType, billingStart, billingEnd };
+}
+
 /** Accounting Due 表格行唯一键（同 process 多账期可并列展示）。 */
 export function accountingDueRowKey(r) {
-  const id = Number(r?.id);
+  const id = Number(r?.bankProcessId ?? r?.id);
   if (!Number.isFinite(id) || id <= 0) return "";
   return `${id}|${accountingDuePeriodType(r)}|${accountingDueBillingMonth(r)}`;
 }
@@ -991,13 +1115,13 @@ export function formatAccountingDueDisplayDate(raw) {
 
 /** Accounting Due：Start Date 固定为流程 day_start（DD-MM-YYYY）。 */
 export function formatAccountingDueProcessDayStart(row) {
-  return formatAccountingDueDisplayDate(row?.day_start) || "-";
+  return formatAccountingDueDisplayDate(row?.dayStart ?? row?.day_start) || "-";
 }
 
 /** Accounting Due：Billing Date 展示应付日（Monthly 先付）或服务区间开始日（其他频率）。 */
 export function formatAccountingDueBillingPeriod(row) {
-  const start = String(row?.billing_period_start || "").trim();
-  const end = String(row?.billing_period_end || "").trim();
+  const start = String(row?.billingStart ?? row?.billing_period_start ?? "").trim();
+  const end = String(row?.billingEnd ?? row?.billing_period_end ?? "").trim();
   const display = formatAccountingDueDisplayDate(start || end);
   return display || "-";
 }

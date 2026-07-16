@@ -134,6 +134,8 @@ export function warmBankProcessListRouteCache(companyId, opts = {}) {
   if (bankProcessListRouteWarmCache.has(key) || bankProcessListRouteWarmInflight.has(key)) return;
   const promise = prefetchBankProcessListPayload(cid, opts)
     .then((slice) => {
+      // Skip write if invalidated while in flight (status/update mutation).
+      if (bankProcessListRouteWarmInflight.get(key) !== promise) return slice;
       if (bankProcessListCacheHasEntry(slice)) bankProcessListRouteWarmCache.set(key, slice);
       return slice;
     })
@@ -150,6 +152,19 @@ export function consumeBankProcessListRouteCache(companyId, opts = {}) {
   const cached = bankProcessListRouteWarmCache.get(key) || null;
   if (cached) bankProcessListRouteWarmCache.delete(key);
   return cached;
+}
+
+/** Drop warm list slices for a tenant after mutations (status/update) so remount does not show stale rows. */
+export function invalidateBankProcessListRouteCache(companyId) {
+  const cid = Number(companyId);
+  if (!Number.isFinite(cid) || cid <= 0) return;
+  const prefix = `${cid}|`;
+  for (const key of [...bankProcessListRouteWarmCache.keys()]) {
+    if (String(key).startsWith(prefix)) bankProcessListRouteWarmCache.delete(key);
+  }
+  for (const key of [...bankProcessListRouteWarmInflight.keys()]) {
+    if (String(key).startsWith(prefix)) bankProcessListRouteWarmInflight.delete(key);
+  }
 }
 
 /** Use sidebar warm cache, in-flight warm, or fetch once. */

@@ -156,7 +156,7 @@ export default function AccountingDueModal({
               <div
                 className={`accounting-due-inbox-grid-row${posted ? " accounting-due-inbox-grid-row--posted" : ""}`}
                 role="row"
-                key={rowKey || `${r.id}-${idx}`}
+                key={rowKey || `${r.bankProcessId ?? r.id}-${idx}`}
               >
                 <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--cb" role="cell">
                   <input
@@ -188,12 +188,12 @@ export default function AccountingDueModal({
                 </div>
                 <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--owner" role="cell">
                   <MaintenanceEllipsisText
-                    value={r.card_owner || r.name || r.supplier || "-"}
+                    value={r.cardOwner || r.card_owner || r.name || r.supplier || "-"}
                     className="accounting-due-owner-text"
                   />
                 </div>
                 <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--bank" role="cell">
-                  {r.bank || "-"}
+                  {r.bankName || r.bank || "-"}
                 </div>
                 <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--contract" role="cell">
                   {r.contract ? formatBankProcessContractLabel(lang, r.contract) : "-"}
