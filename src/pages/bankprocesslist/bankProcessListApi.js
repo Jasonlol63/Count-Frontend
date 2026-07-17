@@ -15,7 +15,7 @@ function isApiSuccess(json) {
 
 /**
  * Dev / verification only: set to an ISO date (e.g. `"2026-08-01"`) to simulate
- * Accounting Due as-of that day. `null` = use server today.
+ * Accounting Due as-of that day. `null` = use server today.  
  */
 export const ACCOUNTING_DUE_AS_OF_OVERRIDE = null;
 
@@ -50,6 +50,7 @@ function buildBankProcessMutableWriteFields({ form, accounts = [] }) {
   const isOnce = rawFreq === "once";
   const isWeek = rawFreq === "week";
   const isDay = rawFreq === "day";
+  const isFirstOfMonth = rawFreq === "1st_of_every_month";
   const omitDayEnd = isOnce || isWeek || isDay;
   const omitContract = isOnce || isWeek || isDay;
 
@@ -76,6 +77,7 @@ function buildBankProcessMutableWriteFields({ form, accounts = [] }) {
   return {
     dayStart: dayStart || null,
     dayEnd,
+    dayEndMonthlyCapEnabled: isFirstOfMonth && !!form?.day_end_monthly_cap_enabled,
     frequency: toSpringBankProcessFrequency(rawFreq),
     supplierAccountId: toOptionalInt(form?.card_merchant_id),
     supplierPrice: buy,
@@ -334,4 +336,54 @@ export async function updateBankProcessRemark({ id, tenantId, remark }, signal) 
     throw new Error(json?.message || "remarkUpdateFailed");
   }
   return remarkValue;
+}
+
+/**
+ * POST /api/bank-process/resend
+ * Body: AccountingDueDTO shape `{ tenantId, bankProcessId, dayStart, dayEnd?, frequency }`.
+ * Phase 1 backend: FIRST_OF_EVERY_MONTH (dayStart+dayEnd), MONTHLY (dayStart → +1 month),
+ * ONCE/DAY (single day = dayStart), WEEK (dayStart → +6 days).
+ */
+export function buildResendBankProcessRequest({
+  tenantId,
+  bankProcessId,
+  dayStart,
+  dayEnd,
+  frequency,
+}) {
+  const tid = resolveBankProcessListTenantId(tenantId);
+  const processId = toOptionalInt(bankProcessId);
+  if (!tid) throw new Error("tenantIdRequired");
+  if (!processId) throw new Error("Invalid bank process ID");
+
+  const startYmd = String(dayStart || "").trim().slice(0, 10) || null;
+  const endYmd = String(dayEnd || "").trim().slice(0, 10) || null;
+  const springFq = toSpringBankProcessFrequency(frequency);
+
+  return {
+    tenantId: tid,
+    bankProcessId: processId,
+    dayStart: startYmd,
+    dayEnd: endYmd,
+    frequency: springFq,
+  };
+}
+
+/**
+ * POST /api/bank-process/resend
+ * @returns {Promise<object|null>} Spring AccountingDueDTO make-up row
+ */
+export async function resendBankProcess(request, signal) {
+  const res = await fetch(buildApiUrl("api/bank-process/resend"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    signal,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !isApiSuccess(json)) {
+    throw new Error(json?.message || "resendFailed");
+  }
+  return json.data ?? null;
 }

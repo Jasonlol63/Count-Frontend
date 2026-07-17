@@ -1,5 +1,4 @@
 import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { formatDmyDash, parseDdMmYyyyToYmd, parseYmd } from "../../../utils/date/dateUtils.js";
 import { notifyTransactionListInvalidated } from "../../transaction/lib/transactionPaymentLogic.js";
 
@@ -247,6 +246,7 @@ export function normalizeBankProcessListItemFromSpring(item) {
     remark: bp.remark ?? "",
     day_start: dayStart,
     day_end: dayEnd,
+    day_end_monthly_cap_enabled: !!(bp.dayEndMonthlyCapEnabled ?? bp.day_end_monthly_cap_enabled),
     date: dayStart,
     frequency: bp.frequency ?? "",
     status,
@@ -257,6 +257,13 @@ export function normalizeBankProcessListItemFromSpring(item) {
     country_id: bp.countryId ?? bp.country_id ?? null,
     bank_option_id: bp.bankOptionId ?? bp.bank_option_id ?? null,
     shares,
+    resend_schedule_day_start: ymdFromSpringDate(
+      bp.resendScheduleDayStart ?? bp.resend_schedule_day_start
+    ),
+    resend_schedule_day_end: ymdFromSpringDate(
+      bp.resendScheduleDayEnd ?? bp.resend_schedule_day_end
+    ),
+    resend_schedule_frequency: bp.resendScheduleFrequency ?? bp.resend_schedule_frequency ?? "",
     created_by: createdBy,
     modified_by: updatedBy,
     dts_created: createdAt,
@@ -312,7 +319,8 @@ export function bankProcessListRowToEditForm(row, accounts = []) {
     profit_sharing: serializeProfitSharingRows(shareRows, accounts),
     day_start: row.day_start ? String(row.day_start).slice(0, 10) : "",
     day_end: dayEnd,
-    day_end_monthly_cap_enabled: frequency === "1st_of_every_month" && !!dayEnd,
+    day_end_monthly_cap_enabled:
+      frequency === "1st_of_every_month" && !!row.day_end_monthly_cap_enabled,
     day_start_frequency: frequency,
     status: row.status || "active",
     remark: row.remark || "",
@@ -555,6 +563,9 @@ export function isBankResendDayStartBackendErrorMessage(text) {
     s.includes("same calendar date as the current contract Day start") ||
     s.includes("already has a transaction posted") ||
     s.includes("already has an open Resend bill") ||
+    s.includes("open Resend bill for this Day start") ||
+    s.includes("day_start and day_end are required") ||
+    s.includes("day_end cannot be before day_start") ||
     s.includes("Duplicate resends are not allowed")
   );
 }
@@ -598,7 +609,19 @@ export function isResendDayStartDuplicateInAccountingDue(rows, processId, daySta
   if (!Number.isFinite(pid) || pid <= 0) return false;
   return (Array.isArray(rows) ? rows : []).some((r) => {
     if (Number(r?.bankProcessId ?? r?.id) !== pid || r?.already_posted_today) return false;
-    const billStart = normalizeBankResendDayStartYmd(r?.billing_period_start);
+
+    // Spring make-up bill: periodType=RESEND_CONSOLIDATED, postedDate/billingStart = day_start
+    const periodType = String(r?.periodType || accountingDuePeriodType(r) || "")
+      .trim()
+      .toUpperCase();
+    if (periodType === "RESEND_CONSOLIDATED") {
+      const anchor = normalizeBankResendDayStartYmd(
+        r?.postedDate || r?.billingStart || r?.dayStart || r?.billing_period_start
+      );
+      if (anchor === ymd) return true;
+    }
+
+    const billStart = normalizeBankResendDayStartYmd(r?.billing_period_start || r?.billingStart);
     if (billStart === ymd) return true;
     if (r?.is_resend_monthly_reopen) {
       const bm = normalizeBankResendDayStartYmd(r?.monthly_billing_month);
@@ -612,29 +635,29 @@ export function isResendDayStartDuplicateInAccountingDue(rows, processId, daySta
   });
 }
 
-export async function checkBankResendLockFromBackend(processId, dayStartRaw) {
+/** Open make-up on list row: same process already has resend_schedule_day_start = this dayStart. */
+export function isResendDayStartOpenOnProcess(row, dayStartRaw) {
+  if (!row) return false;
+  const ymd = normalizeBankResendDayStartYmd(dayStartRaw);
+  if (!ymd) return false;
+  const open = normalizeBankResendDayStartYmd(
+    row.resend_schedule_day_start || row.resendScheduleDayStart
+  );
+  return !!open && open === ymd;
+}
+
+/**
+ * Phase 1: no Spring same-day Post lock API yet.
+ * Open-duplicate is resolved client-side from inbox rows / process schedule.
+ */
+export async function checkBankResendLockFromBackend(processId, dayStartRaw, accountingRows = []) {
   const dayStartYmd = normalizeBankResendDayStartYmd(dayStartRaw);
   if (!processId || !dayStartYmd) {
     return { locked: false, duplicateOpenAnchor: false };
   }
-  const res = await fetch(buildApiUrl("api/bankprocess_maintenance/resend_accounting_due_api.php"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({
-      bank_process_id: processId,
-      mode: "check_daystart_lock",
-      day_start: dayStartYmd,
-    }),
-  });
-  const json = await res.json();
-  if (!res.ok || !json?.success) {
-    throw new Error(json?.message || "Check failed");
-  }
-  const data = json.data || {};
   return {
-    locked: !!data.locked,
-    duplicateOpenAnchor: !!data.duplicate_open_anchor,
+    locked: false,
+    duplicateOpenAnchor: isResendDayStartDuplicateInAccountingDue(accountingRows, processId, dayStartRaw),
   };
 }
 
@@ -1039,8 +1062,8 @@ export const contractBillingEndYmdForBankForm = (startYmd, termMonths, frequency
 /**
  * Accounting Due row period type.
  * Spring `AccountingDueDTO.periodType` (e.g. FIRST_MONTH / PARTIAL_FIRST_MONTH /
- * FULL_MONTH / DAY_END_TAIL) is authoritative; legacy PHP boolean flags are kept
- * as a fallback only for any row shape not yet migrated off PHP.
+ * FULL_MONTH / DAY_END_TAIL / MONTHLY / ONCE_ONE_OFF) is authoritative; legacy PHP
+ * boolean flags are kept as a fallback only for any row shape not yet migrated off PHP.
  */
 export function accountingDuePeriodType(r) {
   const spring = String(r?.periodType || "").trim().toLowerCase();
@@ -1057,7 +1080,10 @@ export function accountingDuePeriodType(r) {
   return "full_month";
 }
 
-/** Accounting Due 锚点日期：Spring `postedDate`（= dayStart 首月 / 当月 1 号其他月）。 */
+/**
+ * Accounting Due 锚点日期：Spring `postedDate`
+ * （1st-of-month 首月 = dayStart / 其他月 = 1 号；Monthly = 当期锚点；Once = dayStart）。
+ */
 export function accountingDueBillingMonth(r) {
   const posted = String(r?.postedDate || "").trim();
   if (posted) return posted;
@@ -1118,10 +1144,31 @@ export function formatAccountingDueProcessDayStart(row) {
   return formatAccountingDueDisplayDate(row?.dayStart ?? row?.day_start) || "-";
 }
 
-/** Accounting Due：Billing Date 展示应付日（Monthly 先付）或服务区间开始日（其他频率）。 */
+/**
+ * Accounting Due：Billing Date。
+ * Once（ONCE_ONE_OFF）/ Day（DAILY）只展示单日；
+ * Week（WEEKLY）展示整段区间 start – end；
+ * Resend（RESEND_CONSOLIDATED）：有起止且不同则同 Week 一样展示 from – to（如 Week/Monthly/1st 补单），
+ * 起止相同则同 Once/Day 展示单日。
+ * 其他频率展示服务区间开始日。
+ */
 export function formatAccountingDueBillingPeriod(row) {
   const start = String(row?.billingStart ?? row?.billing_period_start ?? "").trim();
   const end = String(row?.billingEnd ?? row?.billing_period_end ?? "").trim();
+  const posted = String(row?.postedDate || "").trim();
+  const period = accountingDuePeriodType(row);
+  if (period === "once_one_off" || period === "daily") {
+    const display = formatAccountingDueDisplayDate(start || posted || end);
+    return display || "-";
+  }
+  if (period === "weekly" || period === "resend_consolidated") {
+    const startDisplay = formatAccountingDueDisplayDate(start || posted);
+    const endDisplay = formatAccountingDueDisplayDate(end);
+    if (startDisplay && endDisplay && startDisplay !== endDisplay) {
+      return `${startDisplay} – ${endDisplay}`;
+    }
+    return startDisplay || endDisplay || "-";
+  }
   const display = formatAccountingDueDisplayDate(start || end);
   return display || "-";
 }

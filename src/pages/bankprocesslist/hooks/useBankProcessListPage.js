@@ -77,6 +77,7 @@ import {
   checkBankResendLockFromBackend,
   isBankResendScheduleLockedToday,
   isResendDayStartDuplicateInAccountingDue,
+  isResendDayStartOpenOnProcess,
   normalizeBankResendDayStartYmd,
   resolveBankProcessListTenantId,
   bankProcessListRowToEditForm,
@@ -117,8 +118,10 @@ import {
 import {
   addBankProcess,
   buildAddBankProcessRequest,
+  buildResendBankProcessRequest,
   buildUpdateBankProcessRequest,
   fetchAccountingDueInbox,
+  resendBankProcess,
   skipAccountingDue,
   updateBankProcess,
   deleteBankProcess,
@@ -1066,17 +1069,19 @@ export function useBankProcessListPage() {
       setResendLockChecking(false);
       return;
     }
-    const duplicateClient = isResendDayStartDuplicateInAccountingDue(accountingRows, id, resendDayStart);
+    const duplicateClient =
+      isResendDayStartDuplicateInAccountingDue(accountingRows, id, resendDayStart) ||
+      isResendDayStartOpenOnProcess(resendTarget, resendDayStart);
     const quickLocked = isBankResendScheduleLockedToday(resendTarget, resendDayStart);
     const seq = ++resendLockCheckSeqRef.current;
     setResendLockChecking(true);
     setResendConfirmDisabled(true);
     setResendConfirmBlockReason(duplicateClient ? "duplicate" : quickLocked ? "locked" : "");
     try {
-      const backend = await checkBankResendLockFromBackend(id, resendDayStart);
+      const backend = await checkBankResendLockFromBackend(id, resendDayStart, accountingRows);
       if (seq !== resendLockCheckSeqRef.current) return;
       const duplicate = duplicateClient || backend.duplicateOpenAnchor;
-      const locked = backend.locked;
+      const locked = quickLocked || backend.locked;
       setResendConfirmDisabled(locked || duplicate);
       setResendConfirmBlockReason(duplicate ? "duplicate" : locked ? "locked" : "");
     } catch {
@@ -1277,6 +1282,8 @@ export function useBankProcessListPage() {
   const loadAccountingInbox = useCallback(async (opts = {}) => {
     const silent = !!opts.silent;
     const restoreSkipped = !!(opts.restoreSkipped || opts.restoreDismissed);
+    // Once: resolving inbox may auto-expire past-month processes to INACTIVE on the server.
+    const syncProcessList = opts.syncProcessList !== false;
     const cid = Number(companyId);
     if (!Number.isFinite(cid) || cid <= 0) return;
     const fetchGen = ++accountingInboxFetchGenRef.current;
@@ -1306,6 +1313,9 @@ export function useBankProcessListPage() {
           return next;
         });
       }
+      if (syncProcessList) {
+        void fetchRows({ silent: true, preservePage: true, preserveSelection: true });
+      }
     } catch {
       if (fetchGen !== accountingInboxFetchGenRef.current) return;
       if (Number(companyIdRef.current) !== cid) return;
@@ -1319,7 +1329,7 @@ export function useBankProcessListPage() {
         setAccountingLoading(false);
       }
     }
-  }, [companyId]);
+  }, [companyId, fetchRows]);
 
   const handleBankStatusUpdated = useCallback(
     (row, target, opts = {}) => {
@@ -1338,7 +1348,7 @@ export function useBankProcessListPage() {
       }
       notifyTransactionDataChanged("bank-process-list-react-status");
       void fetchRows({ silent: true, forceReplace: true, preservePage: true, preserveSelection: true });
-      void loadAccountingInbox({ silent: true });
+      void loadAccountingInbox({ silent: true, syncProcessList: false });
     },
     [fetchRows, loadAccountingInbox, search]
   );
@@ -1382,7 +1392,7 @@ export function useBankProcessListPage() {
         preservePage: isLocalBank,
         preserveSelection: isLocalBank,
       });
-      void loadAccountingInbox({ silent: true });
+      void loadAccountingInbox({ silent: true, syncProcessList: false });
       if (resendModalOpen) void refreshResendConfirmLock();
     };
     window.addEventListener("tx-data-changed", onTxChanged);
@@ -1881,7 +1891,7 @@ export function useBankProcessListPage() {
         notifyTransactionDataChanged("bank-process-list-react");
         setModalOpen(false);
         void fetchRows();
-        void loadAccountingInbox({ silent: true });
+        void loadAccountingInbox({ silent: true, syncProcessList: false });
       } catch (err) {
         notify(apiMsg({ message: err?.message }, "saveFailed"), "danger");
       }
@@ -1909,7 +1919,7 @@ export function useBankProcessListPage() {
       notifyTransactionDataChanged("bank-process-list-react");
       setModalOpen(false);
       void fetchRows();
-      void loadAccountingInbox({ silent: true });
+      void loadAccountingInbox({ silent: true, syncProcessList: false });
     } catch (err) {
       notify(apiMsg({ message: err?.message }, "saveFailed"), "danger");
     }
@@ -1932,7 +1942,7 @@ export function useBankProcessListPage() {
       notifyTransactionDataChanged("bank-process-list-react");
       setAccountingOpen(false);
       setAccountingSelected(new Set());
-      loadAccountingInbox(); fetchRows();
+      loadAccountingInbox({ syncProcessList: false }); fetchRows();
     } catch { notify(t("transactionPostFailed"), "danger"); }
   };
 
@@ -1946,7 +1956,7 @@ export function useBankProcessListPage() {
       await skipAccountingDue(items);
       notify(t("removedFromDue"));
       setAccountingDeleteSelected(new Set());
-      await loadAccountingInbox({ silent: true });
+      await loadAccountingInbox({ silent: true, syncProcessList: false });
       await fetchRows();
       if (resendModalOpen) void refreshResendConfirmLock();
       notifyTransactionDataChanged("bank-process-list-react");
@@ -1983,49 +1993,60 @@ export function useBankProcessListPage() {
     if (guardWrite()) return;
     if (!resendTarget) return;
     setResendInlineError("");
-    const dayStart = String(resendDayStart || "").trim();
-    const dayEnd = String(resendDayEnd || "").trim();
-    const fqEarly = bankProcessFrequencyNormalized(resendFrequency);
-    const resendOmitsDayEnd = fqEarly === "once" || fqEarly === "week" || fqEarly === "day" || fqEarly === "monthly";
-    if (!resendOmitsDayEnd && dayStart && dayEnd && dayEnd < dayStart) {
+    const dayStart = normalizeBankResendDayStartYmd(resendDayStart);
+    const dayEnd = normalizeBankResendDayStartYmd(resendDayEnd);
+    const fq = bankProcessFrequencyNormalized(resendFrequency);
+    const isFirstOfMonth = fq === "1st_of_every_month";
+    const omitDayEnd = fq === "once" || fq === "week" || fq === "day" || fq === "monthly";
+
+    if (!dayStart) {
+      const msg = t("dayStartRequired") || "Day start is required";
+      setResendInlineError(msg);
+      notify(msg, "danger");
+      return;
+    }
+    if (isFirstOfMonth && !dayEnd) {
+      const msg = t("dayEndRequired") || "Day end is required for 1st of every month Resend";
+      setResendInlineError(msg);
+      notify(msg, "danger");
+      return;
+    }
+    if (!omitDayEnd && dayStart && dayEnd && dayEnd < dayStart) {
       const msg = t("dayEndEarlierThanStart");
       setResendInlineError(msg);
       notify(msg, "danger");
       return;
     }
-    const fq = bankProcessFrequencyNormalized(resendFrequency);
-    const omitDayEnd = fq === "once" || fq === "week" || fq === "day" || fq === "monthly";
-    const dayEndTrim = omitDayEnd ? "" : String(resendDayEnd || "").trim();
-    const normalizedResendFrequency =
-      fq === "once" ? "once"
-        : (fq === "monthly" ? "monthly"
-          : (fq === "week" ? "week"
-            : (fq === "day" ? "day" : "1st_of_every_month")));
+
+    const tid = resolveBankProcessListTenantId(companyId);
+    if (!tid) {
+      notify(t("missingCompanyContext"), "danger");
+      return;
+    }
+
     try {
-      const res = await fetch(buildApiUrl("api/bankprocess_maintenance/resend_accounting_due_api.php"), {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({
-          bank_process_id: Number(resendTarget.id),
-          day_start: normalizeBankResendDayStartYmd(resendDayStart) || null,
-          day_end: omitDayEnd ? null : (normalizeBankResendDayStartYmd(dayEndTrim) || null),
-          day_start_frequency: normalizedResendFrequency,
-        }),
+      const request = buildResendBankProcessRequest({
+        tenantId: tid,
+        bankProcessId: resendTarget.id,
+        dayStart,
+        dayEnd: omitDayEnd ? null : dayEnd,
+        frequency: fq,
       });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        const rawMsg = json.message || json.error || "";
-        const msg = apiMsg(json, "resendFailed");
-        if (isBankResendDayStartBackendErrorMessage(rawMsg) || isBankResendDayStartBackendErrorMessage(msg)) {
-          setResendInlineError(msg);
-        }
-        return notify(msg, "danger");
-      }
-      notify(apiMsg(json, "resendSuccessful"));
+      await resendBankProcess(request);
+      notify(t("resendSuccessful"));
       notifyTransactionDataChanged("bank-process-list-react");
-      void loadAccountingInbox({ silent: true });
+      void loadAccountingInbox({ silent: true, syncProcessList: false });
       void fetchRows();
-      setResendModalOpen(false); setResendTarget(null);
-    } catch { notify(t("resendFailed"), "danger"); }
+      setResendModalOpen(false);
+      setResendTarget(null);
+    } catch (err) {
+      const rawMsg = err?.message || "";
+      const msg = apiMsg({ message: rawMsg }, "resendFailed");
+      if (isBankResendDayStartBackendErrorMessage(rawMsg) || isBankResendDayStartBackendErrorMessage(msg)) {
+        setResendInlineError(msg);
+      }
+      notify(msg, "danger");
+    }
   };
 
   const deleteSelected = () => {
