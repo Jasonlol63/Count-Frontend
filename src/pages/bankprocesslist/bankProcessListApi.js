@@ -231,6 +231,30 @@ export async function skipAccountingDue(items, signal) {
 }
 
 /**
+ * POST /api/bank-process/accounting-due/post
+ * Body: same shape as skip — `[{ bankProcessId, postedDate, periodType, billingStart, billingEnd }]`.
+ * Phase 1: 1st of every month + Monthly (full amount).
+ */
+export async function postAccountingDue(items, signal) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error("No accounting due items selected!");
+  }
+
+  const res = await fetch(buildApiUrl("api/bank-process/accounting-due/post"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(items),
+    signal,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !isApiSuccess(json)) {
+    throw new Error(json?.message || "transactionPostFailed");
+  }
+  return json.data ?? null;
+}
+
+/**
  * POST /api/bank-process/update-bank-process
  * Body: flat Spring BankProcessDTO (`id` + `tenantId` + mutable fields + shares[]).
  */

@@ -1,18 +1,12 @@
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
-import { buildAccountsUrl } from "./accountLogic.js";
+import {
+  fetchFilteredAccountListByTenantId,
+  resolveAccountListTenantId,
+} from "./accountListApi.js";
+import { resolveGroupCodeToTenantId } from "./accountLogic.js";
+import { getCachedOwnerCompanies } from "../../utils/company/sharedCompanyFilter.js";
 
 const accountListRouteWarmCache = new Map();
 const accountListRouteWarmInflight = new Map();
-
-function buildGroupAccountsUrl(groupId, searchTerm, showInactive, showAll) {
-  const url = new URL(buildApiUrl("api/accounts/accountlistapi.php"));
-  url.searchParams.set("group_id", String(groupId));
-  url.searchParams.set("group_only", "1");
-  if (String(searchTerm || "").trim()) url.searchParams.set("search", String(searchTerm || "").trim());
-  if (showInactive) url.searchParams.set("showInactive", "1");
-  if (showAll) url.searchParams.set("showAll", "1");
-  return url;
-}
 
 function accountListRouteCacheKey({
   companyId = null,
@@ -30,6 +24,12 @@ function hasAccountRows(rows) {
   return Array.isArray(rows) && rows.length > 0;
 }
 
+function resolvePrefetchTenantId({ companyId = null, groupId = null } = {}) {
+  const fromCompany = resolveAccountListTenantId(companyId);
+  if (fromCompany) return fromCompany;
+  return resolveGroupCodeToTenantId(groupId, getCachedOwnerCompanies());
+}
+
 async function fetchAccountListSlice({
   companyId = null,
   groupId = null,
@@ -38,20 +38,14 @@ async function fetchAccountListSlice({
   showAll = false,
   signal,
 } = {}) {
-  const cid = companyId != null ? Number(companyId) : null;
-  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
-  const url =
-    cid != null && Number.isFinite(cid) && cid > 0
-      ? buildAccountsUrl(cid, search, showInactive, showAll, { groupId: gid || null })
-      : gid
-        ? buildGroupAccountsUrl(gid, search, showInactive, showAll)
-        : null;
-  if (!url) return null;
+  const tenantId = resolvePrefetchTenantId({ companyId, groupId });
+  if (!tenantId) return null;
 
-  const res = await fetch(url.toString(), { credentials: "include", signal });
-  const json = await res.json();
-  if (!json?.success) return null;
-  return Array.isArray(json?.data?.accounts) ? json.data.accounts : [];
+  return fetchFilteredAccountListByTenantId(
+    tenantId,
+    { searchTerm: search, showInactive, showAll },
+    signal,
+  );
 }
 
 /** Sidebar hover / dashboard idle warm — consumed on AccountListPage boot. */

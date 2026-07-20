@@ -1,6 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { assetUrl, buildApiUrl } from "../../utils/core/apiUrl.js";
+import { assetUrl } from "../../utils/core/apiUrl.js";
+import {
+  deleteOwner,
+  fetchDomainFeeSettings,
+  fetchDomainList,
+  resolveShareLedgerTenantCode,
+  resolveShareLedgerTenantId,
+} from "./domainApi.js";
 import "../../../public/css/domain.css";
 import "../../../public/css/date-range-picker.css";
 import "../../../public/css/accountCSS.css";
@@ -112,21 +119,15 @@ export default function DomainPage() {
           return;
         }
 
-        const r2 = await fetch(buildApiUrl("api/domain/domain_api.php"), {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "list" }),
-        });
-        const j2 = await r2.json();
-        if (!r2.ok || !j2?.success) {
-          if (!cancelled) setLoadError(j2?.message || t("failedToLoadDomainData"));
-          return;
+        const rows = await fetchDomainList();
+        if (!cancelled) {
+          setDomains(rows);
+          refreshFeeSummary();
         }
-        if (!cancelled) setDomains(Array.isArray(j2?.data?.domains) ? j2.data.domains : []);
-        refreshFeeSummary();
-      } catch {
-        if (!cancelled) setLoadError(t("failedToLoadDomainData"));
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err?.message || t("failedToLoadDomainData"));
+        }
       }
     })();
     return () => {
@@ -136,16 +137,9 @@ export default function DomainPage() {
 
   // ── Fee summary ────────────────────────────────────────────────────────────
   function refreshFeeSummary() {
-    fetch(buildApiUrl("api/domain/domain_api.php"), {
-      cache: "no-cache", method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "get_domain_fee_settings" }),
-    })
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.success && res.data) {
-          setDomainPeriodPrices(normalizeDomainFeeSettingsFromApi(res.data));
-        }
+    fetchDomainFeeSettings()
+      .then((data) => {
+        if (data) setDomainPeriodPrices(normalizeDomainFeeSettingsFromApi(data));
       })
       .catch(() => {});
   }
@@ -212,19 +206,14 @@ export default function DomainPage() {
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          const results = await Promise.all(
-            valid.map((d) =>
-              fetch(buildApiUrl("api/domain/domain_api.php"), {
-                cache: "no-cache", method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "delete", id: d.id }),
-              }).then((r) => r.json())
-            )
-          );
-          const ok = results.filter((r) => r.success).length;
+          const results = await Promise.all(valid.map((d) => deleteOwner(d.id)));
+          const ok = results.filter(({ json }) => json?.success).length;
           const fail = results.length - ok;
           if (fail === 0) showDomainAlert(t("deletedOwnersSuccess", { ok }));
-          else showDomainAlert(t("deletionCompleted", { ok, fail }), "danger");
+          else {
+            const firstErr = results.find(({ json }) => !json?.success)?.json?.message;
+            showDomainAlert(firstErr || t("deletionCompleted", { ok, fail }), "danger");
+          }
           const deletedIds = new Set(valid.map((d) => d.id));
           setDomains((prev) => prev.filter((d) => !deletedIds.has(d.id)));
           setCheckedIds(new Set());
@@ -252,11 +241,12 @@ export default function DomainPage() {
     setShowDomainForm(true);
   }
 
-  function handleDomainSaved(data) {
-    if (isEditMode) {
-      setDomains((prev) => prev.map((d) => d.id === data.id ? data : d));
-    } else {
-      setDomains((prev) => [...prev, data]);
+  async function handleDomainSaved() {
+    try {
+      const rows = await fetchDomainList();
+      setDomains(rows);
+    } catch {
+      showDomainAlert(t("failedToLoadDomainData"), "danger");
     }
   }
 
@@ -551,9 +541,10 @@ export default function DomainPage() {
           editingDomain={editingDomain}
           hasC168Context={canAccessC168DomainPages(me)}
           isOwnerOrAdmin={isOwnerOrAdmin}
-          sessionCompanyId={me?.company_id ?? null}
-          sessionCompanyCode={String(me?.company_code || "")}
+          shareLedgerTenantId={resolveShareLedgerTenantId(me)}
+          shareLedgerTenantCode={resolveShareLedgerTenantCode(me)}
           domainPeriodPrices={domainPeriodPrices}
+          allDomains={domains}
           onClose={() => setShowDomainForm(false)}
           onSaved={handleDomainSaved}
         />

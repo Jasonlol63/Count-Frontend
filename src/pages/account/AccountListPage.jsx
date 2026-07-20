@@ -6,7 +6,6 @@ import { syncCompanySessionApi } from "../../utils/company/companySessionSync.js
 import { pathnameIs, spaPath } from "../../utils/routing/pageRoutes.js";
 import { replaceBrowserPathOnly } from "../../utils/routing/privateBrowserUrl.js";
 import {
-  applyTenantLedgerToParams,
   resolveModalLedgerScope,
   resolvePageLedgerScope,
 } from "../../utils/company/tenantLedgerParams.js";
@@ -55,7 +54,7 @@ import {
   useGcFilterWithAllModes,
 } from "../../utils/company/useGcFilterWithAllModes.js";
 import GcInlineFilterPanel from "../../components/GcInlineFilterPanel.jsx";
-import { assetUrl, buildApiUrl } from "../../utils/core/apiUrl.js";
+import { assetUrl } from "../../utils/core/apiUrl.js";
 import "../../../public/css/account-list.css";
 import "../../../public/css/accountCSS.css";
 import "../../../public/css/userlist.css";
@@ -72,9 +71,9 @@ import {
   normalizeCompanyRow,
   isVirtualGroupLinkCompanyRow,
   buildAccountsFetchKey,
-  buildAccountsUrl,
-  buildGroupAccountsUrl,
   fetchMergedAccounts,
+  deriveAccountRolesFromRows,
+  resolveGroupCodeToTenantId,
   accountListHasMutationScope,
   isCompanyInAccountListPicker,
   pickDefaultAddCurrencyIds,
@@ -85,6 +84,33 @@ import {
   formatAccountLastLoginDate,
   formatAccountLastLoginTimeTitle,
 } from "./accountLogic.js";
+import {
+  accountRowToEditForm,
+  buildAccountCreateRequest,
+  buildAccountUpdateRequest,
+  createAccountUser,
+  deleteAccountUser,
+  fetchAccountLinkedAccounts,
+  fetchFilteredAccountListByTenantId,
+  fetchAccountListByTenantId,
+  linkAccountPair,
+  resolveActiveScopeTenantId,
+  resolveRowScopeTenantId,
+  tenantIdToPickerCompanyIds,
+  toggleAccountUserPaymentAlert,
+  toggleAccountUserStatus,
+  unlinkAccountPair,
+  updateAccountLinkPair,
+  updateAccountUser,
+} from "./accountListApi.js";
+import {
+  bulkUpdateAccountCurrency,
+  createCurrency as createTenantCurrency,
+  deleteCurrency,
+  fetchAvailableCurrencies,
+  fetchLinkedAccountsByCurrency,
+  resolveCurrencyTenantIdFromScope,
+} from "../../utils/api/currencyApi.js";
 
 // Components
 import AccountModal from "../../components/AccountModal.jsx";
@@ -489,22 +515,13 @@ export default function AccountListPage() {
 
       const loadPromise = (async () => {
         let nextAccounts = [];
+        const filters = { searchTerm, showInactive, showAll };
         if (cid) {
-          const listUrl = buildAccountsUrl(cid, searchTerm, showInactive, showAll, {
-            groupId: sg || null,
-          });
-          const res = await fetch(listUrl.toString(), {
-            credentials: "include",
-            signal: ac.signal,
-          });
-          const json = await res.json();
-          if (!json.success) {
-            throw new Error(json.message || "failedToLoadAccounts");
-          }
-          nextAccounts = Array.isArray(json?.data?.accounts) ? json.data.accounts : [];
+          nextAccounts = await fetchFilteredAccountListByTenantId(cid, filters, ac.signal);
         } else if (cAll) {
           const merged = await fetchMergedAccounts({
             companyIds: mergeIds,
+            companies,
             searchTerm,
             showInactive,
             showAll,
@@ -517,6 +534,7 @@ export default function AccountListPage() {
         } else if (gAll) {
           const merged = await fetchMergedAccounts({
             groupIds: groupIdsForGroupsAllAggregate(companies, gids),
+            companies,
             searchTerm,
             showInactive,
             showAll,
@@ -527,15 +545,13 @@ export default function AccountListPage() {
           }
           nextAccounts = merged.accounts;
         } else if (useGroupOnly && sg) {
-          const res = await fetch(
-            buildGroupAccountsUrl(sg, searchTerm, showInactive, showAll, { groupOnly: true }).toString(),
-            { credentials: "include", signal: ac.signal },
+          const groupTenantId = resolveGroupCodeToTenantId(sg, companies);
+          if (!groupTenantId) return null;
+          nextAccounts = await fetchFilteredAccountListByTenantId(
+            groupTenantId,
+            filters,
+            ac.signal,
           );
-          const json = await res.json();
-          if (!json.success) {
-            throw new Error(json.message || "failedToLoadAccounts");
-          }
-          nextAccounts = Array.isArray(json?.data?.accounts) ? json.data.accounts : [];
         } else {
           return null;
         }
@@ -640,30 +656,27 @@ export default function AccountListPage() {
 
   const loadRoles = useCallback(async ({ companyId: cid = null, groupId = null } = {}) => {
     try {
-      const url = new URL(buildApiUrl("api/editdata/editdata_api.php"));
+      const numericCid =
+        cid != null ? Number(cid) : companyId != null ? Number(companyId) : null;
       const gid = (groupId ?? selectedGroup)
         ? String(groupId ?? selectedGroup).trim().toUpperCase()
         : null;
-      const numericCid =
-        cid != null ? Number(cid) : companyId != null ? Number(companyId) : null;
-      const groupOnlyFetch = Boolean(
-        gid && (!Number.isFinite(numericCid) || numericCid <= 0),
-      );
-      if (gid) url.searchParams.set("group_id", gid);
-      if (groupOnlyFetch) {
-        url.searchParams.set("group_only", "1");
-      } else if (Number.isFinite(numericCid) && numericCid > 0) {
-        url.searchParams.set("company_id", String(numericCid));
+      const tenantId =
+        Number.isFinite(numericCid) && numericCid > 0
+          ? numericCid
+          : gid
+            ? resolveGroupCodeToTenantId(gid, companies)
+            : null;
+      if (!tenantId) {
+        setRoles(getAccountModalOrderedRoles([]));
+        return;
       }
-      const res = await fetch(url.toString(), { credentials: "include" });
-      const json = await res.json();
-      if (json?.success && Array.isArray(json?.data?.roles)) {
-        setRoles(json.data.roles);
-      }
+      const rows = await fetchAccountListByTenantId(tenantId);
+      setRoles(getAccountModalOrderedRoles(deriveAccountRolesFromRows(rows)));
     } catch {
-      /* roles are optional for list; modal refetch on open */
+      setRoles(getAccountModalOrderedRoles([]));
     }
-  }, [companyId, selectedGroup, sessionMe]);
+  }, [companyId, selectedGroup, companies]);
 
   const fetchAccountsRef = useRef(fetchAccounts);
   fetchAccountsRef.current = fetchAccounts;
@@ -1954,15 +1967,28 @@ export default function AccountListPage() {
       return;
     }
     try {
-      const fd = new FormData(); fd.append("id", id);
-      appendAccountScopeParams(fd);
-      const res = await fetch(buildApiUrl("api/accounts/toggle_payment_alert_api.php"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (json.success) {
-        const next = json.data?.newPaymentAlert ?? json.newPaymentAlert;
-        setAccounts(prev => prev.map(a => Number(a.id) === Number(id) ? { ...a, payment_alert: next } : a));
+      const row = accounts.find((a) => Number(a.id) === Number(id));
+      if (!row) return;
+      const scopeTenantId = resolveRowScopeTenantId(row, companyId ?? scopeCompanyId);
+      if (!scopeTenantId) return;
+      const currencyRows = await fetchAvailableCurrencies({
+        tenantId: scopeTenantId,
+        accountId: id,
+      });
+      const currencyIds = currencyRows.filter((c) => c.is_linked).map((c) => Number(c.id));
+      const updated = await toggleAccountUserPaymentAlert(row, scopeTenantId, currencyIds);
+      if (updated) {
+        setAccounts((prev) =>
+          prev.map((a) =>
+            Number(a.id) === Number(id)
+              ? { ...a, payment_alert: updated.payment_alert ?? a.payment_alert }
+              : a,
+          ),
+        );
       }
-    } catch { notify(t("toggleFailed"), "danger"); }
+    } catch {
+      notify(t("toggleFailed"), "danger");
+    }
   };
 
   const toggleAccountStatus = async (id) => {
@@ -1971,23 +1997,23 @@ export default function AccountListPage() {
       return;
     }
     try {
-      const fd = new FormData(); fd.append("id", id);
-      appendAccountScopeParams(fd);
-      const res = await fetch(buildApiUrl("api/accounts/toggle_account_status_api.php"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (json.success) {
-        const next = json.newStatus || json.data?.newStatus;
-        setAccounts((prev) => {
-          const updated = prev.map((a) => (Number(a.id) === Number(id) ? { ...a, status: next } : a));
-          const visible = updated.filter((a) =>
-            accountRowVisibleAfterStatusChange(a.status, { showInactive, showAll }),
-          );
-          return visible;
-        });
-        lastAccountsFetchKeyRef.current = "";
-        refreshAccountList({ silent: true });
-      }
-    } catch { notify(t("toggleFailed"), "danger"); }
+      const row = accounts.find((a) => Number(a.id) === Number(id));
+      if (!row) return;
+      const scopeTenantId = resolveRowScopeTenantId(row, companyId ?? scopeCompanyId);
+      if (!scopeTenantId) return;
+      const updated = await toggleAccountUserStatus({ id, scopeTenantId });
+      const next = updated?.status ?? row.status;
+      setAccounts((prev) => {
+        const updatedRows = prev.map((a) => (Number(a.id) === Number(id) ? { ...a, status: next } : a));
+        return updatedRows.filter((a) =>
+          accountRowVisibleAfterStatusChange(a.status, { showInactive, showAll }),
+        );
+      });
+      lastAccountsFetchKeyRef.current = "";
+      refreshAccountList({ silent: true });
+    } catch {
+      notify(t("toggleFailed"), "danger");
+    }
   };
 
   const pageLedgerScope = useMemo(
@@ -2001,43 +2027,31 @@ export default function AccountListPage() {
     [groupOnlyAccountMode, selectedGroup, companyId, sessionMe],
   );
 
-  const appendAccountScopeParams = useCallback(
-    (params) => {
-      applyTenantLedgerToParams(params, pageLedgerScope);
-    },
-    [pageLedgerScope],
-  );
-
-  const appendCurrencyScopeParams = appendAccountScopeParams;
-
-  const buildCurrencyScopePayload = useCallback((ledgerScope) => {
-    const payload = {};
-    const scope = ledgerScope ?? pageLedgerScope;
-    if (scope.groupId) payload.group_id = scope.groupId;
-    if (scope.ledger === "group") {
-      payload.group_only = true;
-    } else if (scope.companyId) {
-      payload.company_id = scope.companyId;
-    }
-    return payload;
-  }, [pageLedgerScope]);
-
-  const appendModalCurrencyScopeParams = useCallback(
-    (params, scopeOverride = undefined) => {
-      const modalScope =
-        scopeOverride !== undefined
-          ? scopeOverride
-          : modalLedgerScopeRef.current ?? modalLedgerScope;
-      const effective = resolveModalLedgerScope(pageLedgerScope, modalScope);
-      applyTenantLedgerToParams(params, effective);
-    },
-    [pageLedgerScope, modalLedgerScope],
-  );
-
   const resolveActiveModalLedgerScope = useCallback(() => {
     const modal = modalLedgerScopeRef.current ?? modalLedgerScope;
     return resolveModalLedgerScope(pageLedgerScope, modal);
   }, [pageLedgerScope, modalLedgerScope]);
+
+  const resolveSelectionMetaTenantId = useCallback(
+    (scopeForRequest, { forcePageLedgerScope = false } = {}) => {
+      if (forcePageLedgerScope) {
+        return resolveCurrencyTenantIdFromScope({
+          ledgerScope: pageLedgerScope,
+          companyId,
+        });
+      }
+      const modalScope =
+        scopeForRequest !== undefined
+          ? scopeForRequest
+          : modalLedgerScopeRef.current ?? modalLedgerScope;
+      const effective = resolveModalLedgerScope(pageLedgerScope, modalScope);
+      return resolveCurrencyTenantIdFromScope({
+        ledgerScope: effective,
+        companyId: companyId ?? scopeCompanyId,
+      });
+    },
+    [pageLedgerScope, modalLedgerScope, companyId, scopeCompanyId],
+  );
 
   const loadSelectionMeta = async (
     id,
@@ -2050,57 +2064,49 @@ export default function AccountListPage() {
         ? ledgerScope
         : modalLedgerScopeRef.current ?? modalLedgerScope;
     try {
-      const currencyParams = new URLSearchParams({ action: "get_available_currencies" });
-      if (id) currencyParams.set("account_id", String(id));
-      if (forcePageLedgerScope) {
-        applyTenantLedgerToParams(currencyParams, pageLedgerScope);
-      } else {
-        appendModalCurrencyScopeParams(currencyParams, scopeForRequest);
-      }
-      const [curRes, compRes] = await Promise.all([
-        fetch(buildApiUrl(`api/accounts/account_currency_api.php?${currencyParams.toString()}`), { credentials: "include" }),
-        fetch(buildApiUrl(`api/accounts/account_company_api.php?action=get_available_companies${id ? `&account_id=${id}` : ""}`), { credentials: "include" }),
-      ]);
-      const curJ = await curRes.json(); const compJ = await compRes.json();
-      if (!curJ.success) {
-        notifyApi(curJ.message, "loadLinksFailed", "danger");
-        return;
-      }
-      const rows = curJ.data.map((c) => ({
-        id: c.id,
-        code: c.code,
-        is_linked: !!c.is_linked,
-        sync_source: c.sync_source,
-        deletable: c.deletable !== false,
-      }));
+      const tenantId = resolveSelectionMetaTenantId(scopeForRequest, { forcePageLedgerScope });
+      if (!tenantId) return;
+
+      const rows = await fetchAvailableCurrencies({
+        tenantId,
+        accountId: id,
+      });
       setCurrencies(rows);
       const wantCode = selectCode ? toUpper(String(selectCode)).trim() : "";
       const matched = wantCode ? rows.find((c) => toUpper(c.code).trim() === wantCode) : null;
       if (isEdit) {
-        const ids = curJ.data.filter((c) => c.is_linked).map((c) => Number(c.id));
-        const base = matched ? [...new Set([...ids, Number(matched.id)])] : ids;
+        const linkedIds = rows.filter((c) => c.is_linked).map((c) => Number(c.id));
+        const base = matched ? [...new Set([...linkedIds, Number(matched.id)])] : linkedIds;
         setSelectedCurrencyIds(base);
-        setInitialEditCurrencyIds(ids);
+        setInitialEditCurrencyIds(linkedIds);
       } else if (matched) {
         setSelectedCurrencyIds((prev) =>
           prev.map(Number).includes(Number(matched.id)) ? prev : [...prev, Number(matched.id)],
         );
       } else {
-        setSelectedCurrencyIds(pickDefaultAddCurrencyIds(curJ.data));
+        setSelectedCurrencyIds(pickDefaultAddCurrencyIds(rows));
       }
-      if (compJ.success) {
-        const linked = compJ.data.filter(c => c.is_linked).map(c => Number(c.id));
-        if (groupOnlyAccountMode) {
-          const defaultGroupEntity =
-            groupPickerCompanies.find((c) => String(c.group_id || c.company_id || "") === String(selectedGroup || "")) ||
-            groupPickerCompanies[0] ||
-            null;
-          setSelectedCompanyIds(defaultGroupEntity?.id ? [String(defaultGroupEntity.id)] : []);
-        } else {
-          setSelectedCompanyIds(linked.length ? linked : companyId ? [Number(companyId)] : []);
-        }
+
+      if (groupOnlyAccountMode) {
+        const defaultGroupEntity =
+          groupPickerCompanies.find(
+            (c) => String(c.group_id || c.company_id || "") === String(selectedGroup || ""),
+          ) ||
+          groupPickerCompanies[0] ||
+          null;
+        setSelectedCompanyIds(defaultGroupEntity?.id ? [String(defaultGroupEntity.id)] : []);
+      } else {
+        setSelectedCompanyIds(
+          tenantIdToPickerCompanyIds(tenantId).length
+            ? tenantIdToPickerCompanyIds(tenantId)
+            : companyId
+              ? [String(companyId)]
+              : [],
+        );
       }
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   };
 
   const openAdd = () => {
@@ -2146,38 +2152,21 @@ export default function AccountListPage() {
       return;
     }
     try {
-      const detailUrl = new URL(buildApiUrl("api/accounts/getaccount_api.php"));
-      detailUrl.searchParams.set("id", String(id));
-      appendAccountScopeParams(detailUrl.searchParams);
-      detailUrl.searchParams.set("_", String(Date.now()));
-      const res = await fetch(detailUrl.toString(), {
-        credentials: "include",
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
-      });
-      const text = await res.text();
-      let json;
-      try {
-        json = text.trim() ? JSON.parse(text) : { success: false };
-      } catch {
-        return notify(t("errorLoadingAccount"), "danger");
-      }
-      if (!json.success) return notifyApi(json.message || json.error, "failedToLoadAccount", "danger");
-      const d = json.data;
+      const row = accounts.find((a) => Number(a.id) === Number(id));
+      if (!row) return notify(t("errorLoadingAccount"), "danger");
+      const editForm = accountRowToEditForm(row);
+      if (!editForm) return notify(t("errorLoadingAccount"), "danger");
+
       setIsEditMode(true);
       setHiddenCurrencyIds([]);
-      const ledger = d.ledger_scope && typeof d.ledger_scope === "object" ? d.ledger_scope : null;
-      const ledgerGroupCode = String(ledger?.group_code || "").trim().toUpperCase();
-      const ledgerScopeForModal =
-        ledger?.mode === "group" && ledgerGroupCode
-          ? { mode: "group", group_code: ledgerGroupCode }
-          : null;
-      syncModalLedgerScope(ledgerScopeForModal);
-      setForm({ id: d.id, account_id: toUpper(d.account_id), name: toUpper(d.name), role: d.role || "", password: d.password || "", remark: toUpper(d.remark), payment_alert: String(d.payment_alert == 1 ? "1" : "0"), alert_type: d.alert_type || d.alert_day || "", alert_start_date: d.alert_start_date || d.alert_specific_date || "", alert_amount: d.alert_amount || "" });
+      syncModalLedgerScope(null);
+      setForm(editForm);
       await loadRoles({ companyId, groupId: selectedGroup });
-      await loadSelectionMeta(id, true, { ledgerScope: ledgerScopeForModal });
+      await loadSelectionMeta(id, true);
       setEditModalOpen(true);
-    } catch { notify(t("errorLoadingAccount"), "danger"); }
+    } catch {
+      notify(t("errorLoadingAccount"), "danger");
+    }
   };
 
   const confirmDelete = async () => {
@@ -2186,17 +2175,21 @@ export default function AccountListPage() {
       return;
     }
     try {
-      const fd = new FormData();
-      selectedDeleteIds.forEach(id => fd.append("ids[]", id));
-      appendAccountScopeParams(fd);
-      const res = await fetch(buildApiUrl("api/accounts/delete_accounts_api.php"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!json.success) return notifyApi(json.message, "deleteFailed", "danger");
+      for (const id of selectedDeleteIds) {
+        const row = accounts.find((a) => Number(a.id) === Number(id));
+        const scopeTenantId = resolveRowScopeTenantId(row, companyId ?? scopeCompanyId);
+        if (!scopeTenantId) {
+          throw new Error("invalidRequest");
+        }
+        await deleteAccountUser({ id, scopeTenantId });
+      }
       setConfirmDeleteOpen(false);
       setSelectedDeleteIds(new Set());
-      notifyApi(json.message, "accountsDeletedSuccessfully");
+      notifyApi(null, "accountsDeletedSuccessfully");
       refreshAccountList();
-    } catch { notify(t("deleteFailed"), "danger"); }
+    } catch (e) {
+      notifyApi(e?.message, "deleteFailed", "danger");
+    }
   };
 
   const saveForm = async (e) => {
@@ -2210,88 +2203,33 @@ export default function AccountListPage() {
       return;
     }
     const amount = normalizeAlertAmount(form.alert_amount);
-    const fd = new FormData();
-    Object.entries(form).forEach(([k, v]) => fd.append(k, k === "alert_amount" ? amount : (v ?? "")));
-    if (!groupOnlyAccountMode && scopeCompanyId) {
-      fd.set("company_id", String(scopeCompanyId));
+    const scopeTenantId = resolveActiveScopeTenantId({
+      companyId: companyId ?? scopeCompanyId,
+      scopeTenantId: form.scope_tenant_id,
+      form,
+    });
+    if (!scopeTenantId) {
+      notify(t("pleaseSelectCompanyFirst"), "danger");
+      return;
     }
-    if (!groupOnlyAccountMode && selectedCompanyIds.length) {
-      fd.set("company_ids", JSON.stringify(selectedCompanyIds));
-    }
-    appendAccountScopeParams(fd);
-    if (!isEditMode && !groupOnlyAccountMode && companyId) {
-      fd.set("company_id", String(companyId));
-      if (selectedCurrencyIds.length) fd.set("currency_ids", JSON.stringify(selectedCurrencyIds));
-    }
+    const formPayload = { ...form, alert_amount: amount };
+    const currencyIds = selectedCurrencyIds.map(Number).filter((id) => Number.isFinite(id) && id > 0);
+
     try {
-      const ep = isEditMode ? "api/accounts/update_api.php" : "api/accounts/addaccountapi.php";
-      const res = await fetch(buildApiUrl(ep), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!json.success) return notifyApi(json.message, "saveFailed", "danger");
-      let postSaveCurrencyError = null;
-      if (!isEditMode && json?.data?.id && selectedCurrencyIds.length) {
-        for (const cid of selectedCurrencyIds) {
-          const currencyRes = await fetch(accountCurrencyApiUrl("add_currency"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ account_id: Number(json.data.id), currency_id: Number(cid) }),
-            credentials: "include",
-          });
-          const currencyJson = await currencyRes.json();
-          if (!currencyRes.ok || !currencyJson.success) {
-            postSaveCurrencyError = String(currencyJson?.message || "");
-            break;
-          }
-        }
-      }
-      if (isEditMode && form.id) {
-        const before = new Set(initialEditCurrencyIds.map(Number));
-        const after = new Set(selectedCurrencyIds.map(Number));
-        const toAdd = [...after].filter((id) => !before.has(id));
-        const toRemove = [...before].filter((id) => !after.has(id));
-        for (const cid of toAdd) {
-          const currencyRes = await fetch(accountCurrencyApiUrl("add_currency"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ account_id: Number(form.id), currency_id: Number(cid) }),
-            credentials: "include",
-          });
-          const currencyJson = await currencyRes.json();
-          if (!currencyRes.ok || !currencyJson.success) {
-            postSaveCurrencyError = String(currencyJson?.message || "");
-            break;
-          }
-        }
-        for (const cid of postSaveCurrencyError ? [] : toRemove) {
-          const currencyRes = await fetch(accountCurrencyApiUrl("remove_currency"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ account_id: Number(form.id), currency_id: Number(cid) }),
-            credentials: "include",
-          });
-          const currencyJson = await currencyRes.json();
-          if (!currencyRes.ok || !currencyJson.success) {
-            postSaveCurrencyError = String(currencyJson?.message || "");
-            break;
-          }
-        }
-        setInitialEditCurrencyIds([...after]);
-        if (settingCurrencyId) void loadCurrencyLinks(settingCurrencyId);
-      }
-      setAddModalOpen(false); setEditModalOpen(false);
-      setHiddenCurrencyIds([]);
-      if (postSaveCurrencyError) {
-        notify(
-          t("accountSavedCurrencySyncFailed", {
-            detail: translateAccountApiMessage(lang, postSaveCurrencyError, "saveFailed"),
-          }),
-          "danger",
-        );
+      if (isEditMode) {
+        await updateAccountUser(buildAccountUpdateRequest(formPayload, scopeTenantId, currencyIds));
       } else {
-        notify(t("accountSavedSuccessfully"));
+        await createAccountUser(buildAccountCreateRequest(formPayload, scopeTenantId, currencyIds));
       }
+      setInitialEditCurrencyIds([...currencyIds]);
+      setAddModalOpen(false);
+      setEditModalOpen(false);
+      setHiddenCurrencyIds([]);
+      notify(t("accountSavedSuccessfully"));
       refreshAccountList();
-    } catch { notify(t("saveFailed"), "danger"); }
+    } catch (e) {
+      notifyApi(e?.message, "saveFailed", "danger");
+    }
   };
 
   const createCurrency = async () => {
@@ -2299,7 +2237,8 @@ export default function AccountListPage() {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
-    const code = toUpper(currencyInput).trim(); if (!code) return;
+    const code = toUpper(currencyInput).trim();
+    if (!code) return;
     const existing = currencies.find((c) => toUpper(c.code).trim() === code);
     if (existing) {
       const existingId = Number(existing.id);
@@ -2310,77 +2249,46 @@ export default function AccountListPage() {
     }
     try {
       const modalScope = currencySettingOpen ? pageLedgerScope : resolveActiveModalLedgerScope();
-      const payload = { code, ...buildCurrencyScopePayload(modalScope) };
-      const res = await fetch(buildApiUrl("api/accounts/create_currency_api.php"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), credentials: "include" });
-      const json = await res.json();
-      if (json.success) {
-        const newId = Number(json.data.id);
-        if (currencySettingOpen) {
-          await loadSelectionMeta(null, false, { forcePageLedgerScope: true, selectCode: code });
-        } else {
-          setCurrencies((prev) => [...prev, { id: newId, code: json.data.code, is_linked: false }]);
-          setSelectedCurrencyIds((prev) => (prev.map(Number).includes(newId) ? prev : [...prev, newId]));
-        }
-        setCurrencyInput("");
+      const tenantId = resolveCurrencyTenantIdFromScope({
+        ledgerScope: modalScope,
+        companyId: companyId ?? scopeCompanyId,
+      });
+      const created = await createTenantCurrency({ code, tenantId });
+      const newId = Number(created.id);
+      if (currencySettingOpen) {
+        await loadSelectionMeta(null, false, { forcePageLedgerScope: true, selectCode: code });
       } else {
-        const msg = String(json.message || json.error || "");
-        if (/already exists/i.test(msg)) {
-          await loadSelectionMeta(isEditMode && form.id ? form.id : null, isEditMode, {
-            selectCode: code,
-            ledgerScope: currencySettingOpen ? undefined : modalLedgerScopeRef.current ?? modalLedgerScope,
-            forcePageLedgerScope: currencySettingOpen,
-          });
-          setCurrencyInput("");
-          return;
-        }
-        notifyApi(json.message, "createFailed", "danger");
+        setCurrencies((prev) => [...prev, { id: newId, code: created.code, is_linked: false }]);
+        setSelectedCurrencyIds((prev) => (prev.map(Number).includes(newId) ? prev : [...prev, newId]));
       }
-    } catch { notify(t("createFailed"), "danger"); }
+      setCurrencyInput("");
+    } catch (e) {
+      const msg = String(e?.message || e?.response?.message || "");
+      if (/already exists/i.test(msg)) {
+        await loadSelectionMeta(isEditMode && form.id ? form.id : null, isEditMode, {
+          selectCode: code,
+          forcePageLedgerScope: currencySettingOpen,
+        });
+        setCurrencyInput("");
+        return;
+      }
+      notifyApi(msg, "createFailed", "danger");
+    }
   };
-
-  const accountCurrencyApiUrl = useCallback(
-    (action) => {
-      const params = new URLSearchParams({ action });
-      if (isEditMode && form.id) params.set("account_id", String(form.id));
-      appendModalCurrencyScopeParams(params);
-      return buildApiUrl(`api/accounts/account_currency_api.php?${params.toString()}`);
-    },
-    [appendModalCurrencyScopeParams, isEditMode, form.id],
-  );
 
   const fetchAccountsUsingCurrency = async (currencyId, scopeOverride = undefined) => {
     try {
-      const params = new URLSearchParams({
-        action: "get_linked_accounts_by_currency",
-        currency_id: String(currencyId),
+      const ledgerScope = scopeOverride ?? resolveActiveModalLedgerScope();
+      const tenantId = resolveCurrencyTenantIdFromScope({
+        ledgerScope,
+        companyId: companyId ?? scopeCompanyId,
       });
-      if (scopeOverride) {
-        applyTenantLedgerToParams(params, scopeOverride);
-      } else {
-        appendModalCurrencyScopeParams(params);
-      }
-      const res = await fetch(
-        buildApiUrl(`api/accounts/bulk_account_currency_api.php?${params.toString()}`),
-        { method: "POST", credentials: "include" },
-      );
-      const json = await res.json();
-      if (!json.success) return [];
-      const fromApi = Array.isArray(json.data?.linked_accounts) ? json.data.linked_accounts : [];
-      if (fromApi.length > 0) {
-        return fromApi.map((a) => ({
-          id: Number(a.id),
-          name: String(a.name ?? ""),
-          account_id: String(a.account_id ?? ""),
-        }));
-      }
-      const linkedIds = new Set((json.data?.linked_account_ids || []).map(Number));
-      return accounts
-        .filter((a) => linkedIds.has(Number(a.id)))
-        .map((a) => ({
-          id: Number(a.id),
-          name: String(a.name ?? ""),
-          account_id: String(a.account_id ?? ""),
-        }));
+      if (!tenantId) return [];
+      const { linkedAccounts } = await fetchLinkedAccountsByCurrency({
+        currencyId,
+        tenantId,
+      });
+      return linkedAccounts;
     } catch {
       return [];
     }
@@ -2422,24 +2330,24 @@ export default function AccountListPage() {
     async (currencyId, { force = false, scope = null } = {}) => {
       const id = Number(currencyId);
       const ledgerScope = scope ?? resolveActiveModalLedgerScope();
-      const deleteUrl = new URL(buildApiUrl("api/accounts/delete_currency_api.php"));
-      applyTenantLedgerToParams(deleteUrl.searchParams, ledgerScope);
-      const deletePayload = { id, ...buildCurrencyScopePayload(ledgerScope) };
-      if (force) deletePayload.force = true;
-      const res = await fetch(deleteUrl.toString(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(deletePayload),
-        credentials: "include",
+      const tenantId = resolveCurrencyTenantIdFromScope({
+        ledgerScope,
+        companyId: companyId ?? scopeCompanyId,
       });
-      const json = await res.json();
+      const result = await deleteCurrency({
+        id,
+        tenantId,
+        ledgerScope,
+        companyId: companyId ?? scopeCompanyId,
+        force,
+      });
       return {
-        success: Boolean(json.success),
-        json,
-        msg: String(json.message || json.error || ""),
+        success: Boolean(result.success),
+        json: result,
+        msg: String(result.message || ""),
       };
     },
-    [buildCurrencyScopePayload, resolveActiveModalLedgerScope],
+    [companyId, scopeCompanyId, resolveActiveModalLedgerScope],
   );
 
   const confirmForceCurrencyDelete = useCallback(async () => {
@@ -2545,24 +2453,25 @@ export default function AccountListPage() {
       }
 
       try {
-        const res = await fetch(accountCurrencyApiUrl("remove_currency"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ account_id: accountId, currency_id: id }),
-          credentials: "include",
+        const scopeTenantId = resolveActiveScopeTenantId({
+          companyId: companyId ?? scopeCompanyId,
+          form,
         });
-        const json = await res.json();
-        if (!res.ok || !json.success) {
-          notifyApi(json.message, "saveFailed", "danger");
-          return false;
-        }
-        setInitialEditCurrencyIds((prev) => prev.filter((x) => Number(x) !== id));
+        if (!scopeTenantId) return false;
+        const remaining = initialEditCurrencyIds
+          .map(Number)
+          .filter((cid) => Number.isFinite(cid) && cid > 0 && cid !== id);
+        await updateAccountUser(
+          buildAccountUpdateRequest(form, scopeTenantId, remaining),
+        );
+        setInitialEditCurrencyIds(remaining);
+        setSelectedCurrencyIds((prev) => prev.filter((x) => Number(x) !== id));
         setCurrencies((prev) =>
           prev.map((c) => (Number(c.id) === id ? { ...c, is_linked: false } : c)),
         );
         return true;
-      } catch {
-        notify(t("saveFailed"), "danger");
+      } catch (e) {
+        notifyApi(e?.message, "saveFailed", "danger");
         return false;
       }
     };
@@ -2603,13 +2512,21 @@ export default function AccountListPage() {
 
   const loadCurrencyLinks = async (curId) => {
     try {
-      const params = new URLSearchParams({ action: "get_linked_accounts_by_currency", currency_id: String(curId) });
-      appendCurrencyScopeParams(params);
-      const res = await fetch(buildApiUrl(`api/accounts/bulk_account_currency_api.php?${params.toString()}`), { method: "POST", credentials: "include" });
-      const json = await res.json();
-      const ids = new Set((json.data?.linked_account_ids || []).map(Number));
-      setSettingLinked(ids); setSettingInitial(new Set(ids));
-    } catch { notify(t("loadLinksFailed"), "danger"); }
+      const tenantId = resolveCurrencyTenantIdFromScope({
+        ledgerScope: pageLedgerScope,
+        companyId: companyId ?? scopeCompanyId,
+      });
+      if (!tenantId) return;
+      const { linkedAccountIds } = await fetchLinkedAccountsByCurrency({
+        currencyId: curId,
+        tenantId,
+      });
+      const ids = new Set(linkedAccountIds.map(Number));
+      setSettingLinked(ids);
+      setSettingInitial(new Set(ids));
+    } catch {
+      notify(t("loadLinksFailed"), "danger");
+    }
   };
 
   const saveCurrencySetting = async () => {
@@ -2617,40 +2534,43 @@ export default function AccountListPage() {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
-    const linked = [], unlinked = [];
-    accounts.forEach(a => {
-      const id = Number(a.id); const was = settingInitial.has(id), now = settingLinked.has(id);
-      if (now && !was) linked.push(id); if (!now && was) unlinked.push(id);
+    const linked = [];
+    const unlinked = [];
+    accounts.forEach((a) => {
+      const aid = Number(a.id);
+      const was = settingInitial.has(aid);
+      const now = settingLinked.has(aid);
+      if (now && !was) linked.push(aid);
+      if (!now && was) unlinked.push(aid);
     });
     try {
-      const params = new URLSearchParams({ action: "bulk_update" });
-      appendCurrencyScopeParams(params);
-      const res = await fetch(buildApiUrl(`api/accounts/bulk_account_currency_api.php?${params.toString()}`), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currency_id: settingCurrencyId, linked_account_ids: linked, unlinked_account_ids: unlinked }), credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notifyApi(json.message, "saveFailed", "danger");
+      const tenantId = resolveCurrencyTenantIdFromScope({
+        ledgerScope: pageLedgerScope,
+        companyId: companyId ?? scopeCompanyId,
+      });
+      if (!tenantId) return;
+      await bulkUpdateAccountCurrency({
+        tenantId,
+        currencyId: settingCurrencyId,
+        linkedAccountIds: linked,
+        unlinkedAccountIds: unlinked,
+      });
       setSettingInitial(new Set(settingLinked));
       setCurrencySettingOpen(false);
       notify(t("currencySettingsSaved"));
       refreshAccountList();
       if (editModalOpen && form.id) void loadSelectionMeta(form.id, true);
-    } catch { notify(t("saveFailed"), "danger"); }
+    } catch (e) {
+      notifyApi(e?.message, "saveFailed", "danger");
+    }
   };
 
-  const buildLinkScopePayload = useCallback(() => {
-    const payload = {};
-    const gid =
-      (selectedGroup && String(selectedGroup).trim().toUpperCase()) ||
-      (isGroupLogin(sessionMe) ? getLoginIdentifier(sessionMe) : null);
-    if (gid) payload.group_id = gid;
-    if (groupOnlyAccountMode) {
-      payload.group_only = true;
-    } else if (companyId) {
-      payload.company_id = Number(companyId);
-    } else if (scopeCompanyId) {
-      payload.company_id = Number(scopeCompanyId);
+  const resolveLinkTenantId = useCallback(() => {
+    if (groupOnlyAccountMode && selectedGroup) {
+      return resolveGroupCodeToTenantId(selectedGroup, companies);
     }
-    return payload;
-  }, [selectedGroup, groupOnlyAccountMode, companyId, scopeCompanyId, sessionMe]);
+    return resolveActiveScopeTenantId({ companyId: companyId ?? scopeCompanyId });
+  }, [groupOnlyAccountMode, selectedGroup, companies, companyId, scopeCompanyId]);
 
   const openLink = async (id) => {
     if (accountMutationsBlocked) {
@@ -2661,33 +2581,24 @@ export default function AccountListPage() {
       if (!companyId && !(groupOnlyAccountMode && selectedGroup)) {
         return notify(t("pleaseSelectCompanyFirst"), "danger");
       }
+      const tenantId = resolveLinkTenantId();
+      if (!tenantId) return notify(t("pleaseSelectCompanyFirst"), "danger");
+
       setLinkingAccountId(Number(id));
       setLinkType("bidirectional");
       setLinkSearchTerm("");
-      const allUrl = groupOnlyAccountMode && selectedGroup
-        ? buildGroupAccountsUrl(selectedGroup, "", false, true, { groupOnly: true })
-        : buildAccountsUrl(companyId ?? scopeCompanyId, "", false, true);
-      const linkedUrl = new URL(buildApiUrl("api/accounts/account_link_api.php"));
-      linkedUrl.searchParams.set("action", "get_linked_accounts");
-      linkedUrl.searchParams.set("account_id", String(id));
-      const linkScope = buildLinkScopePayload();
-      if (linkScope.group_id) linkedUrl.searchParams.set("group_id", String(linkScope.group_id));
-      if (linkScope.group_only) linkedUrl.searchParams.set("group_only", "1");
-      if (linkScope.company_id) linkedUrl.searchParams.set("company_id", String(linkScope.company_id));
-      const [allRes, linkedRes] = await Promise.all([
-        fetch(allUrl.toString(), { credentials: "include" }),
-        fetch(linkedUrl.toString(), { credentials: "include" }),
+
+      const [pool, linkedData] = await Promise.all([
+        fetchFilteredAccountListByTenantId(tenantId, { showAll: true }),
+        fetchAccountLinkedAccounts(id, tenantId),
       ]);
-      const allJson = await allRes.json();
-      const linkedJson = await linkedRes.json();
-      const pool = Array.isArray(allJson?.data?.accounts) ? allJson.data.accounts : [];
       setLinkAccountsPool(pool);
-      const types = linkedJson?.data?.link_types_map || {};
-      setLinkTypeMap(types);
+      setLinkTypeMap(linkedData.linkTypesMap || {});
+      const types = linkedData.linkTypesMap || {};
       const initial = new Set(
-        (Array.isArray(linkedJson?.data?.accounts) ? linkedJson.data.accounts : [])
+        (linkedData.accounts || [])
           .filter((a) => types[a.id] === "bidirectional")
-          .map((a) => Number(a.id))
+          .map((a) => Number(a.id)),
       );
       setSelectedLinkedIds(initial);
       setLinkModalOpen(true);
@@ -2713,84 +2624,53 @@ export default function AccountListPage() {
     }
     if (!linkingAccountId || (!companyId && !(groupOnlyAccountMode && selectedGroup))) return;
     try {
-      const linkScope = buildLinkScopePayload();
-      const refUrl = new URL(buildApiUrl("api/accounts/account_link_api.php"));
-      refUrl.searchParams.set("action", "get_linked_accounts");
-      refUrl.searchParams.set("account_id", String(linkingAccountId));
-      if (linkScope.group_id) refUrl.searchParams.set("group_id", String(linkScope.group_id));
-      if (linkScope.group_only) refUrl.searchParams.set("group_only", "1");
-      if (linkScope.company_id) refUrl.searchParams.set("company_id", String(linkScope.company_id));
-      const refRes = await fetch(refUrl.toString(), { credentials: "include" });
-      const refJson = await refRes.json();
-      if (!refJson?.success) {
-        notifyApi(refJson?.message, "failedSaveAccountLinks", "danger");
-        return;
-      }
-      const linkScopeCompanyId = Number(refJson?.data?.company_id) || Number(linkScope.company_id) || 0;
-      if (!Number.isFinite(linkScopeCompanyId) || linkScopeCompanyId <= 0) {
+      const tenantId = resolveLinkTenantId();
+      if (!tenantId) {
         notify(t("pleaseSelectCompanyFirst"), "danger");
         return;
       }
-      const typesMap = refJson?.data?.link_types_map || {};
+
+      const ref = await fetchAccountLinkedAccounts(linkingAccountId, tenantId);
+      const typesMap = ref.linkTypesMap || {};
       const currentTypeIds = new Set(
-        (Array.isArray(refJson?.data?.accounts) ? refJson.data.accounts : [])
+        (ref.accounts || [])
           .filter((a) => typesMap[a.id] === linkType)
-          .map((a) => Number(a.id))
+          .map((a) => Number(a.id)),
       );
       const desiredIds = new Set([...selectedLinkedIds]);
       const toAdd = [...desiredIds].filter((id) => !currentTypeIds.has(id));
       const toRemove = [...currentTypeIds].filter((id) => !desiredIds.has(id));
 
       for (const linkedId of toRemove) {
-        await fetch(buildApiUrl("api/accounts/account_link_api.php?action=unlink_accounts"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            account_id_1: Number(linkingAccountId),
-            account_id_2: Number(linkedId),
-            company_id: linkScopeCompanyId,
-            ...linkScope,
-          }),
-          credentials: "include",
+        await unlinkAccountPair({
+          accountId1: linkingAccountId,
+          accountId2: linkedId,
+          tenantId,
         });
       }
       for (const linkedId of toAdd) {
-        await fetch(buildApiUrl("api/accounts/account_link_api.php?action=link_accounts"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            account_id_1: Number(linkingAccountId),
-            account_id_2: Number(linkedId),
-            company_id: linkScopeCompanyId,
-            ...linkScope,
-            link_type: linkType,
-            source_account_id: linkType === "unidirectional" ? Number(linkingAccountId) : null,
-          }),
-          credentials: "include",
+        await linkAccountPair({
+          accountId1: linkingAccountId,
+          accountId2: linkedId,
+          linkType,
+          sourceAccountId: linkType === "unidirectional" ? linkingAccountId : null,
         });
       }
       if (toAdd.length === 0 && toRemove.length === 0 && desiredIds.size > 0) {
         for (const linkedId of desiredIds) {
-          await fetch(buildApiUrl("api/accounts/account_link_api.php?action=update_link_type"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              account_id_1: Number(linkingAccountId),
-              account_id_2: Number(linkedId),
-              company_id: linkScopeCompanyId,
-              ...linkScope,
-              link_type: linkType,
-              source_account_id: linkType === "unidirectional" ? Number(linkingAccountId) : null,
-            }),
-            credentials: "include",
+          await updateAccountLinkPair({
+            accountId1: linkingAccountId,
+            accountId2: linkedId,
+            linkType,
+            sourceAccountId: linkType === "unidirectional" ? linkingAccountId : null,
           });
         }
       }
       setLinkModalOpen(false);
       notify(t("accountLinksSavedSuccessfully"));
       refreshAccountList();
-    } catch {
-      notify(t("failedSaveAccountLinks"), "danger");
+    } catch (e) {
+      notifyApi(e?.message, "failedSaveAccountLinks", "danger");
     }
   };
 

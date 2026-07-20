@@ -74,12 +74,12 @@ export function formatProfitSharingStringFixed2(s) {
  * Bank Process 账户下拉（Supplier / Customer / Company / Profit sharing）允许的 role。
  * 与 js/bank_process_list.js BANK_ALLOWED_ACCOUNT_ROLES 一致。
  *
- * 会出现在 option 中：PARTNER, SUPPLIER, UPLINE（供应商）, STAFF, AGENT, MEMBER, PROFIT
+ * 会出现在 option 中：PARTNER, SUPPLIER, STAFF, AGENT, MEMBER, PROFIT
  * 不会出现在 option 中（被 role 筛掉）：CAPITAL, BANK, CASH, EXPENSES, COMPANY, DEBTOR 等未列出的 role
  *
  * 另需 status === active；inactive 账户不会出现在 option 中。
  */
-export const BANK_PICK_ACCOUNT_ROLES = ["PARTNER", "SUPPLIER", "UPLINE", "STAFF", "AGENT", "MEMBER", "PROFIT"];
+export const BANK_PICK_ACCOUNT_ROLES = ["PARTNER", "SUPPLIER", "STAFF", "AGENT", "MEMBER", "PROFIT"];
 
 export function normalizeBankPickAccountRole(role) {
   return String(role || "").trim().toUpperCase();
@@ -1072,7 +1072,7 @@ export function accountingDuePeriodType(r) {
   if (r.is_weekly) return "weekly";
   if (r.is_daily && r.is_daily_consolidated) return "daily_consolidated";
   if (r.is_daily) return "daily";
-  if (r.is_manual_inactive) return "manual_inactive";
+  if (r.is_manual_inactive || r.is_compensation) return "compensation";
   if (r.is_resend_consolidated_range) return "resend_consolidated_range";
   if (r.is_resend_monthly_reopen) return "resend_monthly_reopen";
   if (r.is_partial_first_month) return "partial_first_month";
@@ -1146,7 +1146,7 @@ export function formatAccountingDueProcessDayStart(row) {
 
 /**
  * Accounting Due：Billing Date。
- * Once（ONCE_ONE_OFF）/ Day（DAILY）只展示单日；
+ * Once（ONCE_ONE_OFF）/ Day（DAILY）/ Compensation（COMPENSATION）只展示单日；
  * Week（WEEKLY）展示整段区间 start – end；
  * Resend（RESEND_CONSOLIDATED）：有起止且不同则同 Week 一样展示 from – to（如 Week/Monthly/1st 补单），
  * 起止相同则同 Once/Day 展示单日。
@@ -1157,7 +1157,7 @@ export function formatAccountingDueBillingPeriod(row) {
   const end = String(row?.billingEnd ?? row?.billing_period_end ?? "").trim();
   const posted = String(row?.postedDate || "").trim();
   const period = accountingDuePeriodType(row);
-  if (period === "once_one_off" || period === "daily") {
+  if (period === "once_one_off" || period === "daily" || period === "compensation") {
     const display = formatAccountingDueDisplayDate(start || posted || end);
     return display || "-";
   }
@@ -1181,8 +1181,12 @@ const ACCOUNTING_DUE_FREQUENCY_LABEL_KEYS = {
   "1st_of_every_month": "firstOfEveryMonth",
 };
 
-/** Accounting Due：本行账单计费频率（Resend 行用弹窗频率，正常行用 process 原始频率）。 */
+/** Accounting Due：本行账单计费频率（Resend 行用弹窗频率；Compensation 行单独标注；正常行用 process 原始频率）。 */
 export function formatAccountingDueFrequency(row, t) {
+  const period = accountingDuePeriodType(row);
+  if (period === "compensation" || period === "manual_inactive") {
+    return typeof t === "function" ? t("compensationFrequency") : "Compensation";
+  }
   const fq = bankProcessFrequencyNormalized(row?.display_frequency || row?.frequency || "");
   const key = ACCOUNTING_DUE_FREQUENCY_LABEL_KEYS[fq] || "firstOfEveryMonth";
   return typeof t === "function" ? t(key) : key;

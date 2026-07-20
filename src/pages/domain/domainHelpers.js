@@ -302,6 +302,7 @@ export function createEmptyGroup(groupCode) {
 export function groupFromApiRow(row) {
   const code = String(row?.group_code ?? "").trim().toUpperCase();
   const g = {
+    id: row?.id ?? null,
     group_code: code,
     expiration_date: row?.expiration_date || null,
     permissions: Array.isArray(row?.permissions) ? row.permissions : [],
@@ -584,6 +585,194 @@ export function forceSearchValue(value) {
  * and the domain fee price.
  * Returns { profit, sales, cs, it } totals and per-row amounts.
  */
+// ===================== Spring ↔ UI adapters =====================
+
+const UI_PERMISSION_TO_MODULE = {
+  Games: { id: 1, code: "GAME" },
+  Bank: { id: 2, code: "BANK" },
+  Loan: { id: 3, code: "LOAN" },
+  Rate: { id: 4, code: "RATE" },
+  Money: { id: 5, code: "MONEY" },
+};
+
+const MODULE_CODE_TO_UI_PERMISSION = {
+  GAME: "Games",
+  BANK: "Bank",
+  LOAN: "Loan",
+  RATE: "Rate",
+  MONEY: "Money",
+};
+
+export function featureModulesToPermissionNames(modules) {
+  if (!Array.isArray(modules) || modules.length === 0) return [];
+  const out = [];
+  const seen = new Set();
+  for (const m of modules) {
+    if (!m) continue;
+    const code = String(m.code ?? m.moduleCode ?? "").trim().toUpperCase();
+    const label = MODULE_CODE_TO_UI_PERMISSION[code] ?? (m.name ? String(m.name) : code);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    out.push(label);
+  }
+  return out;
+}
+
+export function permissionNamesToFeatureModules(permissions) {
+  if (!Array.isArray(permissions) || permissions.length === 0) return [];
+  const out = [];
+  const seen = new Set();
+  for (const p of permissions) {
+    const mod = UI_PERMISSION_TO_MODULE[String(p || "").trim()];
+    if (!mod || seen.has(mod.id)) continue;
+    seen.add(mod.id);
+    out.push({ id: mod.id, code: mod.code });
+  }
+  return out;
+}
+
+export function feeShareSpringToUi(rows) {
+  const ui = defaultFeeShareAllocations();
+  if (!Array.isArray(rows)) return ui;
+  for (const row of rows) {
+    if (!row) continue;
+    const role = String(row.shareType ?? row.share_type ?? "")
+      .trim()
+      .toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(ui, role)) continue;
+    const accountId = parseInt(row.accountId ?? row.account_id, 10);
+    if (!accountId) continue;
+    ui[role].push({
+      account_id: accountId,
+      percentage:
+        row.percentage != null && row.percentage !== ""
+          ? parseFloat(row.percentage)
+          : "",
+    });
+  }
+  return ui;
+}
+
+/**
+ * Profit pool = 100 - (sales + cs + it), split evenly across assigned Profit
+ * accounts — same remainder rule shown as the read-only "Total" column on the
+ * Profit card. Profit has no editable % input, so this is the only source of
+ * truth for what percentage each Profit row should persist as.
+ */
+export function distributeProfitPercentages(fsa) {
+  const salesSum = sumFeeShareRolePercentages(fsa?.sales);
+  const csSum = sumFeeShareRolePercentages(fsa?.cs);
+  const itSum = sumFeeShareRolePercentages(fsa?.it);
+  const profitPool = Math.max(0, 100 - (salesSum + csSum + itSum));
+
+  const profitRows = Array.isArray(fsa?.profit) ? fsa.profit : [];
+  const profitAssigned = profitRows.filter(
+    (r) => parseInt(r?.account_id, 10) !== 0
+  ).length;
+  const profitPerBase = profitAssigned > 0 ? profitPool / profitAssigned : 0;
+  const profitPerRounded = Math.round(profitPerBase * 10000) / 10000;
+
+  let assignedSoFar = 0;
+  let assignedSumPct = 0;
+  return profitRows.map((r) => {
+    const accountId = parseInt(r?.account_id, 10) || 0;
+    if (accountId === 0) return { account_id: 0, percentage: 0 };
+    assignedSoFar++;
+    const isLast = assignedSoFar === profitAssigned;
+    const percentage = isLast
+      ? Math.round((profitPool - assignedSumPct) * 10000) / 10000
+      : profitPerRounded;
+    if (!isLast) assignedSumPct += percentage;
+    return { account_id: accountId, percentage };
+  });
+}
+
+/**
+ * UI Share % → Spring `TenantFeeShareAllocate[]` rows.
+ *
+ * Business rule (Domain Share %):
+ * - Profit  = C168's retained cut of the Domain fee   → ownerType "owner"
+ * - Sales/CS/IT = commission paid to staff accounts    → ownerType "user"
+ * - Profit's percentage is never typed by the user (no % input on that card);
+ *   it is always the remainder split via {@link distributeProfitPercentages}.
+ */
+export function feeShareUiToSpring(fsa, tenantId) {
+  const tid = tenantId != null ? parseInt(tenantId, 10) : 0;
+  if (!tid) return [];
+
+  const profitPercentages = distributeProfitPercentages(fsa);
+
+  const roleMap = [
+    ["profit", "PROFIT", "owner"],
+    ["sales", "SALES", "user"],
+    ["cs", "CS", "user"],
+    ["it", "IT", "user"],
+  ];
+  const rows = [];
+  let sortOrder = 0;
+  for (const [uiRole, shareType, ownerType] of roleMap) {
+    const list = Array.isArray(fsa?.[uiRole]) ? fsa[uiRole] : [];
+    list.forEach((r, idx) => {
+      const accountId = parseInt(r?.account_id, 10);
+      if (!accountId) return;
+
+      let percentage;
+      if (uiRole === "profit") {
+        percentage = profitPercentages[idx]?.percentage ?? 0;
+      } else {
+        const pctRaw = r?.percentage;
+        percentage =
+          pctRaw !== undefined && pctRaw !== null && pctRaw !== ""
+            ? parseFloat(pctRaw)
+            : 0;
+      }
+
+      rows.push({
+        tenantId: tid,
+        shareType,
+        accountId,
+        ownerType,
+        percentage: Number.isFinite(percentage) ? percentage : 0,
+        sortOrder: sortOrder++,
+      });
+    });
+  }
+  return rows;
+}
+
+export function groupToTenantSaveEntry(g) {
+  const code = String(g?.code ?? g?.group_code ?? "").trim().toUpperCase();
+  return {
+    code,
+    tenantType: "GROUP",
+    expirationDate: g?.expiration_date ?? g?.expirationDate ?? null,
+  };
+}
+
+export function companyToTenantSaveEntry(c) {
+  const code = String(c?.code ?? c?.company_id ?? "").trim().toUpperCase();
+  const parent = c?.parent_code ?? c?.group_id ?? null;
+  return {
+    code,
+    tenantType: "COMPANY",
+    expirationDate: c?.expiration_date ?? c?.expirationDate ?? null,
+    parentGroupCode: parent ? String(parent).trim().toUpperCase() : null,
+  };
+}
+
+/** UI period edit map → Spring DomainFeeSettingsDTO period keys (snake in JSON). */
+export function periodPricesUiToFeeDto(periodPrices) {
+  const out = {};
+  if (!periodPrices || typeof periodPrices !== "object") return out;
+  DOMAIN_FEE_PERIOD_KEYS.forEach((key) => {
+    const raw = periodPrices[key];
+    if (raw === "" || raw == null) return;
+    const n = Number(raw);
+    if (Number.isFinite(n)) out[key] = n;
+  });
+  return out;
+}
+
 export function computeShareTotals(fsa, price) {
   const p = Number(price) || 0;
   const salesSum = sumFeeShareRolePercentages(fsa.sales);
@@ -593,26 +782,10 @@ export function computeShareTotals(fsa, price) {
   const profitPool = Math.max(0, 100 - otherSum);
 
   // Profit: evenly split remainder among assigned accounts
-  const profitRows = Array.isArray(fsa.profit) ? fsa.profit : [];
-  const profitAssigned = profitRows.filter(
-    (r) => parseInt(r.account_id, 10) !== 0
-  ).length;
-  const profitPerBase = profitAssigned > 0 ? profitPool / profitAssigned : 0;
-  const profitPerRounded = Math.round(profitPerBase * 10000) / 10000;
-
-  let assignedSoFar = 0;
-  let assignedSumPct = 0;
-  const profitRowAmounts = profitRows.map((r) => {
-    const aid = parseInt(r.account_id, 10) || 0;
-    if (aid === 0) return { percentage: 0, amount: 0 };
-    assignedSoFar++;
-    const isLast = assignedSoFar === profitAssigned;
-    const pct = isLast
-      ? Math.round((profitPool - assignedSumPct) * 10000) / 10000
-      : profitPerRounded;
-    if (!isLast) assignedSumPct += pct;
-    return { percentage: pct, amount: p * (pct / 100) };
-  });
+  const profitRowAmounts = distributeProfitPercentages(fsa).map((r) => ({
+    percentage: r.percentage,
+    amount: p * (r.percentage / 100),
+  }));
 
   const computeRowAmounts = (rows) =>
     (rows || []).map((r) => {

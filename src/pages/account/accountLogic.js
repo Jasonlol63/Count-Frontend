@@ -1,17 +1,19 @@
 /** Account List Logic Helpers */
 
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { formatDmyDash } from "../../utils/date/dateUtils.js";
 import {
   companiesForCompanyPicker,
+  companiesGroupEntityList,
   DASHBOARD_GROUP_FILTER_OPT_OUT_KEY,
   dedupeOwnerCompaniesByCode,
   excludeGroupLabelsFromCompanyPicker,
   filterCompaniesWithDisplayId,
+  getCachedOwnerCompanies,
   independentCompaniesForPicker,
   isDashboardGroupOnlyMode,
   normalizeCompanyGroupId,
 } from "../../utils/company/sharedCompanyFilter.js";
+import { fetchMergedAccountLists } from "./accountListApi.js";
 
 export const PAGE_SIZE = 25;
 
@@ -74,10 +76,10 @@ export function normalizeAlertAmount(value) {
 export function roleSortOrder(role, knownRoles) {
   const base = [...ROLE_PRIORITY];
   (knownRoles || []).forEach((r) => {
-    const key = toUpper(r) === "UPLINE" ? "SUPPLIER" : toUpper(r);
+    const key = toUpper(r);
     if (!base.includes(key)) base.push(key);
   });
-  return base.indexOf(toUpper(role) === "UPLINE" ? "SUPPLIER" : toUpper(role));
+  return base.indexOf(toUpper(role));
 }
 
 export function getOrderedRoles(roles) {
@@ -91,20 +93,18 @@ export function getOrderedRoles(roles) {
     if (map.has(p)) {
       out.push(map.get(p));
       map.delete(p);
-    } else if (p === "SUPPLIER" && map.has("UPLINE")) {
-      out.push(map.get("UPLINE"));
-      map.delete("UPLINE");
     }
   });
   return [...out, ...Array.from(map.values()).sort((a, b) => a.localeCompare(b))];
 }
 
-/** Add/Edit Account modal：DB 未建 role 时仍展示的核心角色 */
-const ACCOUNT_MODAL_FALLBACK_ROLES = ["DEBTOR"];
+/** Spring {@code UserServiceImpl.ALLOWED_ACCOUNT_LEDGER_ROLES} — full Add/Edit modal options. */
+export const ACCOUNT_LEDGER_ROLES = [...ROLE_PRIORITY];
 
+/** Add/Edit Account modal：始终展示后端允许的完整 role 列表（不只从现有账号推导）。 */
 export function getAccountModalOrderedRoles(roles) {
   const merged = [...(roles || [])];
-  ACCOUNT_MODAL_FALLBACK_ROLES.forEach((role) => {
+  ACCOUNT_LEDGER_ROLES.forEach((role) => {
     if (!merged.some((r) => toUpper(r) === role)) merged.push(role);
   });
   return getOrderedRoles(merged);
@@ -129,71 +129,55 @@ export function buildAccountsFetchKey(companyId, searchTerm, showInactive, showA
   return `${companyId || ""}|${String(searchTerm || "").trim()}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
 }
 
-export function buildAccountsUrl(companyId, searchTerm, showInactive, showAll, { groupId = null } = {}) {
-  const url = new URL(buildApiUrl("api/accounts/accountlistapi.php"));
-  url.searchParams.set("company_id", String(companyId));
-  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
-  if (gid) url.searchParams.set("group_id", gid);
-  if (String(searchTerm || "").trim()) url.searchParams.set("search", String(searchTerm || "").trim());
-  if (showInactive) url.searchParams.set("showInactive", "1");
-  if (showAll) url.searchParams.set("showAll", "1");
-  return url;
+/** Group code (e.g. AP) → tenant.id for Spring list. */
+export function resolveGroupCodeToTenantId(groupCode, companies = null) {
+  const code = String(groupCode || "").trim().toUpperCase();
+  if (!code) return null;
+  const rows = companies || getCachedOwnerCompanies() || [];
+  const entities = companiesGroupEntityList(rows, code);
+  const id = Number(entities[0]?.id);
+  return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-export function buildGroupAccountsUrl(groupId, searchTerm, showInactive, showAll, { groupOnly = true } = {}) {
-  const url = new URL(buildApiUrl("api/accounts/accountlistapi.php"));
-  url.searchParams.set("group_id", String(groupId));
-  if (groupOnly) url.searchParams.set("group_only", "1");
-  if (String(searchTerm || "").trim()) url.searchParams.set("search", String(searchTerm || "").trim());
-  if (showInactive) url.searchParams.set("showInactive", "1");
-  if (showAll) url.searchParams.set("showAll", "1");
-  return url;
+/** Unique roles from loaded account rows (Spring list has no roles meta endpoint). */
+export function deriveAccountRolesFromRows(rows) {
+  const map = new Map();
+  (rows || []).forEach((row) => {
+    const role = String(row?.role || "").trim();
+    if (role) map.set(toUpper(role), role);
+  });
+  return getOrderedRoles([...map.values()]);
 }
 
-function mergeAccountRows(jsonList) {
-  const byId = new Map();
-  for (const json of jsonList) {
-    if (!json?.success) continue;
-    const rows = Array.isArray(json?.data?.accounts) ? json.data.accounts : [];
-    for (const row of rows) {
-      const id = Number(row?.id);
-      if (Number.isFinite(id) && id > 0) byId.set(id, row);
-    }
-  }
-  return [...byId.values()];
-}
-
-/** Fetch and merge accounts across multiple companies / groups (All modes). */
+/** Fetch and merge accounts across multiple tenant ids (All modes). */
 export async function fetchMergedAccounts({
   companyIds = [],
   groupIds = [],
+  companies = null,
   searchTerm = "",
   showInactive = false,
   showAll = false,
   signal = undefined,
 }) {
-  const tasks = [];
-  for (const cid of companyIds) {
-    tasks.push(
-      fetch(buildAccountsUrl(cid, searchTerm, showInactive, showAll).toString(), {
-        credentials: "include",
-        signal,
-      }).then((r) => r.json()),
-    );
+  const tenantIds = [
+    ...(Array.isArray(companyIds) ? companyIds : [])
+      .map((raw) => Number(raw))
+      .filter((id) => Number.isFinite(id) && id > 0),
+  ];
+  for (const gid of Array.isArray(groupIds) ? groupIds : []) {
+    const tid = resolveGroupCodeToTenantId(gid, companies);
+    if (tid) tenantIds.push(tid);
   }
-  for (const gid of groupIds) {
-    tasks.push(
-      fetch(buildGroupAccountsUrl(gid, searchTerm, showInactive, showAll).toString(), {
-        credentials: "include",
-        signal,
-      }).then((r) => r.json()),
+  if (!tenantIds.length) return { success: false, accounts: [] };
+  try {
+    const accounts = await fetchMergedAccountLists(
+      { tenantIds, searchTerm, showInactive, showAll },
+      signal,
     );
+    return { success: true, accounts };
+  } catch (e) {
+    return { success: false, message: e?.message, accounts: [] };
   }
-  if (!tasks.length) return { success: false, accounts: [] };
-  const results = await Promise.all(tasks);
-  const failed = results.find((j) => !j?.success);
-  if (failed) return { success: false, message: failed.message, accounts: [] };
-  return { success: true, accounts: mergeAccountRows(results) };
 }
 
 /** Add Account：列表中有 MYR 时默认勾选，否则默认第一个 currency */

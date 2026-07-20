@@ -114,7 +114,7 @@ export function buildAccountCreateRequest(form, scopeTenantId, currencyIds = [])
 export function buildAccountUpdateRequest(form, scopeTenantId, currencyIds = []) {
   const body = buildAccountCreateRequest(form, scopeTenantId, currencyIds);
   body.id = Number(form.id);
-  if (!form.password) delete body.password;
+  if (!String(form.password ?? "").trim()) delete body.password;
   return body;
 }
 
@@ -224,4 +224,208 @@ export async function deleteAccountUser({ id, scopeTenantId }, signal) {
   });
   const json = await res.json();
   if (!res.ok || !json.success) throw new Error(json?.message || "deleteFailed");
+}
+
+/** scope_tenant_id on row, else active company pill id. */
+export function resolveRowScopeTenantId(row, fallbackCompanyId = null) {
+  const fromRow = resolveAccountListTenantId(row?.scope_tenant_id);
+  if (fromRow) return fromRow;
+  return resolveAccountListTenantId(fallbackCompanyId);
+}
+
+/**
+ * POST /api/account/list + client filters.
+ * @returns {Promise<object[]>}
+ */
+export async function fetchFilteredAccountListByTenantId(
+  tenantId,
+  { searchTerm = "", showInactive = false, showAll = false } = {},
+  signal,
+) {
+  const rows = await fetchAccountListByTenantId(tenantId, signal);
+  return filterAccountListRows(rows, { searchTerm, showInactive, showAll });
+}
+
+/**
+ * Merge account lists across tenant ids (dedupe by account id), then filter.
+ * @returns {Promise<object[]>}
+ */
+export async function fetchMergedAccountLists(
+  { tenantIds = [], searchTerm = "", showInactive = false, showAll = false } = {},
+  signal,
+) {
+  const ids = [
+    ...new Set(
+      (Array.isArray(tenantIds) ? tenantIds : [])
+        .map((raw) => Number(raw))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    ),
+  ];
+  if (!ids.length) return [];
+
+  const slices = await Promise.all(
+    ids.map((tid) =>
+      fetchAccountListByTenantId(tid, signal).catch(() => []),
+    ),
+  );
+  const byId = new Map();
+  for (const rows of slices) {
+    for (const row of rows) {
+      const id = Number(row?.id);
+      if (Number.isFinite(id) && id > 0) byId.set(id, row);
+    }
+  }
+  return filterAccountListRows([...byId.values()], { searchTerm, showInactive, showAll });
+}
+
+function springLinkTypeToUi(value) {
+  return String(value || "bidirectional").trim().toLowerCase();
+}
+
+function uiLinkTypeToSpring(value) {
+  const key = String(value || "bidirectional").trim().toUpperCase();
+  return key === "UNIDIRECTIONAL" ? "UNIDIRECTIONAL" : "BIDIRECTIONAL";
+}
+
+function normalizeLinkedAccountRow(raw) {
+  const item = normalizeAccountListItem(raw);
+  if (!item) return null;
+  return item;
+}
+
+/** GET /api/account/link/list?account_id=&tenant_id= */
+export async function fetchAccountLinkedAccounts(accountId, tenantId, signal) {
+  const aid = Number(accountId);
+  const tid = Number(tenantId);
+  if (!Number.isFinite(aid) || aid <= 0 || !Number.isFinite(tid) || tid <= 0) {
+    throw new Error("invalidRequest");
+  }
+
+  const params = new URLSearchParams({
+    account_id: String(aid),
+    tenant_id: String(tid),
+  });
+  const res = await fetch(buildApiUrl(`api/account/link/list?${params}`), {
+    credentials: "include",
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) {
+    throw new Error(json?.message || "failedToLoadAccountLinks");
+  }
+
+  const data = json.data && typeof json.data === "object" ? json.data : {};
+  const accounts = (Array.isArray(data.accounts) ? data.accounts : [])
+    .map(normalizeLinkedAccountRow)
+    .filter(Boolean);
+  const linkTypesMap = {};
+  const rawMap = data.link_types_map || data.linkTypesMap || {};
+  for (const [key, value] of Object.entries(rawMap)) {
+    linkTypesMap[Number(key)] = springLinkTypeToUi(value);
+  }
+
+  return {
+    accounts,
+    linkTypesMap,
+    tenantId: Number(data.tenant_id ?? data.tenantId ?? tid),
+  };
+}
+
+/** POST /api/account/link */
+export async function linkAccountPair(
+  { accountId1, accountId2, linkType = "bidirectional", sourceAccountId = null },
+  signal,
+) {
+  const a1 = Number(accountId1);
+  const a2 = Number(accountId2);
+  if (!Number.isFinite(a1) || a1 <= 0 || !Number.isFinite(a2) || a2 <= 0) {
+    throw new Error("invalidRequest");
+  }
+
+  const body = {
+    accountId1: a1,
+    accountId2: a2,
+    linkType: uiLinkTypeToSpring(linkType),
+  };
+  const source = Number(sourceAccountId);
+  if (uiLinkTypeToSpring(linkType) === "UNIDIRECTIONAL" && Number.isFinite(source) && source > 0) {
+    body.sourceAccountId = source;
+  }
+
+  const res = await fetch(buildApiUrl("api/account/link"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) throw new Error(json?.message || "failedSaveAccountLinks");
+  return json;
+}
+
+/** DELETE /api/account/link/pair */
+export async function unlinkAccountPair({ accountId1, accountId2, tenantId }, signal) {
+  const a1 = Number(accountId1);
+  const a2 = Number(accountId2);
+  const tid = Number(tenantId);
+  if (!Number.isFinite(a1) || a1 <= 0 || !Number.isFinite(a2) || a2 <= 0 || !Number.isFinite(tid) || tid <= 0) {
+    throw new Error("invalidRequest");
+  }
+
+  const params = new URLSearchParams({
+    account_id_1: String(a1),
+    account_id_2: String(a2),
+    tenant_id: String(tid),
+  });
+  const res = await fetch(buildApiUrl(`api/account/link/pair?${params}`), {
+    method: "DELETE",
+    credentials: "include",
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) throw new Error(json?.message || "failedSaveAccountLinks");
+  return json;
+}
+
+/** PUT /api/account/link — delete pair then re-insert with new link type. */
+export async function updateAccountLinkPair(
+  { accountId1, accountId2, linkType = "bidirectional", sourceAccountId = null },
+  signal,
+) {
+  const a1 = Number(accountId1);
+  const a2 = Number(accountId2);
+  if (!Number.isFinite(a1) || a1 <= 0 || !Number.isFinite(a2) || a2 <= 0) {
+    throw new Error("invalidRequest");
+  }
+
+  const body = {
+    accountId1: a1,
+    accountId2: a2,
+    linkType: uiLinkTypeToSpring(linkType),
+  };
+  const source = Number(sourceAccountId);
+  if (uiLinkTypeToSpring(linkType) === "UNIDIRECTIONAL" && Number.isFinite(source) && source > 0) {
+    body.sourceAccountId = source;
+  }
+
+  const res = await fetch(buildApiUrl("api/account/link"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) throw new Error(json?.message || "failedSaveAccountLinks");
+  return json;
+}
+
+/** Flip payment_alert via POST /api/account/update (preserves currencyIds). */
+export async function toggleAccountUserPaymentAlert(row, scopeTenantId, currencyIds, signal) {
+  const form = accountRowToEditForm(row);
+  if (!form) throw new Error("invalidRequest");
+  form.payment_alert = Number(row.payment_alert) === 1 ? "0" : "1";
+  const request = buildAccountUpdateRequest(form, scopeTenantId, currencyIds);
+  return updateAccountUser(request, signal);
 }

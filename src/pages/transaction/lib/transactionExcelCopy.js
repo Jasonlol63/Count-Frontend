@@ -99,7 +99,7 @@ export function installTransactionExcelCopy() {
             "transaction-role-expenses",
             "transaction-role-company",
             "transaction-role-staff",
-            "transaction-role-upline",
+            "transaction-role-supplier",
             "transaction-role-agent",
             "transaction-role-member",
             "transaction-role-none",

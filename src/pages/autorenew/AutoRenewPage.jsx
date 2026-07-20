@@ -11,6 +11,10 @@ import { useLoginLang } from "../../utils/i18n/useLoginLang.js";
 import { getAutoRenewText } from "../../translateFile/pages/autoRenewTranslate.js";
 import { DASHBOARD_I18N } from "../../translateFile/shell/dashboardTranslate.js";
 import { formatDate, formatDomainFeeDisplay2, normalizeDomainFeeSettingsFromApi } from "../domain/domainHelpers.js";
+import {
+  resolveShareLedgerTenantCode,
+  resolveShareLedgerTenantId,
+} from "../domain/domainApi.js";
 import CompanySettingsModal from "../domain/components/CompanySettingsModal.jsx";
 import GroupSettingsModal from "../domain/components/GroupSettingsModal.jsx";
 import DomainNotification from "../domain/components/DomainNotification.jsx";
@@ -1018,8 +1022,8 @@ export default function AutoRenewPage() {
           lang={lang}
           company={settingsModal.tenant}
           domainPeriodPrices={domainPeriodPrices}
-          sessionCompanyId={me?.company_id ?? null}
-          sessionCompanyCode={me?.company_code ?? null}
+          shareLedgerTenantId={resolveShareLedgerTenantId(me)}
+          shareLedgerTenantCode={resolveShareLedgerTenantCode(me)}
           excludeOwnerId={settingsModal.ownerId}
           commissionOnly
           sharePricePeriod={settingsModal.sharePricePeriod ?? ""}
@@ -1033,8 +1037,8 @@ export default function AutoRenewPage() {
           lang={lang}
           group={settingsModal.tenant}
           domainPeriodPrices={domainPeriodPrices}
-          sessionCompanyId={me?.company_id ?? null}
-          sessionCompanyCode={me?.company_code ?? null}
+          shareLedgerTenantId={resolveShareLedgerTenantId(me)}
+          shareLedgerTenantCode={resolveShareLedgerTenantCode(me)}
           excludeOwnerId={settingsModal.ownerId}
           commissionOnly
           sharePricePeriod={settingsModal.sharePricePeriod ?? ""}

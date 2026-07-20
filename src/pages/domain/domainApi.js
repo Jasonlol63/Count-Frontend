@@ -1,4 +1,7 @@
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
+import { getSessionTenantCode, getSessionTenantId, isCurrentTenantC168 } from "../../utils/auth/sessionTenant.js";
+import { getCachedOwnerCompanies } from "../../utils/company/sharedCompanyFilter.js";
+import { fetchAccountListByTenantId, normalizeAccountListItem } from "../account/accountListApi.js";
 import {
   featureModulesToPermissionNames,
   feeShareSpringToUi,
@@ -6,6 +9,7 @@ import {
   groupToTenantSaveEntry,
   companyToTenantSaveEntry,
   permissionNamesToFeatureModules,
+  periodPricesUiToFeeDto,
 } from "./domainHelpers.js";
 
 async function postJson(path, body) {
@@ -39,12 +43,41 @@ function normalizeTenantSaveEntry(entry) {
   return companyToTenantSaveEntry(entry);
 }
 
+function tenantRowFromAggregate(type, t, parentCode = null) {
+  const code = String(t.code ?? "").trim().toUpperCase();
+  const permissions = featureModulesToPermissionNames(t.featureModules ?? t.feature_modules);
+  const feeShareAllocations = feeShareSpringToUi(
+    t.feeShareAllocations ?? t.fee_share_allocations
+  );
+  const expirationDate = t.expirationDate ?? t.expiration_date ?? null;
+  if (type === "GROUP") {
+    return {
+      id: t.id,
+      code,
+      group_code: code,
+      expiration_date: expirationDate,
+      permissions: [],
+      fee_share_allocations: feeShareAllocations,
+      feature_modules: t.featureModules ?? t.feature_modules ?? [],
+    };
+  }
+  return {
+    id: t.id,
+    code,
+    company_id: code,
+    expiration_date: expirationDate,
+    parent_code: parentCode,
+    group_id: parentCode,
+    permissions,
+    fee_share_allocations: feeShareAllocations,
+    feature_modules: t.featureModules ?? t.feature_modules ?? [],
+  };
+}
+
 /**
- * Aggregate a flat List<OwnerTenantDTO> from Spring Boot
- * (each row = { owner:{...}, tenant:{...} }) into the shape the UI expects:
- * one entry per owner with groups[] and companies[].
+ * Flat List<OwnerTenantDTO> → one UI row per owner (list table + edit form).
  */
-function aggregateOwnerTenantRows(rows) {
+export function aggregateOwnerTenantRows(rows) {
   const ownerMap = new Map();
 
   for (const row of rows) {
@@ -65,45 +98,28 @@ function aggregateOwnerTenantRows(rows) {
       });
     }
 
+    if (!t?.id) continue;
+
+    const type = String(t.tenantType ?? t.tenant_type ?? "").toUpperCase();
     const entry = ownerMap.get(o.id);
+    const permissions = featureModulesToPermissionNames(t.featureModules ?? t.feature_modules);
+    const feeShareAllocations = feeShareSpringToUi(
+      t.feeShareAllocations ?? t.fee_share_allocations
+    );
+    const base = {
+      id: t.id,
+      code: String(t.code ?? "").trim().toUpperCase(),
+      expiration_date: t.expirationDate ?? t.expiration_date ?? null,
+      feature_modules: t.featureModules ?? t.feature_modules ?? [],
+      fee_share_allocations: feeShareAllocations,
+      category_code: permissions,
+      _parentId: t.parentId ?? t.parent_id ?? null,
+    };
 
-    if (t?.id) {
-      const type = String(t.tenantType ?? t.tenant_type ?? "").toUpperCase();
-      const code = String(t.code ?? "").trim().toUpperCase();
-      const expDate = t.expirationDate ?? t.expiration_date ?? null;
-      const permissions = featureModulesToPermissionNames(
-        t.featureModules ?? t.feature_modules
-      );
-      const legacyCategory = t.categoryCode ?? t.category_code;
-      const categoryCode = permissions.length
-        ? permissions
-        : Array.isArray(legacyCategory)
-          ? legacyCategory
-          : [];
-      const feeShareAllocations = feeShareSpringToUi(
-        t.feeShareAllocations ?? t.fee_share_allocations
-      );
-
-      if (type === "GROUP") {
-        entry.groups.push({
-          id: t.id,
-          code,
-          expiration_date: expDate,
-          category_code: categoryCode,
-          feature_modules: t.featureModules ?? t.feature_modules ?? [],
-          fee_share_allocations: feeShareAllocations,
-        });
-      } else if (type === "COMPANY") {
-        entry.companies.push({
-          id: t.id,
-          code,
-          expiration_date: expDate,
-          category_code: categoryCode,
-          feature_modules: t.featureModules ?? t.feature_modules ?? [],
-          fee_share_allocations: feeShareAllocations,
-          _parentId: t.parentId ?? t.parent_id ?? null,
-        });
-      }
+    if (type === "GROUP") {
+      entry.groups.push({ ...base, permissions: [] });
+    } else if (type === "COMPANY") {
+      entry.companies.push({ ...base, permissions });
     }
   }
 
@@ -115,24 +131,86 @@ function aggregateOwnerTenantRows(rows) {
     }
   }
 
+  const listRows = [];
   for (const entry of ownerMap.values()) {
-    entry.companies = entry.companies.map((c) => {
-      const parentCode = c._parentId ? (tenantIdToCode.get(c._parentId) ?? null) : null;
-      return {
-        id: c.id,
-        code: c.code,
-        expiration_date: c.expiration_date,
-        parent_code: parentCode,
-        category_code: c.category_code || [],
-        feature_modules: c.feature_modules || [],
-        fee_share_allocations: c.fee_share_allocations,
-      };
-    });
+    entry.companies = entry.companies.map((c) => ({
+      ...c,
+      parent_code: c._parentId ? tenantIdToCode.get(c._parentId) ?? null : null,
+    }));
     entry.groups.sort((a, b) => a.code.localeCompare(b.code));
     entry.companies.sort((a, b) => a.code.localeCompare(b.code));
+
+    const groupsFull = entry.groups.map((g) =>
+      tenantRowFromAggregate("GROUP", {
+        id: g.id,
+        code: g.code,
+        expirationDate: g.expiration_date,
+        featureModules: g.feature_modules,
+        feeShareAllocations: g.fee_share_allocations,
+      })
+    );
+    const companiesFull = entry.companies.map((c) =>
+      tenantRowFromAggregate(
+        "COMPANY",
+        {
+          id: c.id,
+          code: c.code,
+          expirationDate: c.expiration_date,
+          featureModules: c.feature_modules,
+          feeShareAllocations: c.fee_share_allocations,
+        },
+        c.parent_code
+      )
+    );
+
+    listRows.push({
+      id: entry.id,
+      owner_code: entry.owner_code,
+      name: entry.name,
+      email: entry.email,
+      created_by: entry.created_by,
+      created_at: entry.created_at,
+      group_ids: groupsFull.map((g) => g.group_code).join(","),
+      groups_full: groupsFull,
+      companies_full: companiesFull,
+    });
   }
 
-  return Array.from(ownerMap.values());
+  listRows.sort((a, b) => String(a.owner_code).localeCompare(String(b.owner_code)));
+  return listRows;
+}
+
+/**
+ * Global tenant code uniqueness (aligns with DomainServiceImpl duplicate checks).
+ * excludeOwnerId: when editing, skip codes belonging to this owner.
+ */
+export function validateTenantCodeGlobally(code, { excludeOwnerId, domains = [] } = {}) {
+  const want = String(code ?? "").trim().toUpperCase();
+  if (!want) {
+    return { ok: false, message: "codeRequired" };
+  }
+  if (want === "C168") {
+    return { ok: false, message: "cannotRenameToC168" };
+  }
+
+  for (const owner of domains) {
+    if (excludeOwnerId != null && Number(owner.id) === Number(excludeOwnerId)) {
+      continue;
+    }
+    const groups = Array.isArray(owner.groups_full) ? owner.groups_full : [];
+    const companies = Array.isArray(owner.companies_full) ? owner.companies_full : [];
+    for (const g of groups) {
+      if (String(g.group_code ?? "").trim().toUpperCase() === want) {
+        return { ok: false, message: "tenantCodeAlreadyExists" };
+      }
+    }
+    for (const c of companies) {
+      if (String(c.company_id ?? "").trim().toUpperCase() === want) {
+        return { ok: false, message: "tenantCodeAlreadyExists" };
+      }
+    }
+  }
+  return { ok: true };
 }
 
 export async function fetchDomainList() {
@@ -144,6 +222,27 @@ export async function fetchDomainList() {
   return aggregateOwnerTenantRows(rawRows);
 }
 
+export async function fetchDomainFeeSettings() {
+  const { res, json } = await postJson("api/domain/list-fee");
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || "Failed to load domain fee settings");
+  }
+  const row = Array.isArray(json?.data) ? json.data[0] : json?.data;
+  return row ?? null;
+}
+
+export async function saveDomainFeeSettings({ companyPeriodPrices, groupPeriodPrices }) {
+  const body = {
+    company_period_prices: periodPricesUiToFeeDto(companyPeriodPrices),
+    group_period_prices: periodPricesUiToFeeDto(groupPeriodPrices),
+  };
+  const { res, json } = await postJson("api/domain/add-fee", body);
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || "Failed to save domain fee settings");
+  }
+  return json.data ?? null;
+}
+
 export async function createDomain({
   ownerCode,
   name,
@@ -153,7 +252,7 @@ export async function createDomain({
   groups,
   companies,
 }) {
-  const { json } = await postJson("api/domain/add", {
+  const { res, json } = await postJson("api/domain/add", {
     owner_code: ownerCode,
     name,
     email,
@@ -162,7 +261,7 @@ export async function createDomain({
     groups: (groups || []).map(normalizeTenantSaveEntry),
     companies: (companies || []).map(normalizeTenantSaveEntry),
   });
-  return json;
+  return { res, json };
 }
 
 export async function updateDomain({
@@ -185,8 +284,13 @@ export async function updateDomain({
   };
   if (password) body.password = password;
   if (secondaryPassword) body.secondary_password = secondaryPassword;
-  const { json } = await putJson("api/domain/update", body);
-  return json;
+  const { res, json } = await putJson("api/domain/update", body);
+  return { res, json };
+}
+
+export async function deleteOwner(ownerId) {
+  const { res, json } = await postJson("api/domain/delete", { id: ownerId });
+  return { res, json };
 }
 
 export async function updateTenantSetting({
@@ -196,6 +300,8 @@ export async function updateTenantSetting({
   expirationDate,
   permissions,
   feeShareAllocations,
+  chargeDomainFeeOnConfirm,
+  domainFeePeriod,
 }) {
   const body = {
     id,
@@ -210,7 +316,146 @@ export async function updateTenantSetting({
   if (feeShareAllocations != null) {
     body.feeShareAllocations = feeShareUiToSpring(feeShareAllocations, id);
   }
+  // Domain Confirm "Charge on Save": only charge when explicitly on for this tenant.
+  if (chargeDomainFeeOnConfirm) {
+    body.chargeDomainFeeOnConfirm = true;
+    body.domainFeePeriod = domainFeePeriod || null;
+  }
 
-  const { json } = await putJson("api/domain/update-setting", body);
-  return json;
+  const { res, json } = await putJson("api/domain/update-setting", body);
+  return { res, json };
+}
+
+/** Merge tenant ids from Spring DomainDTO response (camelCase Tenant list). */
+export function mergeTenantIdsFromDomainResponse(tempGroups, tempCompanies, data) {
+  const groupByCode = new Map();
+  const companyByCode = new Map();
+  for (const g of data?.groups || []) {
+    const code = String(g.code ?? "").trim().toUpperCase();
+    if (code && g.id) groupByCode.set(code, g.id);
+  }
+  for (const c of data?.companies || []) {
+    const code = String(c.code ?? "").trim().toUpperCase();
+    if (code && c.id) companyByCode.set(code, c.id);
+  }
+
+  const groups = (tempGroups || []).map((g) => {
+    const code = String(g.group_code ?? g.code ?? "").trim().toUpperCase();
+    const id = groupByCode.get(code) ?? g.id ?? null;
+    return id ? { ...g, id, group_code: code } : { ...g, group_code: code };
+  });
+  const companies = (tempCompanies || []).map((c) => {
+    const code = String(c.company_id ?? c.code ?? "").trim().toUpperCase();
+    const id = companyByCode.get(code) ?? c.id ?? null;
+    return id ? { ...c, id, company_id: code } : { ...c, company_id: code };
+  });
+  return { groups, companies };
+}
+
+/** Persist feature modules + fee share for all tenants (post create/update skeleton). */
+export async function syncAllTenantSettings(ownerId, tempGroups, tempCompanies) {
+  const errors = [];
+  for (const g of tempGroups || []) {
+    const tenantId = g.id;
+    const code = String(g.group_code ?? g.code ?? "").trim().toUpperCase();
+    if (!tenantId || !code) continue;
+    const { json } = await updateTenantSetting({
+      id: tenantId,
+      code,
+      ownerId,
+      expirationDate: g.expiration_date ?? null,
+      permissions: [],
+      feeShareAllocations: g.fee_share_allocations,
+      chargeDomainFeeOnConfirm: !!g.apply_commission_payments_on_domain_save,
+      domainFeePeriod: g.selectedPeriod ?? null,
+    });
+    if (!json?.success) errors.push(json?.message || `Failed to save group ${code}`);
+  }
+  for (const c of tempCompanies || []) {
+    const tenantId = c.id;
+    const code = String(c.company_id ?? c.code ?? "").trim().toUpperCase();
+    if (!tenantId || !code) continue;
+    const { json } = await updateTenantSetting({
+      id: tenantId,
+      code,
+      ownerId,
+      expirationDate: c.expiration_date ?? null,
+      permissions: Array.isArray(c.permissions) ? c.permissions : [],
+      feeShareAllocations: c.fee_share_allocations,
+      chargeDomainFeeOnConfirm: !!c.apply_commission_payments_on_domain_save,
+      domainFeePeriod: c.selectedPeriod ?? null,
+    });
+    if (!json?.success) errors.push(json?.message || `Failed to save company ${code}`);
+  }
+  if (errors.length) {
+    throw new Error(errors[0]);
+  }
+}
+
+const SHARE_PICKER_ROLES = {
+  profit: new Set(["PROFIT"]),
+  sales: new Set(["STAFF", "AGENT"]),
+  cs: new Set(["STAFF", "AGENT"]),
+  it: new Set(["STAFF", "AGENT"]),
+};
+
+function findC168OwnerCompanyRow(companies = null) {
+  const rows = companies || getCachedOwnerCompanies() || [];
+  return rows.find(
+    (c) =>
+      String(c.tenant_code ?? c.company_id ?? c.code ?? "")
+        .trim()
+        .toUpperCase() === "C168",
+  );
+}
+
+/** C168 ledger tenant.id for Domain Share % account list / Add Account modal. */
+export function resolveShareLedgerTenantId(me, companies = null) {
+  const sessionId = getSessionTenantId(me);
+  const sessionCode = getSessionTenantCode(me);
+  if (sessionId && (isCurrentTenantC168(me) || sessionCode === "C168")) {
+    return sessionId;
+  }
+  const c168Row = findC168OwnerCompanyRow(companies);
+  const fromList = Number(c168Row?.id ?? c168Row?.tenant_id);
+  if (Number.isFinite(fromList) && fromList > 0) return fromList;
+  return sessionId;
+}
+
+/** C168 ledger tenant code for Share % Add Account picker label. */
+export function resolveShareLedgerTenantCode(me, companies = null) {
+  const sessionCode = getSessionTenantCode(me);
+  if (sessionCode === "C168") return "C168";
+  const c168Row = findC168OwnerCompanyRow(companies);
+  const fromList = String(c168Row?.tenant_code ?? c168Row?.company_id ?? c168Row?.code ?? "")
+    .trim()
+    .toUpperCase();
+  if (fromList === "C168") return "C168";
+  return sessionCode || "C168";
+}
+
+/** C168 ledger accounts for Domain Share % pickers (Spring account list). */
+export async function fetchShareAccountsForTenant(tenantId, { signal } = {}) {
+  const rows = await fetchAccountListByTenantId(tenantId, signal);
+  const active = rows
+    .map(normalizeAccountListItem)
+    .filter((a) => a && String(a.status || "").toLowerCase() === "active");
+
+  const accounts = [];
+  const accountsProfit = [];
+  for (const a of active) {
+    const role = String(a.role || "").trim().toUpperCase();
+    const entry = { id: a.id, account_id: a.account_id, name: a.name, role };
+    if (role === "PROFIT" || String(a.account_id || "").toUpperCase() === "PROFIT") {
+      accountsProfit.push(entry);
+    }
+    if (SHARE_PICKER_ROLES.sales.has(role)) {
+      accounts.push(entry);
+    }
+  }
+
+  return {
+    accounts,
+    accounts_profit: accountsProfit,
+  };
 }

@@ -2074,7 +2074,7 @@ body.transaction-page #historyModal .transaction-history-modal .transaction-moda
     /* font-weight: 600 !important; */
 }
 
-.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-upline {
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-supplier {
     background-color: #d6f9ff !important;
     color: #0a6b78 !important;
     /* font-weight: 600 !important; */
@@ -2116,7 +2116,7 @@ body.transaction-page #historyModal .transaction-history-modal .transaction-moda
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-company,
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-partner,
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-staff,
-.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-upline,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-supplier,
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-agent,
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-member,
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-debtor,
@@ -3370,11 +3370,6 @@ body.transaction-page .transaction-add-section .rate-fields .transaction-account
 .category-tag[data-category-value="STAFF"] {
     background-color: #ffe5cc !important;
     color: #a24700 !important;
-}
-
-.category-tag[data-category-value="UPLINE"] {
-    background-color: #d6f9ff !important;
-    color: #0a6b78 !important;
 }
 
 .category-tag[data-category-value="SUPPLIER"] {

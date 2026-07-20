@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { showDomainAlert } from "./DomainNotification.jsx";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
 import {
@@ -8,6 +7,7 @@ import {
   defaultDomainFeeSettings,
   normalizeDomainFeeSettingsFromApi,
 } from "../domainHelpers.js";
+import { fetchDomainFeeSettings, saveDomainFeeSettings } from "../domainApi.js";
 import { getDomainText } from "../../../translateFile/pages/domainTranslate.js";
 import DomainModalPortal from "./DomainModalPortal.jsx";
 
@@ -108,52 +108,29 @@ export default function DomainFeeModal({ onClose, onFeeSaved, lang = "en" }) {
   const { submitting, runGuarded } = useSubmitGuard(true);
 
   useEffect(() => {
-    fetch(buildApiUrl("api/domain/domain_api.php"), {
-      cache: "no-cache",
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "get_domain_fee_settings" }),
-    })
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.success && res.data) {
-          const normalized = normalizeDomainFeeSettingsFromApi(res.data);
+    fetchDomainFeeSettings()
+      .then((data) => {
+        if (data) {
+          const normalized = normalizeDomainFeeSettingsFromApi(data);
           setCompanyPeriodPrices(periodPricesToEditState(normalized.company));
           setGroupPeriodPrices(periodPricesToEditState(normalized.group));
-        } else {
-          showDomainAlert(res.message || t("couldNotLoadSettings"), "danger");
         }
       })
-      .catch(() => showDomainAlert(t("couldNotLoadSettings"), "danger"));
-  }, [lang]);
+      .catch((err) => showDomainAlert(err?.message || t("couldNotLoadSettings"), "danger"));
+  }, [lang, t]);
 
-  function handleSave() {
-    fetch(buildApiUrl("api/domain/domain_api.php"), {
-      cache: "no-cache",
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "save_domain_fee_settings",
-        company_period_prices: companyPeriodPrices,
-        period_prices: companyPeriodPrices,
-        group_period_prices: groupPeriodPrices,
-        company_price: companyPeriodPrices["6months"] ?? "",
-        group_price: groupPeriodPrices["6months"] ?? "",
-      }),
-    })
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.success) {
-          showDomainAlert(res.message || t("saved"));
-          if (res.data) onFeeSaved(res.data);
-          onClose();
-        } else {
-          showDomainAlert(res.message || t("saveFailed"), "danger");
-        }
-      })
-      .catch(() => showDomainAlert(t("saveFailed"), "danger"));
+  async function handleSave() {
+    try {
+      const data = await saveDomainFeeSettings({
+        companyPeriodPrices,
+        groupPeriodPrices,
+      });
+      showDomainAlert(t("saved"));
+      if (data) onFeeSaved(data);
+      onClose();
+    } catch (err) {
+      showDomainAlert(err?.message || t("saveFailed"), "danger");
+    }
   }
 
   return (

@@ -1245,13 +1245,12 @@ export function useTransactionSearch({
         singleCurrencyTitle: null,
       };
     }
-    const filtered = filterTransactionTableRows(baseRowsPresentation.baseLeft, baseRowsPresentation.baseRight, {
-      showZeroBalance: listPresentationModeActive ? true : searchState.showZeroBalance,
-      showPaymentOnly: listPresentationModeActive ? false : searchState.showPaymentOnly,
-      showCaptureOnly: listPresentationModeActive ? false : searchState.showCaptureOnly,
-    });
-    const sortedLeft = filtered.left;
-    const sortedRight = filtered.right;
+    const viewLeft = baseRowsPresentation.baseLeft;
+    const viewRight = baseRowsPresentation.baseRight;
+    const norm = normalizeRateRowsByCrDr(viewLeft, viewRight, false);
+    // BP-only v1: show all API rows; skip zero-balance / payment / capture filters.
+    const sortedLeft = sortByRole(norm.leftRows);
+    const sortedRight = sortByRole(norm.rightRows);
     const totalsLeft = calculateTotals(sortedLeft);
     const totalsRight = calculateTotals(sortedRight);
     const totalsSummary = applySummaryWinLossDisplayTolerance(calculateTotals([...sortedLeft, ...sortedRight]));

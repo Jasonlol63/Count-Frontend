@@ -70,8 +70,6 @@ import {
   filterBankPickAccounts,
   filterBankProcessRowsBySearch,
   sortBankProcessTableRows,
-  accountingDuePeriodType,
-  accountingDueBillingMonth,
   accountingDueRowKey,
   buildAccountingDueSkipItem,
   checkBankResendLockFromBackend,
@@ -121,6 +119,7 @@ import {
   buildResendBankProcessRequest,
   buildUpdateBankProcessRequest,
   fetchAccountingDueInbox,
+  postAccountingDue,
   resendBankProcess,
   skipAccountingDue,
   updateBankProcess,
@@ -1929,21 +1928,19 @@ export function useBankProcessListPage() {
     if (guardWrite()) return;
     const selected = accountingRows.filter((r) => accountingSelected.has(accountingDueRowKey(r)) && !r.already_posted_today);
     if (selected.length === 0) return notify(t("needOneDueItem"), "warning");
+    const items = selected.map((r) => buildAccountingDueSkipItem(r)).filter(Boolean);
+    if (items.length === 0) return notify(t("transactionPostFailed"), "danger");
     try {
-      const fd = new FormData();
-      selected.forEach((r) => {
-        fd.append("ids[]", r.id); fd.append("period_types[]", accountingDuePeriodType(r)); fd.append("billing_months[]", accountingDueBillingMonth(r));
-      });
-      fd.append("allow_future_monthly", "1");
-      const res = await fetch(buildApiUrl("api/processes/process_post_to_transaction_api.php"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "transactionPostFailed"), "danger");
-      notify(apiMsg(json, "postedToTransaction"));
+      await postAccountingDue(items);
+      notify(t("postedToTransaction"));
       notifyTransactionDataChanged("bank-process-list-react");
       setAccountingOpen(false);
       setAccountingSelected(new Set());
-      loadAccountingInbox({ syncProcessList: false }); fetchRows();
-    } catch { notify(t("transactionPostFailed"), "danger"); }
+      loadAccountingInbox({ syncProcessList: false });
+      fetchRows();
+    } catch (err) {
+      notify(apiMsg({ message: err?.message }, "transactionPostFailed"), "danger");
+    }
   };
 
   const dismissAccountingRows = async () => {
