@@ -13,6 +13,11 @@ import {
   buildSpringHistoryRequest,
   normalizeSpringHistoryResponse,
 } from "./transactionHistoryNormalize.js";
+import {
+  buildSpringSubmitRequest,
+  isSpringSubmitType,
+  normalizeSpringSubmitResponse,
+} from "./transactionSubmitNormalize.js";
 import { persistUserCurrencyDisplayOrder } from "../../../utils/company/currencyDisplayOrder.js";
 
 export const transactionQueryKeys = {
@@ -374,6 +379,33 @@ export async function submitTransaction({
   payload,
   clientRequestId,
 }) {
+  const txType = String(payload?.transaction_type || "").toUpperCase().trim();
+
+  if (isSpringSubmitType(txType)) {
+    try {
+      void viewGroup;
+      void groupId;
+      void groupAggregate;
+      void clientRequestId;
+      const body = buildSpringSubmitRequest({ companyId, payload });
+      const res = await fetch(buildApiUrl("api/transaction/submit"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        credentials: "include",
+        cache: "no-cache",
+      });
+      const json = await safeJson(res);
+      return normalizeSpringSubmitResponse(json);
+    } catch (err) {
+      return {
+        success: false,
+        message: err?.message || "submitFailed",
+        data: null,
+      };
+    }
+  }
+
   const fd = new FormData();
   appendTransactionScope(fd, { companyId, viewGroup, groupId, groupAggregate }, "form");
   if (clientRequestId) fd.append("client_request_id", clientRequestId);

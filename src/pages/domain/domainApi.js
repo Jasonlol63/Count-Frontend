@@ -46,6 +46,7 @@ function normalizeTenantSaveEntry(entry) {
 function tenantRowFromAggregate(type, t, parentCode = null) {
   const code = String(t.code ?? "").trim().toUpperCase();
   const permissions = featureModulesToPermissionNames(t.featureModules ?? t.feature_modules);
+  // feeShareSpringToUi is idempotent: Spring rows[] or already-UI {profit,sales,...}.
   const feeShareAllocations = feeShareSpringToUi(
     t.feeShareAllocations ?? t.fee_share_allocations
   );
@@ -213,8 +214,13 @@ export function validateTenantCodeGlobally(code, { excludeOwnerId, domains = [] 
   return { ok: true };
 }
 
-export async function fetchDomainList() {
-  const { res, json } = await postJson("api/domain/list");
+/**
+ * @param {number|string|null|undefined} ownerId — optional filter (`?ownerId=`); omit for all owners
+ */
+export async function fetchDomainList(ownerId) {
+  const id = Number(ownerId);
+  const qs = Number.isFinite(id) && id > 0 ? `?ownerId=${encodeURIComponent(id)}` : "";
+  const { res, json } = await postJson(`api/domain/list${qs}`);
   if (!res.ok || !json?.success) {
     throw new Error(json?.message || "Failed to load domains");
   }

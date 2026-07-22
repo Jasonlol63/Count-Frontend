@@ -1,4 +1,4 @@
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
+import { fetchDomainFeeSettings, fetchDomainList } from "../domain/domainApi.js";
 import {
   ensureCompanyFeeShare,
   groupFromApiRow,
@@ -9,22 +9,10 @@ function normalizeCode(value) {
   return String(value ?? "").trim().toUpperCase();
 }
 
-async function postDomainAction(action, payload = {}) {
-  const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, ...payload }),
-  });
-  const json = await res.json();
-  if (!json.success) {
-    throw new Error(json.message || "Domain request failed");
-  }
-  return json.data;
-}
-
-function mapCompanyRow(c) {
+/** Spring aggregate company row → CompanySettingsModal company state */
+function mapCompanyFromSpring(c) {
   const co = {
+    id: c.id ?? null,
     company_id: c.company_id,
     expiration_date: c.expiration_date || null,
     permissions: Array.isArray(c.permissions) ? c.permissions : [],
@@ -41,7 +29,7 @@ function mapCompanyRow(c) {
 }
 
 /**
- * Load Company / Group Settings payload for an auto-renew row.
+ * Load Company / Group Settings payload for an auto-renew row (Spring Domain list).
  * @returns {Promise<{ type: 'company'|'group', ownerId: number, tenant: object }|null>}
  */
 export async function loadAutoRenewTenantSettings(row) {
@@ -51,11 +39,16 @@ export async function loadAutoRenewTenantSettings(row) {
   const code = normalizeCode(row.company_code);
   if (!code) return null;
 
+  const owners = await fetchDomainList(ownerId);
+  const owner =
+    (Array.isArray(owners) ? owners : []).find((o) => Number(o.id) === ownerId) ||
+    (Array.isArray(owners) && owners.length === 1 ? owners[0] : null);
+  if (!owner) return null;
+
   const isGroup = row?.entity_type === "group";
 
   if (isGroup) {
-    const data = await postDomainAction("get_groups", { owner_id: ownerId });
-    const groups = Array.isArray(data?.groups) ? data.groups : [];
+    const groups = Array.isArray(owner.groups_full) ? owner.groups_full : [];
     const match = groups.find((g) => normalizeCode(g.group_code) === code);
     if (!match) return null;
     return {
@@ -65,18 +58,17 @@ export async function loadAutoRenewTenantSettings(row) {
     };
   }
 
-  const data = await postDomainAction("get_companies", { owner_id: ownerId });
-  const companies = Array.isArray(data?.companies) ? data.companies : [];
+  const companies = Array.isArray(owner.companies_full) ? owner.companies_full : [];
   const match = companies.find((c) => normalizeCode(c.company_id) === code);
   if (!match) return null;
   return {
     type: "company",
     ownerId,
-    tenant: mapCompanyRow(match),
+    tenant: mapCompanyFromSpring(match),
   };
 }
 
+/** Domain fee period prices for Share % amount preview (Spring list-fee). */
 export async function fetchDomainFeeSettingsForAutoRenew() {
-  const data = await postDomainAction("get_domain_fee_settings");
-  return data;
+  return fetchDomainFeeSettings();
 }

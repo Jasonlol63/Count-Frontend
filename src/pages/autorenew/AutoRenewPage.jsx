@@ -462,15 +462,13 @@ export default function AutoRenewPage() {
     if (!row || !canEditGlobal || busyRequestId) return;
     if (!canApproveRow(row, rowDrafts, feeSettings)) return;
 
-    const { period, fromAccountId, toAccountId } = getRowDraftValues(row, rowDrafts);
+    const { period } = getRowDraftValues(row, rowDrafts);
     setApproveConfirmRow(null);
     setBusyRequestId(row.request_id);
     try {
       await approveAutoRenew({
         requestId: row.request_id,
         period,
-        fromAccountId,
-        toAccountId,
       });
       notify(t("approvedSuccess"), "success");
       await refreshListAfterMutation();
@@ -1021,6 +1019,7 @@ export default function AutoRenewPage() {
         <CompanySettingsModal
           lang={lang}
           company={settingsModal.tenant}
+          ownerId={settingsModal.ownerId}
           domainPeriodPrices={domainPeriodPrices}
           shareLedgerTenantId={resolveShareLedgerTenantId(me)}
           shareLedgerTenantCode={resolveShareLedgerTenantCode(me)}
@@ -1036,6 +1035,7 @@ export default function AutoRenewPage() {
         <GroupSettingsModal
           lang={lang}
           group={settingsModal.tenant}
+          ownerId={settingsModal.ownerId}
           domainPeriodPrices={domainPeriodPrices}
           shareLedgerTenantId={resolveShareLedgerTenantId(me)}
           shareLedgerTenantCode={resolveShareLedgerTenantCode(me)}

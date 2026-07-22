@@ -11,19 +11,24 @@ export const AUTO_RENEW_PERIODS = [
 
 export const AUTO_RENEW_STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
-async function postAutoRenew(body, { signal } = {}) {
-  const res = await fetch(buildApiUrl("api/subscription/auto_renew_api.php"), {
+async function postJson(path, body, { signal } = {}) {
+  const res = await fetch(buildApiUrl(path), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body ?? {}),
     signal,
   });
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
   if (!json.success) {
     throw new Error(json.message || "Auto renew request failed");
   }
   return json.data;
+}
+
+/** List / counts — legacy PHP path rewritten to Spring `api/auto-renew/list`. */
+async function postAutoRenewList(body, { signal } = {}) {
+  return postJson("api/subscription/auto_renew_api.php", body, { signal });
 }
 
 export async function fetchAutoRenewApprovals(
@@ -33,15 +38,15 @@ export async function fetchAutoRenewApprovals(
   const body = { action: "list", status, entity_type: entityType === "group" ? "group" : "company" };
   if (dateFrom) body.date_from = dateFrom;
   if (dateTo) body.date_to = dateTo;
-  return postAutoRenew(body, { signal });
+  return postAutoRenewList(body, { signal });
 }
 
 export async function fetchAutoRenewStatusMap() {
-  return postAutoRenew({ action: "status_map" });
+  return postAutoRenewList({ action: "status_map" });
 }
 
 export async function saveAutoRenewDraft({ requestId, period, fromAccountId, toAccountId }) {
-  return postAutoRenew({
+  return postAutoRenewList({
     action: "save_draft",
     request_id: requestId,
     period: period || null,
@@ -50,25 +55,24 @@ export async function saveAutoRenewDraft({ requestId, period, fromAccountId, toA
   });
 }
 
-export async function approveAutoRenew({ requestId, period, fromAccountId, toAccountId }) {
-  return postAutoRenew({
-    action: "approve",
+/** Approve: Domain Fee charge + extend expiration from current date + period. */
+export async function approveAutoRenew({ requestId, period }) {
+  const data = await postJson("api/auto-renew/approve", {
     request_id: requestId,
     period,
-    from_account_id: fromAccountId,
-    to_account_id: toAccountId,
   });
+  invalidateTransactionListCache("auto_renew");
+  return data;
 }
 
 export async function rejectAutoRenew({ requestId }) {
-  return postAutoRenew({
-    action: "reject",
+  return postJson("api/auto-renew/reject", {
     request_id: requestId,
   });
 }
 
 export async function deleteAutoRenew({ requestId, transactionId, entityType }) {
-  return postAutoRenew({
+  return postAutoRenewList({
     action: "delete",
     request_id: requestId,
     transaction_id: transactionId || null,

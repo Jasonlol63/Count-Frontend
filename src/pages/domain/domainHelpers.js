@@ -631,7 +631,16 @@ export function permissionNamesToFeatureModules(permissions) {
   return out;
 }
 
+/**
+ * Spring `TenantFeeShareAllocate[]` → UI `{ profit, sales, cs, it }`.
+ * Also accepts already-normalized UI shape (idempotent) so aggregate →
+ * companies_full / groups_full does not wipe Share % on a second pass.
+ */
 export function feeShareSpringToUi(rows) {
+  if (rows && typeof rows === "object" && !Array.isArray(rows)) {
+    // Already UI-shaped (e.g. after first convert in aggregateOwnerTenantRows).
+    return normalizeFeeShareFromServer(rows);
+  }
   const ui = defaultFeeShareAllocations();
   if (!Array.isArray(rows)) return ui;
   for (const row of rows) {

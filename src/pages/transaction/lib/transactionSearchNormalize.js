@@ -28,11 +28,11 @@ export function normalizeSpringSearchToGrid(data) {
       cr_dr: String(row.crDr ?? "0.00"),
       balance: String(row.balance ?? "0.00"),
       balance_full: String(row.balance ?? "0.00"),
-      has_crdr_transactions: 0,
+      has_crdr_transactions: row.hasCrDrInPeriod ? 1 : 0,
       has_contra_clear_period: 0,
       has_win_loss_transactions: row.hasWinLossInPeriod ? 1 : 0,
       has_win_loss_history: 0,
-      has_period_id_product_rows: row.hasWinLossInPeriod ? 1 : 0,
+      has_period_id_product_rows: row.hasWinLossInPeriod || row.hasCrDrInPeriod ? 1 : 0,
       is_alert: 0,
       is_rate_middleman: 0,
     };

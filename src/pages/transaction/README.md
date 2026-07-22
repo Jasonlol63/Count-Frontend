@@ -17,11 +17,13 @@ Route: `/transaction` (see `App.jsx`). Entry: `TransactionPaymentPage.jsx`.
 | List search, filters, grid state | `hooks/useTransactionSearch.js` |
 | Right-side type search (all-time transaction rows) | `api/transactions/type_transaction_search_api.php` + `runTypeSearch` in `useTransactionSearch.js` |
 | Submit payment / rate / invalidate cache | `hooks/useTransactionForm.js` |
+| **PAYMENT submit → Spring** | `lib/transactionApi.js` → `POST /api/transaction/submit` |
+| Spring submit request/response adapter | `lib/transactionSubmitNormalize.js`（PAYMENT / CLAIM / CLEAR / CONTRA / ADJUSTMENT） |
 | Toast, history query, contra inbox | `hooks/useTransactionUI.js` |
 | Date range picker init | `hooks/useTransactionDateRange.js` |
 | First-load defaults (dates, currency selection) | `hooks/useTransactionInitialization.js` |
 | Cross-tab / localStorage list refresh | `hooks/useTransactionSync.js` |
-| PHP API calls + React Query keys | `lib/transactionApi.js` |
+| PHP API calls + React Query keys | `lib/transactionApi.js`（Search/History/Meta → Spring；**PAYMENT/CLAIM/CLEAR/CONTRA/ADJUSTMENT Submit → Spring**；其余仍 PHP） |
 | Money/rate/date formatting (legacy-aligned) | `lib/transactionFormat.js` |
 | Grid filters, totals, session keys, W/L logic | `lib/transactionPaymentLogic.js` |
 | Submit payload builders | `lib/transactionSubmitHelpers.js` |

@@ -241,7 +241,7 @@ export function buildOptimisticSubmitDeltas({
   };
 
   if (type === "ADJUSTMENT") {
-    push(toId, { crDrDelta: amtStr });
+    push(toId, { winLossDelta: amtStr });
     return deltas;
   }
 
