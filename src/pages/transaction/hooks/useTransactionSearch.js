@@ -976,10 +976,12 @@ export function useTransactionSearch({
     async ({
       accountIds,
       submitCurrency,
+      submitCurrencies,
       amount,
       txType: submitTxType,
       toAccountId,
       fromAccountId,
+      rateLegs,
     } = {}) => {
       const ids = [...new Set((accountIds || []).map((id) => Number(id)).filter((id) => id > 0))];
       if (ids.length === 0) return;
@@ -988,16 +990,20 @@ export function useTransactionSearch({
 
       const rangeKey = `${effectiveDateFrom}|${effectiveDateTo}`;
       const currencyCode = String(submitCurrency || "").toUpperCase().trim();
+      const extraCurrencies = Array.isArray(submitCurrencies)
+        ? submitCurrencies.map((c) => String(c || "").toUpperCase().trim()).filter(Boolean)
+        : [];
+      const currenciesToEnsure = [...new Set([currencyCode, ...extraCurrencies].filter(Boolean))];
 
       let currencyOverrides = {};
-      if (currencyCode && !showAllCurrencies) {
+      if (currenciesToEnsure.length > 0 && !showAllCurrencies) {
         const current = selectedCurrencies
           .map((c) => String(c || "").toUpperCase().trim())
           .filter(Boolean);
-        const alreadySelected = current.includes(currencyCode);
+        const missing = currenciesToEnsure.filter((c) => !current.includes(c));
 
-        if (!alreadySelected) {
-          const merged = [...current, currencyCode];
+        if (missing.length > 0) {
+          const merged = [...current, ...missing];
           const order = (currencyRowsOrdered || [])
             .map((r) => String(r.code || "").toUpperCase().trim())
             .filter(Boolean);
@@ -1030,35 +1036,55 @@ export function useTransactionSearch({
         setTypeSearchFormType(null);
         setTypeSearchAccountIds([]);
 
-        if (currencyCode) {
+        const focusCurrencies = currenciesToEnsure.length > 0 ? currenciesToEnsure : currencyCode ? [currencyCode] : [];
+        if (focusCurrencies.length > 0) {
           setSubmitFocusByCurrency((prev) => {
             const base = submitFocusRangeKey === rangeKey ? { ...prev } : {};
-            const existing = Array.isArray(base[currencyCode]) ? base[currencyCode] : [];
-            base[currencyCode] = [...new Set([...existing, ...ids])];
+            for (const code of focusCurrencies) {
+              const existing = Array.isArray(base[code]) ? base[code] : [];
+              base[code] = [...new Set([...existing, ...ids])];
+            }
             return base;
           });
         }
         setSubmitFocusRangeKey(rangeKey);
         submitFocusLeftRangeKeysRef.current.delete(rangeKey);
 
-        const deltas = buildOptimisticSubmitDeltas({
-          txType: submitTxType,
-          amount,
-          toAccountId,
-          fromAccountId,
-        });
-        if (deltas.length > 0 && currencyCode) {
+        const optimisticLegs =
+          Array.isArray(rateLegs) && rateLegs.length > 0
+            ? rateLegs
+            : currencyCode
+              ? [{ currency: currencyCode, amount, toAccountId, fromAccountId }]
+              : [];
+
+        if (optimisticLegs.length > 0) {
           let didPatch = false;
           setRawSearchData((prev) => {
-            const patched = applyOptimisticSubmitBalancePatch(prev, {
-              currency: currencyCode,
-              deltas,
-            });
-            if (patched && patched !== prev) {
-              didPatch = true;
-              return patched;
+            let next = prev;
+            for (const leg of optimisticLegs) {
+              const legCurrency = String(leg?.currency || "").toUpperCase().trim();
+              if (!legCurrency) continue;
+              const deltas = buildOptimisticSubmitDeltas({
+                txType: leg?.winLossAdjustment
+                  ? "ADJUSTMENT"
+                  : leg?.winLoss
+                    ? "PROFIT"
+                    : submitTxType,
+                amount: leg.amount,
+                toAccountId: leg.toAccountId,
+                fromAccountId: leg.fromAccountId,
+              });
+              if (deltas.length === 0) continue;
+              const patched = applyOptimisticSubmitBalancePatch(next, {
+                currency: legCurrency,
+                deltas,
+              });
+              if (patched && patched !== next) {
+                didPatch = true;
+                next = patched;
+              }
             }
-            return prev;
+            return didPatch ? next : prev;
           });
           if (didPatch) setTablesVisible(true);
         }
@@ -1066,7 +1092,6 @@ export function useTransactionSearch({
 
       setSearchLoading(true);
       try {
-        // forceRefresh already clears caches + invalidates; avoid a second round-trip here.
         await runSearch({
           forceRefresh: true,
           silent: true,
