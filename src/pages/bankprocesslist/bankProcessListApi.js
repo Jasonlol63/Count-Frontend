@@ -1,9 +1,9 @@
 /** Bank Process — Spring Boot `/api/bank-process/*` (tenantId in body). */
 
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
+import { MoneyDecimal } from "../../utils/money/moneyDecimal.js";
 import {
   bankProcessFrequencyNormalized,
-  formatBankMoneyFixed2,
   normalizeRows,
   parseProfitSharingToRows,
   resolveBankProcessListTenantId,
@@ -37,8 +37,13 @@ function toOptionalInt(raw) {
 function toOptionalMoney(raw) {
   const s = String(raw ?? "").trim();
   if (!s) return null;
-  const n = Number(formatBankMoneyFixed2(s));
-  return Number.isFinite(n) ? n : null;
+  try {
+    const plain = MoneyDecimal.requireNormalAmount(s, "Amount");
+    const n = Number(plain);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -71,7 +76,11 @@ function buildBankProcessMutableWriteFields({ form, accounts = [] }) {
   const sell = toOptionalMoney(form?.price);
   let companyPrice = toOptionalMoney(form?.profit);
   if (companyPrice == null && buy != null && sell != null) {
-    companyPrice = Number(formatBankMoneyFixed2(String(sell - buy)));
+    try {
+      companyPrice = Number(MoneyDecimal.toPlainAmount(String(sell - buy)));
+    } catch {
+      companyPrice = null;
+    }
   }
 
   return {

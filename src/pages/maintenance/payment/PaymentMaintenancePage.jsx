@@ -20,12 +20,6 @@ import {
 } from "../../../utils/company/sharedCompanyFilter.js";
 import { useGroupAnchorSessionSync } from "../../../utils/company/useGroupAnchorSessionSync.js";
 import { fetchOwnerCompaniesAll } from "../../../utils/company/sharedCompanyFilter.js";
-import {
-  resolvePaymentMaintenanceScope,
-  paymentMaintenanceScopeCacheCompanyKey,
-  paymentMaintenanceScopeCacheKey,
-  paymentMaintenanceScopeIsReady,
-} from "./paymentMaintenanceScope.js";
 import "../../../../public/css/accountCSS.css";
 import "../../../../public/css/date-range-picker.css";
 import "../../../../public/css/customer_report.css";
@@ -33,9 +27,9 @@ import "../../../../public/css/report-outlined-fields.css";
 import "../../../../public/css/payment_maintenance.css";
 import "../../../../public/css/maintenance_unified_filters.css";
 import {
-  fetchCompanyPermissions,
   fetchCompanyCurrencies,
   pickPaymentMaintenanceCurrency,
+  resolvePaymentMaintenanceTenantId,
   searchPaymentData,
   deletePaymentRecords,
   updateSessionCompany,
@@ -63,7 +57,6 @@ export default function PaymentMaintenancePage() {
   // -- Boot State --
   const [bootLoading, setBootLoading] = useState(true);
   const [companies, setCompanies] = useState([]);
-  const [permissions, setPermissions] = useState([]);
 
   // -- Filter State --
   const [companyId, setCompanyId] = useState(null);
@@ -71,7 +64,6 @@ export default function PaymentMaintenancePage() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [transactionType, setTransactionType] = useState("");
   const [query, setQuery] = useState("");
-  const [activePermission, setActivePermission] = useState("");
   const [currencies, setCurrencies] = useState([]);
   const [selectedCurrency, setSelectedCurrency] = useState(null);
   
@@ -101,7 +93,7 @@ export default function PaymentMaintenancePage() {
   // -- UI State --
   const [toasts, setToasts] = useState([]);
   const companyIdRef = useRef(null);
-  const scopeKeyRef = useRef("");
+  const tenantKeyRef = useRef("");
   const searchSeqRef = useRef(0);
   const searchAbortRef = useRef(null);
   const initialPaymentSearchDoneRef = useRef(false);
@@ -136,25 +128,24 @@ export default function PaymentMaintenancePage() {
     onClearCompany: (...args) => onClearCompanyRef.current(...args),
   });
 
-  const paymentScope = useMemo(
+  /** UI Group/Company pills → single Spring tenant id (no scope / group_id API params). */
+  const activeTenantId = useMemo(
     () =>
-      resolvePaymentMaintenanceScope({
-        companies,
-        selectedGroup,
+      resolvePaymentMaintenanceTenantId({
         companyId,
-        groupsAllMode,
-        groupAllMode,
+        selectedGroup,
+        companies,
       }),
-    [companies, selectedGroup, companyId, groupsAllMode, groupAllMode],
+    [companyId, selectedGroup, companies],
   );
 
-  const paymentScopeKey = useMemo(
-    () => paymentMaintenanceScopeCacheKey(paymentScope),
-    [paymentScope],
+  const tenantKey = useMemo(
+    () => (activeTenantId != null ? String(activeTenantId) : ""),
+    [activeTenantId],
   );
 
   const listQueryEnabled =
-    !bootLoading && paymentMaintenanceScopeIsReady(paymentScope) && Boolean(dateFrom) && Boolean(dateTo);
+    !bootLoading && activeTenantId != null && activeTenantId > 0 && Boolean(dateFrom) && Boolean(dateTo);
 
   const { resetAnchorSessionRef } = useGroupAnchorSessionSync({
     companies,
@@ -165,8 +156,8 @@ export default function PaymentMaintenancePage() {
   });
 
   useEffect(() => {
-    scopeKeyRef.current = paymentScopeKey;
-  }, [paymentScopeKey]);
+    tenantKeyRef.current = tenantKey;
+  }, [tenantKey]);
 
   const notify = useCallback((message, type = "success") => {
     const id = Date.now();
@@ -277,30 +268,19 @@ export default function PaymentMaintenancePage() {
           setCompanyId(null);
           setCompanyCode("");
           companyIdRef.current = null;
-          const bootScope = resolvePaymentMaintenanceScope({
-            companies: rows,
-            selectedGroup: bootGroup,
-            companyId: null,
-          });
           const anchor = bootGroup ? companiesInGroupList(rows, bootGroup)[0] : null;
           const code = anchor?.company_id ? String(anchor.company_id) : "";
-          const scopeCompanyId = bootScope?.scopeCompanyId;
-          const [companyPerms, currList] = await Promise.all([
-            code ? fetchCompanyPermissions(code) : Promise.resolve([]),
-            fetchCompanyCurrencies(null, bootScope),
-          ]);
+          const bootTenantId = resolvePaymentMaintenanceTenantId({
+            companyId: null,
+            selectedGroup: bootGroup,
+            companies: rows,
+          });
+          const currList = bootTenantId
+            ? await fetchCompanyCurrencies(bootTenantId)
+            : [];
           if (cancelled) return;
-          setPermissions(companyPerms);
           setCurrencies(currList);
-          const savedPerm = code ? localStorage.getItem(`selectedPermission_${code}`) : null;
-          setActivePermission(
-            savedPerm && companyPerms.includes(savedPerm)
-              ? savedPerm
-              : companyPerms.length > 0
-                ? companyPerms[0]
-                : "",
-          );
-          setSelectedCurrency(pickPaymentMaintenanceCurrency(currList, bootScope));
+          setSelectedCurrency(pickPaymentMaintenanceCurrency(currList));
           if (bootGroup) sessionStorage.setItem("dashboard_group_filter", bootGroup);
           skipMetaAfterBootRef.current = true;
           return;
@@ -312,24 +292,17 @@ export default function PaymentMaintenancePage() {
           const code = currentComp.company_id || "";
           setCompanyCode(code);
 
-          const bootScope = resolvePaymentMaintenanceScope({
-            companies: rows,
-            selectedGroup: bootGroup,
+          const bootTenantId = resolvePaymentMaintenanceTenantId({
             companyId: initialCompanyId,
+            selectedGroup: bootGroup,
+            companies: rows,
           });
 
-          const [companyPerms, currList] = await Promise.all([
-            fetchCompanyPermissions(code),
-            fetchCompanyCurrencies(null, bootScope),
-          ]);
-          setPermissions(companyPerms);
+          const currList = bootTenantId
+            ? await fetchCompanyCurrencies(bootTenantId)
+            : [];
           setCurrencies(currList);
-
-          const savedPerm = localStorage.getItem(`selectedPermission_${code}`);
-          const initialActive = savedPerm && companyPerms.includes(savedPerm) ? savedPerm : (companyPerms.length > 0 ? companyPerms[0] : "");
-          setActivePermission(initialActive);
-
-          setSelectedCurrency(pickPaymentMaintenanceCurrency(currList, bootScope));
+          setSelectedCurrency(pickPaymentMaintenanceCurrency(currList));
 
           if (bootGroup) sessionStorage.setItem("dashboard_group_filter", bootGroup);
           skipMetaAfterBootRef.current = true;
@@ -379,39 +352,20 @@ export default function PaymentMaintenancePage() {
 
   // -- Load Meta Data (Permissions & Currencies) --
   useEffect(() => {
-    if (bootLoading || !paymentMaintenanceScopeIsReady(paymentScope)) return;
+    if (bootLoading || !activeTenantId) return;
     if (skipMetaAfterBootRef.current) {
       skipMetaAfterBootRef.current = false;
       return;
     }
 
     let cancelled = false;
-    const scope = paymentScope;
-    const permCode =
-      companyCode ||
-      (selectedGroup
-        ? companiesInGroupList(companies, selectedGroup)[0]?.company_id
-        : "") ||
-      "";
+    const tenantId = activeTenantId;
     (async () => {
       try {
-        const [permList, currList] = await Promise.all([
-          permCode ? fetchCompanyPermissions(permCode) : Promise.resolve([]),
-          fetchCompanyCurrencies(null, scope),
-        ]);
+        const currList = await fetchCompanyCurrencies(tenantId);
         if (cancelled) return;
-        setPermissions(permList);
         setCurrencies(currList);
-        
-        // Initial permission
-        const savedPerm = permCode ? localStorage.getItem(`selectedPermission_${permCode}`) : null;
-        if (savedPerm && permList.includes(savedPerm)) {
-          setActivePermission(savedPerm);
-        } else if (permList.length > 0) {
-          setActivePermission(permList[0]);
-        }
-
-        setSelectedCurrency(pickPaymentMaintenanceCurrency(currList, scope));
+        setSelectedCurrency(pickPaymentMaintenanceCurrency(currList));
       } catch (err) {
         if (cancelled) return;
         console.error("Meta data load error:", err);
@@ -421,22 +375,23 @@ export default function PaymentMaintenancePage() {
     return () => {
       cancelled = true;
     };
-  }, [bootLoading, paymentScope, companyId, companyCode, selectedGroup, companies, notify, t]);
+  }, [bootLoading, activeTenantId, companyCode, selectedGroup, companies, notify, t]);
 
   // -- Search Logic --
-  /** 与 Capture Maintenance 对齐：支持 overrides.companyId；seq + ref + Abort；首次 Loading / 之后 listSyncing 保留旧表 */
+  /** 与 Capture Maintenance 对齐：支持 overrides.tenantId；seq + ref + Abort；首次 Loading / 之后 listSyncing 保留旧表 */
   const performSearch = useCallback(
     async (overrides = {}) => {
-      const effectiveScope =
-        overrides.scope ??
-        resolvePaymentMaintenanceScope({
-          companies,
-          selectedGroup: overrides.selectedGroup ?? selectedGroup,
-          companyId: overrides.companyId ?? companyId,
-        });
-      if (!paymentMaintenanceScopeIsReady(effectiveScope) || !dateFrom || !dateTo) return;
+      const tenantId =
+        overrides.tenantId != null
+          ? Number(overrides.tenantId)
+          : resolvePaymentMaintenanceTenantId({
+              companyId: overrides.companyId ?? companyId,
+              selectedGroup: overrides.selectedGroup ?? selectedGroup,
+              companies,
+            });
+      if (!tenantId || !dateFrom || !dateTo) return;
 
-      const searchScopeKey = paymentMaintenanceScopeCacheKey(effectiveScope);
+      const searchTenantKey = String(tenantId);
       const quietRefresh = initialPaymentSearchDoneRef.current;
 
       searchAbortRef.current?.abort();
@@ -452,20 +407,19 @@ export default function PaymentMaintenancePage() {
       setSelectedIds([]);
       try {
         const data = await searchPaymentData({
+          tenantId,
           dateFrom,
           dateTo,
           transactionType,
           query,
-          companyId: effectiveScope.scopeCompanyId,
           currency: overrides.currency ?? selectedCurrency,
-          scope: effectiveScope,
           signal: controller.signal,
         });
         if (seq !== searchSeqRef.current) return;
-        if (searchScopeKey !== scopeKeyRef.current) return;
+        if (searchTenantKey !== tenantKeyRef.current) return;
         setPaymentListEpoch((e) => e + 1);
         setPaymentData(data);
-        setPaymentDataSourceCompanyId(paymentMaintenanceScopeCacheCompanyKey(effectiveScope));
+        setPaymentDataSourceCompanyId(tenantId);
         setConfirmDelete(false);
         if (!quietRefresh) {
           if (data.length > 0) {
@@ -476,7 +430,7 @@ export default function PaymentMaintenancePage() {
         }
       } catch (err) {
         if (err?.name === "AbortError" || seq !== searchSeqRef.current) return;
-        if (searchScopeKey !== scopeKeyRef.current) return;
+        if (searchTenantKey !== tenantKeyRef.current) return;
         notify(err.message, "error");
         setPaymentListEpoch((e) => e + 1);
         setPaymentData([]);
@@ -508,7 +462,7 @@ export default function PaymentMaintenancePage() {
     return () => clearTimeout(h);
   }, [
     listQueryEnabled,
-    paymentScopeKey,
+    tenantKey,
     transactionType,
     query,
     dateFrom,
@@ -525,32 +479,15 @@ export default function PaymentMaintenancePage() {
   );
 
   // -- Handlers --
-  const reloadScopeMeta = useCallback(async (scope, permCodeHint = "") => {
-    const permCode =
-      permCodeHint ||
-      companyCode ||
-      (scope?.selectedGroup
-        ? companiesInGroupList(companies, scope.selectedGroup)[0]?.company_id
-        : "") ||
-      "";
-    const [permList, currList] = await Promise.all([
-      permCode ? fetchCompanyPermissions(String(permCode)) : Promise.resolve([]),
-      fetchCompanyCurrencies(null, scope),
-    ]);
-    setPermissions(permList);
+  const reloadTenantMeta = useCallback(async (tenantId) => {
+    const tid = Number(tenantId);
+    const currList =
+      Number.isFinite(tid) && tid > 0 ? await fetchCompanyCurrencies(tid) : [];
     setCurrencies(currList);
-    const savedPerm = permCode ? localStorage.getItem(`selectedPermission_${permCode}`) : null;
-    setActivePermission(
-      savedPerm && permList.includes(savedPerm)
-        ? savedPerm
-        : permList.length > 0
-          ? permList[0]
-          : "",
-    );
-    const nextCurrency = pickPaymentMaintenanceCurrency(currList, scope);
+    const nextCurrency = pickPaymentMaintenanceCurrency(currList);
     setSelectedCurrency(nextCurrency);
     return nextCurrency;
-  }, [companies, companyCode]);
+  }, []);
 
   const handleClearCompany = useCallback(
     (groupForPersist) => {
@@ -568,24 +505,26 @@ export default function PaymentMaintenancePage() {
       notifyDashboardGroupFilterChanged(g, null);
       void (async () => {
         try {
-          const scope = resolvePaymentMaintenanceScope({
+          const nextTenantId = resolvePaymentMaintenanceTenantId({
+            companyId: null,
+            selectedGroup: g,
             companies,
-            selectedGroup: g,
-            companyId: null,
           });
-          const nextCurrency = await reloadScopeMeta(scope);
-          await performSearch({
-            selectedGroup: g,
-            companyId: null,
-            scope,
-            currency: nextCurrency,
-          });
+          const nextCurrency = await reloadTenantMeta(nextTenantId);
+          if (nextTenantId) {
+            await performSearch({
+              selectedGroup: g,
+              companyId: null,
+              tenantId: nextTenantId,
+              currency: nextCurrency,
+            });
+          }
         } catch (err) {
           console.error("Meta bootstrap after clear company:", err);
         }
       })();
     },
-    [companies, selectedGroup, reloadScopeMeta, performSearch, resetAnchorSessionRef],
+    [companies, selectedGroup, reloadTenantMeta, performSearch, resetAnchorSessionRef],
   );
 
   const onPrepareCompanySelect = useCallback((c) => {
@@ -601,17 +540,12 @@ export default function PaymentMaintenancePage() {
     persistDashboardFilterState(newGroup, nextId);
     followGroupRef.current();
     void (async () => {
-      const nextScope = resolvePaymentMaintenanceScope({
-        companies,
-        selectedGroup: newGroup,
-        companyId: nextId,
-      });
       try {
-        const nextCurrency = await reloadScopeMeta(nextScope, nextCode);
+        const nextCurrency = await reloadTenantMeta(nextId);
         await performSearch({
           companyId: nextId,
           selectedGroup: newGroup,
-          scope: nextScope,
+          tenantId: nextId,
           currency: nextCurrency,
         });
       } catch (err) {
@@ -619,7 +553,7 @@ export default function PaymentMaintenancePage() {
         notify(err.message || t("failedLoadCompanyMetadata"), "error");
       }
     })();
-  }, [companies, reloadScopeMeta, performSearch, notify, t]);
+  }, [reloadTenantMeta, performSearch, notify, t]);
 
   onPrepareCompanySelectRef.current = onPrepareCompanySelect;
 
@@ -644,17 +578,12 @@ export default function PaymentMaintenancePage() {
           if (newGroup) setSelectedGroup(newGroup);
           persistDashboardFilterState(newGroup, nextId);
 
-          const nextScope = resolvePaymentMaintenanceScope({
-            companies,
-            selectedGroup: newGroup,
-            companyId: nextId,
-          });
           try {
-            const nextCurrency = await reloadScopeMeta(nextScope, nextCode);
+            const nextCurrency = await reloadTenantMeta(nextId);
             await performSearch({
               companyId: nextId,
               selectedGroup: newGroup,
-              scope: nextScope,
+              tenantId: nextId,
               currency: nextCurrency,
             });
           } catch (err) {
@@ -673,11 +602,6 @@ export default function PaymentMaintenancePage() {
   onClearCompanyRef.current = handleClearCompany;
 
   followGroupRef.current = () => {};
-
-  const handlePermissionSwitch = (p) => {
-    setActivePermission(p);
-    localStorage.setItem(`selectedPermission_${companyCode}`, p);
-  };
 
   const handleCurrencySelectAll = useCallback(() => {
     setSelectedCurrency(null);
@@ -721,11 +645,17 @@ export default function PaymentMaintenancePage() {
 
   const handleConfirmDelete = async () => {
     setIsDeleteModalOpen(false);
+    if (!activeTenantId) {
+      notify(t("deleteFailed"), "error");
+      return;
+    }
+    const idsToDelete = [...selectedIds];
     try {
-      await deletePaymentRecords(selectedIds, paymentScope);
+      await deletePaymentRecords(idsToDelete, activeTenantId);
       notifyTransactionListInvalidated("payment_maintenance_delete");
-      notify(t("successfullyDeletedN", { n: selectedIds.length }), "success");
-      performSearch({ scope: paymentScope });
+      notify(t("successfullyDeletedN", { n: idsToDelete.length }), "success");
+      setSelectedIds([]);
+      await performSearch({ tenantId: activeTenantId });
     } catch (err) {
       notify(err.message || t("deleteFailed"), "error");
     }
@@ -735,26 +665,6 @@ export default function PaymentMaintenancePage() {
 
   return (
     <div className="container">
-      {permissions.length > 1 ? (
-      <div className="maintenance-header">
-          <div id="maintenance-permission-filter" className="maintenance-permission-filter-header">
-            <span className="maintenance-company-label">{m.category}</span>
-            <div id="maintenance-permission-buttons" className="maintenance-company-buttons">
-              {permissions.map(p => (
-                <button 
-                  key={p} 
-                  type="button" 
-                  className={`maintenance-company-btn ${p === activePermission ? 'active' : ''}`}
-                  onClick={() => handlePermissionSwitch(p)}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-      </div>
-      ) : null}
-
       <div className="payment-maintenance-page-root">
       <PaymentMaintenanceFilters 
         transactionType={transactionType}
@@ -796,7 +706,7 @@ export default function PaymentMaintenancePage() {
           </div>
         )}
         <PaymentMaintenanceTable
-          key={`${paymentScopeKey}:${paymentDataSourceCompanyId ?? "no-company"}`}
+          key={`${tenantKey}:${paymentDataSourceCompanyId ?? "no-tenant"}`}
           data={paymentData}
           listEpoch={paymentListEpoch}
           rowKeyCompanyId={paymentDataSourceCompanyId ?? companyId}

@@ -1,5 +1,7 @@
-import { formatRateAmount } from "./transactionFormat.js";
-import MoneyDecimal from "../../../utils/money/moneyDecimal.js";
+import MoneyDecimal, {
+  requireRateAmount,
+  toPlainAmount,
+} from "../../../utils/money/moneyDecimal.js";
 
 export function toNumberLike(raw) {
   const n = Number(String(raw ?? "").replace(/,/g, "").trim());
@@ -66,8 +68,10 @@ export function buildRatePayload({
     ? MoneyDecimal.toDecimal(netRaw, 0)
     : grossDec;
 
-  const leg1Amount = formatRateAmount(fromDec.toString());
-  const leg2Amount = formatRateAmount(netDec.toString());
+  // Submit plain RATE precision (≤8); never round-to-2 for API.
+  const leg1Amount = requireRateAmount(fromDec.toString(), "Leg1 amount");
+  const leg2Amount = requireRateAmount(netDec.toString(), "Leg2 amount");
+  const grossPlain = requireRateAmount(grossDec.toString(), "Gross amount");
   const rateExpression = String(rateExchangeRateRaw ?? "").trim();
 
   const middleId = rateMiddlemanAccount?.id ? Number(rateMiddlemanAccount.id) : 0;
@@ -97,7 +101,7 @@ export function buildRatePayload({
     rate_currency_to: rateCurrencyTo,
     rate_from_amount: leg1Amount,
     rate_currency_to_amount: leg2Amount,
-    rate_to_amount_gross: formatRateAmount(grossDec.toString()),
+    rate_to_amount_gross: grossPlain,
     rate_exchange_rate: String(parsedRateNormalizedStr ?? ""),
     rate_expression: rateExpression,
     rate_exchange_rate_raw: rateExpression,
@@ -106,12 +110,13 @@ export function buildRatePayload({
   if (Number.isFinite(middleId) && middleId > 0 && (hasMiddleRate || hasFeeInput)) {
     payload.rate_middleman_account_id = middleId;
     if (hasMiddleRate) {
-      payload.rate_middleman_rate = middleRateStr;
+      payload.rate_middleman_rate = requireRateAmount(middleRateStr, "Middle-Man rate");
     }
     if (hasFeeInput) {
       // Fee in first currency; backend converts with exchangeRate.
-      payload.rate_middleman_fee = formatRateAmount(
-        MoneyDecimal.toDecimal(feeInputStr, 0).toString(),
+      payload.rate_middleman_fee = requireRateAmount(
+        toPlainAmount(MoneyDecimal.toDecimal(feeInputStr, 0).toString()),
+        "Middle-Man fee",
       );
       payload.rate_middleman_amount = payload.rate_middleman_fee;
     }
@@ -155,7 +160,7 @@ export function collectSubmitFocusAccountIds({
 
 /**
  * Cr/Dr (or Win/Loss) deltas for optimistic list update after approved submit.
- * CONTRA/PAYMENT/CLAIM/CLEAR/RECEIVE/RATE: To −amount, From +amount.
+ * CONTRA/PAYMENT/CLAIM/CLEAR/RATE: To −amount, From +amount.
  * ADJUSTMENT: To += signed amount.
  * PROFIT: From += amount, To −= amount (Win/Loss).
  * WIN/LOSE: amounts go to win_loss (To/From signs per period search).
@@ -209,7 +214,7 @@ export function buildOptimisticSubmitDeltas({
     return deltas;
   }
 
-  if (["CONTRA", "PAYMENT", "CLAIM", "CLEAR", "RECEIVE", "RATE"].includes(type)) {
+  if (["CONTRA", "PAYMENT", "CLAIM", "CLEAR", "RATE"].includes(type)) {
     push(toId, { crDrDelta: MoneyDecimal.sub("0", amtStr).toString() });
     push(fromId, { crDrDelta: amtStr });
   }

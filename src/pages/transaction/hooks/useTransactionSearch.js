@@ -1272,8 +1272,15 @@ export function useTransactionSearch({
     }
     const viewLeft = baseRowsPresentation.baseLeft;
     const viewRight = baseRowsPresentation.baseRight;
-    const norm = normalizeRateRowsByCrDr(viewLeft, viewRight, false);
-    // BP-only v1: show all API rows; skip zero-balance / payment / capture filters.
+    // Show Payment / Win-Loss / zero-balance filters (type-search mode skips them).
+    const filtered = typeSearchActive
+      ? { left: viewLeft, right: viewRight }
+      : filterTransactionTableRows(viewLeft, viewRight, {
+          showZeroBalance: searchState.showZeroBalance,
+          showPaymentOnly: searchState.showPaymentOnly,
+          showCaptureOnly: searchState.showCaptureOnly,
+        });
+    const norm = normalizeRateRowsByCrDr(filtered.left, filtered.right, false);
     const sortedLeft = sortByRole(norm.leftRows);
     const sortedRight = sortByRole(norm.rightRows);
     const totalsLeft = calculateTotals(sortedLeft);
@@ -1375,6 +1382,7 @@ export function useTransactionSearch({
     rawSearchData,
     baseRowsPresentation,
     searchState,
+    typeSearchActive,
     listPresentationModeActive,
     showAllCurrencies,
     selectedCurrencies,

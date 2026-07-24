@@ -9,9 +9,6 @@ import ReportGcFilterPanel from "../../../report/shared/ReportGcFilterPanel.jsx"
 import { normalizeMaintenanceSearchInput } from "../../shared/maintenanceSearchInput.js";
 
 export default function BankprocessMaintenanceFilters({
-  permissions,
-  selectedPermission,
-  setSelectedPermission,
   dateFrom,
   dateTo,
   setDateFrom,
@@ -46,26 +43,6 @@ export default function BankprocessMaintenanceFilters({
 
   return (
     <div className="bankprocess-maintenance-filters-shell">
-      {permissions.length > 1 ? (
-        <div className="maintenance-header">
-          <div id="bankprocess-permission-filter" className="maintenance-permission-filter-header">
-            <span className="maintenance-company-label">{m.category}</span>
-            <div id="bankprocess-permission-buttons" className="maintenance-company-buttons">
-              {permissions.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={`maintenance-company-btn ${selectedPermission === p ? "active" : ""}`}
-                  onClick={() => setSelectedPermission(p)}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div className="customer-report-filter-container">
         <div className="customer-report-filters">
           <ReportDatePicker

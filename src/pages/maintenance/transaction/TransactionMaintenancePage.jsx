@@ -185,11 +185,6 @@ export default function TransactionMaintenancePage() {
     [selectedProcess],
   );
 
-  const visiblePermissions = useMemo(
-    () => filterTransactionMaintenancePermissions(permissions),
-    [permissions],
-  );
-
   const switchCompanyRef = useRef(async () => {});
   const onPrepareCompanySelectRef = useRef(() => {});
   const onClearCompanyRef = useRef(() => {});
@@ -1109,35 +1104,10 @@ export default function TransactionMaintenancePage() {
 
   followGroupRef.current = () => {};
 
-  const handlePermissionSwitch = (p) => {
-    setActivePermission(p);
-    localStorage.setItem(`selectedPermission_${companyCode}`, p);
-  };
-
   const showTopLoadingBar = listLoading;
 
   return (
     <div className="container">
-      {visiblePermissions.length > 1 ? (
-      <div className="maintenance-header">
-          <div id="maintenance-permission-filter" className="maintenance-permission-filter-header">
-            <span className="maintenance-company-label">{m.category}</span>
-            <div id="maintenance-permission-buttons" className="maintenance-company-buttons">
-              {visiblePermissions.map(p => (
-                <button 
-                  key={p} 
-                  type="button" 
-                  className={`maintenance-company-btn ${p === activePermission ? 'active' : ''}`}
-                  onClick={() => handlePermissionSwitch(p)}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-      </div>
-      ) : null}
-
       <div className="transaction-maintenance-page-root">
         <TransactionMaintenanceFilters 
           processes={processes}

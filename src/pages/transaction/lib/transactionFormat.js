@@ -1,4 +1,11 @@
-import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
+import {
+  MoneyDecimal,
+  RATE_AMOUNT_SCALE,
+  formatUiFixed,
+  formatUiMoney,
+  normalizeComputedRate,
+  toPlainAmount,
+} from "../../../utils/money/moneyDecimal.js";
 
 function cleanNumberLike(value) {
   if (value === "-" || value === null || value === undefined) return null;
@@ -22,26 +29,30 @@ export function getHistoryRemark(row) {
   return toUpperDisplay(row?.sms || "-");
 }
 
-// Keep legacy behavior: show '-' stays '-', otherwise always 2 decimals with thousand separators.
+/** Display only: always half-up 2 + thousands. */
 export function formatMoney2(value) {
-  const n = cleanNumberLike(value);
-  if (n === null) return value === "-" ? "-" : "0.00";
-  const fixed = (Math.trunc((n + Number.EPSILON) * 100) / 100).toFixed(2);
-  const parts = fixed.split(".");
-  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return parts.join(".");
+  if (value === "-" || value === null || value === undefined) return value === "-" ? "-" : "0.00";
+  const cleaned = String(value).replace(/,/g, "").trim();
+  if (!cleaned || cleaned === "-") return value === "-" ? "-" : "0.00";
+  try {
+    return formatUiMoney(cleaned);
+  } catch {
+    return "0.00";
+  }
 }
 
 /**
- * Main grid + totals: align with legacy MoneyDecimal-style display (avoid trunc quirks on pre-rounded API strings).
+ * Main grid + totals display (half-up 2 + thousands).
  */
 export function formatPaymentHistoryMoney(value) {
   if (value === "-" || value === null || value === undefined) return "-";
   const cleaned = String(value).replace(/,/g, "").trim();
   if (cleaned === "" || cleaned === "-") return "0.00";
-  const n = Number(cleaned);
-  if (!Number.isFinite(n)) return "0.00";
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  try {
+    return formatUiMoney(cleaned);
+  } catch {
+    return "0.00";
+  }
 }
 
 /** Payment History modal: half-up to cents then thousands; zero displays as "-". */
@@ -50,23 +61,23 @@ export function formatPaymentHistoryMoneyHalfUp(value) {
   const cleaned = String(value).replace(/,/g, "").trim();
   if (cleaned === "" || cleaned === "-") return "-";
   try {
-    const rounded = MoneyDecimal.formatFixedHalfUp(cleaned, 2);
+    const rounded = formatUiFixed(cleaned);
     if (MoneyDecimal.toDecimal(rounded).isZero()) return "-";
-    return MoneyDecimal.formatThousands(rounded, 2);
+    return formatUiMoney(rounded);
   } catch {
     return "-";
   }
 }
 
-/** Transaction main grid + footers: same rounding as history; zero displays as "0.00". */
+/** Transaction main grid + footers: display half-up 2; zero displays as "0.00". */
 export function formatTransactionGridMoneyHalfUp(value) {
   if (value === "-" || value === null || value === undefined) return "-";
   const cleaned = String(value).replace(/,/g, "").trim();
   if (cleaned === "" || cleaned === "-") return "0.00";
   try {
-    const rounded = MoneyDecimal.formatFixedHalfUp(cleaned, 2);
+    const rounded = formatUiFixed(cleaned);
     if (MoneyDecimal.toDecimal(rounded).isZero()) return "0.00";
-    return MoneyDecimal.formatThousands(rounded, 2);
+    return formatUiMoney(rounded);
   } catch {
     return "0.00";
   }
@@ -82,15 +93,14 @@ export function formatHistoryBalanceMoney(v) {
   const cleaned = String(v).replace(/,/g, "").trim();
   if (cleaned === "" || cleaned === "-") return "0.00";
   try {
-    const rounded = MoneyDecimal.formatFixedHalfUp(cleaned, 2);
+    const rounded = formatUiFixed(cleaned);
     if (MoneyDecimal.toDecimal(rounded).isZero()) return "0.00";
-    return MoneyDecimal.formatThousands(rounded, 2);
+    return formatUiMoney(rounded);
   } catch {
     return "0.00";
   }
 }
 
-const RATE_MAX_DECIMALS = 8;
 const RATE_HISTORY_MAX_DECIMALS = 6;
 
 /** Same as legacy `js/transaction.js` countDecimalPlaces (RATE token width checks). */
@@ -112,17 +122,17 @@ function truncateDecimalString(value, scale) {
   return negative ? `-${intPart}.${frac}` : `${intPart}.${frac}`;
 }
 
+/** Exchange-rate expression result: plain within RATE scale (half-up only if over). */
 function normalizeRateForSubmit(value) {
   try {
-    const normalized = MoneyDecimal.toDecimal(value || "0").toString();
-    return truncateDecimalString(normalized, RATE_MAX_DECIMALS);
+    return normalizeComputedRate(value || "0");
   } catch {
     return "0";
   }
 }
 
 function hasTokenExceedingRateDecimals(token) {
-  return countRateDecimalPlaces(token) > RATE_MAX_DECIMALS;
+  return countRateDecimalPlaces(token) > RATE_AMOUNT_SCALE;
 }
 
 /** Payment History Rate column — same as `js/transaction.js` formatRateForHistoryDisplay. */
@@ -142,7 +152,7 @@ export function formatRateForHistoryDisplay(value) {
 
 /**
  * RATE exchange-rate field: same as legacy `js/transaction.js` parseRateExpression.
- * On success, `value` is the **8dp-truncated normalized string** (not a JS number).
+ * On success, `value` is the RATE-scale plain string (not round-to-2).
  */
 export function parseRateExpression(rawValue) {
   const invalid = () => ({ valid: false, value: "0" });
@@ -207,11 +217,24 @@ export function parseRateExpression(rawValue) {
   return { valid: true, value: out };
 }
 
+/**
+ * Display only for RATE computed amount fields (half-up 2).
+ * Do not use for API submit payloads.
+ */
 export function formatRateAmount(value) {
   try {
-    return MoneyDecimal.formatFixedHalfUp(value || "0", 2);
+    return formatUiFixed(value || "0");
   } catch {
     return "0.00";
+  }
+}
+
+/** Plain RATE amount for submit / internal state (≤8 dp, no round-to-2). */
+export function toRatePlainAmount(value) {
+  try {
+    return normalizeComputedRate(value || "0");
+  } catch {
+    return "0";
   }
 }
 
@@ -235,3 +258,4 @@ export function buildClientRequestId() {
   return `tx_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+export { toPlainAmount, formatUiFixed, formatUiMoney };

@@ -9,7 +9,7 @@ export const PAGE_SIZE_MAX = 80;
 /** Bank Process 金额：固定两位小数（如 300.00）. */
 export function isValidBankMoneyInput(value) {
   try {
-    MoneyDecimal.toDecimal(value);
+    MoneyDecimal.requireNormalAmount(value, "Amount");
     return true;
   } catch {
     return false;
@@ -24,7 +24,7 @@ export function formatBankMoneyFixed2(value, { emptyAsZero = true } = {}) {
   const raw = String(value ?? "").trim();
   if (!raw) return emptyAsZero ? "0.00" : "";
   if (!isValidBankMoneyInput(raw)) return emptyAsZero ? "0.00" : "";
-  return MoneyDecimal.formatFixedHalfUp(raw, 2);
+  return MoneyDecimal.formatUiFixed(raw);
 }
 
 /** Profit = max(0, sell - buy - sum(profit sharing))，展示两位小数；全无输入时为空 */

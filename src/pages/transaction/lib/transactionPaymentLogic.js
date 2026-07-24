@@ -207,13 +207,14 @@ export function applyOptimisticSubmitBalancePatch(rawSearchData, { currency, del
           : crDr;
 
       const balanceFull = MoneyDecimal.add(MoneyDecimal.add(bf, nextWlFull), nextCrDr).toString();
+      // Keep full precision in row data; UI cells round half-up to 2 for display only.
       const next = {
         ...row,
-        win_loss: MoneyDecimal.formatFixedHalfUp(nextWlFull, 2),
+        win_loss: nextWlFull,
         win_loss_full: nextWlFull,
-        cr_dr: MoneyDecimal.formatFixedHalfUp(nextCrDr, 2),
+        cr_dr: nextCrDr,
         balance_full: balanceFull,
-        balance: MoneyDecimal.formatFixedHalfUp(balanceFull, 2),
+        balance: balanceFull,
       };
       if (delta.crDrDelta && !MoneyDecimal.toDecimal(delta.crDrDelta, 0).isZero()) {
         next.has_crdr_transactions = 1;
@@ -268,27 +269,31 @@ export function rowIsZeroBalance(row) {
 }
 
 /**
- * 本期是否有 Payment/CrDr 动账：展示净额非 0，或 API 标志有流水（含轧成 0.00 / CONTRA 清账）。
- * 与 search_api has_crdr_transactions / has_contra_clear_period 对齐。
+ * 本期是否有 Payment/CrDr 动账：展示净额非 0，或 API 标志 period 内有 Cr/Dr 流水（含正负轧成 0）。
+ * 仅看 Cr/Dr（has_crdr_transactions / cr_dr）；不含仅有 Win/Loss 的账户。
  */
 export function rowHasPeriodCrdr(row) {
-  const crdr = parseBalanceValue(row?.cr_dr);
+  const crdr = parseBalanceValue(String(row?.cr_dr ?? "").replace(/,/g, ""));
   if (crdr !== null && Math.abs(crdr) > TX_FILTER_EPS) return true;
   return txRowFlag(row?.has_crdr_transactions) || txRowFlag(row?.has_contra_clear_period);
 }
 
 /**
- * 本期是否有 Win/Loss 动账：展示净额非 0，或 API 标志有流水（含当日正负轧成 0.00）。
- * 与 search_api has_win_loss_transactions / has_period_id_product_rows 对齐。
+ * 本期是否有 Win/Loss 动账：展示净额非 0，或 API 标志 period 内有 W/L 流水（含正负轧成 0）。
+ * 仅看 Win/Loss（has_win_loss_transactions / win_loss）；不含仅有 Cr/Dr 的账户。
  */
 export function rowHasPeriodWinLoss(row) {
   const wl = parseBalanceValue(String(row?.win_loss ?? "").replace(/,/g, ""));
   if (wl !== null && Math.abs(wl) > TX_FILTER_EPS) return true;
-  return txRowFlag(row?.has_win_loss_transactions) || txRowFlag(row?.has_period_id_product_rows);
+  const wlFull = parseBalanceValue(
+    String(row?.win_loss_full != null ? row.win_loss_full : "").replace(/,/g, ""),
+  );
+  if (wlFull !== null && Math.abs(wlFull) > TX_FILTER_EPS) return true;
+  return txRowFlag(row?.has_win_loss_transactions);
 }
 
 /**
- * API 查询参数：Show all 0 balance 与 Payment/Win-Loss Only 联动的覆盖规则。
+ * API 查询参数 / session key：与勾选状态一致（过滤在前端展示层执行）。
  * @returns {{ showInactiveForQuery: boolean, showCaptureOnlyForQuery: boolean, hideZeroBalanceForQuery: boolean }}
  */
 export function buildTransactionSearchQueryFilters({
@@ -297,43 +302,52 @@ export function buildTransactionSearchQueryFilters({
   showCaptureOnly = false,
 }) {
   return {
-    showInactiveForQuery: showZeroBalance && showPaymentOnly ? false : !!showPaymentOnly,
-    showCaptureOnlyForQuery: showZeroBalance && showCaptureOnly ? false : !!showCaptureOnly,
+    showInactiveForQuery: !!showPaymentOnly,
+    showCaptureOnlyForQuery: !!showCaptureOnly,
     hideZeroBalanceForQuery: !showZeroBalance,
   };
 }
 
-/** Layer B：零余额过滤（balance=0 但本期有 Cr/Dr 或 Win/Loss 动账时仍显示）。 */
+/** 从未执行过任何账单的账户×币种壳行（Show all 0 balance 补全）。 */
+export function rowIsNeverTransacted(row) {
+  return txRowFlag(row?.never_transacted) || txRowFlag(row?.neverTransacted);
+}
+
+/** Layer B：零余额过滤（balance=0 但本期有已勾选类型的动账时仍显示；Payment∩WinLoss 为 OR）。 */
 export function rowPassesHideZeroBalanceFilter(showZero, row, opts = {}) {
   if (showZero) return true;
   if (!rowIsZeroBalance(row)) return true;
-  if (opts.showPaymentOnly && rowHasPeriodCrdr(row)) return true;
-  if (opts.showWinLossOnly && rowHasPeriodWinLoss(row)) return true;
-  return false;
+  const keepForPayment = opts.showPaymentOnly && rowHasPeriodCrdr(row);
+  const keepForWinLoss = opts.showWinLossOnly && rowHasPeriodWinLoss(row);
+  return keepForPayment || keepForWinLoss;
 }
 
 /**
- * Layer A + B 完整过滤（与 transaction.js applyFilters 一致）。
- * @param {object[]} rows
- * @param {{ showZero?: boolean, showPaymentOnly?: boolean, showWinLossOnly?: boolean }} opts
+ * Layer A + B 完整过滤。
+ * Show all 0 balance + Payment/WinLoss：活动账户 ∪ 从未动账账户（neverTransacted）。
+ * 同时勾选 Payment + Win/Loss：活动条件为 OR。
  */
 export function applyTransactionDisplayFilters(rows, { showZero = false, showPaymentOnly = false, showWinLossOnly = false } = {}) {
   let filtered = Array.isArray(rows) ? rows : [];
   if (showPaymentOnly || showWinLossOnly) {
     if (showPaymentOnly && showWinLossOnly) {
-      filtered = filtered.filter((row) =>
-        showZero
-          ? rowIsZeroBalance(row) || rowHasPeriodCrdr(row) || rowHasPeriodWinLoss(row)
-          : rowHasPeriodCrdr(row) || rowHasPeriodWinLoss(row),
-      );
+      filtered = filtered.filter((row) => {
+        const active = rowHasPeriodCrdr(row) || rowHasPeriodWinLoss(row);
+        if (showZero) return active || rowIsNeverTransacted(row);
+        return active;
+      });
     } else if (showPaymentOnly) {
-      filtered = filtered.filter((row) =>
-        showZero ? rowIsZeroBalance(row) || rowHasPeriodCrdr(row) : rowHasPeriodCrdr(row),
-      );
+      filtered = filtered.filter((row) => {
+        const active = rowHasPeriodCrdr(row);
+        if (showZero) return active || rowIsNeverTransacted(row);
+        return active;
+      });
     } else {
-      filtered = filtered.filter((row) =>
-        showZero ? rowIsZeroBalance(row) || rowHasPeriodWinLoss(row) : rowHasPeriodWinLoss(row),
-      );
+      filtered = filtered.filter((row) => {
+        const active = rowHasPeriodWinLoss(row);
+        if (showZero) return active || rowIsNeverTransacted(row);
+        return active;
+      });
     }
   }
   const layerBOpts = { showPaymentOnly, showWinLossOnly };
@@ -426,7 +440,8 @@ function cleanMoneyCell(value) {
   return s;
 }
 
-/** Match `js/transaction.js` calculateTotals (bf/cr_dr sum; win_loss from win_loss_full; balance = bf+wl+cr). */
+/** Match `js/transaction.js` calculateTotals (bf/cr_dr sum; win_loss from win_loss_full; balance = bf+wl+cr).
+ * Accumulate at full precision; UI footers round half-up to 2 for display only. */
 export function calculateTotals(rows) {
   let bfAcc = MoneyDecimal.toDecimal("0", 0);
   let wlAcc = MoneyDecimal.toDecimal("0", 0);
@@ -448,10 +463,10 @@ export function calculateTotals(rows) {
       /* skip */
     }
   }
-  const bfTot = MoneyDecimal.formatFixed(bfAcc.toString(), 2);
-  const wlTot = MoneyDecimal.formatFixedHalfUp(wlAcc.toString(), 2);
-  const crTot = MoneyDecimal.formatFixed(crAcc.toString(), 2);
-  const balTot = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(MoneyDecimal.add(bfTot, wlTot), crTot).toString(), 2);
+  const bfTot = MoneyDecimal.toPlainAmount(bfAcc.toString());
+  const wlTot = MoneyDecimal.toPlainAmount(wlAcc.toString());
+  const crTot = MoneyDecimal.toPlainAmount(crAcc.toString());
+  const balTot = MoneyDecimal.toPlainAmount(MoneyDecimal.add(MoneyDecimal.add(bfTot, wlTot), crTot).toString());
   return { bf: bfTot, win_loss: wlTot, cr_dr: crTot, balance: balTot };
 }
 
@@ -487,17 +502,17 @@ export function applySummaryWinLossDisplayTolerance(totals) {
   if (absWl.gt(tol)) return totals;
   const bf2 = String(totals.bf ?? "0").replace(/,/g, "").trim();
   const cr2 = String(totals.cr_dr ?? "0").replace(/,/g, "").trim();
-  const wl0 = MoneyDecimal.formatFixedHalfUp("0", 2);
-  const balance2 = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(MoneyDecimal.add(bf2, wl0), cr2).toString(), 2);
+  const wl0 = "0";
+  const balance2 = MoneyDecimal.toPlainAmount(MoneyDecimal.add(MoneyDecimal.add(bf2, wl0), cr2).toString());
   return { bf: totals.bf, win_loss: wl0, cr_dr: totals.cr_dr, balance: balance2 };
 }
 
 /** Merge left+right footer totals (each already `calculateTotals` output). */
 export function mergeTotals(leftT, rightT) {
-  const bf = MoneyDecimal.formatFixed(MoneyDecimal.add(String(leftT?.bf ?? "0"), String(rightT?.bf ?? "0")).toString(), 2);
-  const wl = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(String(leftT?.win_loss ?? "0"), String(rightT?.win_loss ?? "0")).toString(), 2);
-  const cr = MoneyDecimal.formatFixed(MoneyDecimal.add(String(leftT?.cr_dr ?? "0"), String(rightT?.cr_dr ?? "0")).toString(), 2);
-  const bal = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(MoneyDecimal.add(bf, wl), cr).toString(), 2);
+  const bf = MoneyDecimal.toPlainAmount(MoneyDecimal.add(String(leftT?.bf ?? "0"), String(rightT?.bf ?? "0")).toString());
+  const wl = MoneyDecimal.toPlainAmount(MoneyDecimal.add(String(leftT?.win_loss ?? "0"), String(rightT?.win_loss ?? "0")).toString());
+  const cr = MoneyDecimal.toPlainAmount(MoneyDecimal.add(String(leftT?.cr_dr ?? "0"), String(rightT?.cr_dr ?? "0")).toString());
+  const bal = MoneyDecimal.toPlainAmount(MoneyDecimal.add(MoneyDecimal.add(bf, wl), cr).toString());
   return { bf, win_loss: wl, cr_dr: cr, balance: bal };
 }
 

@@ -24,11 +24,33 @@ Route: `/transaction` (see `App.jsx`). Entry: `TransactionPaymentPage.jsx`.
 | First-load defaults (dates, currency selection) | `hooks/useTransactionInitialization.js` |
 | Cross-tab / localStorage list refresh | `hooks/useTransactionSync.js` |
 | PHP API calls + React Query keys | `lib/transactionApi.js`（Search/History/Meta → Spring；**PAYMENT/CLAIM/CLEAR/CONTRA/ADJUSTMENT/PROFIT/RATE Submit → Spring**；其余仍 PHP） |
-| Money/rate/date formatting (legacy-aligned) | `lib/transactionFormat.js` |
+| Money/rate/date formatting (legacy-aligned) | `lib/transactionFormat.js`（展示 round 2；提交真值见下方 Amount precision） |
 | Grid filters, totals, session keys, W/L logic | `lib/transactionPaymentLogic.js` |
 | Submit payload builders | `lib/transactionSubmitHelpers.js`（RATE：`buildRatePayload` → leg1/leg2 + 可选 Middle-Man） |
 | Excel copy with table styles | `lib/transactionExcelCopy.js` |
 | Page constants, DMY parse, script loader | `lib/transactionPaymentPageUtils.js` |
+
+## Amount precision
+
+存真值（普通 ≤6 / RATE ≤8），UI 仅 HALF_UP 到 2。完整约定见后端仓库：
+
+`Count/docs/transaction-amount-precision.md`
+
+共享实现：`../../utils/money/moneyDecimal.js`（`formatUiMoney` / `requireNormalAmount` / `requireRateAmount`）。
+
+## Show Payment / Show Win/Loss
+
+勾选后只保留**当前搜索 From–To 区间内**有对应动账的账户行（规则对称）：
+
+| 勾选 | 看的列 | balance = 0 仍出 |
+|------|--------|------------------|
+| Show Payment Only（`showPaymentOnly`） | Cr/Dr | 本期有 Cr/Dr 则出 |
+| Show Win/Loss Only（`showCaptureOnly`） | Win/Loss | 本期有 W/L 则出 |
+| **两个同时勾选** | Cr/Dr **或** Win/Loss | 任一有数据即出（**OR**） |
+| **+ Show all 0 balance** | 同上活动条件 | 再 **∪ 从未动账**账户（`never_transacted`） |
+
+完整约定：后端仓库 `Count/docs/transaction-list-payment-winloss-filters.md`  
+实现：`filterTransactionTableRows` / `rowHasPeriodCrdr` / `rowHasPeriodWinLoss` / `rowIsNeverTransacted` → `useTransactionSearch.tablePresentation`。
 
 ## Spring submit notes
 

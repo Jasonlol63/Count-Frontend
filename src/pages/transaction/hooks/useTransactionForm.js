@@ -9,12 +9,17 @@ import {
   parseRateExpression,
   buildClientRequestId,
   parseBalanceValue,
-  formatRateAmount,
+  toRatePlainAmount,
   countRateDecimalPlaces,
 } from "../lib/transactionFormat.js";
 import { buildRatePayload, toNumberLike, collectSubmitFocusAccountIds } from "../lib/transactionSubmitHelpers.js";
 import { submitTransaction, transactionQueryKeys } from "../lib/transactionApi.js";
-import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
+import {
+  MoneyDecimal,
+  RATE_AMOUNT_SCALE,
+  isWithinMaxScale,
+  requireNormalAmount,
+} from "../../../utils/money/moneyDecimal.js";
 import { resolveGridRowToAccountOption } from "../lib/transactionPaymentLogic.js";
 
 function sanitizeTransactionAmountInput(value) {
@@ -61,12 +66,8 @@ export function useTransactionForm({
   const [txType, setTxTypeRaw] = useState("CONTRA");
   const setTxType = useCallback((next) => {
     const v = String(next || "").trim().toUpperCase();
-    if (v === "RECEIVE") return;
     setTxTypeRaw(v || "CONTRA");
   }, []);
-  useEffect(() => {
-    if (txType === "RECEIVE") setTxTypeRaw("CONTRA");
-  }, [txType]);
   const [txDate, setTxDate] = useState(null);
   const [txToAccount, setTxToAccount] = useState(null);
   const [txFromAccount, setTxFromAccount] = useState(null);
@@ -177,14 +178,14 @@ export function useTransactionForm({
         if (isProfitType) {
           try {
             const absStr = MoneyDecimal.abs(String(parsedBalance)).toString();
-            amountDisplay = MoneyDecimal.formatFixedHalfUp(absStr, 2);
+            amountDisplay = MoneyDecimal.formatUiFixed(absStr);
           } catch {
             const absStr = MoneyDecimal.abs(String(balanceAttr)).toString();
-            amountDisplay = MoneyDecimal.formatFixedHalfUp(absStr, 2);
+            amountDisplay = MoneyDecimal.formatUiFixed(absStr);
           }
         } else {
           const absStr = MoneyDecimal.abs(String(parsedBalance)).toString();
-          amountDisplay = MoneyDecimal.formatFixedHalfUp(absStr, 2);
+          amountDisplay = MoneyDecimal.formatUiFixed(absStr);
         }
         amountSet = true;
       }
@@ -280,9 +281,10 @@ export function useTransactionForm({
     const finalFeeDec = baseFeeDec.plus(convertedInputAmtDec);
     let middleStr = "";
     if (!finalFeeDec.isZero()) {
-      middleStr = formatRateAmount(finalFeeDec.toString());
+      // Keep full RATE precision in state; read-only UI shows round-2.
+      middleStr = toRatePlainAmount(finalFeeDec.toString());
     } else if (finalFeeDec.isZero() && (baseFeeDec.gt(0) || !inputAmtDec.isZero())) {
-      middleStr = "0.00";
+      middleStr = "0";
     }
     setRateMiddlemanAmount(middleStr);
 
@@ -306,15 +308,15 @@ export function useTransactionForm({
         finalGrossForBackend = baseGross.plus(inputAmtDec);
       }
 
-      const grossDisplayStr = formatRateAmount(finalGrossForBackend.toString());
-      setRateToAmountGrossStr(grossDisplayStr);
+      const grossPlainStr = toRatePlainAmount(finalGrossForBackend.toString());
+      setRateToAmountGrossStr(grossPlainStr);
 
       let displayVal = finalGrossForBackend;
       if (!finalFeeDec.isZero()) {
         displayVal = displayVal.minus(finalFeeDec);
       }
       
-      setRateCurrencyToAmount(formatRateAmount(displayVal.toString()));
+      setRateCurrencyToAmount(toRatePlainAmount(displayVal.toString()));
     } catch {
       setRateCurrencyToAmount("");
       setRateToAmountGrossStr("");
@@ -349,10 +351,6 @@ export function useTransactionForm({
       pushToast(m.pleaseSelectTransactionType, "error");
       return;
     }
-    if (txType === "RECEIVE") {
-      pushToast(m.receiveTypeDisabled, "error");
-      return;
-    }
 
     if (txType === "RATE") {
       const toId = rateToAccount?.id ? String(rateToAccount.id) : "";
@@ -384,9 +382,17 @@ export function useTransactionForm({
         return;
       }
       const finalRateAmount = rateFullAmount || rateCurrencyFromAmount;
+      if (!isWithinMaxScale(finalRateAmount, RATE_AMOUNT_SCALE)) {
+        pushToast(m.amountMaxDecimalsRate, "error");
+        return;
+      }
       const fromAmt = toNumberLike(finalRateAmount);
       const toGrossRaw = String(rateToAmountGrossStr || "").trim().replace(/,/g, "");
       const toGrossStr = toGrossRaw !== "" ? toGrossRaw : String(rateCurrencyToAmount || "").trim().replace(/,/g, "");
+      if (toGrossStr && !isWithinMaxScale(toGrossStr, RATE_AMOUNT_SCALE)) {
+        pushToast(m.amountMaxDecimalsRate, "error");
+        return;
+      }
       const grossNum = toNumberLike(toGrossStr);
       if (!Number.isFinite(fromAmt) || fromAmt <= 0 || !Number.isFinite(grossNum) || grossNum <= 0) {
         pushToast(m.pleaseEnterValidCurrencyAmounts, "error");
@@ -417,8 +423,12 @@ export function useTransactionForm({
         pushToast(m.pleaseEnterMiddleManRateOrFee || m.pleaseEnterMiddleManRate, "error");
         return;
       }
-      if (hasMiddleRate && countRateDecimalPlaces(middleRateStr) > 8) {
+      if (hasMiddleRate && countRateDecimalPlaces(middleRateStr) > RATE_AMOUNT_SCALE) {
         pushToast(m.middleManRateMaxDecimals, "error");
+        return;
+      }
+      if (hasFeeInput && !isWithinMaxScale(feeInputStr, RATE_AMOUNT_SCALE)) {
+        pushToast(m.amountMaxDecimalsRate, "error");
         return;
       }
       if (hasMiddleAccount && (hasMiddleRate || hasFeeInput)) {
@@ -502,7 +512,7 @@ export function useTransactionForm({
               const ratePortion = fromAmtDec.times(MoneyDecimal.toDecimal(middleRateStr, 0));
               rateLegs.push({
                 currency: rateCurrencyTo,
-                amount: formatRateAmount(ratePortion.toString()),
+                amount: toRatePlainAmount(ratePortion.toString()),
                 toAccountId: transferToId,
                 fromAccountId: middleId,
                 winLoss: true,
@@ -513,7 +523,7 @@ export function useTransactionForm({
               // Fee: middleman-only +Win/Loss (no −WL on leg2 payer).
               rateLegs.push({
                 currency: rateCurrencyTo,
-                amount: formatRateAmount(feePortion.toString()),
+                amount: toRatePlainAmount(feePortion.toString()),
                 toAccountId: middleId,
                 winLossAdjustment: true,
               });
@@ -550,7 +560,11 @@ export function useTransactionForm({
         pushToast(res?.message || m.submitFailed, "error");
       } catch (e) {
         console.error(e);
-        pushToast(m.networkError, "error");
+        if (String(e?.message || "").includes("decimal places")) {
+          pushToast(m.amountMaxDecimalsRate, "error");
+        } else {
+          pushToast(m.networkError, "error");
+        }
       } finally {
         setSubmitting(false);
       }
@@ -600,10 +614,16 @@ export function useTransactionForm({
     }
 
     let amtDec;
+    let amountPlain;
     try {
-      amtDec = MoneyDecimal.toDecimal(cleanedAmt);
-    } catch {
-      pushToast(m.pleaseEnterValidAmount, "error");
+      amountPlain = requireNormalAmount(cleanedAmt, "Amount");
+      amtDec = MoneyDecimal.toDecimal(amountPlain);
+    } catch (err) {
+      if (String(err?.message || "").includes("decimal places")) {
+        pushToast(m.amountMaxDecimalsNormal, "error");
+      } else {
+        pushToast(m.pleaseEnterValidAmount, "error");
+      }
       return;
     }
 
@@ -634,7 +654,7 @@ export function useTransactionForm({
         transaction_type: txType,
         account_id: toId,
         from_account_id: isAdjustment ? "" : fromId || "",
-        amount: finalAmount,
+        amount: amountPlain,
         transaction_date: txDate,
         description: "",
         sms: txRemark,

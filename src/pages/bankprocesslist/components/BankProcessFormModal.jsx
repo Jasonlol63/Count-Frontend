@@ -16,6 +16,7 @@ import {
   formatBankMoneyFixed2,
   sanitizeBankMoneyTyping,
 } from "../lib/bankProcessHelpers.js";
+import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
 
 export default function BankProcessFormModal({
   editMode,
@@ -59,8 +60,13 @@ export default function BankProcessFormModal({
       setForm((prev) => (prev[field] === "" ? prev : { ...prev, [field]: "" }));
       return;
     }
-    const formatted = formatBankMoneyFixed2(raw, { emptyAsZero: false });
-    setForm((prev) => (prev[field] === formatted ? prev : { ...prev, [field]: formatted }));
+    try {
+      // Store plain ≤6 dp (no round-to-2); list/UI cells still display half-up 2.
+      const plain = MoneyDecimal.requireNormalAmount(raw, "Amount");
+      setForm((prev) => (prev[field] === plain ? prev : { ...prev, [field]: plain }));
+    } catch {
+      // Keep typed value if over scale / invalid — submit validation will catch.
+    }
   };
 
   const removeProfitSharingAt = (idx) => {

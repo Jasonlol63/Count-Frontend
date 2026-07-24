@@ -1075,7 +1075,7 @@ body.dashboard-page.maintenance-page .bankprocess-maintenance-page-root .mainten
 .bankprocess-maintenance-page-root .bankprocess-virtual-data-row {
     display: grid;
     grid-template-columns:
-        minmax(28px, 3fr) minmax(88px, 8fr) minmax(52px, 6.5fr) minmax(72px, 13.5fr) minmax(72px, 8.5fr) minmax(120px, 26.5fr) minmax(64px, 9fr) minmax(56px, 8fr) minmax(40px, 6fr);
+        minmax(28px, 3fr) minmax(88px, 8fr) minmax(52px, 6.5fr) minmax(72px, 13.5fr) minmax(72px, 8.5fr) minmax(120px, 26.5fr) minmax(64px, 9fr) minmax(56px, 8fr) minmax(80px, 13fr) minmax(40px, 6fr);
     align-items: stretch;
     width: 100%;
     box-sizing: border-box;

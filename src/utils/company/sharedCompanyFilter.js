@@ -4,6 +4,7 @@
  *
  * Login scope rules: see `loginScope.js` and `includes/group_company_access.php`.
  */
+import { sessionHasTenantBank } from "../auth/sessionTenant.js";
 import { buildApiUrl } from "../core/apiUrl.js";
 import { stripPrivateQueryFromBrowserUrl } from "../routing/privateBrowserUrl.js";
 import { pathnameIs } from "../routing/pageRoutes.js";
@@ -1311,7 +1312,7 @@ export function shouldShowBankprocessMaintenanceInSidebar(me) {
     const flags = resolveGroupCategoryFlagsForSidebar(sidebarGroup, { includeBank: true });
     return Boolean(flags?.hasBank);
   }
-  return Boolean(me?.company_has_bank);
+  return sessionHasTenantBank(me);
 }
 
 /** In-memory cache so report/maintenance remounts do not re-block on companies API. */

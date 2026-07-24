@@ -35,6 +35,7 @@ export function normalizeSpringSearchToGrid(data) {
       has_period_id_product_rows: row.hasWinLossInPeriod || row.hasCrDrInPeriod ? 1 : 0,
       is_alert: 0,
       is_rate_middleman: 0,
+      never_transacted: row.neverTransacted ? 1 : 0,
     };
 
     if (MoneyDecimal.cmp(gridRow.balance, "0") < 0) {
@@ -76,7 +77,14 @@ function emptyGrid() {
   };
 }
 
-export function buildSpringSearchRequest({ companyId, dateFrom, dateTo, currencyCodes, categories } = {}) {
+export function buildSpringSearchRequest({
+  companyId,
+  dateFrom,
+  dateTo,
+  currencyCodes,
+  categories,
+  showAllZeroBalance = false,
+} = {}) {
   const tenantId = Number(companyId);
   if (!Number.isFinite(tenantId) || tenantId <= 0) {
     throw new Error("tenantIdRequired");
@@ -91,5 +99,6 @@ export function buildSpringSearchRequest({ companyId, dateFrom, dateTo, currency
     categories: Array.isArray(categories)
       ? categories.map((c) => String(c || "").trim().toUpperCase()).filter(Boolean)
       : [],
+    showAllZeroBalance: !!showAllZeroBalance,
   };
 }

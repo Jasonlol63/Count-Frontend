@@ -1,7 +1,8 @@
 import React from "react";
 import ProcessModalPortal, { processModalBackdropStyle } from "../../../components/ProcessModalPortal.jsx";
 import { BankSearchableAccountPick } from "./bankProcessFormFields.jsx";
-import { formatBankMoneyFixed2, sanitizeBankMoneyTyping } from "../lib/bankProcessHelpers.js";
+import { sanitizeBankMoneyTyping } from "../lib/bankProcessHelpers.js";
+import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
 
 function ProfitSharingAddIcon() {
   return (
@@ -39,8 +40,12 @@ export default function ProfitSharingModal({
       setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, amount: "" } : r)));
       return;
     }
-    const formatted = formatBankMoneyFixed2(trimmed, { emptyAsZero: false });
-    setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, amount: formatted } : r)));
+    try {
+      const plain = MoneyDecimal.requireNormalAmount(trimmed, "Amount");
+      setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, amount: plain } : r)));
+    } catch {
+      // Keep typed value if over scale / invalid — submit validation will catch.
+    }
   };
 
   const removeRow = (idx) => {

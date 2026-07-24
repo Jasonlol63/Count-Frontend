@@ -333,7 +333,6 @@ export async function searchTransactions({
   void subsidiaryAccountsOnly;
   void showInactive;
   void showCaptureOnly;
-  void hideZeroBalance;
   void typeSearch;
   void typeAccountIds;
   void typeSearchFormType;
@@ -345,6 +344,8 @@ export async function searchTransactions({
       dateTo,
       currencyCodes,
       categories,
+      // hideZeroBalance=false → Show all 0 balance ON → include never-transacted shells
+      showAllZeroBalance: !hideZeroBalance,
     });
     const res = await fetch(buildApiUrl("api/transaction/search"), {
       method: "POST",

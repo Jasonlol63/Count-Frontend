@@ -7,7 +7,7 @@
 | `core/` | `apiUrl.js`, `injectStylesheet.js`, `unsetWindowProperty.js` | SPA paths, static CSS, legacy `window` cleanup |
 | `i18n/` | `useLoginLang.js` | EN/中 toggle sync |
 | `date/` | `dateUtils.js`, `dateRangePicker.js` | DMY/YMD parsing; shared calendar (`ensureMaintenanceDateRangePicker`) |
-| `money/` | `decimalEngine.js`, `moneyDecimal.js` | Decimal.js config + `MoneyDecimal` |
+| `money/` | `decimalEngine.js`, `moneyDecimal.js` | Decimal.js + `MoneyDecimal`（存真值 / UI round 2；见仓库 `docs/transaction-amount-precision.md`） |
 | `company/` | `sharedCompanyFilter.js`, `companySessionEvents.js` | Group/company filter session + `notifyCompanySessionUpdated` |
 | `dashboard/` | `dashboardMerge.js`, `frankfurterRates.js` | Transaction dashboard only |
 | `maintenance/` | `maintenanceStylesheets.js` | Maintenance sub-page CSS swap |

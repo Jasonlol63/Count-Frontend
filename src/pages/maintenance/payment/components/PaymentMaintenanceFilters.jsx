@@ -46,9 +46,10 @@ export default function PaymentMaintenanceFilters({
     () => [
       { value: "CONTRA", label: "CONTRA" },
       { value: "PAYMENT", label: "PAYMENT" },
-      { value: "RECEIVE", label: "RECEIVE" },
       { value: "CLAIM", label: "CLAIM" },
+      { value: "CLEAR", label: "CLEAR" },
       { value: "ADJUSTMENT", label: "ADJUSTMENT" },
+      { value: "PROFIT", label: "PROFIT" },
       { value: "RATE", label: "RATE" },
     ],
     [],

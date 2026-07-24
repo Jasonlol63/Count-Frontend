@@ -26,11 +26,11 @@ import BankprocessMaintenanceFilters from "./components/BankprocessMaintenanceFi
 import BankprocessMaintenanceTable from "./components/BankprocessMaintenanceTable.jsx";
 import MaintenanceDeleteConfirmModal from "../shared/MaintenanceDeleteConfirmModal.jsx";
 import { useAuthSession } from "../../../context/AuthSessionContext.jsx";
+import { sessionHasTenantBank } from "../../../utils/auth/sessionTenant.js";
 import { fetchOwnerCompaniesAll } from "../../../utils/company/sharedCompanyFilter.js";
 import {
   deleteBankprocessData,
   fetchCompanyCurrencies,
-  fetchCompanyPermissions,
   formatDmy,
   isBankprocessMaintenanceRowSelectable,
   searchBankprocessData,
@@ -68,8 +68,6 @@ export default function BankprocessMaintenancePage() {
   const [companyId, setCompanyId] = useState(null);
   const [companyCode, setCompanyCode] = useState("");
   const [selectedGroup, setSelectedGroup] = useState(null);
-  const [permissions, setPermissions] = useState([]);
-  const [selectedPermission, setSelectedPermission] = useState("");
   const [currencies, setCurrencies] = useState([]);
   /** true = omit currency API param — all company currencies */
   const [allCurrenciesSelected, setAllCurrenciesSelected] = useState(false);
@@ -158,7 +156,7 @@ export default function BankprocessMaintenancePage() {
         const userPerms = Array.isArray(user.permissions) ? user.permissions : [];
         const hasFull = userPerms.length === 0;
         const canMaintenance = hasFull || userPerms.includes("maintenance");
-        if (!canMaintenance || !user.company_has_bank) {
+        if (!canMaintenance || !sessionHasTenantBank(user)) {
           navigate(spaPath("dashboard"), { replace: true });
           return;
         }
@@ -194,15 +192,7 @@ export default function BankprocessMaintenancePage() {
         const code = currentComp?.company_id || "";
 
         // Fetch initial metadata here to ensure the first query starts with the correct selectedPermission
-        const [perms, currencyList] = await Promise.all([
-          fetchCompanyPermissions(code),
-          fetchCompanyCurrencies(initialCompanyId).catch(() => [])
-        ]);
-
-        setPermissions(perms);
-        const savedPerm = localStorage.getItem(`selectedPermission_${code}`);
-        if (savedPerm && perms.includes(savedPerm)) setSelectedPermission(savedPerm);
-        else setSelectedPermission(perms[0] || "");
+        const currencyList = await fetchCompanyCurrencies(initialCompanyId).catch(() => []);
 
         setCurrencies(currencyList);
         if (currencyList.length === 0) {
@@ -266,13 +256,6 @@ export default function BankprocessMaintenancePage() {
     let cancelled = false;
     setCurrenciesReady(false);
     (async () => {
-      const perms = await fetchCompanyPermissions(companyCode);
-      if (cancelled) return;
-      setPermissions(perms);
-      const saved = localStorage.getItem(`selectedPermission_${companyCode}`);
-      if (saved && perms.includes(saved)) setSelectedPermission(saved);
-      else setSelectedPermission(perms[0] || "");
-
       const currencyList = await fetchCompanyCurrencies(companyId).catch(() => []);
       if (cancelled) return;
       setCurrencies(currencyList);
@@ -323,7 +306,7 @@ export default function BankprocessMaintenancePage() {
       const data = await searchBankprocessData({
         dateFrom,
         dateTo,
-        companyId,
+        tenantId: searchCompanyId,
         currencyCodes: selectedCurrencies,
         allCurrencies: allCurrenciesSelected,
         query,
@@ -341,7 +324,7 @@ export default function BankprocessMaintenancePage() {
         if (data.length > 0) {
           notify(t("foundRecords", { n: data.length }), "success");
         } else {
-          const dedupeKey = `${searchCompanyId}|${dateFrom}|${dateTo}|${currencyKey}|${selectedPermission}|${query}|empty`;
+          const dedupeKey = `${searchCompanyId}|${dateFrom}|${dateTo}|${currencyKey}|${query}|empty`;
           if (consumeNoDataToastDedupeKey(dedupeKey)) {
             notify(t("noDataAdjustSearch"), "info");
           }
@@ -372,7 +355,6 @@ export default function BankprocessMaintenancePage() {
     currenciesReady,
     allCurrenciesSelected,
     selectedCurrencies,
-    selectedPermission,
     query,
     notify,
     t,
@@ -393,7 +375,6 @@ export default function BankprocessMaintenancePage() {
     selectedCurrencies,
     dateFrom,
     dateTo,
-    selectedPermission,
     query,
     performSearch,
   ]);
@@ -404,11 +385,6 @@ export default function BankprocessMaintenancePage() {
     },
     [],
   );
-
-  useEffect(() => {
-    if (!selectedPermission || !companyCode) return;
-    localStorage.setItem(`selectedPermission_${companyCode}`, selectedPermission);
-  }, [selectedPermission, companyCode]);
 
   const followGroupRef = useRef(() => {});
 
@@ -561,8 +537,13 @@ export default function BankprocessMaintenancePage() {
 
   const onConfirmDelete = async () => {
     setIsDeleteModalOpen(false);
+    const tid = Number(companyId);
+    if (!Number.isFinite(tid) || tid <= 0) {
+      notify(t("deleteFailed"), "error");
+      return;
+    }
     try {
-      const result = await deleteBankprocessData(selectedIds);
+      await deleteBankprocessData(selectedIds, tid);
       notifyTransactionListInvalidated("bankprocess_maintenance_delete");
       notify(t("successfullyDeletedBankProcessN", { n: selectedIds.length }), "success");
       setSelectedIds([]);
@@ -583,9 +564,6 @@ export default function BankprocessMaintenancePage() {
   return (
     <div className="bankprocess-maintenance-page-root container">
       <BankprocessMaintenanceFilters
-        permissions={permissions}
-        selectedPermission={selectedPermission}
-        setSelectedPermission={setSelectedPermission}
         dateFrom={dateFrom}
         dateTo={dateTo}
         setDateFrom={setDateFrom}

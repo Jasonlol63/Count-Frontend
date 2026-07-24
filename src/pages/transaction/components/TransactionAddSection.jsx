@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import SimpleSelect from "../../../components/SimpleSelect.jsx";
 import AccountSelect from "./AccountSelect.jsx";
 import { assetUrl } from "../../../utils/core/apiUrl.js";
+import { formatRateAmount } from "../lib/transactionFormat.js";
 
 const TX_TYPE_OPTIONS = [
   "CONTRA",
@@ -330,7 +331,7 @@ export default function TransactionAddSection({
               placeholder={m.amount}
               readOnly
               disabled={mutationsBlocked}
-              value={rateCurrencyToAmount}
+              value={rateCurrencyToAmount === "" ? "" : formatRateAmount(rateCurrencyToAmount)}
               aria-label={m.toAccount}
             />
           </div>
@@ -421,7 +422,7 @@ export default function TransactionAddSection({
               placeholder={m.amount}
               readOnly
               disabled={mutationsBlocked}
-              value={rateMiddlemanAmount}
+              value={rateMiddlemanAmount === "" ? "" : formatRateAmount(rateMiddlemanAmount)}
               aria-label={m.middleMan}
             />
           </div>

@@ -913,30 +913,6 @@ export default function FormulaMaintenancePage() {
 
   followGroupRef.current = () => {};
 
-  const handlePermissionSwitch = (p) => {
-    startTransition(() => {
-      setActivePermission(p);
-    });
-    const permCode =
-      companyCode ||
-      (selectedGroup ? companiesNativeInGroupList(companies, selectedGroup)[0]?.company_id : "") ||
-      "";
-    if (permCode) localStorage.setItem(`selectedPermission_${permCode}`, p);
-    setSelectedProcess(null);
-    clearFormulaList();
-    lastSearchQueryKeyRef.current = "";
-    setConfirmDelete(false);
-    void (async () => {
-      try {
-        const procList = await fetchProcesses(companyId, formulaScope, p);
-        setProcesses(procList);
-      } catch (err) {
-        console.error("Process list load error:", err);
-        notify(err.message || t("failedLoadProcesses"), "error");
-      }
-    })();
-  };
-
   const handleSetSelectedProcess = useCallback(
     (value) => {
       if (value === null || value === undefined) {
@@ -1142,26 +1118,6 @@ export default function FormulaMaintenancePage() {
 
   return (
     <div className="container">
-      {permissions.length > 1 ? (
-      <div className="maintenance-header">
-          <div id="maintenance-permission-filter" className="maintenance-permission-filter-header">
-            <span className="maintenance-company-label">{m.category}</span>
-            <div id="maintenance-permission-buttons" className="maintenance-company-buttons">
-              {permissions.map(p => (
-                <button 
-                  key={p} 
-                  type="button" 
-                  className={`maintenance-company-btn ${p === activePermission ? 'active' : ''}`}
-                  onClick={() => handlePermissionSwitch(p)}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-      </div>
-      ) : null}
-
       <div className="formula-maintenance-page-root">
       <FormulaMaintenanceFilters 
         processes={processes}
