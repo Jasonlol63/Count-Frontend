@@ -52,9 +52,8 @@ export const PROCESS_LIST_I18N = {
     noColumn: "No",
     description: "Description",
     status: "Status",
-    statusActive: "ACTIVE",
-    statusInactive: "INACTIVE",
-    statusWaiting: "WAITING",
+    statusActive: "Active",
+    statusInactive: "Inactive",
     currencyColumn: "Currency",
     dayUse: "Day Use",
     action: "Action",
@@ -181,7 +180,6 @@ export const PROCESS_LIST_I18N = {
     status: "状态",
     statusActive: "启用",
     statusInactive: "停用",
-    statusWaiting: "等待",
     currencyColumn: "货币",
     dayUse: "使用日期",
     action: "操作",
@@ -274,13 +272,12 @@ const PROCESS_DAY_NAME_KEYS = {
   SUNDAY: "daySunday",
 };
 
-/** Process list table: localized status badge */
+/** Process list table: localized status badge (backend enum ACTIVE | INACTIVE only). */
 export function formatProcessStatusDisplay(t, status) {
-  const s = String(status || "").trim().toLowerCase();
-  if (s === "active") return t("statusActive");
-  if (s === "inactive") return t("statusInactive");
-  if (s === "waiting") return t("statusWaiting");
-  return String(status || "").toUpperCase();
+  const s = String(status || "").trim().toUpperCase();
+  if (s === "ACTIVE") return t("statusActive");
+  if (s === "INACTIVE") return t("statusInactive");
+  return String(status || "").trim();
 }
 
 /** Process list table: localized day-use column (MON,TUE → 周一,周二) */

@@ -2,6 +2,198 @@ import { excludeGroupLabelsFromCompanyPicker } from "../../utils/company/sharedC
 import { parseRemoveWordChips, serializeRemoveWordChips } from "../../lib/removeWordChips.js";
 import { notifyTransactionListInvalidated } from "../transaction/lib/transactionPaymentLogic.js";
 
+/** Spring `process_day.day_of_week`: 1=Mon … 7=Sun — form checkbox ids. */
+export const PROCESS_WEEKDAY_OPTIONS = [
+  { id: 1, dayOfWeek: 1, day_name: "MON" },
+  { id: 2, dayOfWeek: 2, day_name: "TUE" },
+  { id: 3, dayOfWeek: 3, day_name: "WED" },
+  { id: 4, dayOfWeek: 4, day_name: "THU" },
+  { id: 5, dayOfWeek: 5, day_name: "FRI" },
+  { id: 6, dayOfWeek: 6, day_name: "SAT" },
+  { id: 7, dayOfWeek: 7, day_name: "SUN" },
+];
+
+const DAY_OF_WEEK_LABELS = ["", "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+
+/** Spring Process.Status — store/compare as ACTIVE | INACTIVE (backend enum). */
+export function normalizeProcessStatusKey(raw) {
+  const s = String(raw ?? "").trim().toUpperCase();
+  if (s === "ACTIVE" || s === "INACTIVE") return s;
+  return s || "ACTIVE";
+}
+
+export function isProcessStatusActive(status) {
+  return normalizeProcessStatusKey(status) === "ACTIVE";
+}
+
+export function isProcessStatusInactive(status) {
+  return normalizeProcessStatusKey(status) === "INACTIVE";
+}
+
+export function formatProcessDescriptionLabel(processDescriptions) {
+  const list = Array.isArray(processDescriptions) ? processDescriptions : [];
+  return list
+    .map((d) => String(d?.name ?? "").trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+export function formatProcessDayUseLabel(processDays) {
+  const list = Array.isArray(processDays) ? processDays : [];
+  return list
+    .map((d) => {
+      const n = Number(d?.dayOfWeek ?? d?.day_of_week);
+      return n >= 1 && n <= 7 ? DAY_OF_WEEK_LABELS[n] : "";
+    })
+    .filter(Boolean)
+    .join(",");
+}
+
+export function dayUseIdsFromListRow(row) {
+  const days = row?.processDays ?? row?.process_days ?? [];
+  return (Array.isArray(days) ? days : [])
+    .map((d) => String(d?.dayOfWeek ?? d?.day_of_week ?? ""))
+    .filter((v) => v && Number(v) >= 1 && Number(v) <= 7);
+}
+
+/** Spring `ProcessDTO` list row → table + edit payload (Games / category=GAME). */
+export function normalizeProcessListItem(item) {
+  if (!item || typeof item !== "object") return null;
+
+  const proc = item.process ?? item;
+  const category = String(proc.category ?? item.category ?? "GAME").trim().toUpperCase();
+  if (category === "BANK") return null;
+
+  const id = proc.id ?? item.id;
+  if (id == null) return null;
+
+  const processDescriptions = item.processDescriptions ?? item.process_descriptions ?? [];
+  const processDays = item.processDays ?? item.process_days ?? [];
+  const status = normalizeProcessStatusKey(proc.status ?? item.status ?? "ACTIVE");
+
+  return {
+    id,
+    tenantId: proc.tenantId ?? item.tenantId ?? item.tenant_id ?? null,
+    category,
+    process_name: String(proc.code ?? item.code ?? "").trim(),
+    description: formatProcessDescriptionLabel(processDescriptions),
+    description_name: processDescriptions[0]?.name ?? "",
+    status,
+    currency: String(item.currencyCode ?? item.currency_code ?? "").trim(),
+    currencyId: proc.currencyId ?? item.currencyId ?? item.currency_id ?? null,
+    day_use: formatProcessDayUseLabel(processDays),
+    processDescriptions,
+    processDays,
+    remove_word: proc.removeWord ?? item.removeWord ?? item.remove_word ?? "",
+    replace_word_from: proc.replaceWordFrom ?? item.replaceWordFrom ?? item.replace_word_from ?? "",
+    replace_word_to: proc.replaceWordTo ?? item.replaceWordTo ?? item.replace_word_to ?? "",
+    remark: proc.remark ?? item.remark ?? "",
+    created_by: proc.createdBy ?? item.createdBy ?? item.created_by ?? "",
+    updated_by: proc.updatedBy ?? item.updatedBy ?? item.updated_by ?? "",
+    dts_created: proc.createdAt ?? item.createdAt ?? item.created_at ?? "",
+    dts_modified: proc.updatedAt ?? item.updatedAt ?? item.updated_at ?? "",
+    has_transactions: false,
+  };
+}
+
+export function normalizeProcessListRows(data) {
+  if (!Array.isArray(data)) return [];
+  return data.map(normalizeProcessListItem).filter(Boolean);
+}
+
+/** Client-side list filters (Spring list has no search/status query params yet). */
+export function applyProcessListFilters(rows, { search = "", showInactive = false, showAll = false } = {}) {
+  let list = Array.isArray(rows) ? [...rows] : [];
+  const q = String(search || "").trim().toUpperCase();
+  if (q) {
+    list = list.filter((r) => {
+      const hay = `${r.process_name || ""} ${r.description || ""}`.toUpperCase();
+      return hay.includes(q);
+    });
+  }
+  if (showAll && showInactive) {
+    return list.filter((r) => isProcessStatusInactive(r.status));
+  }
+  if (showAll) {
+    return list.filter((r) => isProcessStatusActive(r.status));
+  }
+  if (showInactive) {
+    return list.filter((r) => isProcessStatusInactive(r.status));
+  }
+  return list.filter((r) => isProcessStatusActive(r.status));
+}
+
+export function existingProcessesFromListRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((r) => ({
+    id: r.id,
+    process_id: r.id,
+    process_name: r.process_name,
+    description_name: r.description_name || String(r.description || "").split(",")[0]?.trim() || "",
+  }));
+}
+
+export function buildCopyFromFormPatchFromRow(row, { currencies = [], descriptions = [] } = {}) {
+  if (!row) return emptyCopyFromSyncFields();
+  return buildCopyFromFormPatch(
+    {
+      currency_id: row.currencyId,
+      currency_code: row.currency,
+      remove_word: row.remove_word,
+      replace_word_from: row.replace_word_from,
+      replace_word_to: row.replace_word_to,
+      remark: row.remark,
+      day_use: row.day_use,
+      description_name: row.description_name || String(row.description || "").split(",")[0]?.trim(),
+      description_names: (row.processDescriptions || []).map((d) => d.name).filter(Boolean),
+    },
+    { currencies, descriptions },
+  );
+}
+
+export function buildEditFormFromListRow(row, descriptionsList, { existingProcesses = [] } = {}) {
+  if (!row) return { ...EMPTY_FORM, existingProcesses };
+
+  let currencyId = row.currencyId != null ? String(row.currencyId) : "";
+  const selectedDescriptions = buildEditDescriptionSelection(
+    {
+      description_names: (row.processDescriptions || []).map((d) => d.name).filter(Boolean),
+      description_name: row.description_name,
+      description_id: row.processDescriptions?.[0]?.id,
+    },
+    descriptionsList,
+  );
+
+  const dtsModified = row.dts_modified || "";
+  const dtsCreated = row.dts_created || "";
+  let displayModifiedDate = "";
+  let displayModifiedBy = "";
+  if (dtsModified && dtsModified !== dtsCreated) {
+    displayModifiedDate = dtsModified;
+    displayModifiedBy = row.updated_by || "";
+  }
+
+  return {
+    id: String(row.id),
+    process_name: row.process_name || "",
+    selected_descriptions: selectedDescriptions,
+    currency_id: currencyId,
+    day_use: dayUseIdsFromListRow(row),
+    remove_word: serializeRemoveWordChips(parseRemoveWordChips(row.remove_word || "")),
+    replace_word_from: row.replace_word_from || "",
+    replace_word_to: row.replace_word_to || "",
+    remark: parseRemarkForForm(row.remark),
+    status: normalizeProcessStatusKey(row.status),
+    dts_modified: dtsModified,
+    modified_by: row.updated_by || "",
+    dts_created: dtsCreated,
+    created_by: row.created_by || "",
+    dts_modified_display: displayModifiedDate,
+    dts_modified_user_display: displayModifiedBy,
+    currency_warning: null,
+    existingProcesses,
+  };
+}
+
 export const PAGE_SIZE = 25;
 
 /** Description 名称：输入与保存统一大写 */
@@ -28,7 +220,7 @@ export const EMPTY_FORM = {
   replace_word_from: "",
   replace_word_to: "",
   remark: "",
-  status: "active",
+  status: "ACTIVE",
   dts_modified: "",
   modified_by: "",
   dts_created: "",
@@ -43,14 +235,19 @@ export function normalizeRows(data) {
   return Array.isArray(data) ? data : [];
 }
 
-/** Drop all cached process-list slices for one company (after add/edit/delete). */
-export function invalidateProcessListCompanyCache(cacheRef, companyId) {
-  const cid = Number(companyId);
-  if (!Number.isFinite(cid) || cid <= 0 || !cacheRef?.current) return;
-  const prefix = `company:${cid}|`;
+/** Drop all cached process-list slices for one tenant (after add/edit/delete). */
+export function invalidateProcessListTenantCache(cacheRef, tenantId) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0 || !cacheRef?.current) return;
+  const prefix = `tenant:${tid}|`;
   for (const key of cacheRef.current.keys()) {
     if (key.startsWith(prefix)) cacheRef.current.delete(key);
   }
+}
+
+/** @deprecated Use {@link invalidateProcessListTenantCache}. */
+export function invalidateProcessListCompanyCache(cacheRef, tenantId) {
+  invalidateProcessListTenantCache(cacheRef, tenantId);
 }
 
 /** Minimal table rows so the list updates immediately after addprocess_api succeeds. */
@@ -68,7 +265,7 @@ export function buildOptimisticProcessRows(created, form, { currencies = [], day
     id: row.id,
     process_name: row.process_id,
     description: descById.get(String(row.description_id)) || descriptions[0]?.name || "",
-    status: "active",
+    status: "ACTIVE",
     currency: currency?.code || "",
     day_use: dayNames,
     has_transactions: false,
@@ -126,20 +323,25 @@ export function processListCacheHasEntry(cached) {
 /**
  * Process list API scope: in ungrouped mode only independent companies (no group_id) may load rows.
  */
-export function resolveProcessListActiveCompanyId(
-  companyId,
-  companies,
+export function resolveProcessListActiveTenantId(
+  tenantId,
+  tenants,
   { groupFilterKind = "follow", groupIds = [] } = {},
 ) {
-  const id = Number(companyId);
+  const id = Number(tenantId);
   if (!Number.isFinite(id) || id <= 0) return null;
   if (groupFilterKind !== "ungrouped") return id;
 
   const buttons = filterProcessPageCompanyButtons(
-    dedupeCompanyRowsForSwitcher(companies, id),
+    dedupeCompanyRowsForSwitcher(tenants, id),
     { groupFilterKind: "ungrouped", groupIds, selectedGroupKey: "" },
   );
   return buttons.some((c) => Number(c.id) === id) ? id : null;
+}
+
+/** @deprecated Use {@link resolveProcessListActiveTenantId}. */
+export function resolveProcessListActiveCompanyId(tenantId, tenants, opts) {
+  return resolveProcessListActiveTenantId(tenantId, tenants, opts);
 }
 
 /** Process / Bank Process company pills: in-group list without group labels (AP, IG, …). */
@@ -244,9 +446,11 @@ export function sortProcessTableRows(rows, sortColumn, sortDirection) {
     );
   } else if (sortColumn === "status") {
     sortPrimary((a, b) =>
-      String(a.status || "")
-        .toLowerCase()
-        .localeCompare(String(b.status || "").toLowerCase(), undefined, { sensitivity: "base" }),
+      normalizeProcessStatusKey(a.status).localeCompare(
+        normalizeProcessStatusKey(b.status),
+        undefined,
+        { sensitivity: "base" },
+      ),
     );
   } else if (sortColumn === "currency") {
     sortPrimary((a, b) =>
@@ -337,7 +541,9 @@ export function parseRemarkForForm(remarks) {
 
 export function buildEditDescriptionSelection(p, descriptionsList) {
   let names = [];
-  if (Array.isArray(p.description_names) && p.description_names.length > 0) {
+  if (Array.isArray(p.descriptionNames) && p.descriptionNames.length > 0) {
+    names = p.descriptionNames.map((x) => String(x).trim()).filter(Boolean);
+  } else if (Array.isArray(p.description_names) && p.description_names.length > 0) {
     names = p.description_names.map((x) => String(x).trim()).filter(Boolean);
   } else if (p.description_names && typeof p.description_names === "string") {
     names = p.description_names

@@ -165,7 +165,18 @@ export async function populateSummaryRowsPure({
             processId,
             captureId,
           });
-  const { templates, subsByParent } = await fetchTemplates();
+
+  let templates = {};
+  let subsByParent = null;
+  try {
+    const loaded = await fetchTemplates();
+    templates = loaded?.templates && typeof loaded.templates === "object" ? loaded.templates : {};
+    subsByParent =
+      loaded?.subsByParent && typeof loaded.subsByParent === "object" ? loaded.subsByParent : null;
+  } catch (error) {
+    console.warn("Summary templates unavailable — showing Id Product rows only", error);
+    return rows;
+  }
 
   const suppressed = freshFromCapture ? new Set() : loadSuppressedRowKeys();
   const appliedMainKeys = new Set();

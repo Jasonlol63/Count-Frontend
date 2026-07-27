@@ -43,6 +43,8 @@ import { pushDataCaptureNotification } from "../lib/dataCaptureNotify.js";
 import { translateDataCaptureMessage } from "../../../translateFile/pages/dataCaptureTranslate.js";
 import { markSummaryFreshNavigation } from "../../datacapturesummary/lib/summaryStorage.js";
 import { dataCaptureScopeLedgerCompanyId } from "../lib/dataCaptureScope.js";
+import { resolveDataCaptureTenantId } from "../lib/dataCaptureTenant.js";
+import { saveBankCaptureDraft } from "../lib/dataCaptureSpringApi.js";
 import { prefetchRouteModule } from "../../../utils/routing/routePrefetch.js";
 import { prefetchSummaryPopulateData } from "../../datacapturesummary/lib/summaryPrefetch.js";
 import { useDataCaptureContext } from "../context/DataCaptureContext.jsx";
@@ -57,13 +59,23 @@ import {
   unregisterDataCaptureRuntime,
 } from "../lib/dataCaptureRuntime.js";
 
-function buildProcessCapturePayload(form, captureType, currencies, selectedDescriptions) {
+function buildProcessCapturePayload(form, captureType, currencies, selectedDescriptions, captureScope, options = {}) {
   const currencyOpt = (currencies || []).find((c) => String(c.id) === String(form.currencyId));
+  const proc = form.selectedProcess;
+  const processCode = String(proc?.processId ?? proc?.process_id ?? "").trim().toUpperCase();
+  const processDisplay =
+    String(proc?.displayText || "").trim() ||
+    processCode ||
+    (proc?.id != null ? String(proc.id) : "");
+  const tenantId = resolveDataCaptureTenantId(captureScope);
+  const category = options.category === "BANK" ? "BANK" : options.category === "GAME" ? "GAME" : null;
   return {
     date: form.captureDate,
-    process: form.selectedProcess?.id,
-    processName: form.selectedProcess?.displayText || "",
-    processCode: form.selectedProcess?.process_id || "",
+    tenantId,
+    category,
+    process: proc?.id,
+    processName: processDisplay,
+    processCode,
     dataCaptureType: captureType,
     descriptions: getActiveDescriptions(form.descriptionDisplay, selectedDescriptions),
     currency: form.currencyId,
@@ -105,6 +117,9 @@ export function useDataCaptureSubmitReset({
   const captureTypeRef = useRef(captureType);
   captureTypeRef.current = captureType;
 
+  /** Bank payroll UI (C168 / bank-only / group ledger) or Bank category permission. */
+  const isBankCaptureMode = Boolean(groupPayrollUi || selectedPermission === "Bank");
+
   const recomputeSubmitState = useCallback(() => {
     const activeCaptureType = captureTypeRef.current;
     const tableData = captureTableSnapshot(activeCaptureType, gridRef.current);
@@ -125,11 +140,19 @@ export function useDataCaptureSubmitReset({
       currencyId: form.currencyId,
       captureType: activeCaptureType,
       tableData,
-      requireDescriptions,
-      requireTableData: groupPayrollUi,
+      requireDescriptions: isBankCaptureMode ? false : requireDescriptions,
+      requireTableData: isBankCaptureMode,
     });
     setSubmitDisabled(!ready);
-  }, [form.selectedProcess, form.currencyId, form.descriptionDisplay, requireDescriptions, groupPayrollUi, selectedDescriptions, gridRef]);
+  }, [
+    form.selectedProcess,
+    form.currencyId,
+    form.descriptionDisplay,
+    requireDescriptions,
+    isBankCaptureMode,
+    selectedDescriptions,
+    gridRef,
+  ]);
 
   useEffect(() => {
     recomputeSubmitState();
@@ -156,8 +179,8 @@ export function useDataCaptureSubmitReset({
       currencyId: form.currencyId,
       captureType: activeCaptureType,
       tableData,
-      requireDescriptions,
-      requireTableData: groupPayrollUi,
+      requireDescriptions: isBankCaptureMode ? false : requireDescriptions,
+      requireTableData: isBankCaptureMode,
     });
     if (!validation.ok) {
       pushDataCaptureNotification(translateDataCaptureMessage(localStorage.getItem("login_lang") === "zh" ? "zh" : "en", validation.message), "danger");
@@ -176,25 +199,42 @@ export function useDataCaptureSubmitReset({
     setIsSubmitting(true);
     prefetchRouteModule("/datacapturesummary");
     try {
-      const processData = buildProcessCapturePayload(form, activeCaptureType, form.currencies, selectedDescriptions);
-      const isBankCategoryMode = selectedPermission === "Bank";
-      if ((groupPayrollUi || isBankCategoryMode) && isGroupOnlyProcessId(processData.process)) {
+      const processData = buildProcessCapturePayload(
+        form,
+        activeCaptureType,
+        form.currencies,
+        selectedDescriptions,
+        captureScope,
+        { category: isBankCaptureMode ? "BANK" : "GAME" },
+      );
+
+      // Bank four-code UI stores process as "salary"/… — resolve to process.id when possible.
+      // Phase 1: if resolve fails, still enter Summary with processCode (header + Id Product rows).
+      if (isBankCaptureMode) {
         const code =
-          form.selectedProcess?.process_id ||
-          processData.processCode ||
+          form.selectedProcess?.processId ??
+          form.selectedProcess?.process_id ??
+          processData.processCode ??
           String(processData.process || "").toUpperCase();
-        let numericId;
-        try {
-          numericId = await fetchGroupProcessIdByCode(captureScope, code, form.currencyId);
-        } catch (resolveErr) {
-          pushDataCaptureNotification(
-            resolveErr?.message || t("failedCaptureData"),
-            "danger"
-          );
-          return;
+        const normalizedCode = String(code || "").trim().toUpperCase();
+        processData.processCode = normalizedCode;
+        processData.category = "BANK";
+        if (isGroupOnlyProcessId(processData.process) || isGroupOnlyProcessId(normalizedCode)) {
+          try {
+            const numericId = await fetchGroupProcessIdByCode(
+              captureScope,
+              normalizedCode,
+              form.currencyId,
+            );
+            processData.process = numericId;
+          } catch (resolveErr) {
+            console.warn(
+              "Bank process id resolve skipped — Summary will use processCode",
+              resolveErr,
+            );
+            processData.process = null;
+          }
         }
-        processData.process = numericId;
-        processData.processCode = String(code).trim().toUpperCase();
       }
 
       const capturedAfterConvert = convertTableFormatForSubmit(activeCaptureType, preConvertSnapshot);
@@ -229,6 +269,34 @@ export function useDataCaptureSubmitReset({
         );
       }
 
+      // Phase 2: BANK draft DB — Submit only; PROFIT excluded.
+      if (
+        isBankCaptureMode &&
+        isGroupPayrollDraftProcessId(form.selectedProcess?.id) &&
+        tableSnapshotHasData(preConvertSnapshot)
+      ) {
+        const tenantId =
+          processData.tenantId ?? resolveDataCaptureTenantId(captureScope);
+        const processCode =
+          processData.processCode ||
+          form.selectedProcess?.processId ||
+          String(form.selectedProcess?.id || "").toUpperCase();
+        try {
+          await saveBankCaptureDraft({
+            tenantId,
+            processCode,
+            currencyId: form.currencyId,
+            tableData: preConvertSnapshot,
+          });
+          if (processData.process == null) {
+            // ensureBankProcess may have created the row; keep code for Summary.
+            processData.processCode = String(processCode).trim().toUpperCase();
+          }
+        } catch (draftErr) {
+          console.warn("Bank draft save failed — continuing to Summary", draftErr);
+        }
+      }
+
       saveCaptureSession(finalTableData, processData, activeCaptureType, {
         groupPayrollUi,
         groupOnly: groupLedgerCapture,
@@ -240,6 +308,7 @@ export function useDataCaptureSubmitReset({
           captureScope?.scopeCompanyId != null && Number(captureScope.scopeCompanyId) > 0
             ? Number(captureScope.scopeCompanyId)
             : null,
+        tenantId: processData.tenantId ?? resolveDataCaptureTenantId(captureScope),
       });
 
       prefetchSummaryPopulateData({
@@ -262,7 +331,7 @@ export function useDataCaptureSubmitReset({
       submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
-  }, [form, captureType, mutationsBlocked, navigate, t, requireDescriptions, groupPayrollUi, groupLedgerCapture, groupPayrollCapture, payrollDraftBucket, payrollDraftServerSync, selectedGroup, selectedPermission, captureScope, selectedDescriptions, gridRef]);
+  }, [form, captureType, mutationsBlocked, navigate, t, requireDescriptions, isBankCaptureMode, groupPayrollUi, groupLedgerCapture, groupPayrollCapture, payrollDraftBucket, payrollDraftServerSync, selectedGroup, captureScope, selectedDescriptions, gridRef]);
 
   const reset = useCallback(() => {
     const draftBucket = payrollDraftBucket || selectedGroup;
@@ -362,11 +431,13 @@ export function useDataCaptureSubmitReset({
 
       const pid = processData.process != null ? String(processData.process) : "";
       if (pid && captureScope && !restoringGroupLedger && !isGroupOnlyProcessId(pid)) {
-        const res = await fetchProcessDetail(pid, captureScope);
+        const res = await fetchProcessDetail(pid, captureScope, processData.date);
         if (res.success && res.data) {
           await callDataCaptureRuntime("syncRestoreForm", {
             ...processData,
-            currency: processData.currency || res.data.currency_id,
+            currency:
+              processData.currency ||
+              (res.data.currencyId ?? res.data.currency_id),
           });
         }
       }

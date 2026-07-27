@@ -1,23 +1,27 @@
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { mergeCurrencyCodesWithSavedOrder } from "../../utils/company/currencyDisplayOrder.js";
-import { normalizeRows as normalizeGamesProcessRows, processListCacheHasEntry, processListCacheHasRows } from "./processListHelpers.js";
+import {
+  applyProcessListFilters,
+  processListCacheHasEntry,
+  rowCurrencyCodesFromRows,
+} from "./processListHelpers.js";
+import { fetchProcessFormMeta, fetchProcessListByTenantId } from "./processListApi.js";
 
 const processListRouteWarmCache = new Map();
 const processListRouteWarmInflight = new Map();
 const bankProcessListRouteWarmCache = new Map();
 const bankProcessListRouteWarmInflight = new Map();
 
-function processListRouteCacheKey(companyId, { search = "", showInactive = false, showAll = false } = {}) {
-  return `${Number(companyId)}|${String(search || "").trim()}|${showInactive ? 1 : 0}|${showAll ? 1 : 0}`;
+function processListRouteCacheKey(tenantId, { search = "", showInactive = false, showAll = false } = {}) {
+  return `${Number(tenantId)}|${String(search || "").trim()}|${showInactive ? 1 : 0}|${showAll ? 1 : 0}`;
 }
 
 /** Sidebar hover / idle warm — consumed on ProcessListPage boot. */
-export function warmProcessListRouteCache(companyId, opts = {}) {
-  const cid = Number(companyId);
-  if (!Number.isFinite(cid) || cid <= 0) return;
-  const key = processListRouteCacheKey(cid, opts);
+export function warmProcessListRouteCache(tenantId, opts = {}) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0) return;
+  const key = processListRouteCacheKey(tid, opts);
   if (processListRouteWarmCache.has(key) || processListRouteWarmInflight.has(key)) return;
-  const promise = fetchGamesProcessListSlice(cid, opts)
+  const promise = fetchGamesProcessListSlice(tid, opts)
     .then((slice) => {
       if (processListCacheHasEntry(slice)) processListRouteWarmCache.set(key, slice);
       return slice;
@@ -30,22 +34,22 @@ export function warmProcessListRouteCache(companyId, opts = {}) {
   processListRouteWarmInflight.set(key, promise);
 }
 
-export function consumeProcessListRouteCache(companyId, opts = {}) {
-  const key = processListRouteCacheKey(Number(companyId), opts);
+export function consumeProcessListRouteCache(tenantId, opts = {}) {
+  const key = processListRouteCacheKey(Number(tenantId), opts);
   const cached = processListRouteWarmCache.get(key) || null;
   if (cached) processListRouteWarmCache.delete(key);
   return cached;
 }
 
 /** Use sidebar warm cache, in-flight warm, or fetch once. */
-export async function resolveProcessListRouteCache(companyId, opts = {}) {
-  const cid = Number(companyId);
-  if (!Number.isFinite(cid) || cid <= 0) {
+export async function resolveProcessListRouteCache(tenantId, opts = {}) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0) {
     return { rows: null, currencyCodes: null };
   }
-  const cached = consumeProcessListRouteCache(cid, opts);
+  const cached = consumeProcessListRouteCache(tid, opts);
   if (processListCacheHasEntry(cached)) return cached;
-  const key = processListRouteCacheKey(cid, opts);
+  const key = processListRouteCacheKey(tid, opts);
   const inflight = processListRouteWarmInflight.get(key);
   if (inflight) {
     try {
@@ -55,62 +59,23 @@ export async function resolveProcessListRouteCache(companyId, opts = {}) {
       /* fall through to fetch */
     }
   }
-  return fetchGamesProcessListSlice(cid, opts);
+  return fetchGamesProcessListSlice(tid, opts);
 }
 
-/** Games process list row + currency pill payload (company switch cache / hover warm). */
+/** Games process list row + currency pill payload (tenant switch cache / hover warm). */
 export async function fetchGamesProcessListSlice(
-  companyId,
+  tenantId,
   { search = "", showInactive = false, showAll = false, signal } = {},
 ) {
-  const cid = Number(companyId);
-  if (!Number.isFinite(cid) || cid <= 0) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0) {
     return { rows: null, currencyCodes: null };
   }
 
-  const listUrl = new URL(buildApiUrl("api/processes/processlist_api.php"));
-  listUrl.searchParams.set("permission", "Games");
-  listUrl.searchParams.set("company_id", String(cid));
-  const q = String(search || "").trim();
-  if (q) listUrl.searchParams.set("search", q);
-  if (showInactive) listUrl.searchParams.set("showInactive", "1");
-  if (showAll) listUrl.searchParams.set("showAll", "1");
-
-  const curUrl = buildApiUrl(`api/transactions/get_company_currencies_api.php?company_id=${cid}`);
-  const ordUrl = buildApiUrl(
-    `api/transactions/user_currency_order_api.php?company_id=${cid}&_t=${Date.now()}`,
-  );
-
   try {
-    const fetchOpts = { credentials: "include", signal };
-    const [listRes, curRes, ordRes] = await Promise.all([
-      fetch(listUrl.toString(), fetchOpts),
-      fetch(curUrl, fetchOpts),
-      fetch(ordUrl, fetchOpts).catch(() => null),
-    ]);
-    const listJson = await listRes.json();
-    const curJson = await curRes.json();
-
-    const rows =
-      listRes.ok && listJson?.success && Array.isArray(listJson.data)
-        ? normalizeGamesProcessRows(listJson.data)
-        : null;
-
-    let currencyCodes = null;
-    if (curRes.ok && curJson?.success && Array.isArray(curJson.data)) {
-      const codes = curJson.data.map((r) => String(r.code).toUpperCase());
-      let savedOrder = null;
-      if (ordRes) {
-        try {
-          const ordJson = await ordRes.json();
-          savedOrder = ordJson?.data?.order;
-        } catch {
-          /* optional order */
-        }
-      }
-      currencyCodes = mergeCurrencyCodesWithSavedOrder(codes, savedOrder);
-    }
-
+    const allRows = await fetchProcessListByTenantId(tid, signal);
+    const rows = applyProcessListFilters(allRows, { search, showInactive, showAll });
+    const currencyCodes = rowCurrencyCodesFromRows(allRows);
     return { rows, currencyCodes };
   } catch (err) {
     if (err?.name === "AbortError") throw err;
@@ -118,8 +83,8 @@ export async function fetchGamesProcessListSlice(
   }
 }
 
-function bankProcessListRouteCacheKey(companyId, { search = "" } = {}) {
-  return `${Number(companyId)}|${String(search || "").trim()}`;
+function bankProcessListRouteCacheKey(tenantId, { search = "" } = {}) {
+  return `${Number(tenantId)}|${String(search || "").trim()}`;
 }
 
 function bankProcessListCacheHasEntry(cached) {
@@ -127,14 +92,13 @@ function bankProcessListCacheHasEntry(cached) {
 }
 
 /** Sidebar hover / idle warm — consumed on BankProcessListPage boot. */
-export function warmBankProcessListRouteCache(companyId, opts = {}) {
-  const cid = Number(companyId);
-  if (!Number.isFinite(cid) || cid <= 0) return;
-  const key = bankProcessListRouteCacheKey(cid, opts);
+export function warmBankProcessListRouteCache(tenantId, opts = {}) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0) return;
+  const key = bankProcessListRouteCacheKey(tid, opts);
   if (bankProcessListRouteWarmCache.has(key) || bankProcessListRouteWarmInflight.has(key)) return;
-  const promise = prefetchBankProcessListPayload(cid, opts)
+  const promise = prefetchBankProcessListPayload(tid, opts)
     .then((slice) => {
-      // Skip write if invalidated while in flight (status/update mutation).
       if (bankProcessListRouteWarmInflight.get(key) !== promise) return slice;
       if (bankProcessListCacheHasEntry(slice)) bankProcessListRouteWarmCache.set(key, slice);
       return slice;
@@ -147,18 +111,18 @@ export function warmBankProcessListRouteCache(companyId, opts = {}) {
   bankProcessListRouteWarmInflight.set(key, promise);
 }
 
-export function consumeBankProcessListRouteCache(companyId, opts = {}) {
-  const key = bankProcessListRouteCacheKey(Number(companyId), opts);
+export function consumeBankProcessListRouteCache(tenantId, opts = {}) {
+  const key = bankProcessListRouteCacheKey(Number(tenantId), opts);
   const cached = bankProcessListRouteWarmCache.get(key) || null;
   if (cached) bankProcessListRouteWarmCache.delete(key);
   return cached;
 }
 
 /** Drop warm list slices for a tenant after mutations (status/update) so remount does not show stale rows. */
-export function invalidateBankProcessListRouteCache(companyId) {
-  const cid = Number(companyId);
-  if (!Number.isFinite(cid) || cid <= 0) return;
-  const prefix = `${cid}|`;
+export function invalidateBankProcessListRouteCache(tenantId) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0) return;
+  const prefix = `${tid}|`;
   for (const key of [...bankProcessListRouteWarmCache.keys()]) {
     if (String(key).startsWith(prefix)) bankProcessListRouteWarmCache.delete(key);
   }
@@ -168,14 +132,14 @@ export function invalidateBankProcessListRouteCache(companyId) {
 }
 
 /** Use sidebar warm cache, in-flight warm, or fetch once. */
-export async function resolveBankProcessListRouteCache(companyId, opts = {}) {
-  const cid = Number(companyId);
-  if (!Number.isFinite(cid) || cid <= 0) {
+export async function resolveBankProcessListRouteCache(tenantId, opts = {}) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0) {
     return { rows: null, currencyCodes: null };
   }
-  const cached = consumeBankProcessListRouteCache(cid, opts);
+  const cached = consumeBankProcessListRouteCache(tid, opts);
   if (bankProcessListCacheHasEntry(cached)) return cached;
-  const key = bankProcessListRouteCacheKey(cid, opts);
+  const key = bankProcessListRouteCacheKey(tid, opts);
   const inflight = bankProcessListRouteWarmInflight.get(key);
   if (inflight) {
     try {
@@ -185,17 +149,17 @@ export async function resolveBankProcessListRouteCache(companyId, opts = {}) {
       /* fall through to fetch */
     }
   }
-  return prefetchBankProcessListPayload(cid, opts);
+  return prefetchBankProcessListPayload(tid, opts);
 }
 
 /** Warm Bank Process List data before route swap (Games → Bank). */
-export async function prefetchBankProcessListPayload(companyId, { search = "", signal } = {}) {
-  const cid = Number(companyId);
-  if (!cid) return { rows: null, currencyCodes: null };
+export async function prefetchBankProcessListPayload(tenantId, { search = "", signal } = {}) {
+  const tid = Number(tenantId);
+  if (!tid) return { rows: null, currencyCodes: null };
 
   try {
     const { fetchBankProcessListByTenantId } = await import("../bankprocesslist/bankProcessListApi.js");
-    const rows = await fetchBankProcessListByTenantId(cid, signal);
+    const rows = await fetchBankProcessListByTenantId(tid, signal);
     const filtered = search
       ? rows.filter((r) => {
           const q = String(search).trim().toUpperCase();
@@ -207,35 +171,7 @@ export async function prefetchBankProcessListPayload(companyId, { search = "", s
         })
       : rows;
 
-    // Currencies still optional / PHP until currency order is Spring-only for this page.
-    let currencyCodes = null;
-    try {
-      const curUrl = buildApiUrl(`api/transactions/get_company_currencies_api.php?company_id=${cid}`);
-      const ordUrl = buildApiUrl(
-        `api/transactions/user_currency_order_api.php?company_id=${cid}&_t=${Date.now()}`,
-      );
-      const [curRes, ordRes] = await Promise.all([
-        fetch(curUrl, { credentials: "include", signal }),
-        fetch(ordUrl, { credentials: "include", signal }).catch(() => null),
-      ]);
-      const curJson = await curRes.json();
-      if (curRes.ok && curJson?.success && Array.isArray(curJson.data)) {
-        const codes = curJson.data.map((r) => String(r.code).toUpperCase());
-        let savedOrder = null;
-        if (ordRes) {
-          try {
-            const ordJson = await ordRes.json();
-            savedOrder = ordJson?.data?.order;
-          } catch {
-            /* optional */
-          }
-        }
-        currencyCodes = mergeCurrencyCodesWithSavedOrder(codes, savedOrder);
-      }
-    } catch {
-      /* currency meta optional for list */
-    }
-
+    const currencyCodes = rowCurrencyCodesFromRows(filtered);
     return { rows: filtered, currencyCodes };
   } catch (err) {
     if (err?.name === "AbortError") throw err;
@@ -244,28 +180,15 @@ export async function prefetchBankProcessListPayload(companyId, { search = "", s
 }
 
 /** Warm Games Process List data before route swap (Bank → Games). */
-export async function prefetchGamesProcessListPayload(companyId) {
-  const cid = Number(companyId);
-  if (!cid) return { rows: null, meta: null, currencyCodes: null };
-
-  const metaUrl = new URL(buildApiUrl("api/processes/addprocess_api.php"));
-  metaUrl.searchParams.set("company_id", String(cid));
+export async function prefetchGamesProcessListPayload(tenantId) {
+  const tid = Number(tenantId);
+  if (!tid) return { rows: null, meta: null, currencyCodes: null };
 
   try {
-    const [slice, metaRes] = await Promise.all([
-      fetchGamesProcessListSlice(cid),
-      fetch(metaUrl.toString(), { credentials: "include" }),
+    const [slice, meta] = await Promise.all([
+      fetchGamesProcessListSlice(tid),
+      fetchProcessFormMeta(tid),
     ]);
-    const metaJson = await metaRes.json();
-    const metaData = metaJson?.data || metaJson || {};
-
-    const meta = {
-      currencies: Array.isArray(metaData.currencies) ? metaData.currencies : [],
-      descriptions: Array.isArray(metaData.descriptions) ? metaData.descriptions : [],
-      days: Array.isArray(metaData.days) ? metaData.days : [],
-      existingProcesses: Array.isArray(metaData.existingProcesses) ? metaData.existingProcesses : [],
-    };
-
     return { rows: slice.rows, meta, currencyCodes: slice.currencyCodes };
   } catch {
     return { rows: null, meta: null, currencyCodes: null };

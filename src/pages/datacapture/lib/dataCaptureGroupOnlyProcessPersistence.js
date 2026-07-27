@@ -90,7 +90,7 @@ export function saveGroupOnlyProcessPrefsFromProcessData(processData, prefsKey) 
     : null;
   saveGroupOnlyProcessPrefs(gid, {
     process: proc?.id ?? processData.process,
-    processCode: proc?.process_id || processData.processCode || processData.process_code,
+    processCode: proc?.processId ?? proc?.process_id ?? processData.processCode ?? processData.process_code,
     processName: proc?.displayText || processData.processName || processData.process_name,
     currency: processData.currency,
     date: processData.date,
@@ -106,7 +106,7 @@ export function selectedProcessFromGroupOnlyPrefs(prefs) {
   return {
     id: pid,
     displayText: pname || pcode || pid.toUpperCase(),
-    process_id: pcode || pid.toUpperCase(),
-    description_name: null,
+    processId: pcode || pid.toUpperCase(),
+    descriptionName: null,
   };
 }

@@ -52,7 +52,7 @@ export default function ProcessFormModal({
   editMode,
   form,
   setForm,
-  scopeCompanyId = null,
+  scopeTenantId = null,
   currencies,
   days,
   readOnly = false,
@@ -562,7 +562,7 @@ export default function ProcessFormModal({
                     value={form.remove_word}
                     onChange={(next) => setForm((prev) => ({ ...prev, remove_word: next }))}
                     processId={editMode && form.id ? form.id : null}
-                    scopeCompanyId={scopeCompanyId}
+                    scopeCompanyId={scopeTenantId}
                     placeholder={t("enterWordsToRemove")}
                     disabled={ro}
                   />

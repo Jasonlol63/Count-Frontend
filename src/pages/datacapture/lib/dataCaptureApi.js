@@ -1,11 +1,18 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { getDataCaptureWeekdayLabels } from "../../../translateFile/pages/dataCaptureTranslate.js";
 import { dataCaptureScopeApiParams, dataCaptureScopeCacheKey } from "./dataCaptureScope.js";
+import { resolveDataCaptureTenantId } from "./dataCaptureTenant.js";
+import {
+  fetchCaptureCurrenciesByTenantId,
+  fetchCaptureDescriptionCatalog,
+  fetchTenantCategoryPermissions,
+  postCaptureDescription,
+  postCaptureDescriptionDelete,
+  postGameCaptureForm,
+} from "./dataCaptureSpringApi.js";
 
-/** Data Capture submissions + process picker (canonical). Legacy: api/processes/submitted_processes_api.php */
+/** Legacy PHP — submissions list (Spring not implemented yet). */
 const DATA_CAPTURE_SUBMISSIONS_API = "api/datacapture/submissions_api.php";
-/** Form catalog + descriptions for capture page. Legacy: api/processes/addprocess_api.php */
-const DATA_CAPTURE_CATALOG_API = "api/datacapture/catalog_api.php";
 
 /** One option per currency code (subsidiary + group rows can share company_id). */
 export function dedupeCaptureCurrenciesByCode(rows) {
@@ -24,10 +31,10 @@ export function dedupeCaptureCurrenciesByCode(rows) {
 
 export const dataCaptureQueryKeys = {
   root: () => ["dataCapture"],
-  permissions: (companyCode) => [
+  permissions: (tenantId) => [
     ...dataCaptureQueryKeys.root(),
     "permissions",
-    companyCode ?? "none",
+    tenantId != null ? String(tenantId) : "none",
   ],
   submissions: (scopeKey, captureDate) => [
     ...dataCaptureQueryKeys.root(),
@@ -133,19 +140,21 @@ function withCompany(url, companyId) {
   return `${url}${sep}company_id=${encodeURIComponent(String(cid))}`;
 }
 
-/** Same as legacy loadFormData: GET api/datacapture/catalog_api.php */
-export async function fetchAddProcessFormData(scopeOrCompanyId) {
-  const scope =
-    scopeOrCompanyId != null && typeof scopeOrCompanyId === "object"
-      ? scopeOrCompanyId
-      : scopeOrCompanyId
-        ? { mode: "company", scopeCompanyId: Number(scopeOrCompanyId) }
-        : null;
-  let url = buildApiUrl(DATA_CAPTURE_CATALOG_API);
-  url = scope ? withScope(url, scope) : url;
-  if (!scope && scopeOrCompanyId) url = withCompany(url, scopeOrCompanyId);
-  const response = await fetch(url, { credentials: "include" });
-  return response.json();
+/** Load currency list for Games capture form — Spring `/api/currency/list`. */
+export async function fetchAddProcessFormData(scopeOrTenantId) {
+  const tenantId =
+    scopeOrTenantId != null && typeof scopeOrTenantId === "object"
+      ? resolveDataCaptureTenantId(scopeOrTenantId)
+      : Number(scopeOrTenantId);
+  if (!Number.isFinite(tenantId) || tenantId <= 0) {
+    return { success: false, message: "tenantId is required", currencies: [] };
+  }
+  try {
+    const currencies = await fetchCaptureCurrenciesByTenantId(tenantId);
+    return { success: true, currencies };
+  } catch (err) {
+    return { success: false, message: err?.message || "Failed to load currencies", currencies: [] };
+  }
 }
 
 /**
@@ -244,28 +253,44 @@ export async function fetchCurrenciesForCompanyIds(
     .sort((a, b) => a.code.localeCompare(b.code));
 }
 
-/** Same as legacy loadProcessesByDate */
+/** Games process options for capture date — Spring POST `/api/datacapture/games/form`. */
 export async function fetchProcessesByDay(selectedDate, scope) {
-  const params = new URLSearchParams({
-    action: "get_processes_by_day",
-    date: selectedDate,
-  });
-  appendDataCaptureScopeParams(params, scope);
-  const url = buildApiUrl(`${DATA_CAPTURE_SUBMISSIONS_API}?${params.toString()}`);
-  const response = await fetch(url, { credentials: "include" });
-  return response.json();
+  const tenantId = resolveDataCaptureTenantId(scope);
+  if (!tenantId) {
+    return { success: false, message: "tenantId is required", data: [] };
+  }
+  try {
+    const json = await postGameCaptureForm({ tenantId, captureDate: selectedDate });
+    return { success: true, data: Array.isArray(json.data?.processes) ? json.data.processes : [] };
+  } catch (err) {
+    return { success: false, message: err?.message || "Failed to load processes", data: [] };
+  }
 }
 
-/** Same as legacy loadProcessData */
-export async function fetchProcessDetail(processId, scope) {
-  const params = new URLSearchParams({
-    action: "get_process",
-    id: String(processId),
-  });
-  appendDataCaptureScopeParams(params, scope);
-  const url = buildApiUrl(`api/processes/processlist_api.php?${params.toString()}`);
-  const response = await fetch(url, { credentials: "include" });
-  return response.json();
+/** Auto-fill on process select — Spring POST `/api/datacapture/games/form` with `id`. */
+export async function fetchProcessDetail(processPk, scopeOrTenantId, captureDate = null) {
+  const tenantId =
+    scopeOrTenantId != null && typeof scopeOrTenantId === "object"
+      ? resolveDataCaptureTenantId(scopeOrTenantId)
+      : Number(scopeOrTenantId);
+  const pk = Number(processPk);
+  if (!Number.isFinite(tenantId) || tenantId <= 0 || !Number.isFinite(pk) || pk <= 0) {
+    return { success: false, message: "tenantId and process id are required", data: null };
+  }
+  try {
+    const json = await postGameCaptureForm({
+      tenantId,
+      captureDate: captureDate || getLocalDateString(),
+      processPk: pk,
+    });
+    const detail = json.data?.selectedProcess ?? null;
+    if (!detail) {
+      return { success: false, message: "Process not found", data: null };
+    }
+    return { success: true, data: detail };
+  } catch (err) {
+    return { success: false, message: err?.message || "Failed to load process", data: null };
+  }
 }
 
 /** Resolve numeric process.id for group payroll codes (SALARY/COMMISSION/BONUS/PROFIT) under scoped company. */
@@ -309,15 +334,9 @@ export async function fetchSubmissionsByCaptureDate(captureDate, scope) {
   return response.json();
 }
 
-/** Same as legacy `loadPermissionButtons`: POST domain_api get_company_permissions */
-export async function fetchCompanyPermissionsForDataCapture(companyCode) {
-  const response = await fetch(buildApiUrl("api/domain/domain_api.php"), {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "get_company_permissions", company_id: companyCode }),
-  });
-  return response.json();
+/** Tenant category permissions — Spring `/auth/switch-tenant` session flags. */
+export async function fetchCompanyPermissionsForDataCapture(tenantId) {
+  return fetchTenantCategoryPermissions(tenantId);
 }
 
 /** Matches `renderSubmittedProcesses` date/time formatting in `js/datacapture.js`. */
@@ -351,13 +370,16 @@ export function formatSubmittedProcessDateTime(process) {
 }
 
 export function displayTextFromProcessRow(process) {
-  if (process.process_display != null && String(process.process_display).trim() !== "") {
-    return String(process.process_display).trim();
+  const display = process?.processDisplay ?? process?.process_display;
+  if (display != null && String(display).trim() !== "") {
+    return String(display).trim();
   }
-  if (process.description_name) {
-    return `${process.process_id} (${process.description_name})`;
+  const processId = process?.processId ?? process?.process_id ?? "";
+  const descriptionName = process?.descriptionName ?? process?.description_name;
+  if (descriptionName) {
+    return `${processId} (${descriptionName})`;
   }
-  return process.process_id;
+  return String(processId);
 }
 
 /** Group submitted list: SALARY(1), SALARY(2) when API provides same_day_seq / process_display. */
@@ -372,56 +394,44 @@ export function formatGroupSubmittedProcessLabel(process) {
   return code;
 }
 
-/** GET catalog_api.php — returns `descriptions` at top level (and under `data`). */
-export async function fetchDescriptionCatalog(scopeOrCompanyId) {
-  const scope =
-    scopeOrCompanyId != null && typeof scopeOrCompanyId === "object"
-      ? scopeOrCompanyId
-      : scopeOrCompanyId
-        ? { mode: "company", scopeCompanyId: Number(scopeOrCompanyId) }
-        : null;
-  let url = buildApiUrl(DATA_CAPTURE_CATALOG_API);
-  url = scope ? withScope(url, scope) : withCompany(url, scopeOrCompanyId);
-  const response = await fetch(url, { credentials: "include" });
-  return response.json();
-}
-
-/** POST action=add_description — same fields as legacy `addDescriptionForm` handler. */
-export async function postAddDescription(scopeOrCompanyId, descriptionName) {
-  const formData = new FormData();
-  formData.append("action", "add_description");
-  formData.append("description_name", descriptionName);
-  const scope =
-    scopeOrCompanyId != null && typeof scopeOrCompanyId === "object"
-      ? scopeOrCompanyId
-      : null;
-  if (scope) {
-    const { companyId, groupId, reportScope } = dataCaptureScopeApiParams(scope);
-    if (companyId) formData.append("company_id", String(companyId));
-    if (groupId) formData.append("group_id", String(groupId));
-    if (reportScope) formData.append("report_scope", reportScope);
-  } else if (scopeOrCompanyId) {
-    formData.append("company_id", String(scopeOrCompanyId));
+/** POST `/api/process/list-description` — tenant description catalog. */
+export async function fetchDescriptionCatalog(tenantId) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0) {
+    return { success: false, error: "tenantId is required", descriptions: [] };
   }
-  const response = await fetch(buildApiUrl(DATA_CAPTURE_CATALOG_API), {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-  return response.json();
+  try {
+    return await fetchCaptureDescriptionCatalog(tid);
+  } catch (err) {
+    return { success: false, error: err?.message || "Failed to load descriptions", descriptions: [] };
+  }
 }
 
-/** POST action=delete_description — matches legacy `deleteDescription` body. */
-export async function postDeleteDescription(descriptionId) {
-  const formData = new FormData();
-  formData.append("action", "delete_description");
-  formData.append("description_id", String(descriptionId));
-  const response = await fetch(buildApiUrl(DATA_CAPTURE_CATALOG_API), {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-  return response.json();
+/** POST `/api/process/add-description` */
+export async function postAddDescription(tenantId, descriptionName) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0) {
+    return { success: false, error: "tenantId is required" };
+  }
+  try {
+    return await postCaptureDescription(tid, descriptionName);
+  } catch (err) {
+    return { success: false, error: err?.message || "Failed to add description" };
+  }
+}
+
+/** POST `/api/process/delete-description` */
+export async function postDeleteDescription(tenantId, descriptionId) {
+  const tid = Number(tenantId);
+  const id = Number(descriptionId);
+  if (!Number.isFinite(tid) || tid <= 0 || !Number.isFinite(id) || id <= 0) {
+    return { success: false, error: "tenantId and description id are required" };
+  }
+  try {
+    return await postCaptureDescriptionDelete(tid, id);
+  } catch (err) {
+    return { success: false, error: err?.message || "Failed to delete description" };
+  }
 }
 
 export { appendDataCaptureScopeParams as appendScopeParams };

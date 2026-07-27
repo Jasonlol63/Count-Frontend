@@ -37,7 +37,7 @@ import {
   normalizeRows,
   dedupeCompanyRowsForSwitcher,
   filterProcessPageCompanyButtons,
-  resolveProcessListActiveCompanyId,
+  resolveProcessListActiveTenantId,
   sortProcessTableRows,
   notifyTransactionDataChanged,
   parseRemarkForForm,
@@ -45,11 +45,26 @@ import {
   processListCacheHasEntry,
   processListCacheHasRows,
   emptyCopyFromSyncFields,
-  buildCopyFromFormPatch,
-  invalidateProcessListCompanyCache,
+  buildCopyFromFormPatchFromRow,
+  invalidateProcessListTenantCache,
   buildOptimisticProcessRows,
   mergeProcessRowsById,
+  existingProcessesFromListRows,
+  buildEditFormFromListRow,
+  normalizeProcessStatusKey,
+  isProcessStatusActive,
+  isProcessStatusInactive,
 } from "./processListHelpers.js";
+import {
+  addProcess,
+  addProcessDescription,
+  deleteProcess,
+  deleteProcessDescription,
+  fetchProcessFormMeta,
+  fetchProcessDescriptionsByTenantId,
+  updateProcess,
+  updateProcessStatus,
+} from "./processListApi.js";
 import {
   fetchGamesProcessListSlice,
   prefetchBankProcessListPayload,
@@ -76,16 +91,16 @@ function filterSearchInput(raw) {
     .toUpperCase();
 }
 
-function resolveProcessListCacheKey(companyId, debouncedSearch, showInactive, showAll) {
-  return `company:${Number(companyId)}|${String(debouncedSearch || "").trim()}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
+function resolveProcessListCacheKey(tenantId, debouncedSearch, showInactive, showAll) {
+  return `tenant:${Number(tenantId)}|${String(debouncedSearch || "").trim()}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
 }
 
 function processRowVisibleAfterStatusChange(newStatus, { showInactive, showAll }) {
-  const status = String(newStatus || "").toLowerCase();
-  if (showAll && showInactive) return status === "inactive";
-  if (showAll) return status === "active";
-  if (showInactive) return status === "inactive";
-  return status === "active";
+  const status = normalizeProcessStatusKey(newStatus);
+  if (showAll && showInactive) return isProcessStatusInactive(status);
+  if (showAll) return isProcessStatusActive(status);
+  if (showInactive) return isProcessStatusInactive(status);
+  return isProcessStatusActive(status);
 }
 
 function processRowsFingerprint(rows) {
@@ -223,23 +238,24 @@ export default function ProcessListPage() {
     rowsRef.current = rows;
   }, [rows]);
 
-  const loadFormMeta = useCallback(async (cid) => {
-    if (!cid) return;
+  const loadFormMeta = useCallback(async (tenantId) => {
+    const tid = Number(tenantId);
+    if (!Number.isFinite(tid) || tid <= 0) return;
     try {
-      const u = new URL(buildApiUrl("api/processes/addprocess_api.php"));
-      u.searchParams.set("company_id", String(cid));
-      const formRes = await fetch(u.toString(), { credentials: "include" });
-      const formJson = await formRes.json();
-      setCurrencies(Array.isArray(formJson?.data?.currencies) ? formJson.data.currencies : formJson?.currencies || []);
-      setDescriptions(Array.isArray(formJson?.data?.descriptions) ? formJson.data.descriptions : formJson?.descriptions || []);
-      setDays(Array.isArray(formJson?.data?.days) ? formJson.data.days : formJson?.days || []);
-      setExistingProcesses(
-        Array.isArray(formJson?.data?.existingProcesses) ? formJson.data.existingProcesses : formJson?.existingProcesses || []
-      );
+      const meta = await fetchProcessFormMeta(tid);
+      setCurrencies(meta.currencies || []);
+      setDescriptions(meta.descriptions || []);
+      setDays(meta.days || []);
+      setExistingProcesses(existingProcessesFromListRows(rowsRef.current));
     } catch {
       /* ignore */
     }
   }, []);
+
+  useEffect(() => {
+    if (!companyId) return;
+    setExistingProcesses(existingProcessesFromListRows(rows));
+  }, [rows, companyId]);
 
   useEffect(() => {
     if (loading || !companyId || groupFilterKind !== "follow") return;
@@ -302,7 +318,7 @@ export default function ProcessListPage() {
             ),
           ].sort();
           const resolvedCompanyId = ungroupedBoot
-            ? resolveProcessListActiveCompanyId(resolvedPrefetchId, prefetchedCompanies, {
+            ? resolveProcessListActiveTenantId(resolvedPrefetchId, prefetchedCompanies, {
                 groupFilterKind: "ungrouped",
                 groupIds: prefetchGroupIds,
               })
@@ -422,7 +438,7 @@ export default function ProcessListPage() {
         if (isUngroupedBoot) {
           setGroupFilterKind("ungrouped");
           setSelectedGroup(null);
-          effectiveCompany = resolveProcessListActiveCompanyId(effectiveCompany, cs, {
+          effectiveCompany = resolveProcessListActiveTenantId(effectiveCompany, cs, {
             groupFilterKind: "ungrouped",
             groupIds: bootGroupIds,
           });
@@ -658,13 +674,11 @@ export default function ProcessListPage() {
   );
 
   const reloadDescriptions = async () => {
-    if (!companyId) return;
+    const tid = Number(activeCompanyId ?? companyId);
+    if (!Number.isFinite(tid) || tid <= 0) return;
     try {
-      const u = new URL(buildApiUrl("api/processes/addprocess_api.php"));
-      u.searchParams.set("company_id", String(companyId));
-      const formRes = await fetch(u.toString(), { credentials: "include" });
-      const formJson = await formRes.json();
-      setDescriptions(Array.isArray(formJson?.data?.descriptions) ? formJson.data.descriptions : formJson?.descriptions || []);
+      const rows = await fetchProcessDescriptionsByTenantId(tid);
+      setDescriptions(rows.map((d) => ({ id: d.id, name: d.name })));
     } catch {
       /* ignore */
     }
@@ -678,31 +692,16 @@ export default function ProcessListPage() {
     }
     const normalizedName = String(descName || "").trim().toUpperCase();
     if (!normalizedName) return null;
+    const tid = Number(activeCompanyId ?? companyId);
+    if (!Number.isFinite(tid) || tid <= 0) return null;
     try {
-      const fd = new FormData();
-      fd.append("action", "add_description");
-      fd.append("description_name", normalizedName);
-      if (companyId) fd.append("company_id", String(companyId));
-      const res = await fetch(buildApiUrl("api/processes/addprocess_api.php"), {
-        method: "POST",
-        body: fd,
-        credentials: "include",
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        if (json?.data?.duplicate || String(json?.message || json?.error || "").includes("already exists")) {
-          notify(t("descExists"), "danger");
-        } else {
-          notify(json.message || json.error || t("failedAddDescription"), "danger");
-        }
-        return null;
-      }
+      const created = await addProcessDescription(tid, normalizedName);
       notify(t("descAdded"), "success");
       await reloadDescriptions();
-      const newId = json?.data?.description_id ?? json?.description_id;
-      return newId != null ? { id: newId, name: normalizedName } : null;
-    } catch {
-      notify(t("failedAddDescription"), "danger");
+      return created?.id != null ? { id: created.id, name: created.name || normalizedName } : null;
+    } catch (err) {
+      if (err?.duplicate) notify(t("descExists"), "danger");
+      else notify(err?.message || t("failedAddDescription"), "danger");
       return null;
     }
   };
@@ -712,29 +711,18 @@ export default function ProcessListPage() {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
+    const tid = Number(activeCompanyId ?? companyId);
+    if (!Number.isFinite(tid) || tid <= 0) return;
     try {
-      const fd = new FormData();
-      fd.append("action", "delete_description");
-      fd.append("description_id", String(descId));
-      if (companyId) fd.append("company_id", String(companyId));
-      const res = await fetch(buildApiUrl("api/processes/addprocess_api.php"), {
-        method: "POST",
-        body: fd,
-        credentials: "include",
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        notify(json.message || json.error || t("failedDeleteDescription"), "danger");
-        return;
-      }
+      await deleteProcessDescription(tid, descId);
       notify(t("descDeleted"), "success");
       await reloadDescriptions();
       setForm((prev) => ({
         ...prev,
         selected_descriptions: prev.selected_descriptions.filter((d) => String(d.id) !== String(descId)),
       }));
-    } catch {
-      notify(t("failedDeleteDescription"), "danger");
+    } catch (err) {
+      notify(err?.message || t("failedDeleteDescription"), "danger");
     }
   };
 
@@ -768,7 +756,7 @@ export default function ProcessListPage() {
   );
   const activeCompanyId = useMemo(
     () =>
-      resolveProcessListActiveCompanyId(companyId, companies, {
+      resolveProcessListActiveTenantId(companyId, companies, {
         groupFilterKind,
         groupIds,
       }),
@@ -926,7 +914,7 @@ export default function ProcessListPage() {
   const toggleSelectAll = useCallback(
     (checked) => {
       const deletable = pageRows.filter(
-        (r) => String(r.status || "").toLowerCase() === "inactive" && !r.has_transactions
+        (r) => isProcessStatusInactive(r.status) && !r.has_transactions
       );
       setSelectedIds((prev) => {
         const next = new Set(prev);
@@ -990,28 +978,9 @@ export default function ProcessListPage() {
         void runFetch();
 
         try {
-          const res = await fetch(
-            buildApiUrl(`auth/switch-tenant?tenant_id=${nextId}`),
-            { credentials: "include", signal: sessionAc.signal },
-          );
-          const json = await res.json();
+          const json = await syncCompanySessionApi(nextId);
           if (sessionAc.signal.aborted) return;
-          if (!res.ok || !json.success) {
-            const reason = json?.data?.reason;
-            if (reason === "expired" || reason === "no_set") {
-              if (previousCompanyId != null && Number(previousCompanyId) !== nextId) {
-                skipCompanyFetchEffectRef.current = true;
-                flushSync(() => {
-                  setCompanyId(previousCompanyId);
-                  applyProcessListCache(previousCompanyId);
-                });
-                void fetchRows({ companyId: previousCompanyId, silent: true });
-              }
-              setExpirationCompanies([
-                { company_id: company.company_id, expiration_date: company.expiration_date ?? null },
-              ]);
-              return;
-            }
+          if (!json?.success) {
             if (previousCompanyId != null && Number(previousCompanyId) !== nextId) {
               skipCompanyFetchEffectRef.current = true;
               flushSync(() => {
@@ -1020,7 +989,7 @@ export default function ProcessListPage() {
               });
               void fetchRows({ companyId: previousCompanyId, silent: true });
             }
-            notify(json.message || json.error || t("switchCompanyFailed"), "danger");
+            notify(json?.message || t("switchCompanyFailed"), "danger");
             return;
           }
           notifyCompanySessionUpdated(json.data ?? null);
@@ -1101,7 +1070,7 @@ export default function ProcessListPage() {
 
       // Process list is company-scoped: re-click active group hides the group row (ungrouped).
       if (groupFilterKind === "follow" && g === selectedGroupKey && companyId != null) {
-        const nextCompanyId = resolveProcessListActiveCompanyId(companyId, companies, {
+        const nextCompanyId = resolveProcessListActiveTenantId(companyId, companies, {
           groupFilterKind: "ungrouped",
           groupIds,
         });
@@ -1206,119 +1175,39 @@ export default function ProcessListPage() {
 
       setForm((prev) => ({ ...prev, copy_from: id }));
 
-      try {
-        const url = new URL(buildApiUrl("api/processes/addprocess_api.php"));
-        url.searchParams.set("action", "copy_from");
-        url.searchParams.set("process_id", id);
-        const scopeId = activeCompanyId ?? companyId;
-        if (scopeId) url.searchParams.set("company_id", String(scopeId));
-
-        const res = await fetch(url.toString(), { credentials: "include" });
-        const json = await res.json();
-        if (!res.ok || !json.success || !json.data) {
-          notify(json.message || json.error || t("failedLoadProcess"), "danger");
-          return;
-        }
-
-        const data = json.data;
-        const patch = buildCopyFromFormPatch(data, { currencies, descriptions });
-
-        if (data.currency_warning && !patch.currency_id) {
-          if (data.currency_code) {
-            notify(t("currencyWarningWithCode", { code: String(data.currency_code).toUpperCase() }), "danger");
-          } else {
-            notify(t("currencyWarningNoCompany"), "danger");
-          }
-        }
-
-        setForm((prev) => ({
-          ...prev,
-          copy_from: id,
-          ...patch,
-        }));
-      } catch {
+      const row = rowsRef.current.find((r) => String(r.id) === id);
+      if (!row) {
         notify(t("failedLoadProcess"), "danger");
+        return;
       }
+
+      const patch = buildCopyFromFormPatchFromRow(row, { currencies, descriptions });
+      setForm((prev) => ({
+        ...prev,
+        copy_from: id,
+        ...patch,
+      }));
     },
-    [activeCompanyId, companyId, currencies, descriptions, t],
+    [currencies, descriptions, t, notify],
   );
 
-  const openEdit = async (id) => {
+  const openEdit = (id) => {
     if (processMutationsBlocked) {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
-    try {
-      const url = new URL(buildApiUrl("api/processes/processlist_api.php"));
-      url.searchParams.set("action", "get_process");
-      url.searchParams.set("id", String(id));
-      url.searchParams.set("permission", "Games");
-      const res = await fetch(url.toString(), { credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success || !json.data) {
-        notify(json.message || json.error || t("failedLoadProcess"), "danger");
-        return;
-      }
-      const p = json.data;
-
-      let currencyId = String(p.currency_id || "");
-      if (currencyId) {
-        const exists = currencies.some((c) => String(c.id) === currencyId);
-        if (!exists) {
-          if (p.currency_warning) notify(t("currencyWarningNoCompany"), "danger");
-          currencyId = "";
-        }
-      }
-      if (!currencyId && p.currency_code) {
-        const code = String(p.currency_code).toUpperCase();
-        const matchingOption = currencies.find((opt) => String(opt.code || "").toUpperCase() === code);
-        if (matchingOption) {
-          currencyId = String(matchingOption.id);
-        } else if (p.currency_warning) {
-          notify(t("currencyWarningWithCode", { code }), "danger");
-        }
-      }
-
-      const dtsModified = p.dts_modified || "";
-      const dtsCreated = p.dts_created || "";
-      let displayModifiedDate = "";
-      let displayModifiedBy = "";
-      if (dtsModified && dtsModified !== dtsCreated) {
-        displayModifiedDate = dtsModified;
-        displayModifiedBy = p.modified_by || "";
-      }
-
-      const selectedDescriptions = buildEditDescriptionSelection(p, descriptions);
-
-      setEditMode(true);
-      setForm({
-        id: String(p.id || ""),
-        process_name: p.process_name || "",
-        selected_descriptions: selectedDescriptions,
-        currency_id: currencyId,
-        day_use: String(p.day_use || "")
-          .split(",")
-          .map((v) => v.trim())
-          .filter(Boolean),
-        remove_word: serializeRemoveWordChips(parseRemoveWordChips(p.remove_word || "")),
-        replace_word_from: p.replace_word_from || "",
-        replace_word_to: p.replace_word_to || "",
-        remark: parseRemarkForForm(p.remarks),
-        status: p.status || "active",
-        dts_modified: dtsModified,
-        modified_by: p.modified_by || "",
-        dts_created: dtsCreated,
-        created_by: p.created_by || "",
-        dts_modified_display: displayModifiedDate,
-        dts_modified_user_display: displayModifiedBy,
-        currency_warning: p.currency_warning || null,
-        existingProcesses,
-      });
-      setDescriptionPickerOpen(false);
-      setModalOpen(true);
-    } catch {
+    const row = rowsRef.current.find((r) => Number(r.id) === Number(id));
+    if (!row) {
       notify(t("failedLoadProcess"), "danger");
+      return;
     }
+    setEditMode(true);
+    setForm({
+      ...buildEditFormFromListRow(row, descriptions, { existingProcesses }),
+      existingProcesses,
+    });
+    setDescriptionPickerOpen(false);
+    setModalOpen(true);
   };
 
   const submitForm = async (event) => {
@@ -1338,94 +1227,75 @@ export default function ProcessListPage() {
       return;
     }
 
-    if (!editMode) {
-      if (!form.is_multi_process && (!form.process_name || !String(form.process_name).trim())) {
-        notify(t("needProcessIdOrMulti"), "danger");
-        return;
-      }
-      if (form.is_multi_process && (!form.selected_processes || form.selected_processes.length === 0)) {
-        notify(t("needOneMultiProcess"), "danger");
-        return;
-      }
-    }
+    const submitTenantId = Number(activeCompanyId ?? companyId);
+    if (!Number.isFinite(submitTenantId) || submitTenantId <= 0) return;
 
-    const fd = new FormData();
+    const descriptionIds = form.selected_descriptions
+      .map((d) => Number(d.id))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const dayOfWeeks = (form.day_use || [])
+      .map((v) => Number(v))
+      .filter((n) => Number.isFinite(n) && n >= 1 && n <= 7);
+    const springFields = {
+      currencyId: Number(form.currency_id),
+      descriptionIds,
+      dayOfWeeks,
+      removeWord: submittedRemoveWord,
+      replaceWordFrom: form.replace_word_from || "",
+      replaceWordTo: form.replace_word_to || "",
+      remark: form.remark || "",
+    };
+
     if (editMode) {
-      fd.append("id", form.id);
-      fd.append("process_name", form.process_name);
-      fd.append("status", form.status || "active");
-      const names = form.selected_descriptions.map((d) => d.name).filter(Boolean);
-      fd.append("selected_descriptions", JSON.stringify(names.length ? names : [form.selected_descriptions[0].name]));
-      fd.append("description", form.selected_descriptions[0].name);
-      fd.append("day_use", form.day_use.join(","));
-      fd.append("remove_word", submittedRemoveWord);
-      fd.append("replace_word_from", form.replace_word_from || "");
-      fd.append("replace_word_to", form.replace_word_to || "");
-      fd.append("remark", form.remark || "");
-      fd.append("currency_id", form.currency_id);
       try {
-        const res = await fetch(buildApiUrl("api/processes/processlist_api.php?action=update_process"), {
-          method: "POST",
-          body: fd,
-          credentials: "include",
+        await updateProcess(submitTenantId, {
+          id: Number(form.id),
+          ...springFields,
         });
-        const json = await res.json();
-        if (!res.ok || !json.success) {
-          notify(json.message || json.error || t("updateFailed"), "danger");
-          return;
-        }
-        notify(json.message || t("processUpdated"), "success");
+        notify(t("processUpdated"), "success");
         notifyTransactionDataChanged("processlist-react");
         setModalOpen(false);
-        fetchRows();
-      } catch {
-        notify(t("updateFailed"), "danger");
+        invalidateProcessListTenantCache(processListCacheRef, submitTenantId);
+        fetchRows({ companyId: submitTenantId, force: true });
+      } catch (err) {
+        notify(err?.message || t("updateFailed"), "danger");
       }
       return;
     }
 
-    if (form.is_multi_process && form.selected_processes?.length > 0) {
-      fd.append("selected_processes", JSON.stringify(form.selected_processes));
-    } else {
-      fd.append("process_id", form.process_name);
+    if (!form.is_multi_process && (!form.process_name || !String(form.process_name).trim())) {
+      notify(t("needProcessIdOrMulti"), "danger");
+      return;
     }
-    fd.append("selected_descriptions", JSON.stringify(form.selected_descriptions.map((d) => d.name)));
-    fd.append("currency_id", form.currency_id);
-    fd.append("day_use", form.day_use.join(","));
-    fd.append("remove_word", submittedRemoveWord);
-    fd.append("replace_word_from", form.replace_word_from || "");
-    fd.append("replace_word_to", form.replace_word_to || "");
-    fd.append("remark", form.remark || "");
-    if (form.copy_from) fd.append("copy_from", form.copy_from);
-    fd.append("permission", "Games");
-    const submitCompanyId = activeCompanyId ?? companyId;
-    if (submitCompanyId) fd.append("company_id", String(submitCompanyId));
+    if (form.is_multi_process && (!form.selected_processes || form.selected_processes.length === 0)) {
+      notify(t("needOneMultiProcess"), "danger");
+      return;
+    }
+
+    const codesToCreate = form.is_multi_process
+      ? form.selected_processes.map((c) => String(c).trim().toUpperCase()).filter(Boolean)
+      : [String(form.process_name).trim().toUpperCase()];
 
     try {
-      const res = await fetch(buildApiUrl("api/processes/addprocess_api.php"), {
-        method: "POST",
-        body: fd,
-        credentials: "include",
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        notify(json.message || json.error || t("createFailed"), "danger");
-        return;
-      }
-      const d = json.data;
-      const created = Array.isArray(d?.created_processes) ? d.created_processes : [];
-      if (created.length === 0) {
-        notify(json.message || json.error || t("createFailed"), "danger");
-        return;
-      }
-      let message = json.message || t("processAdded");
-      if (d && typeof d === "object") {
-        if (d.copy_from_used && Number(d.source_templates_found) === 0) message += ` (${t("copyNoTemplates")})`;
-        if (d.copy_from_used && d.sync_source_set) message += ` [${t("copySyncEnabled")}]`;
-        else if (d.copy_from_used && !d.sync_source_set) message += ` (${t("copySyncNotSet")})`;
-        if (Array.isArray(d.errors) && d.errors.length > 0) {
-          message += `. ${t("processSkippedConflicts", { count: d.errors.length })}`;
+      const created = [];
+      const errors = [];
+      for (const code of codesToCreate) {
+        try {
+          const data = await addProcess(submitTenantId, { code, ...springFields });
+          if (data?.id != null) {
+            created.push({ id: data.id, process_id: data.process?.code ?? code, description_id: descriptionIds[0] });
+          }
+        } catch (err) {
+          errors.push(err?.message || code);
         }
+      }
+      if (!created.length) {
+        notify(errors[0] || t("createFailed"), "danger");
+        return;
+      }
+      let message = t("processAdded");
+      if (errors.length > 0) {
+        message += `. ${t("processSkippedConflicts", { count: errors.length })}`;
       }
       notify(message, "success");
       notifyTransactionDataChanged("processlist-react");
@@ -1438,15 +1308,15 @@ export default function ProcessListPage() {
         resetProcessListPagination();
       }
 
-      invalidateProcessListCompanyCache(processListCacheRef, submitCompanyId);
-      await loadFormMeta(submitCompanyId);
+      invalidateProcessListTenantCache(processListCacheRef, submitTenantId);
+      await loadFormMeta(submitTenantId);
       await fetchRows({
-        companyId: submitCompanyId,
+        companyId: submitTenantId,
         force: true,
         preserveIds: optimisticRows.map((row) => row.id),
       });
-    } catch {
-      notify(t("createFailed"), "danger");
+    } catch (err) {
+      notify(err?.message || t("createFailed"), "danger");
     }
   };
 
@@ -1479,31 +1349,26 @@ export default function ProcessListPage() {
       setDeleteConfirmOpen(false);
       return;
     }
+    const submitTenantId = Number(activeCompanyId ?? companyId);
+    if (!Number.isFinite(submitTenantId) || submitTenantId <= 0) return;
+
     setDeleteSubmitting(true);
     setDeleteConfirmError("");
     try {
-      const res = await fetch(buildApiUrl("api/processes/delete_processes_api.php"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: Array.from(selectedIds), permission: "Games" }),
-        credentials: "include",
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        const msg = translateProcessListApiMessage(lang, json, t("deleteFailed"));
-        setDeleteConfirmError(msg);
-        notify(msg, "danger");
-        return;
+      let deleted = 0;
+      for (const id of selectedIds) {
+        await deleteProcess(submitTenantId, id);
+        deleted += 1;
       }
-      const n = json?.data?.deleted ?? selectedIds.size;
-      notify(n === 1 ? t("processDeletedOne") : t("processDeletedMany", { count: n }), "success");
+      notify(deleted === 1 ? t("processDeletedOne") : t("processDeletedMany", { count: deleted }), "success");
       notifyTransactionDataChanged("processlist-react");
       setDeleteConfirmOpen(false);
       setDeleteConfirmError("");
       setSelectedIds(new Set());
-      fetchRows();
-    } catch {
-      const msg = t("deleteFailed");
+      invalidateProcessListTenantCache(processListCacheRef, submitTenantId);
+      fetchRows({ companyId: submitTenantId, force: true });
+    } catch (err) {
+      const msg = translateProcessListApiMessage(lang, { message: err?.message }, t("deleteFailed"));
       setDeleteConfirmError(msg);
       notify(msg, "danger");
     } finally {
@@ -1517,24 +1382,14 @@ export default function ProcessListPage() {
       return;
     }
     if (!row?.id) return;
+    const submitTenantId = Number(activeCompanyId ?? companyId);
+    if (!Number.isFinite(submitTenantId) || submitTenantId <= 0) return;
     try {
-      const fd = new FormData();
-      fd.append("id", String(row.id));
-      fd.append("permission", "Games");
-      const res = await fetch(buildApiUrl("api/processes/toggle_process_status_api.php"), {
-        method: "POST",
-        body: fd,
-        credentials: "include",
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        notify(json.message || json.error || t("statusUpdateFailed"), "danger");
-        return;
-      }
-      const newStatus = String(json?.data?.newStatus || "").toLowerCase();
+      const { status } = await updateProcessStatus(submitTenantId, row.id);
+      const newStatus = normalizeProcessStatusKey(status);
       if (!newStatus) {
         notifyTransactionDataChanged("processlist-react");
-        fetchRows();
+        fetchRows({ companyId: submitTenantId, force: true });
         return;
       }
 
@@ -1548,15 +1403,16 @@ export default function ProcessListPage() {
 
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        if (newStatus === "active") next.delete(row.id);
+        if (isProcessStatusActive(newStatus)) next.delete(row.id);
         return next;
       });
 
-      const statusText = newStatus === "active" ? t("activated") : t("deactivated");
+      const statusText = isProcessStatusActive(newStatus) ? t("activated") : t("deactivated");
       notify(t("statusChangedTo", { status: statusText }), "success");
       notifyTransactionDataChanged("processlist-react");
-    } catch {
-      notify(t("statusUpdateFailed"), "danger");
+      invalidateProcessListTenantCache(processListCacheRef, submitTenantId);
+    } catch (err) {
+      notify(err?.message || t("statusUpdateFailed"), "danger");
     }
   };
 
@@ -1725,7 +1581,7 @@ export default function ProcessListPage() {
           editMode={editMode}
           form={form}
           setForm={setForm}
-          scopeCompanyId={companyId}
+          scopeTenantId={activeCompanyId ?? companyId}
           currencies={currencies}
           days={days}
           readOnly={processMutationsBlocked}

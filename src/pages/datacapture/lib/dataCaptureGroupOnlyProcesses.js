@@ -33,7 +33,7 @@ export function isGroupPayrollDraftProcessId(id) {
 export function getGroupOnlyProcessOptions() {
   return GROUP_PAYROLL_PROCESS_CODES.map((code) => ({
     id: code.toLowerCase(),
-    process_id: code,
+    processId: code,
     displayText: code,
   }));
 }
@@ -49,13 +49,13 @@ export function selectedProcessFromGroupOnlySession(processData) {
     .trim()
     .toUpperCase();
   if (pcode) {
-    const byCode = options.find((o) => o.process_id === pcode);
+    const byCode = options.find((o) => (o.processId ?? o.process_id) === pcode);
     if (byCode) {
       return {
         id: byCode.id,
         displayText: byCode.displayText,
-        process_id: byCode.process_id,
-        description_name: null,
+        processId: byCode.processId ?? byCode.process_id,
+        descriptionName: null,
       };
     }
   }
@@ -66,8 +66,8 @@ export function selectedProcessFromGroupOnlySession(processData) {
       return {
         id: byId.id,
         displayText: byId.displayText,
-        process_id: byId.process_id,
-        description_name: null,
+        processId: byId.processId ?? byId.process_id,
+        descriptionName: null,
       };
     }
   }
@@ -75,13 +75,15 @@ export function selectedProcessFromGroupOnlySession(processData) {
     .trim()
     .toUpperCase();
   if (pname) {
-    const byName = options.find((o) => o.process_id === pname || o.displayText === pname);
+    const byName = options.find(
+      (o) => (o.processId ?? o.process_id) === pname || o.displayText === pname,
+    );
     if (byName) {
       return {
         id: byName.id,
         displayText: byName.displayText,
-        process_id: byName.process_id,
-        description_name: null,
+        processId: byName.processId ?? byName.process_id,
+        descriptionName: null,
       };
     }
   }

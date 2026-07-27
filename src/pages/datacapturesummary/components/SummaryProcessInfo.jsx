@@ -1,6 +1,7 @@
 import {
   formatSummaryProcessCurrency,
   formatSummaryProcessDescriptions,
+  formatSummaryProcessLabel,
 } from "../lib/summaryTransform.js";
 
 function resolveHeaderCurrency(processData, rows) {
@@ -32,7 +33,7 @@ export default function SummaryProcessInfo({ t, processData, rows = [], visible 
         <div className="process-info-item">
           <span className="process-info-label">{t("process")}</span>
           <span className="process-info-value" id="processInfoProcess">
-            {processData.processName || processData.process || "-"}
+            {formatSummaryProcessLabel(processData)}
           </span>
         </div>
         <div className="process-info-item">

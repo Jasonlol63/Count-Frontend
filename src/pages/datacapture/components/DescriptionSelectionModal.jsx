@@ -102,7 +102,7 @@ export default function DescriptionSelectionModal({
           notify(dup ? "Description name already exists" : result.error || "Failed to add description");
           return;
         }
-        const newId = result.data?.description_id ?? result.description_id;
+        const newId = result.data?.id ?? result.data?.description_id ?? result.description_id;
         if (newId != null) {
           setCatalog((prev) => {
             if (prev.some((p) => String(p.id) === String(newId))) return prev;
@@ -128,7 +128,7 @@ export default function DescriptionSelectionModal({
         return;
       }
       try {
-        const result = await postDeleteDescription(id);
+        const result = await postDeleteDescription(companyId, id);
         if (!result.success) {
           notify(result.error || "Failed to delete description");
           return;
@@ -144,7 +144,7 @@ export default function DescriptionSelectionModal({
         notify("Failed to delete description");
       }
     },
-    [t, notify, onDescriptionsChange],
+    [t, notify, onDescriptionsChange, companyId],
   );
 
   const handleConfirm = useCallback(() => {

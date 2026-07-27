@@ -12,7 +12,7 @@ Pure React SPA — no runtime load of `js/datacapture.js` or other legacy script
 |------|----------|
 | Page shell, company filter, page-ready chrome | `DataCapturePage.jsx` |
 | Form fields, capture type, submit/reset | `hooks/useDataCaptureFormEngine.js`, `hooks/useDataCaptureCaptureType.js`, `hooks/useDataCaptureSubmitReset.js` |
-| Category / permission gates | `hooks/useDataCaptureCategoryPermissions.js` |
+| Capture category (auto Games/Bank, no UI pills) | `hooks/useDataCaptureCategoryPermissions.js`, `lib/dataCaptureSpringApi.js` — see [CATEGORY_REMOVED.md](./CATEGORY_REMOVED.md) |
 | Submitted process list (right panel) | `hooks/useDataCaptureSubmittedList.js` |
 | Page lifecycle (first load, URL params) | `hooks/useDataCapturePageLifecycle.js` |
 | Runtime registry (replaces legacy globals) | `lib/dataCaptureRuntime.js`, `lib/dataCaptureBridge.js` |

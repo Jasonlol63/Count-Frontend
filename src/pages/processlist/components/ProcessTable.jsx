@@ -4,19 +4,18 @@ import {
   formatProcessDayUseDisplay,
   formatProcessStatusDisplay,
 } from "../../../translateFile/pages/processListTranslate.js";
+import {
+  isProcessStatusInactive,
+  normalizeProcessStatusKey,
+} from "../processListHelpers.js";
 
 function upperCell(val) {
   if (val == null || val === "") return "";
   return String(val).toUpperCase();
 }
 
-function normalizeProcessStatus(raw) {
-  return String(raw || "").trim().toLowerCase();
-}
-
 function processStatusBadgeClass(statusKey) {
-  if (statusKey === "active") return "status-active";
-  if (statusKey === "waiting") return "status-waiting";
+  if (statusKey === "ACTIVE") return "status-active";
   return "status-inactive";
 }
 
@@ -49,7 +48,7 @@ export default function ProcessTable({
   t,
 }) {
   const deletableRows = pageRows.filter(
-    (r) => normalizeProcessStatus(r.status) === "inactive" && !r.has_transactions
+    (r) => isProcessStatusInactive(r.status) && !r.has_transactions
   );
   const allDeletableSelected =
     deletableRows.length > 0 && deletableRows.every((r) => selectedIds.has(r.id));
@@ -118,7 +117,7 @@ export default function ProcessTable({
           </div>
         ) : null}
         {pageRows.map((row, idx) => {
-          const statusKey = normalizeProcessStatus(row.status);
+          const statusKey = normalizeProcessStatusKey(row.status);
           return (
             <div
               className="process-card games-process-row"
@@ -159,7 +158,7 @@ export default function ProcessTable({
               </div>
               {showSelectColumn ? (
                 <div className="card-item card-item--select">
-                  {statusKey === "inactive" && !row.has_transactions ? (
+                  {statusKey === "INACTIVE" && !row.has_transactions ? (
                     <input
                       type="checkbox"
                       className="row-checkbox"

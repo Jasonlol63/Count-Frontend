@@ -1,6 +1,8 @@
 ﻿import { spaPath } from "../../../utils/routing/pageRoutes.js";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { fetchCompanyPermissionsForDataCapture } from "./dataCaptureApi.js";
+import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
+import { peekCompanySessionFlags } from "../../../utils/company/companySessionFlagsCache.js";
+import { sessionHasTenantBank, sessionHasTenantGame } from "../../../utils/auth/sessionTenant.js";
+import { fetchTenantCategoryPermissions } from "./dataCaptureSpringApi.js";
 import { canUseGroupOnlyMode } from "../../../utils/company/loginScope.js";
 import {
   isBankOnlySessionUser,
@@ -21,6 +23,7 @@ export function permissionsIncludeGames(permissions) {
 
 /** Session has any company category (direct row or aggregated group flags). */
 export function sessionUserHasCompanyCategoryAccess(sessionUser) {
+  if (sessionHasTenantGame(sessionUser) || sessionHasTenantBank(sessionUser)) return true;
   const perms = Array.isArray(sessionUser?.company_permissions)
     ? sessionUser.company_permissions
     : [];
@@ -30,9 +33,9 @@ export function sessionUserHasCompanyCategoryAccess(sessionUser) {
   return false;
 }
 
-/** Session may use Data Capture when group/company has Games (incl. aggregated group flags). */
+/** Session may use Data Capture when tenant has Games or bank-only payroll channel. */
 export function sessionUserHasGamblingAccess(sessionUser) {
-  if (sessionUser?.company_has_gambling === true) return true;
+  if (sessionHasTenantGame(sessionUser) || sessionUser?.company_has_gambling === true) return true;
   return permissionsIncludeGames(sessionUser?.company_permissions);
 }
 
@@ -55,14 +58,15 @@ export function companyRowHasBankOnlyPayrollAccess(companyRow) {
 
 export function syncDataAllowsDataCaptureAccess(syncData) {
   if (!syncData) return false;
-  if (syncData.has_gambling === true) return true;
+  if (syncData.has_gambling === true || syncData.has_game === true) return true;
   return syncDataIsBankOnlyPayrollCompany(syncData);
 }
 
-export async function fetchCompanyHasGamesCategory(companyCode) {
-  if (!companyCode) return false;
+export async function fetchCompanyHasGamesCategory(tenantId) {
+  const tid = Number(tenantId);
+  if (!tid) return false;
   try {
-    const result = await fetchCompanyPermissionsForDataCapture(companyCode);
+    const result = await fetchTenantCategoryPermissions(tid);
     const perms =
       result.success && result.data && Array.isArray(result.data.permissions)
         ? result.data.permissions
@@ -73,17 +77,22 @@ export async function fetchCompanyHasGamesCategory(companyCode) {
   }
 }
 
-export async function syncDataCaptureCompanySession(companyId) {
-  const response = await fetch(
-    buildApiUrl(`auth/switch-tenant?tenant_id=${companyId}`),
-    { credentials: "include" }
-  );
-  return response.json();
+/** Switch session tenant — Spring POST `/auth/switch-tenant`. */
+export async function syncDataCaptureCompanySession(tenantId) {
+  return syncCompanySessionApi(Number(tenantId));
 }
 
-/** @returns {Promise<boolean>} true when company may use Data Capture */
+function tenantFlagsAllowDataCapture(tenantId) {
+  const flags = peekCompanySessionFlags(Number(tenantId));
+  if (!flags) return null;
+  if (flags.has_gambling) return true;
+  return Boolean(flags.has_bank && !flags.has_gambling);
+}
+
+/** @returns {Promise<boolean>} true when tenant may use Data Capture */
 export async function resolveCompanyGamesAccess({
   companyId,
+  tenantId = null,
   companyCode,
   sessionUser,
   companyRow = null,
@@ -91,8 +100,15 @@ export async function resolveCompanyGamesAccess({
   if (sessionUserHasDataCapturePageAccess(sessionUser)) return true;
   if (companyRow && companyRowHasBankOnlyPayrollAccess(companyRow)) return true;
 
-  const numericId = Number(companyId);
+  const numericId = Number(tenantId ?? companyId);
   if (!Number.isFinite(numericId) || numericId <= 0) return false;
+
+  const cached = tenantFlagsAllowDataCapture(numericId);
+  if (cached === true) return true;
+  if (cached === false) {
+    const flags = peekCompanySessionFlags(numericId);
+    return Boolean(flags?.has_bank && !flags?.has_gambling);
+  }
 
   try {
     const syncJson = await syncDataCaptureCompanySession(numericId);
@@ -107,10 +123,10 @@ export async function resolveCompanyGamesAccess({
     /* fall through to permissions API */
   }
 
-  if (await fetchCompanyHasGamesCategory(companyCode)) return true;
+  if (await fetchCompanyHasGamesCategory(numericId)) return true;
 
   try {
-    const result = await fetchCompanyPermissionsForDataCapture(companyCode);
+    const result = await fetchTenantCategoryPermissions(numericId);
     const perms =
       result.success && result.data && Array.isArray(result.data.permissions)
         ? result.data.permissions
@@ -131,6 +147,7 @@ export function isGroupCaptureScope(captureScope, sessionProcessData = null) {
 export async function resolveSummaryPageAccess({
   captureScope,
   companyId,
+  tenantId = null,
   companyCode,
   sessionUser,
   sessionProcessData = null,
@@ -148,5 +165,10 @@ export async function resolveSummaryPageAccess({
 
   if (sessionUserHasBankOnlyPayrollAccess(sessionUser)) return true;
 
-  return resolveCompanyGamesAccess({ companyId, companyCode, sessionUser });
+  return resolveCompanyGamesAccess({
+    companyId,
+    tenantId,
+    companyCode,
+    sessionUser,
+  });
 }

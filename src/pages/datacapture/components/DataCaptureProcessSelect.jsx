@@ -193,9 +193,9 @@ export default function DataCaptureProcessSelect({
         {...(selectedProcess?.id
           ? {
               "data-value": selectedProcess.id,
-              "data-process-code": selectedProcess.process_id || "",
-              ...(selectedProcess.description_name
-                ? { "data-description-name": selectedProcess.description_name }
+              "data-process-code": selectedProcess.processId ?? selectedProcess.process_id ?? "",
+              ...(selectedProcess.descriptionName ?? selectedProcess.description_name
+                ? { "data-description-name": selectedProcess.descriptionName ?? selectedProcess.description_name }
                 : {}),
             }
           : {})}

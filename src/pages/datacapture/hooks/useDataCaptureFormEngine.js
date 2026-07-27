@@ -48,10 +48,10 @@ const PROCESS_PLACEHOLDER = "Select Process";
 const PROCESS_OPTIONS_RENDER_CAP = 80;
 
 const BANK_PROCESSES = [
-  { id: "profit", process_id: "PROFIT", process_display: "PROFIT", description_name: null },
-  { id: "salary", process_id: "SALARY", process_display: "SALARY", description_name: null },
-  { id: "commission", process_id: "COMMISSION", process_display: "COMMISSION", description_name: null },
-  { id: "bonus", process_id: "BONUS", process_display: "BONUS", description_name: null }
+  { id: "profit", processId: "PROFIT", processDisplay: "PROFIT", descriptionName: null },
+  { id: "salary", processId: "SALARY", processDisplay: "SALARY", descriptionName: null },
+  { id: "commission", processId: "COMMISSION", processDisplay: "COMMISSION", descriptionName: null },
+  { id: "bonus", processId: "BONUS", processDisplay: "BONUS", descriptionName: null },
 ];
 function readRestoredProcessData() {
   try {
@@ -86,8 +86,8 @@ function readRestoredSelectedProcess(restoredProcessData, selectedGroup = null, 
   return {
     id: pid,
     displayText: pname || pcode || pid,
-    process_id: pcode,
-    description_name: null,
+    processId: pcode,
+    descriptionName: null,
   };
 }
 
@@ -105,20 +105,33 @@ function applyProcessDetailToFields(data, setters, currenciesSnapshot, applyComp
   const pd = data || {};
 
   if (applyCompanyOnlyFields) {
-    if (pd.remove_word) setRemoveWord(normalizeRemoveWordValue(pd.remove_word));
-    if (pd.replace_word_from) setReplaceFrom(toDataCaptureWordFieldCase(pd.replace_word_from));
-    if (pd.replace_word_to) setReplaceTo(toDataCaptureWordFieldCase(pd.replace_word_to));
+    if (pd.removeWord ?? pd.remove_word) {
+      setRemoveWord(normalizeRemoveWordValue(pd.removeWord ?? pd.remove_word));
+    }
+    if (pd.replaceWordFrom ?? pd.replace_word_from) {
+      setReplaceFrom(toDataCaptureWordFieldCase(pd.replaceWordFrom ?? pd.replace_word_from));
+    }
+    if (pd.replaceWordTo ?? pd.replace_word_to) {
+      setReplaceTo(toDataCaptureWordFieldCase(pd.replaceWordTo ?? pd.replace_word_to));
+    }
 
-    if (pd.description_names) {
-      const arr = Array.isArray(pd.description_names) ? pd.description_names : [pd.description_names];
+    const descriptionNames = pd.descriptionNames ?? pd.description_names;
+    if (descriptionNames) {
+      const arr = Array.isArray(descriptionNames) ? descriptionNames : [descriptionNames];
       setSelectedDescriptions?.(arr);
       setDescriptionDisplay(arr.join(", "));
     }
   }
 
-  if (pd.remarks) setRemark(toDataCaptureWordFieldCase(pd.remarks));
+  const remarkValue = pd.remark ?? pd.remarks;
+  if (remarkValue) setRemark(toDataCaptureWordFieldCase(remarkValue));
 
-  const currencyIdStr = pd.currency_id != null ? String(pd.currency_id) : "";
+  const currencyIdStr =
+    pd.currencyId != null
+      ? String(pd.currencyId)
+      : pd.currency_id != null
+        ? String(pd.currency_id)
+        : "";
   const list = currenciesSnapshot || [];
   if (currencyIdStr && list.length) {
     const exists = list.some((c) => String(c.id) === currencyIdStr);
@@ -127,8 +140,13 @@ function applyProcessDetailToFields(data, setters, currenciesSnapshot, applyComp
       return;
     }
   }
-  if (pd.currency_warning && pd.currency_code && list.length) {
-    const code = String(pd.currency_code).toUpperCase();
+  const currencyCode = pd.currencyCode ?? pd.currency_code;
+  if (pd.currency_warning && currencyCode && list.length) {
+    const code = String(currencyCode).toUpperCase();
+    const match = list.find((c) => String(c.code).toUpperCase() === code);
+    if (match) setCurrencyId(String(match.id));
+  } else if (currencyCode && list.length) {
+    const code = String(currencyCode).toUpperCase();
     const match = list.find((c) => String(c.code).toUpperCase() === code);
     if (match) setCurrencyId(String(match.id));
   }
@@ -373,7 +391,7 @@ export function useDataCaptureFormEngine(
       if (!proc?.id) return;
       saveGroupOnlyProcessPrefs(payrollPrefsKeyRef.current, {
         process: proc.id,
-        processCode: proc.process_id,
+        processCode: proc.processId,
         processName: proc.displayText,
         currency: currencyId,
         date: captureDate,
@@ -387,8 +405,8 @@ export function useDataCaptureFormEngine(
     const next = {
       id: String(option.id),
       displayText: option.displayText || String(option.id),
-      process_id: option.process_id || String(option.id).toUpperCase(),
-      description_name: null,
+      processId: option.processId || String(option.id).toUpperCase(),
+      descriptionName: null,
     };
     const prev = selectedProcessRef.current;
     if (prev?.id && prev.id !== next.id && isGroupPayrollDraftProcessId(prev.id)) {
@@ -407,7 +425,7 @@ export function useDataCaptureFormEngine(
     setSelectedProcess(next);
     saveGroupOnlyProcessPrefs(payrollPrefsKeyRef.current, {
       process: next.id,
-      processCode: next.process_id,
+      processCode: next.processId,
       processName: next.displayText,
       currency: currencyId,
       date: captureDate,
@@ -434,14 +452,14 @@ export function useDataCaptureFormEngine(
     setSelectedProcess({
       id: String(row.id),
       displayText,
-      process_id: row.process_id,
-      description_name: row.description_name || null,
+      processId: row.processId ?? row.process_id,
+      descriptionName: row.descriptionName ?? row.description_name ?? null,
     });
     setProcessOpen(false);
     setProcessFilter("");
     setRemoveWord("");
-    const cid = companyIdRef.current;
-    const res = await fetchProcessDetail(row.id, cid);
+    const scope = captureScopeRef.current;
+    const res = await fetchProcessDetail(row.id, scope, captureDate);
     if (res.success && res.data) {
       applyProcessDetailToFields(
         res.data,
@@ -459,7 +477,7 @@ export function useDataCaptureFormEngine(
       );
     }
     scheduleRecomputeSubmitState();
-  }, [setSelectedDescriptions]);
+  }, [captureDate, setSelectedDescriptions]);
 
   const clearCompanyOnlyFields = useCallback(() => {
     setRemoveWord("");
@@ -548,7 +566,7 @@ export function useDataCaptureFormEngine(
       if (proc?.id) {
         saveGroupOnlyProcessPrefs(prefsKey, {
           process: proc.id,
-          processCode: proc.process_id || pcode,
+          processCode: proc.processId || pcode,
           processName: proc.displayText || pname,
           currency: processData.currency,
           date: processData.date,
@@ -557,22 +575,24 @@ export function useDataCaptureFormEngine(
     } else {
       let row = null;
       if (pid) row = rows.find((r) => String(r.id) === pid);
-      if (!row && pcode) row = rows.find((r) => String(r.process_id || "").trim() === pcode);
+      if (!row && pcode) {
+        row = rows.find((r) => String(r.processId ?? r.process_id ?? "").trim() === pcode);
+      }
       if (!row && pname) row = rows.find((r) => displayTextFromProcessRow(r) === pname);
 
       if (row) {
         setSelectedProcess({
           id: String(row.id),
           displayText: displayTextFromProcessRow(row),
-          process_id: row.process_id,
-          description_name: row.description_name || null,
+          processId: row.processId ?? row.process_id,
+          descriptionName: row.descriptionName ?? row.description_name ?? null,
         });
       } else if (pid || pcode || pname) {
         setSelectedProcess({
           id: pid || pcode,
           displayText: pname || pcode || pid,
-          process_id: pcode,
-          description_name: null,
+          processId: pcode,
+          descriptionName: null,
         });
       }
     }

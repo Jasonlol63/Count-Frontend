@@ -54,10 +54,10 @@ import {
   resolveCompanyGamesAccess,
   sessionUserHasCompanyCategoryAccess,
   sessionUserHasDataCapturePageAccess,
-  sessionUserHasGamblingAccess,
   syncDataAllowsDataCaptureAccess,
   syncDataCaptureCompanySession,
 } from "./lib/dataCaptureCompanyAccess.js";
+import { resolveDataCaptureEffectiveTenantId } from "./lib/dataCaptureTenant.js";
 import {
   getGroupOnlyProcessOptions,
   isGroupOnlyProcessId,
@@ -323,8 +323,12 @@ function DataCapturePageContent() {
     return "";
   }, [isCompanySelected, currentCompanyRow, groupOnlyTable, selectedGroup, anchorCompanyRow, scopeCompanyId]);
 
-  const { permissions, selectedPermission, selectPermission, showPermissionFilter } =
-    useDataCaptureCategoryPermissions(companyCode);
+  const categoryTenantId = useMemo(
+    () => resolveDataCaptureEffectiveTenantId(captureScope, companyId),
+    [captureScope, companyId],
+  );
+
+  const { selectedPermission } = useDataCaptureCategoryPermissions(categoryTenantId);
 
   const form = useDataCaptureFormEngine(captureScope, {
     applyCompanyOnlyFields: showCompanyProcessUi,
@@ -593,6 +597,7 @@ function DataCapturePageContent() {
 
         const hasGamesAccess = await resolveCompanyGamesAccess({
           companyId: effectiveCompany,
+          tenantId: effectiveCompany,
           companyCode: pickCode,
           sessionUser: u,
           companyRow: rowForPick,
@@ -990,32 +995,6 @@ function DataCapturePageContent() {
   return (
     <DataCaptureErrorBoundary>
       <div className="container">
-      <div className="dc-page-toolbar">
-
-        <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
-          <div
-            id="data-capture-permission-filter"
-            className="data-capture-company-filter data-capture-permission-filter-header"
-            style={{ display: showPermissionFilter ? "flex" : "none" }}
-          >
-            <span className="data-capture-company-label">{t("category")}</span>
-            <div id="data-capture-permission-buttons" className="data-capture-company-buttons">
-              {permissions.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={`data-capture-company-btn${selectedPermission === p ? " active" : ""}`.trim()}
-                  data-permission={p}
-                  onClick={() => selectPermission(p)}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {engineError ? (
         <div style={{ marginBottom: 12, color: "#b91c1c" }} role="alert">
           {engineError}

@@ -1,12 +1,25 @@
-/** Games Process — Spring Boot `/api/process/*` (tenant / ids in RequestBody, never on URL). */
+/** Games Process — Spring Boot `/api/process/*` (tenantId in RequestBody only). */
 
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
-import { normalizeRows, resolveProcessListActiveCompanyId } from "./processListHelpers.js";
+import {
+  normalizeProcessListRows,
+  normalizeProcessStatusKey,
+  PROCESS_WEEKDAY_OPTIONS,
+  resolveProcessListActiveTenantId,
+} from "./processListHelpers.js";
+import {
+  fetchCurrencyListByTenantId,
+  normalizeCurrencyRow,
+} from "../../utils/api/currencyApi.js";
 
-/** company.id in the picker === tenant.id in the backend. */
-export function resolveProcessListTenantId(companyId) {
-  const tid = companyId != null ? Number(companyId) : Number.NaN;
+export function resolveProcessListTenantId(tenantId) {
+  const tid = tenantId != null ? Number(tenantId) : Number.NaN;
   return Number.isFinite(tid) && tid > 0 ? tid : null;
+}
+
+/** @deprecated Use {@link resolveProcessListTenantId}. */
+export function resolveProcessListActiveCompanyId(tenantId, tenants, opts) {
+  return resolveProcessListActiveTenantId(tenantId, tenants, opts);
 }
 
 function isApiSuccess(json) {
@@ -33,7 +46,7 @@ export async function fetchProcessListByTenantId(tenantId, signal) {
     throw new Error(json?.message || "failedToLoadProcesses");
   }
   const data = Array.isArray(json.data) ? json.data : [];
-  return normalizeRows(data);
+  return normalizeProcessListRows(data);
 }
 
 /** Spring ProcessDescription → picker row. */
@@ -158,6 +171,7 @@ export async function addProcess(tenantId, fields, signal) {
     replaceWordFrom: fields?.replaceWordFrom != null ? String(fields.replaceWordFrom) : "",
     replaceWordTo: fields?.replaceWordTo != null ? String(fields.replaceWordTo) : "",
     remark: fields?.remark != null ? String(fields.remark) : "",
+    category: "GAME",
   };
 
   const res = await fetch(buildApiUrl("api/process/add-process"), {
@@ -228,7 +242,7 @@ export async function updateProcess(tenantId, fields, signal) {
  * POST /api/process/update-status
  * Body aligned with Spring Process entity fields used by the endpoint: { id, tenantId }.
  * Server toggles ACTIVE ↔ INACTIVE; response data is the updated Process (use data.status).
- * @returns {Promise<{ status: string }>} normalized lowercase status
+ * @returns {Promise<{ status: string }>} normalized ACTIVE | INACTIVE
  */
 export async function updateProcessStatus(tenantId, processId, signal) {
   const tid = resolveProcessListTenantId(tenantId);
@@ -247,8 +261,8 @@ export async function updateProcessStatus(tenantId, processId, signal) {
   if (!res.ok || !isApiSuccess(json)) {
     throw new Error(json?.message || "failedToUpdateProcessStatus");
   }
-  const status = String(json?.data?.status || "").trim().toLowerCase();
-  if (status !== "active" && status !== "inactive") {
+  const status = normalizeProcessStatusKey(json?.data?.status);
+  if (status !== "ACTIVE" && status !== "INACTIVE") {
     throw new Error(json?.message || "failedToUpdateProcessStatus");
   }
   return { status, process: json.data };
@@ -279,4 +293,33 @@ export async function deleteProcess(tenantId, processId, signal) {
   return json.data ?? null;
 }
 
-export { resolveProcessListActiveCompanyId, normalizeRows };
+export { resolveProcessListActiveTenantId, normalizeProcessListRows as normalizeRows } from "./processListHelpers.js";
+
+/**
+ * Form meta for Add/Edit modal — Spring currency + description + weekday options.
+ */
+export async function fetchProcessFormMeta(tenantId, signal) {
+  const tid = resolveProcessListTenantId(tenantId);
+  if (!tid) throw new Error("tenantIdRequired");
+
+  const [currencyRows, descriptions] = await Promise.all([
+    fetchCurrencyListByTenantId(tid, signal),
+    fetchProcessDescriptionsByTenantId(tid, signal),
+  ]);
+
+  const currencies = currencyRows
+    .map((raw) => normalizeCurrencyRow(raw))
+    .filter((c) => Number.isFinite(c.id) && c.id > 0)
+    .map((c) => ({
+      id: String(c.id),
+      code: String(c.code || "").trim().toUpperCase(),
+      name: String(c.code || "").trim().toUpperCase(),
+    }));
+
+  return {
+    currencies,
+    descriptions: descriptions.map((d) => ({ id: d.id, name: d.name })),
+    days: PROCESS_WEEKDAY_OPTIONS,
+    existingProcesses: [],
+  };
+}

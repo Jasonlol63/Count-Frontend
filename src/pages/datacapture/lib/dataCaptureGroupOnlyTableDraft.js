@@ -19,6 +19,8 @@ import {
   isGroupPayrollCaptureSession,
   payrollDraftBucketIsCompany,
 } from "../../../utils/company/c168CaptureChannel.js";
+import { getBankCaptureDraft } from "./dataCaptureSpringApi.js";
+import { resolveDataCaptureTenantId } from "./dataCaptureTenant.js";
 
 export const GROUP_ONLY_TABLE_DRAFTS_KEY = "dc_group_only_table_drafts";
 
@@ -371,8 +373,33 @@ export async function restoreGroupOnlyTableDraft(
   try {
     callDataCaptureRuntime("clearCaptureTable");
 
-    const scope = payrollDraftBucketIsCompany(g) ? options.captureScope : options.captureScope || scopeFromGroupId(g);
-    const draft = await fetchGroupOnlyTableDraft(g, p, c, scope, options);
+    // Phase 2: prefer Spring BANK draft (tenant + processCode + currency).
+    const tenantId = resolveDataCaptureTenantId(options.captureScope);
+    let draft = null;
+    if (tenantId) {
+      try {
+        draft = await getBankCaptureDraft({
+          tenantId,
+          processCode: String(p).toUpperCase(),
+          currencyId: c,
+        });
+        if (draft?.tableData) {
+          writeLocalDraft(g, p, c, {
+            tableData: draft.tableData,
+            captureType: draft.captureType || "1.Text",
+          });
+        }
+      } catch (err) {
+        console.warn("Spring bank draft load failed — falling back", err);
+      }
+    }
+
+    if (!draft?.tableData) {
+      const scope = payrollDraftBucketIsCompany(g)
+        ? options.captureScope
+        : options.captureScope || scopeFromGroupId(g);
+      draft = await fetchGroupOnlyTableDraft(g, p, c, scope, options);
+    }
     if (seq !== restoreSeq) return;
 
     if (!draft?.tableData) {
