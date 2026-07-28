@@ -65,21 +65,35 @@ function SummaryTableRowInner({ row, onRowChange, onNewFormula, onEditFormula, o
     setDraftValue("");
   }, []);
 
-  const saveFormulaEdit = useCallback(() => {
-    const patch = buildFormulaInlineEditPatch(row, draftValue);
-    setEditingField(null);
-    setDraftValue("");
-    if (!patch) return;
-    onInlineEditSave?.(row, patch);
-  }, [row, draftValue, onInlineEditSave]);
+  const saveFormulaEdit = useCallback(
+    (nextValue) => {
+      const patch = buildFormulaInlineEditPatch(
+        row,
+        nextValue ?? draftValue,
+        editOriginalRef.current
+      );
+      setEditingField(null);
+      setDraftValue("");
+      if (!patch) return;
+      onInlineEditSave?.(row, patch);
+    },
+    [row, draftValue, onInlineEditSave]
+  );
 
-  const saveSourceEdit = useCallback(() => {
-    const patch = buildSourceInlineEditPatch(row, draftValue);
-    setEditingField(null);
-    setDraftValue("");
-    if (!patch) return;
-    onInlineEditSave?.(row, patch);
-  }, [row, draftValue, onInlineEditSave]);
+  const saveSourceEdit = useCallback(
+    (nextValue) => {
+      const patch = buildSourceInlineEditPatch(
+        row,
+        nextValue ?? draftValue,
+        editOriginalRef.current
+      );
+      setEditingField(null);
+      setDraftValue("");
+      if (!patch) return;
+      onInlineEditSave?.(row, patch);
+    },
+    [row, draftValue, onInlineEditSave]
+  );
 
   const saveRateValue = useCallback(
     (cell) => {

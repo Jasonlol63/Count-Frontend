@@ -4,6 +4,7 @@ import {
   createMainRowFromEntry,
   createSubRowFromTemplate,
   applyMainTemplateToRowModel,
+  isSummarySubRow,
 } from "./summaryRowData.js";
 import { findMainRowForTemplate, findMainRowForSubTemplatePure } from "./summaryTemplateMatching.js";
 import { fetchSummaryTemplates } from "../lib/summaryApi.js";
@@ -255,15 +256,15 @@ export async function populateSummaryRowsPure({
 
   rows = rows
     .filter((row) => {
-      if (row.productType === "sub") {
+      if (isSummarySubRow(row)) {
         if (isParentRowSuppressed(row, rows, suppressed)) return false;
         if (isRowSuppressed(row, suppressed)) return false;
       }
       return true;
     })
     .map((row) => {
-      if (row.productType === "main" && isRowSuppressed(row, suppressed)) {
-        return clearRowEditableFields(row);
+      if (!isSummarySubRow(row) && isRowSuppressed(row, suppressed)) {
+        return clearRowEditableFields(row, { asMainSkeleton: true });
       }
       return row;
     });

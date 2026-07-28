@@ -158,6 +158,7 @@ export const ACCOUNT_I18N = {
     apiFillRequiredFields: "Please fill in all required fields",
     apiAccountIdExists: "Account ID already exists",
     apiAccountIdExistsInScope: "Account ID already exists in {scope}",
+    apiAccountIdExistsInCompany: "Account ID already exists in this company",
     accountSavedCurrencySyncFailed: "Account saved, but currency sync failed: {detail}",
     apiMissingRequiredParams: "Missing required parameters",
     apiAccountNotInCompany: "Account does not belong to this company",
@@ -365,6 +366,7 @@ export const ACCOUNT_I18N = {
     apiFillRequiredFields: "请填写所有必填字段",
     apiAccountIdExists: "账户 ID 已存在",
     apiAccountIdExistsInScope: "账户 ID 已存在于 {scope}",
+    apiAccountIdExistsInCompany: "该公司下账户 ID 已存在",
     accountSavedCurrencySyncFailed: "账号已保存，但货币同步失败：{detail}",
     apiMissingRequiredParams: "缺少必要参数",
     apiAccountNotInCompany: "账户不属于该公司",
@@ -467,7 +469,10 @@ const ACCOUNT_API_MESSAGE_KEYS = {
   [normAccountApiMessage("请填写所有必填字段")]: "apiFillRequiredFields",
   [normAccountApiMessage("Account ID already exists")]: "apiAccountIdExists",
   [normAccountApiMessage("账户ID已存在")]: "apiAccountIdExists",
+  [normAccountApiMessage("Account ID already exists in this company")]: "apiAccountIdExistsInCompany",
+  [normAccountApiMessage("该公司下账户 ID 已存在")]: "apiAccountIdExistsInCompany",
   [normAccountApiMessage("缺少必要参数")]: "apiMissingRequiredParams",
+  [normAccountApiMessage("Account ID is required")]: "apiAccountIdRequired",
   [normAccountApiMessage("账户不属于该公司")]: "apiAccountNotInCompany",
   [normAccountApiMessage("只读账号无法修改账户关联")]: "apiReadOnlyCannotModifyLinks",
   [normAccountApiMessage("不能关联同一个账户")]: "apiCannotLinkSameAccount",
@@ -603,7 +608,13 @@ function translateAccountDynamicApiMessage(lang, message, data = null) {
     raw.match(/^账户ID已存在于\s+(.+)$/u) ||
     raw.match(/^账户\s*ID\s*已存在于\s+(.+)$/iu) ||
     raw.match(/^Account ID already exists in\s+(.+)$/i);
-  if (m) return getAccountText(lang, "apiAccountIdExistsInScope", { scope: m[1].trim() });
+  if (m) {
+    const scope = m[1].trim();
+    if (/^this company$/i.test(scope) || /^该公司$/u.test(scope)) {
+      return getAccountText(lang, "apiAccountIdExistsInCompany");
+    }
+    return getAccountText(lang, "apiAccountIdExistsInScope", { scope });
+  }
 
   m = raw.match(/^数据库错误:\s*(.+)$/u) || raw.match(/^数据库更新错误:\s*(.+)$/u);
   if (m) return getAccountText(lang, "apiDatabaseError") + ": " + m[1].trim();

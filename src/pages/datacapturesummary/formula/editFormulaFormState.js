@@ -535,18 +535,18 @@ export function addSelectedDescriptionToForm(form, tableData, rowContext = {}) {
 export function buildFormulaSavePatchFromForm(form, row) {
   const currencyId = String(form.currencyId || "").trim();
   if (!currencyId) {
-    return { ok: false, message: "请先选择 Currency 后再保存。Please select a currency." };
+    return { ok: false, message: "Currency Id is required" };
   }
 
   const accountId = String(form.accountId || "").trim();
   const accountText = String(form.accountText || "").trim();
   if (!accountId) {
-    return { ok: false, message: "Please select an account" };
+    return { ok: false, message: "Account Id is required" };
   }
 
   const formulaValue = String(form.formula || "").trim();
   if (!formulaValue) {
-    return { ok: false, message: "Please enter a formula" };
+    return { ok: false, message: "Formula is required" };
   }
 
   const sourcePercentValue = String(form.sourcePercent || "1").trim() || "1";

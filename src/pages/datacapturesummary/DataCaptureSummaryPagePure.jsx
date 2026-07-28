@@ -46,7 +46,7 @@ import { clearSummaryFormulaContext, bindSummaryFormulaContext } from "./lib/sum
 import { useSummaryOverlays } from "./hooks/useSummaryOverlays.js";
 
 import { fetchSummaryAccountList } from "./lib/summaryApi.js";
-import { saveSummaryTemplatePure } from "./formula/summarySaveTemplatePure.js";
+import { saveUpdateFormulaSpring } from "./formula/summarySaveTemplatePure.js";
 import { recalculateRowAmounts } from "./table/summaryRowAmount.js";
 import { pushSummaryNotification } from "./lib/summaryNotify.js";
 
@@ -214,6 +214,8 @@ function DataCaptureSummaryPureInner() {
 
     processId: capture.processId,
 
+    processCode: capture.processCode,
+
     tableData: capture.transformedTableData,
 
     rows,
@@ -230,11 +232,11 @@ function DataCaptureSummaryPureInner() {
 
     if (!captureScope) return;
 
-    const accounts = await fetchSummaryAccountList(captureScope);
+    const accounts = await fetchSummaryAccountList(captureScope, effectiveCompanyId);
 
     setAccounts(accounts);
 
-  }, [captureScope, setAccounts]);
+  }, [captureScope, effectiveCompanyId, setAccounts]);
 
 
 
@@ -505,25 +507,41 @@ function DataCaptureSummaryPureInner() {
       updateRow(row.key, patch);
       const merged = recalculateRowAmounts({ ...row, ...patch }, globalRateInput);
       if (!merged.accountId || !merged.account?.trim()) return;
+
       try {
-        const tpl = await saveSummaryTemplatePure(merged, {
+        const tpl = await saveUpdateFormulaSpring(merged, {
           captureScope,
           companyId: effectiveCompanyId,
           processId: capture.processId,
+          processCode: capture.processCode,
         });
         if (!tpl.success) {
-          pushSummaryNotification("Error", tpl.message || "Template save failed.", "error");
+          pushSummaryNotification("Error", tpl.message || "Formula update failed.", "error");
+          return;
+        }
+        if (tpl.templateId != null) {
+          updateRow(row.key, {
+            templateId: tpl.templateId,
+            templateKey: tpl.templateKey ?? merged.templateKey,
+          });
         }
       } catch (e) {
-        console.warn("Inline edit template save failed:", e);
+        console.warn("Inline edit formula update failed:", e);
         pushSummaryNotification(
           "Error",
-          String(e?.message || e) || "Template save failed.",
+          String(e?.message || e) || "Formula update failed.",
           "error"
         );
       }
     },
-    [updateRow, globalRateInput, captureScope, effectiveCompanyId, capture.processId]
+    [
+      updateRow,
+      globalRateInput,
+      captureScope,
+      effectiveCompanyId,
+      capture.processId,
+      capture.processCode,
+    ]
   );
 
 
