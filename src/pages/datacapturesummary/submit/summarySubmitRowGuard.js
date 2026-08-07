@@ -60,11 +60,11 @@ function isCommDescription(row) {
 
 /**
  * Classify whether a summary row will be included in the submit payload.
- * @returns {{ willSubmit: boolean, reason: null|'selectChecked'|'noAccount'|'unresolvedAccount', amount: number }}
+ * @returns {{ willSubmit: boolean, reason: null|'selectChecked'|'noAccount'|'unresolvedAccount', amount: string }}
  */
 export function classifySubmitRow(row, accounts = [], globalRateInput = "") {
-  const amountRaw = resolveSubmitProcessedAmount(row, globalRateInput);
-  const amount = Number.isFinite(amountRaw) ? amountRaw : 0;
+  // 6-dp ROUND_DOWN plain string — never HALF_UP-2 display.
+  const amount = resolveSubmitProcessedAmount(row, globalRateInput);
 
   if (row?.selectChecked) {
     return { willSubmit: false, reason: "selectChecked", amount };

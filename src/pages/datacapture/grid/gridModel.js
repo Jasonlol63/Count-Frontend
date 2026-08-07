@@ -260,10 +260,17 @@ export function gridToSnapshot(grid, captureType = "1.Text") {
   return tableData;
 }
 
-/** Restore grid model from a session snapshot. */
+/**
+ * Restore grid model from a session snapshot.
+ * `fallbackRows`/`fallbackCols` are the caller-resolved *required* size (e.g. the
+ * fixed 11-col Bank/group-only grid) — never shrink below them, only grow to fit
+ * a snapshot that holds more data than that floor.
+ */
 export function snapshotToGrid(snapshot, fallbackRows = 26, fallbackCols = 20) {
-  const rows = snapshot?.rowCount || snapshot?.rows?.length || fallbackRows;
-  const cols = Math.max(1, (snapshot?.colCount || fallbackCols + 1) - 1);
+  const snapshotRows = snapshot?.rowCount || snapshot?.rows?.length || 0;
+  const snapshotCols = snapshot?.colCount ? Math.max(1, snapshot.colCount - 1) : 0;
+  const rows = Math.max(fallbackRows, snapshotRows);
+  const cols = Math.max(fallbackCols, snapshotCols);
   const grid = createEmptyGrid(rows, cols);
 
   if (!snapshot?.rows?.length) return grid;

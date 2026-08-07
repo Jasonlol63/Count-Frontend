@@ -1,15 +1,65 @@
 import { fetchGroupProcessIdByCode } from "../../datacapture/lib/dataCaptureApi.js";
 import { normalizeGroupCaptureScope } from "../../datacapture/lib/dataCaptureScope.js";
 import { isGroupLedgerCapture } from "../../../utils/company/c168CaptureChannel.js";
-import { submitSummaryPayload } from "../lib/summaryApi.js";
+import { submitSummaryPayload, submitSummaryToSpring } from "../lib/summaryApi.js";
 import { SUMMARY_SUBMIT_MAX_ROWS_PER_BATCH } from "./summarySubmitTotalPure.js";
 import { pushSummaryNotification } from "../lib/summaryNotify.js";
 
-function buildSummarySubmitPayload(processData, summaryRows) {
+const BATCH_SUCCESS_REDIRECT_MS = 2000;
+
+function notify(title, message, type = "success") {
+  pushSummaryNotification(title, message, type);
+}
+
+/**
+ * Spring `lines[]` shape (`DataCaptureLineDTO`) from a {@link buildSubmitRowsFromModel} row.
+ * Drops fields the Spring endpoint doesn't read (display-only text, batching bookkeeping) —
+ * see docs/datacapture-spring-api.md §2.2 "Summary Submit（Spring）".
+ */
+function toSpringLine(row) {
+  return {
+    productType: row.productType === "sub" ? "SUB" : "MAIN",
+    idProduct: row.idProduct || null,
+    idProductMain: row.idProductMain || null,
+    idProductSub: row.idProductSub || null,
+    descriptionMain: row.descriptionMain || null,
+    descriptionSub: row.descriptionSub || null,
+    formulaVariant: row.formulaVariant != null ? Number(row.formulaVariant) : null,
+    displayOrder: row.displayOrder != null ? Number(row.displayOrder) : null,
+    accountId: row.accountId != null ? Number(row.accountId) : null,
+    currencyId: row.currencyId != null ? Number(row.currencyId) : null,
+    sourceColumns: row.sourceColumns || null,
+    sourcePercent: row.sourcePercent || null,
+    enableSourcePercent: Number(row.enableSourcePercent) === 1,
+    formula: row.formula || null,
+    processedAmount: row.processedAmount != null ? String(row.processedAmount) : null,
+    rateValue: row.rateValue || null,
+  };
+}
+
+/** Spring header envelope (`DataCaptureSummarySubmitDTO`) — tenantId is the plain numeric tenant.id. */
+function buildSpringSubmitEnvelope(processData, summaryRows, tenantId) {
+  return {
+    tenantId,
+    category: processData?.category || null,
+    processId: processData?.process != null ? Number(processData.process) : null,
+    processCode: processData?.processCode || processData?.process_code || "",
+    captureDate: processData?.date,
+    currencyId: processData?.currency != null ? Number(processData.currency) : null,
+    remark: processData?.remark || "",
+    removeWord: processData?.removeWord || "",
+    replaceWordFrom: processData?.replaceWordFrom || "",
+    replaceWordTo: processData?.replaceWordTo || "",
+    lines: summaryRows.map(toSpringLine),
+  };
+}
+
+/* ---- Legacy AP/IG group-ledger path (still PHP — get_group_process_id not yet on Spring) ---- */
+
+function buildLegacySummarySubmitPayload(processData, summaryRows) {
   if (!processData) return null;
   const groupPayrollCapture = processData.groupPayrollCapture === true;
-  const groupLedger =
-    processData.groupOnlyCapture === true && !groupPayrollCapture;
+  const groupLedger = processData.groupOnlyCapture === true && !groupPayrollCapture;
   return {
     captureDate: processData.date,
     processId: processData.process,
@@ -21,9 +71,10 @@ function buildSummarySubmitPayload(processData, summaryRows) {
     groupPayrollUi: processData.groupPayrollUi === true || groupLedger || groupPayrollCapture,
     groupPayrollCapture,
     groupOnlyCapture: groupLedger,
-    captureSelectedGroup: groupLedger || groupPayrollCapture
-      ? String(processData.captureSelectedGroup || "").trim().toUpperCase()
-      : undefined,
+    captureSelectedGroup:
+      groupLedger || groupPayrollCapture
+        ? String(processData.captureSelectedGroup || "").trim().toUpperCase()
+        : undefined,
     captureScopeMode: groupLedger ? "group" : "company",
     scopeCompanyId:
       processData.scopeCompanyId != null && Number(processData.scopeCompanyId) > 0
@@ -31,67 +82,6 @@ function buildSummarySubmitPayload(processData, summaryRows) {
         : undefined,
     summaryRows: Array.isArray(summaryRows) ? summaryRows : [],
   };
-}
-
-const BATCH_DELAY_MS = 300;
-const BATCH_SUCCESS_REDIRECT_MS = 2000;
-const SUBMIT_REQUEST_ID_STORAGE_PREFIX = "dcSummarySubmitRequestId:";
-
-function createSubmitRequestId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `sr-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
-}
-
-/** Session key: same Summary identity reuses id on retry; success clears it. */
-function buildSubmitRequestStorageKey(baseData, captureScope) {
-  const scopeMode = baseData.captureScopeMode === "group" ? "group" : "company";
-  const scopeId =
-    scopeMode === "group"
-      ? String(baseData.captureSelectedGroup || captureScope?.groupId || "").trim().toUpperCase()
-      : String(
-          baseData.scopeCompanyId ||
-            captureScope?.scopeCompanyId ||
-            captureScope?.companyId ||
-            "",
-        );
-  return [
-    SUBMIT_REQUEST_ID_STORAGE_PREFIX,
-    scopeMode,
-    scopeId || "na",
-    String(baseData.captureDate || ""),
-    String(baseData.processId || ""),
-    String(baseData.currencyId || ""),
-  ].join("|");
-}
-
-function getOrCreateSessionSubmitRequestId(storageKey) {
-  try {
-    const existing = sessionStorage.getItem(storageKey);
-    if (existing && existing.trim()) return existing.trim();
-  } catch {
-    /* ignore */
-  }
-  const created = createSubmitRequestId();
-  try {
-    sessionStorage.setItem(storageKey, created);
-  } catch {
-    /* ignore */
-  }
-  return created;
-}
-
-function clearSessionSubmitRequestId(storageKey) {
-  try {
-    sessionStorage.removeItem(storageKey);
-  } catch {
-    /* ignore */
-  }
-}
-
-function notify(title, message, type = "success") {
-  pushSummaryNotification(title, message, type);
 }
 
 async function ensureGroupSubmitProcessId(effectiveScope, parsedProcessData, baseData) {
@@ -125,45 +115,91 @@ async function ensureGroupSubmitProcessId(effectiveScope, parsedProcessData, bas
   };
 }
 
-async function postSubmitBatch(captureScope, batchData, options = {}) {
-  const isGroup = isGroupLedgerCapture(captureScope, batchData);
-  const payload = {
-    ...batchData,
-    submitRequestId: options.submitRequestId || undefined,
-    company_id: isGroup ? null : (captureScope?.scopeCompanyId ?? null),
-  };
-  if (options.captureId != null) {
-    payload.captureId = options.captureId;
+async function executeLegacyGroupLedgerSubmit({
+  effectiveScope,
+  companyId,
+  parsedProcessData,
+  summaryRows,
+  onProgress,
+  onSuccess,
+}) {
+  const baseDataRaw = buildLegacySummarySubmitPayload(parsedProcessData, summaryRows);
+  const baseData = await ensureGroupSubmitProcessId(effectiveScope, parsedProcessData, baseDataRaw);
+  if (!baseData) {
+    return { ok: false, message: "No process data found. Please return to Data Capture page." };
   }
 
-  return submitSummaryPayload(captureScope, payload);
+  const isGroup = isGroupLedgerCapture(effectiveScope, baseData);
+  let finalCaptureId = null;
+  const batchSize = Math.max(1, Math.min(SUMMARY_SUBMIT_MAX_ROWS_PER_BATCH, summaryRows.length));
+  const totalBatches = Math.ceil(summaryRows.length / batchSize);
+
+  for (let i = 0; i < summaryRows.length; i += batchSize) {
+    const batchRows = summaryRows.slice(i, i + batchSize);
+    const batchNumber = Math.floor(i / batchSize) + 1;
+    onProgress?.({ batchNumber, totalBatches });
+
+    const payload = {
+      ...baseData,
+      summaryRows: batchRows,
+      company_id: isGroup ? null : (effectiveScope?.scopeCompanyId ?? null),
+    };
+    if (finalCaptureId != null) {
+      payload.captureId = finalCaptureId;
+    }
+
+    const result = await submitSummaryPayload(effectiveScope, payload);
+    if (!result?.success) {
+      return {
+        ok: false,
+        message: result?.message || `Submission failed (batch ${batchNumber}/${totalBatches})`,
+      };
+    }
+    finalCaptureId = result.captureId ?? finalCaptureId;
+  }
+
+  if (!finalCaptureId) {
+    return { ok: false, message: "Submission did not return a capture ID." };
+  }
+
+  notify("Success", `All data submitted successfully! Capture ID: ${finalCaptureId}, total ${summaryRows.length} rows`, "success");
+  await new Promise((resolve) => window.setTimeout(resolve, BATCH_SUCCESS_REDIRECT_MS));
+  onSuccess?.({ mode: "legacy-group-ledger", captureId: finalCaptureId });
+  return { ok: true, mode: "legacy-group-ledger", captureId: finalCaptureId };
 }
 
-function verifySubmitPayload(submitData) {
-  let jsonData;
+/* ---- Spring path (Games / Bank, company-scope — the common case) ---- */
+
+async function executeSpringSubmit({ tenantId, parsedProcessData, summaryRows, onProgress, onSuccess }) {
+  const payload = buildSpringSubmitEnvelope(parsedProcessData, summaryRows, tenantId);
+
+  onProgress?.({ batchNumber: 1, totalBatches: 1 });
+
+  let result;
   try {
-    jsonData = JSON.stringify(submitData);
+    result = await submitSummaryToSpring(payload);
   } catch (error) {
-    return {
-      ok: false,
-      message: `Data serialization failed: ${error.message}. The data may be too large or contain circular references.`,
-    };
+    return { ok: false, message: error?.message || "Submission failed" };
   }
-  if (!jsonData) {
-    return { ok: false, message: "The data is empty after serialization. Please check whether the data is correct." };
+
+  const captureId = result?.data?.captureId ?? null;
+  if (!captureId) {
+    return { ok: false, message: "Submission did not return a capture ID." };
   }
-  try {
-    JSON.parse(jsonData);
-  } catch (error) {
-    return { ok: false, message: `Failed to verify data after serialization: ${error.message}` };
-  }
-  return { ok: true, jsonData };
+
+  notify("Success", `All data submitted successfully! Capture ID: ${captureId}, total ${summaryRows.length} rows`, "success");
+  await new Promise((resolve) => window.setTimeout(resolve, BATCH_SUCCESS_REDIRECT_MS));
+  onSuccess?.({ mode: "spring", captureId });
+  return { ok: true, mode: "spring", captureId };
 }
 
 /**
- * React-owned summary submit execution (batching).
- * Waits for real backend write success — no immediateAck false-success path.
- * submitRequestId is session-scoped (retry-safe); cleared only after success.
+ * React-owned summary submit execution.
+ * Games / Bank company-scope submits go to the Spring `POST /api/datacapture-summary/submit`
+ * (single request, one DB transaction). True AP/IG group-ledger submits still resolve their
+ * process id via the PHP `get_group_process_id` endpoint, so they keep using the legacy
+ * PHP submit + batching path until that resolver is migrated (see
+ * docs/datacapture-spring-api.md §4).
  */
 export async function executeSummarySubmit({
   captureScope,
@@ -173,167 +209,35 @@ export async function executeSummarySubmit({
   onProgress,
   onSuccess,
 }) {
-  const effectiveScope = normalizeGroupCaptureScope(captureScope, parsedProcessData);
-  const baseDataRaw = buildSummarySubmitPayload(parsedProcessData, summaryRows);
-  const baseData = await ensureGroupSubmitProcessId(
-    effectiveScope,
-    parsedProcessData,
-    baseDataRaw,
-  );
-  if (!baseData) {
+  if (!parsedProcessData) {
     return { ok: false, message: "No process data found. Please return to Data Capture page." };
   }
 
-  const verify = verifySubmitPayload(baseData);
-  if (!verify.ok) {
-    return { ok: false, message: verify.message };
-  }
+  const effectiveScope = normalizeGroupCaptureScope(captureScope, parsedProcessData);
 
-  const submitRequestStorageKey = buildSubmitRequestStorageKey(baseData, effectiveScope);
-  const submitRequestId = getOrCreateSessionSubmitRequestId(submitRequestStorageKey);
-
-  const submitBatch = async (batchData, captureId, batchNumber, totalBatches) => {
-    onProgress?.({ batchNumber, totalBatches });
-    return postSubmitBatch(effectiveScope, batchData, {
-      captureId,
-      submitRequestId,
+  if (isGroupLedgerCapture(effectiveScope, parsedProcessData)) {
+    return executeLegacyGroupLedgerSubmit({
+      effectiveScope,
+      companyId,
+      parsedProcessData,
+      summaryRows,
+      onProgress,
+      onSuccess,
     });
-  };
-
-  let finalCaptureId = null;
-  const failedProblemRows = [];
-  const batchSize = Math.max(1, Math.min(SUMMARY_SUBMIT_MAX_ROWS_PER_BATCH, summaryRows.length));
-  const totalBatches = Math.ceil(summaryRows.length / batchSize);
-
-  async function submitWithBinarySplit(rows, batchData, batchNumber, total) {
-    async function helper(subRows) {
-      if (!subRows?.length) return;
-
-      if (subRows.length === 1) {
-        try {
-          const result = await submitBatch({ ...batchData, summaryRows: subRows }, finalCaptureId, batchNumber, total);
-          if (!result?.success) {
-            throw new Error(result?.message || "Submit failed");
-          }
-          finalCaptureId = result.captureId ?? finalCaptureId;
-        } catch (err) {
-          failedProblemRows.push(subRows[0]);
-          console.warn("Single row still failed, marking as problematic row:", { error: err, row: subRows[0] });
-        }
-        return;
-      }
-
-      try {
-        const result = await submitBatch({ ...batchData, summaryRows: subRows }, finalCaptureId, batchNumber, total);
-        if (!result?.success) {
-          throw new Error(result?.message || "Submit failed");
-        }
-        finalCaptureId = result.captureId ?? finalCaptureId;
-        return;
-      } catch {
-        const mid = Math.floor(subRows.length / 2);
-        await helper(subRows.slice(0, mid));
-        await helper(subRows.slice(mid));
-      }
-    }
-
-    await helper(rows);
   }
 
-  for (let i = 0; i < summaryRows.length; i += batchSize) {
-    const batchRows = summaryRows.slice(i, i + batchSize);
-    const batchNumber = Math.floor(i / batchSize) + 1;
-    const batchData = { ...baseData, summaryRows: batchRows };
+  const tenantId =
+    parsedProcessData.tenantId != null && Number(parsedProcessData.tenantId) > 0
+      ? Number(parsedProcessData.tenantId)
+      : effectiveScope?.scopeCompanyId != null && Number(effectiveScope.scopeCompanyId) > 0
+        ? Number(effectiveScope.scopeCompanyId)
+        : Number(companyId) > 0
+          ? Number(companyId)
+          : null;
 
-    try {
-      const result = await submitBatch(batchData, finalCaptureId, batchNumber, totalBatches);
-      if (!result?.success) {
-        return {
-          ok: false,
-          message: result?.message || `Submission failed (batch ${batchNumber}/${totalBatches})`,
-        };
-      }
-      finalCaptureId = result.captureId ?? finalCaptureId;
-      if (batchNumber < totalBatches) {
-        await new Promise((resolve) => window.setTimeout(resolve, BATCH_DELAY_MS));
-      }
-    } catch (error) {
-      if (error.isSizeError && batchRows.length > 1) {
-        const halfSize = Math.max(1, Math.min(Math.floor(batchRows.length / 2), SUMMARY_SUBMIT_MAX_ROWS_PER_BATCH));
-        for (let j = 0; j < batchRows.length; j += halfSize) {
-          const smallerBatch = batchRows.slice(j, j + halfSize);
-          const result = await submitBatch(
-            { ...batchData, summaryRows: smallerBatch },
-            finalCaptureId,
-            batchNumber,
-            totalBatches
-          );
-          if (!result?.success) {
-            return {
-              ok: false,
-              message: result?.message || `Submission failed (batch ${batchNumber}/${totalBatches})`,
-            };
-          }
-          finalCaptureId = result.captureId ?? finalCaptureId;
-          if (j + halfSize < batchRows.length) {
-            await new Promise((resolve) => window.setTimeout(resolve, BATCH_DELAY_MS));
-          }
-        }
-      } else if (batchRows.length > 1) {
-        console.warn(
-          `Batch ${batchNumber}/${totalBatches} failed with non-size error. Splitting batch to locate problematic rows.`,
-          error
-        );
-        await submitWithBinarySplit(batchRows, batchData, batchNumber, totalBatches);
-      } else {
-        failedProblemRows.push(batchRows[0]);
-        let errorMessage = error.message || "Unknown error";
-        if (error.status) {
-          errorMessage = `Server error (${error.status}): ${errorMessage}`;
-        }
-        return {
-          ok: false,
-          message: `Submission failed (batch ${batchNumber}/${totalBatches}): ${errorMessage}`,
-        };
-      }
-    }
+  if (!tenantId) {
+    return { ok: false, message: "Missing tenant id for submit." };
   }
 
-  if (!finalCaptureId) {
-    return { ok: false, message: "Submission did not return a capture ID." };
-  }
-
-  if (failedProblemRows.length > 0) {
-    return {
-      ok: false,
-      message:
-        `Submission incomplete: ${failedProblemRows.length} row(s) failed to save` +
-        (finalCaptureId ? ` (Capture ID: ${finalCaptureId}). Please retry.` : "."),
-      captureId: finalCaptureId,
-      failedProblemRows,
-    };
-  }
-
-  clearSessionSubmitRequestId(submitRequestStorageKey);
-
-  try {
-    localStorage.setItem("capturedCaptureId", String(finalCaptureId));
-  } catch {
-    /* ignore */
-  }
-
-  notify(
-    "Success",
-    `All data submitted successfully! Capture ID: ${finalCaptureId}, total ${summaryRows.length} rows`,
-    "success"
-  );
-
-  try {
-    localStorage.removeItem("capturedCaptureId");
-  } catch {
-    /* ignore */
-  }
-  await new Promise((resolve) => window.setTimeout(resolve, BATCH_SUCCESS_REDIRECT_MS));
-  onSuccess?.({ mode: "batched", captureId: finalCaptureId, failedProblemRows });
-  return { ok: true, mode: "batched", captureId: finalCaptureId, failedProblemRows };
+  return executeSpringSubmit({ tenantId, parsedProcessData, summaryRows, onProgress, onSuccess });
 }

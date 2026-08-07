@@ -7,7 +7,7 @@ import {
 } from "./summaryFormulaReference.js";
 import {
   formatProcessedAmountDisplay,
-  roundProcessedAmountTo2Decimals,
+  truncateProcessedAmountTo6Decimals,
 } from "../table/summaryRowAmount.js";
 import { formatNegativeNumbersInFormula, parseIdProductColumnRef } from "./summaryFormulaParseUtils.js";
 import { normalizeSummaryIdProductText } from "../lib/summaryIdProductUtils.js";
@@ -576,18 +576,18 @@ export function buildFormulaSavePatchFromForm(form, row) {
     enableSourcePercent
   );
 
-  const processedAmount = roundProcessedAmountTo2Decimals(
-    calculateFormulaResultFromExpression(
-      normalizedFormula,
-      sourcePercentValue,
-      inputMethodValue,
-      enableInputMethod,
-      enableSourcePercent,
-      processValue,
-      clickedRefs,
-      row?.rowIndex ?? null
-    )
+  const baseProcessedAmount = calculateFormulaResultFromExpression(
+    normalizedFormula,
+    sourcePercentValue,
+    inputMethodValue,
+    enableInputMethod,
+    enableSourcePercent,
+    processValue,
+    clickedRefs,
+    row?.rowIndex ?? null
   );
+  // Storage = 6-dp ROUND_DOWN; display = HALF_UP 2 only (never write round-2 into amount fields).
+  const processedAmount = truncateProcessedAmountTo6Decimals(baseProcessedAmount);
 
   const sourceColumns = hasDollarSign
     ? buildSourceColumnsFromFormula(normalizedFormula, clickedRefs)
@@ -614,7 +614,9 @@ export function buildFormulaSavePatchFromForm(form, row) {
       inputMethod: inputMethodValue,
       enableInputMethod,
       originalDescription: descriptionValue,
-      processedAmountDisplay: formatProcessedAmountDisplay(processedAmount),
+      baseProcessedAmount,
+      processedAmount,
+      processedAmountDisplay: formatProcessedAmountDisplay(baseProcessedAmount),
       templateApplied: true,
     },
   };

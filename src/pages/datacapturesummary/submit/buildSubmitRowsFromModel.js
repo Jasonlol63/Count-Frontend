@@ -55,6 +55,7 @@ export function buildSubmitRowsFromModel(rows, parsedProcessData, accounts = [],
         ? removeTrailingSourcePercentExpression(formulaDisplay) || formulaDisplay
         : formulaDisplay;
 
+    // 6-dp ROUND_DOWN plain string (aligns with SummaryAmountFormat.computeProcessedAmount).
     const finalProcessedAmount = resolveSubmitProcessedAmount(row, globalRateInput);
 
     let rateValue = null;
@@ -85,7 +86,7 @@ export function buildSubmitRowsFromModel(rows, parsedProcessData, accounts = [],
       enableSourcePercent: row.enableSourcePercent ? 1 : 0,
       formulaOperators,
       formula: formulaToSend,
-      processedAmount: Number.isFinite(finalProcessedAmount) ? finalProcessedAmount : 0,
+      processedAmount: finalProcessedAmount || "0",
       inputMethod: row.inputMethod || "",
       enableInputMethod: row.enableInputMethod ? 1 : 0,
       batchSelection: 0,

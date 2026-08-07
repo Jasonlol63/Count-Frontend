@@ -157,6 +157,26 @@ export async function submitSummaryPayload(captureScope, payload) {
   return json;
 }
 
+/**
+ * POST /api/datacapture-summary/submit — Spring final Submit (single request, one DB
+ * transaction; no batching — see docs/datacapture-spring-api.md §2.2 "Games Submit → Summary").
+ * Body: {@code DataCaptureSummarySubmitDTO} (header fields + `lines`).
+ * @returns {{success:boolean, message:string, data:{captureId:number}|null}}
+ */
+export async function submitSummaryToSpring(payload) {
+  const response = await fetch(buildApiUrl("api/datacapture-summary/submit"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json = await response.json();
+  if (!response.ok) {
+    throw new Error(json?.message || `HTTP ${response.status}`);
+  }
+  return json;
+}
+
 /** GET accounts list (same as legacy fetchSummaryAccountList). */
 export async function fetchSummaryAccountList(captureScope, companyId = null) {
   const json = await fetchSummaryFormCatalog(captureScope, companyId);

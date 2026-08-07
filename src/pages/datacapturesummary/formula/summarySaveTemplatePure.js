@@ -3,7 +3,7 @@ import { appendDataCaptureScopeParams } from "../../datacapture/lib/dataCaptureA
 import { resolveDataCaptureEffectiveTenantId } from "../../datacapture/lib/dataCaptureTenant.js";
 import {
   calculateBaseProcessedAmount,
-  roundProcessedAmountTo2Decimals,
+  truncateProcessedAmountTo6Decimals,
 } from "../table/summaryRowAmount.js";
 
 function isApiSuccess(json) {
@@ -55,7 +55,7 @@ export function buildTemplatePayloadFromRow(row, { processId, companyId } = {}) 
     batch_selection: row.selectChecked ? 1 : 0,
     formula_display: formulaDisplay,
     last_source_value: formulaDisplay,
-    last_processed_amount: roundProcessedAmountTo2Decimals(calculateBaseProcessedAmount(row)),
+    last_processed_amount: truncateProcessedAmountTo6Decimals(calculateBaseProcessedAmount(row)),
     template_key: buildTemplateKey(row),
     template_id: row.templateId ?? null,
     formula_variant: row.formulaVariant ?? null,
