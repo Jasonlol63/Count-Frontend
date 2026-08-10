@@ -50,6 +50,34 @@ export async function postGameCaptureForm({ tenantId, captureDate, processPk = n
   return json;
 }
 
+/**
+ * POST /api/datacapture/games/submitted
+ * Body: {@link DataCaptureGameDTO} — `{ tenantId, captureDate }`.
+ * Response `data` rows: `{ id, processId, descriptionName, processDisplay, createdBy, createAt, captureDate }`.
+ */
+export async function postSubmittedProcesses({ tenantId, captureDate }, signal) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0) {
+    throw new Error("tenantId is required");
+  }
+  if (!captureDate) {
+    throw new Error("captureDate is required");
+  }
+
+  const res = await fetch(buildApiUrl("api/datacapture/games/submitted"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tenantId: tid, captureDate: String(captureDate) }),
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !isApiSuccess(json)) {
+    throw new Error(json?.message || "Failed to load submitted processes");
+  }
+  return json;
+}
+
 /** Spring currency rows for capture form (deduped by code). */
 export async function fetchCaptureCurrenciesByTenantId(tenantId, signal) {
   const tid = Number(tenantId);

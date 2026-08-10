@@ -9,9 +9,10 @@ import {
   postCaptureDescription,
   postCaptureDescriptionDelete,
   postGameCaptureForm,
+  postSubmittedProcesses,
 } from "./dataCaptureSpringApi.js";
 
-/** Legacy PHP — submissions list (Spring not implemented yet). */
+/** Legacy PHP — still used for get_group_process_id (submissions list migrated to Spring). */
 const DATA_CAPTURE_SUBMISSIONS_API = "api/datacapture/submissions_api.php";
 
 /** One option per currency code (subsidiary + group rows can share company_id). */
@@ -322,16 +323,18 @@ export async function fetchGroupProcessIdByCode(scope, processCode, currencyId =
   return id;
 }
 
-/** Same as legacy `loadSubmittedProcesses`: GET get_submissions_by_capture_date */
+/** Submitted GAME processes for capture date — Spring POST `/api/datacapture/games/submitted`. */
 export async function fetchSubmissionsByCaptureDate(captureDate, scope) {
-  const params = new URLSearchParams({
-    action: "get_submissions_by_capture_date",
-    capture_date: captureDate,
-  });
-  appendDataCaptureScopeParams(params, scope);
-  const url = buildApiUrl(`${DATA_CAPTURE_SUBMISSIONS_API}?${params.toString()}`);
-  const response = await fetch(url, { credentials: "include" });
-  return response.json();
+  const tenantId = resolveDataCaptureTenantId(scope);
+  if (!tenantId) {
+    return { success: false, message: "tenantId is required", data: [] };
+  }
+  try {
+    const json = await postSubmittedProcesses({ tenantId, captureDate });
+    return { success: true, data: Array.isArray(json.data) ? json.data : [] };
+  } catch (err) {
+    return { success: false, message: err?.message || "Failed to load submitted processes", data: [] };
+  }
 }
 
 /** Tenant category permissions — Spring `/auth/switch-tenant` session flags. */
@@ -339,20 +342,20 @@ export async function fetchCompanyPermissionsForDataCapture(tenantId) {
   return fetchTenantCategoryPermissions(tenantId);
 }
 
-/** Matches `renderSubmittedProcesses` date/time formatting in `js/datacapture.js`. */
+/** Formats `DataCaptureGameDTO.createAt` (fallback `captureDate`) as `DD/MM/YYYY HH:MM:SS`. */
 export function formatSubmittedProcessDateTime(process) {
   let formattedDate = "";
   let formattedTime = "";
 
-  if (process.created_at) {
-    const createdObj = new Date(process.created_at);
+  if (process.createAt) {
+    const createdObj = new Date(process.createAt);
     const day = String(createdObj.getDate()).padStart(2, "0");
     const month = String(createdObj.getMonth() + 1).padStart(2, "0");
     const year = createdObj.getFullYear();
     formattedDate = `${day}/${month}/${year}`;
     formattedTime = `${String(createdObj.getHours()).padStart(2, "0")}:${String(createdObj.getMinutes()).padStart(2, "0")}:${String(createdObj.getSeconds()).padStart(2, "0")}`;
   } else {
-    const logicalDateStr = process.capture_date || process.date_submitted;
+    const logicalDateStr = process.captureDate;
     if (logicalDateStr) {
       const parts = logicalDateStr.split("-");
       if (parts.length === 3) {

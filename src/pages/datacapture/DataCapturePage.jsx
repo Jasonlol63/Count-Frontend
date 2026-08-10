@@ -39,7 +39,7 @@ import "../../../public/css/datacapture.css";
 import "../../../public/css/remove-word-chip.css";
 import "../../../public/css/description-input.css";
 
-import { formatSubmittedProcessDateTime } from "./lib/dataCaptureApi.js";
+import { formatSubmittedProcessDateTime, displayTextFromProcessRow } from "./lib/dataCaptureApi.js";
 import { readCaptureSessionMeta, shouldRestoreFromUrl, loadCaptureSession, captureSessionMatchesScope, loadActiveCaptureSession, readCaptureRestoreBoot } from "./lib/dataCaptureStorage.js";
 import { callDataCaptureRuntime, getDataCaptureState } from "./lib/dataCaptureRuntime.js";
 import {
@@ -1280,7 +1280,7 @@ function DataCapturePageContent() {
                     key={
                       process.id != null
                         ? String(process.id)
-                        : `sub-${index}-${process.process_code}-${process.created_at || ""}-${process.submitted_by || ""}`
+                        : `sub-${index}-${process.processId}-${process.createAt || ""}-${process.createdBy || ""}`
                     }
                     className="submitted-item"
                   >
@@ -1288,11 +1288,11 @@ function DataCapturePageContent() {
                       <div className="detail-row">
                         <strong>
                           {captureScope?.mode === "group" || companyPayrollChannel
-                            ? process.process_code
-                            : `${process.process_code}${process.description_name ? ` (${process.description_name})` : ""}`}
+                            ? process.processId
+                            : displayTextFromProcessRow(process)}
                         </strong>
                         <div className="submitted-meta">
-                          <span className="submitted-by">{process.submitted_by}</span>
+                          <span className="submitted-by">{process.createdBy}</span>
                           <span className="submitted-date">{formatSubmittedProcessDateTime(process)}</span>
                         </div>
                       </div>
