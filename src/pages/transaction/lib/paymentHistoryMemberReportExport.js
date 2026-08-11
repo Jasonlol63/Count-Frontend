@@ -208,8 +208,9 @@ const REPORT_TABLE_COLGROUP = `<colgroup>
 </colgroup>`;
 
 function productCell(row) {
+  if (row?.product) return row.product;
   if (row?.is_bank_process_transaction) return row.card_owner || "-";
-  return row?.product || "-";
+  return "-";
 }
 
 function remarkCell(row) {

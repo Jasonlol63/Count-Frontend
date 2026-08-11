@@ -65,11 +65,13 @@ export function buildSubmitRowsFromModel(rows, parsedProcessData, accounts = [],
       rateValue = resolveGlobalRateForSubmit(row, globalRateInput);
     }
 
+    const isSubRow = row.productType === "sub";
+
     summaryRows.push({
       idProductMain: idProductMain || null,
-      descriptionMain: row.originalDescription || null,
+      descriptionMain: isSubRow ? null : row.originalDescription || null,
       idProductSub: idProductSub || null,
-      descriptionSub: null,
+      descriptionSub: isSubRow ? row.originalDescription || null : null,
       productType,
       parentIdProduct: row.parentIdProduct || idProductMain || null,
       idProduct,
