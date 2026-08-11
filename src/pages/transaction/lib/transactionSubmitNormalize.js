@@ -219,7 +219,7 @@ export function normalizeSpringSubmitResponse(json) {
       to_account_id: d.toAccountId ?? null,
       from_account_id: d.fromAccountId ?? null,
       currency: String(d.currencyCode || "").toUpperCase(),
-      amount: d.amount ?? "",
+      amount: d.amountDisplay ?? "",
       transaction_date: d.transactionDate ?? "",
       remark: d.remark ?? "",
       rate_group_id: d.rateGroupId ?? null,
@@ -228,7 +228,7 @@ export function normalizeSpringSubmitResponse(json) {
       middleman_id: d.middlemanId ?? null,
       middleman_rate_id: d.middlemanRateId ?? null,
       middleman_fee_id: d.middlemanFeeId ?? null,
-      exchange_rate: d.exchangeRate ?? "",
+      exchange_rate: d.exchangeRateDisplay ?? "",
       rate_expression: d.rateExpression ?? "",
     },
   };
