@@ -138,8 +138,8 @@ export default function TransactionMaintenanceTable({
   const getItemKey = useCallback(
     (index) => {
       const row = rows[index];
-      const tid = row?.transaction_id;
-      return tid != null ? tid : index;
+      const id = row?.id;
+      return id != null ? id : index;
     },
     [rows],
   );

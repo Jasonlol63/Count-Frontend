@@ -54,7 +54,7 @@ import {
   filterFormulaRowsBySearch,
   formulaRowIdsMatch,
   patchFormulaRowAfterSave,
-  pickFormulaMaintenancePermission,
+  resolveFormulaMaintenanceActivePermission,
 } from "./formulaMaintenanceLogic.js";
 import {
   formulaMaintenanceEffectiveCompanyId,
@@ -500,7 +500,7 @@ export default function FormulaMaintenancePage() {
 
           const permList = rawPerms;
           const savedPerm = localStorage.getItem(`selectedPermission_${code}`);
-          const initialActive = pickFormulaMaintenancePermission(permList, savedPerm);
+          const initialActive = resolveFormulaMaintenanceActivePermission(permList, savedPerm, bootScope);
 
           const procList = await fetchProcesses(initialCompanyId, bootScope, initialActive);
           if (cancelled) return;
@@ -602,7 +602,7 @@ export default function FormulaMaintenancePage() {
           permList = [];
         }
         const savedPerm = permCode ? localStorage.getItem(`selectedPermission_${permCode}`) : null;
-        const nextPerm = pickFormulaMaintenancePermission(permList, savedPerm);
+        const nextPerm = resolveFormulaMaintenanceActivePermission(permList, savedPerm, scope);
         const procList = await fetchProcesses(companyId, scope, nextPerm);
         if (cancelled) return;
         setPermissions(permList);
@@ -799,7 +799,7 @@ export default function FormulaMaintenancePage() {
             groupAllMode,
           });
           const meta = await bootstrapFormulaMaintenanceMeta({ companies, groupId: g });
-          const procList = scope ? await fetchProcesses(null, scope) : [];
+          const procList = scope ? await fetchProcesses(null, scope, meta.activePermission) : [];
           setPermissions(meta.permissions);
           setActivePermission(meta.activePermission);
           setProcesses(procList);
@@ -872,11 +872,6 @@ export default function FormulaMaintenancePage() {
           updateSessionCompany,
           onStay: async () => {
             const perms = await fetchCompanyPermissions(code);
-            const nextActive = pickFormulaMaintenancePermission(perms, savedPerm);
-            switchPermsCacheRef.current = { companyCode: code, perms };
-            setActivePermission(nextActive);
-            setPermissions(perms);
-
             const nextScope = resolveFormulaMaintenanceScope({
               companies,
               selectedGroup: newGroup,
@@ -884,6 +879,11 @@ export default function FormulaMaintenancePage() {
               groupsAllMode,
               groupAllMode,
             });
+            const nextActive = resolveFormulaMaintenanceActivePermission(perms, savedPerm, nextScope);
+            switchPermsCacheRef.current = { companyCode: code, perms };
+            setActivePermission(nextActive);
+            setPermissions(perms);
+
             handledMetaScopeKeyRef.current = buildFormulaMetaEffectKey(
               formulaMaintenanceScopeCacheKey(nextScope),
               nextCompanyId,
@@ -1067,8 +1067,8 @@ export default function FormulaMaintenancePage() {
     const idsToDelete = resolveSelectedIds();
     if (idsToDelete.length === 0) return;
     try {
-      const effectiveCompanyId = formulaMaintenanceEffectiveCompanyId(formulaScope, companyId);
-      await deleteFormulaTemplates(effectiveCompanyId, idsToDelete, formulaScope);
+      const tenantId = formulaMaintenanceEffectiveCompanyId(formulaScope, companyId);
+      await deleteFormulaTemplates({ tenantId, formulaIds: idsToDelete });
       removeFormulaRowsLocally(idsToDelete);
       setConfirmDelete(false);
       notify(t("successfullyDeletedN", { n: idsToDelete.length }), "success");
@@ -1081,23 +1081,21 @@ export default function FormulaMaintenancePage() {
   const handleSaveRow = async (id, editForm) => {
     if (guardWrite()) return;
     try {
-      const effectiveCompanyId = formulaMaintenanceEffectiveCompanyId(formulaScope, companyId);
-      const payload = {
-        template_id: id,
-        ...(effectiveCompanyId != null ? { company_id: effectiveCompanyId } : {}),
-        account_id: editForm.account_id,
-        source_columns: editForm.source_ref ?? "",
-        source_percent: editForm.source_percent ?? "",
-        input_method: editForm.input_method ?? "",
-        formula: editForm.formula ?? "",
-        description: editForm.description ?? "",
-      };
-      const serverData = await updateFormulaTemplate(payload, formulaScope);
+      const tenantId = formulaMaintenanceEffectiveCompanyId(formulaScope, companyId);
+      await updateFormulaTemplate({
+        tenantId,
+        id,
+        accountId: editForm.account_id,
+        sourcePercent: editForm.source_percent,
+        inputMethod: editForm.input_method,
+        formula: editForm.formula,
+        description: editForm.description,
+      });
       notify(t("updateSuccessful"), "success");
 
       const account = accounts.find((a) => formulaRowIdsMatch(a.id, editForm.account_id));
       const accountLabel = account?.display_text ?? "";
-      const patchOpts = { id, editForm, accountLabel, serverData };
+      const patchOpts = { id, editForm, accountLabel };
       const mergeRow = (row) => patchFormulaRowAfterSave(row, patchOpts);
 
       formulaDataFullRef.current = formulaDataFullRef.current.map(mergeRow);

@@ -1,5 +1,4 @@
-﻿import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { formatDmy, parseDdMmYyyyToYmd, parseYmd } from "../../../utils/date/dateUtils.js";
+import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import {
   companiesInGroupList,
   pickDefaultSubsidiaryForGroup,
@@ -9,27 +8,15 @@ import { notifyCompanySessionUpdated } from "../../../utils/company/companySessi
 import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
 import {
   fetchDomainCompanyPermissions,
-  fetchMaintenanceProcesses,
   isBankOnlyCategoryCompany,
 } from "../shared/maintenanceCompanyApi.js";
 import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
 import { mapDomainGroupProcesses } from "../../report/domain/domainReportGroupProcesses.js";
-import { GROUP_ONLY_PROCESS_CODES } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
+import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
 import {
-  transactionMaintenanceScopeApiParams,
   transactionMaintenanceScopeCacheKey,
   transactionMaintenanceUsesGroupProcesses,
 } from "./transactionMaintenanceScope.js";
-
-/** å®½æ—¥æœŸå…œåº•åˆ†ç‰‡ï¼ˆæ¸¸æ ‡åˆ†é¡µä¸‹é€šå¸¸æ•´æ®µä¸€æ¬¡æŸ¥å®Œï¼›ä»…è¶…èŒƒå›´æˆ–å¤±è´¥å†åˆ†ç‰‡ï¼‰ã€‚ */
-const MAINTENANCE_CHUNK_DAYS = 90;
-const MAINTENANCE_CHUNK_THRESHOLD_DAYS = 400;
-/** é¦–å±å°½å¿«å‡ºè¡¨ï¼›åŽç»­å¤§æ‰¹é‡æ¸¸æ ‡æ‹‰å–ï¼ˆåŽç«¯ UNION å•æŸ¥è¯¢ï¼Œæ¯é¡µåªæ‰« page_size è¡Œï¼‰ã€‚ */
-const MAINTENANCE_FIRST_PAGE_SIZE = 800;
-const MAINTENANCE_PAGE_SIZES = [5000, 3500, 2000, 1000, 500];
-const MAINTENANCE_MAX_PAGES = 100;
-const MAINTENANCE_FETCH_RETRIES = 4;
-const MAINTENANCE_RETRY_BASE_MS = 400;
 
 function isFetchAbortError(err, signal) {
   if (signal?.aborted) return true;
@@ -43,10 +30,6 @@ function rethrowIfAborted(err, signal) {
   throw new DOMException("The operation was aborted.", "AbortError");
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function isMaintenanceTransferError(err) {
   if (err?.isMaintenanceTransfer) return true;
   const msg = String(err?.message || "").toLowerCase();
@@ -57,23 +40,8 @@ function isMaintenanceTransferError(err) {
     msg.includes("load failed") ||
     msg.includes("http2") ||
     msg.includes("quic") ||
-    msg.includes("err_quic") ||
-    msg.includes("incomplete") ||
-    msg.includes("unexpected end") ||
-    msg.includes("search failed (502)") ||
-    msg.includes("search failed (503)") ||
-    msg.includes("search failed (504)") ||
-    msg.includes("search failed (413)") ||
-    msg.includes("search failed (524)") ||
-    msg.includes("search failed (520)") ||
-    msg.includes("search failed (0)")
+    msg.includes("err_quic")
   );
-}
-
-function throwMaintenanceTransferError(message = "Failed to fetch") {
-  const err = new Error(message);
-  err.isMaintenanceTransfer = true;
-  throw err;
 }
 
 export async function fetchCompanyPermissions(companyCode) {
@@ -94,31 +62,6 @@ export function mapProcessesForMaintenanceSelect(apiList) {
       description: row.description ?? null,
     };
   });
-}
-
-function appendMaintenanceScopeToParams(params, scope) {
-  const {
-    companyId,
-    viewGroup,
-    groupId,
-    reportScope,
-    groupsAll,
-    groupAll,
-    groupOnly,
-    groupAggregate,
-  } = transactionMaintenanceScopeApiParams(scope);
-  if (companyId) params.append("company_id", String(companyId));
-  const vg = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
-  if (vg) params.append("view_group", vg);
-  const gid = groupId
-    ? String(groupId).trim().toUpperCase()
-    : vg;
-  if (gid) params.append("group_id", gid);
-  if (groupsAll) params.append("groups_all", "1");
-  if (groupAll) params.append("group_all", "1");
-  if (reportScope) params.append("report_scope", reportScope);
-  if (groupOnly) params.append("group_only", "1");
-  if (groupAggregate) params.append("group_aggregate", "1");
 }
 
 export async function fetchProcesses(companyId, scope = null) {
@@ -143,26 +86,16 @@ export async function fetchProcessesForMaintenance(companyId, permission, scope 
     const apiList = await fetchDomainReportProcesses(scope, { credentials: "include" });
     return mapProcessesForMaintenanceSelect(mapDomainGroupProcesses(apiList));
   }
+  // Company mode: every GAME-category process under the current tenant (Spring `/api/process/process-list`,
+  // same source as the Process List page — BANK rows are already filtered out by normalizeProcessListRows).
   const effectiveId = scope?.scopeCompanyId ?? companyId;
-  const permForApi =
-    payrollChannel && String(permission).toLowerCase() === "bank" ? "" : permission;
-  const rows = await fetchMaintenanceProcesses(effectiveId, {
-    credentials: true,
-    permission: permForApi,
-  });
-  let mapped = mapProcessesForMaintenanceSelect(rows);
-  if (payrollChannel) {
-    const payrollCodes = new Set(GROUP_ONLY_PROCESS_CODES);
-    mapped = mapped.filter((p) =>
-      payrollCodes.has(String(p.process_name ?? "").trim().toUpperCase()),
-    );
-  }
-  return mapped;
+  const rows = await fetchProcessListByTenantId(effectiveId);
+  return mapProcessesForMaintenanceSelect(rows);
 }
 
 /**
  * Load permission/category + process list when Company is cleared (group-only).
- * Uses a group anchor company for permissions UI only â€” does not select that company.
+ * Uses a group anchor company for permissions UI only — does not select that company.
  */
 export async function bootstrapTransactionMaintenanceMeta({
   companies,
@@ -183,13 +116,13 @@ export async function bootstrapTransactionMaintenanceMeta({
   return { permissions: companyPerms, activePermission };
 }
 
-/** Transaction Maintenance ä»… Games/Gambling/Bank æœ‰æ•°æ®ï¼›Loan/Rate/Money ä¸Žå…¶å®ƒç»´æŠ¤é¡µå…±ç”¨ localStorage æ—¶ä¼šè¯¯ä¼ ã€‚ */
+/** Transaction Maintenance 仅 Games/Gambling/Bank 有数据；Loan/Rate/Money 与其它维护页共用 localStorage 时会误传。 */
 const TXN_MAINTENANCE_SEARCH_CATEGORIES = new Set(["games", "gambling", "bank"]);
 const TXN_MAINTENANCE_EMPTY_CATEGORIES = new Set(["loan", "rate", "money"]);
-/** ä¸Ž Payment ç­‰é¡µå…±ç”¨ localStorageï¼›Bank åœ¨æœ¬é¡µä¼šè·³è¿‡ Data Captureï¼Œé»˜è®¤ä¸æ¢å¤ saved Bankã€‚ */
+/** 与 Payment 等页共用 localStorage；Bank 在本页会跳过 Data Capture，默认不恢复 saved Bank。 */
 const TXN_MAINTENANCE_IGNORE_SAVED_CATEGORIES = new Set(["loan", "rate", "money", "bank"]);
 
-/** æœ¬é¡µå¯é€‰çš„ Category æŒ‰é’®ï¼ˆè¿‡æ»¤ Loan/Rate/Moneyï¼‰ã€‚ */
+/** 本页可选的 Category 按钮（过滤 Loan/Rate/Money）。 */
 export function filterTransactionMaintenancePermissions(permissions) {
   const perms = Array.isArray(permissions) ? permissions : [];
   const filtered = perms.filter((p) =>
@@ -198,7 +131,7 @@ export function filterTransactionMaintenancePermissions(permissions) {
   return filtered.length > 0 ? filtered : perms;
 }
 
-/** é€‰æ‹©é»˜è®¤ Categoryï¼šä¼˜å…ˆ Games/Gamblingï¼Œå¿½ç•¥ Loan/Rate/Money/Bank çš„ localStorageã€‚ */
+/** 选择默认 Category：优先 Games/Gambling，忽略 Loan/Rate/Money/Bank 的 localStorage。 */
 export function pickTransactionMaintenancePermission(permissions, saved) {
   const perms = filterTransactionMaintenancePermissions(permissions);
   const savedLower = String(saved ?? "").toLowerCase();
@@ -220,21 +153,42 @@ export function pickTransactionMaintenancePermission(permissions, saved) {
   );
 }
 
-/** ä¼ ç»™ maintenance_search_api çš„ categoryï¼ˆLoan/Rate/Money â†’ Gamesï¼‰ã€‚ */
-export function resolveTransactionMaintenanceCategory(permission, scope = null) {
+/**
+ * Active-permission pick, forcing "Bank" for payroll-channel companies (C168 / bank-only, e.g. OK2).
+ *
+ * `fetchCompanyPermissions` → `fetchDomainCompanyPermissions` calls the legacy `api/domain/domain_api.php`
+ * endpoint, which the Spring backend never implemented (the reverse proxy sends every `/api/*` path
+ * straight to Spring now, so it 500s). Its catch-all fallback returns the full default permission list
+ * (`["Games","Bank",...]`), and `pickTransactionMaintenancePermission` always prefers Games/Gambling first —
+ * so a bank-only company silently gets defaulted to GAME category even though its real rows are BANK.
+ * `fetchProcessesForMaintenance` already works around this same broken call for the Process dropdown via
+ * `scope.companyPayrollChannel`/`scope.c168Channel`; mirror that override here so category resolution
+ * agrees with what the dropdown actually shows (SALARY/BONUS/PROFIT/COMMISSION are BANK-category processes).
+ */
+export function resolveTransactionMaintenanceActivePermission(permissions, saved, scope = null) {
+  if (scope?.c168Channel || scope?.companyPayrollChannel) return "Bank";
+  return pickTransactionMaintenancePermission(permissions, saved);
+}
+
+/**
+ * Resolve the `category` sent to the Spring endpoint (Loan/Rate/Money → Games).
+ * Required by the backend — it hard-filters `data_captures.category` so GAME/BANK rows never mix.
+ *
+ * Bank permission always maps to "Bank" (→ BANK), even for payroll-channel/C168 companies:
+ * `data_captures.category` is set purely from the submitted process's own `process.category`
+ * (DataCaptureSummaryServiceImpl), and SALARY/BONUS/PROFIT/COMMISSION are BANK-category
+ * processes — there is no "payroll companies store Bank data as GAME" behavior on the backend.
+ */
+export function resolveTransactionMaintenanceCategory(permission) {
   const raw = String(permission ?? "").trim();
   if (!raw) return "";
   const lower = raw.toLowerCase();
   if (TXN_MAINTENANCE_EMPTY_CATEGORIES.has(lower)) return "Games";
   if (lower === "gambling") return "Games";
-  // Bank-only payroll subsidiaries (e.g. CX): Data Capture uses Games semantics, not Bank ledger.
-  if (lower === "bank" && (scope?.companyPayrollChannel || scope?.c168Channel)) {
-    return "Games";
-  }
   return raw;
 }
 
-/** Select All è¯¯ä¼ å ä½æ–‡æ¡ˆæ—¶è§†ä¸ºæœªé€‰ Processã€‚ */
+/** Select All 误传占位文案时视为未选 Process。 */
 export function normalizeMaintenanceProcessFilter(process) {
   const raw = String(process ?? "").trim();
   if (!raw) return "";
@@ -242,8 +196,8 @@ export function normalizeMaintenanceProcessFilter(process) {
   if (
     lower === "select all" ||
     lower === "--select all--" ||
-    raw === "å…¨éƒ¨" ||
-    raw === "--å…¨éƒ¨--"
+    raw === "全部" ||
+    raw === "--全部--"
   ) {
     return "";
   }
@@ -257,7 +211,7 @@ function renumberMaintenanceRows(rows) {
   return rows;
 }
 
-/** Client-side text filter across visible columns (API is paginated â€” avoid post-filter in PHP). */
+/** Client-side text filter across visible columns. */
 export function filterTransactionMaintenanceRowsBySearch(rows, searchTerm) {
   const q = String(searchTerm || "").trim().toUpperCase();
   const list = Array.isArray(rows) ? rows : [];
@@ -266,7 +220,6 @@ export function filterTransactionMaintenanceRowsBySearch(rows, searchTerm) {
     "process",
     "id_product",
     "account",
-    "from_account",
     "description",
     "remark",
     "currency",
@@ -290,13 +243,21 @@ export function filterTransactionMaintenanceRowsBySearch(rows, searchTerm) {
   return renumberMaintenanceRows(filtered);
 }
 
-function finalizeMaintenanceRows(rows) {
-  const merged = [...rows];
-  merged.sort(compareMaintenanceRows);
-  return renumberMaintenanceRows(merged);
+/** 按 dts_created（新→旧）+ id 降序合并多公司结果（Group 聚合视图）。 */
+function parseMaintenanceDtsTimestamp(value) {
+  const raw = String(value ?? "").trim();
+  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+  if (!m) return 0;
+  return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]).getTime();
 }
 
-/** ä¸¤æ®µå‡å·²æŒ‰ compareMaintenanceRows é™åºæ—¶ O(n) å½’å¹¶ã€‚ */
+function compareMaintenanceRows(a, b) {
+  const tsA = parseMaintenanceDtsTimestamp(a.dts_created);
+  const tsB = parseMaintenanceDtsTimestamp(b.dts_created);
+  if (tsA !== tsB) return tsB - tsA;
+  return Number(b.id ?? 0) - Number(a.id ?? 0);
+}
+
 function mergeSortedMaintenanceRows(left, right) {
   if (!left.length) return renumberMaintenanceRows([...right]);
   if (!right.length) return renumberMaintenanceRows([...left]);
@@ -315,16 +276,139 @@ function mergeSortedMaintenanceRows(left, right) {
   return renumberMaintenanceRows(out);
 }
 
-/** åŒæ—¥æœŸæ®µå†…åˆ†é¡µç»“æžœå¯ç›´æŽ¥è¿½åŠ ï¼ˆAPI å·²å…¨å±€é™åºï¼‰ã€‚ */
-function appendMaintenancePageRows(existing, pageRows) {
-  if (!pageRows.length) return existing;
-  if (!existing.length) return renumberMaintenanceRows([...pageRows]);
-  return renumberMaintenanceRows(existing.concat(pageRows));
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+/** Spring LocalDateTime → dd/MM/yyyy HH:mm:ss for existing table display. */
+function formatTransactionMaintenanceCreatedAt(value) {
+  if (value == null || value === "") return "";
+  if (Array.isArray(value) && value.length >= 3) {
+    const [y, m, d, hh = 0, mm = 0, ss = 0] = value;
+    return `${pad2(d)}/${pad2(m)}/${y} ${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`;
+  }
+  const raw = String(value).trim();
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(raw)) return raw;
+  const m = raw.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/,
+  );
+  if (m) {
+    return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}:${m[6] || "00"}`;
+  }
+  return raw;
 }
 
 /**
- * Search transaction maintenance data.
- * Automatically: splits wide date ranges â†’ paginates each slice â†’ retries â†’ splits again on failure.
+ * Spring POST /api/maintenance/transaction-maintenance/list body (tenant-only).
+ * `category` is required — the backend hard-filters GAME/BANK, never mixes them.
+ */
+export function buildSpringTransactionMaintenanceRequest({
+  tenantId,
+  dateFrom,
+  dateTo,
+  process,
+  category,
+  q,
+} = {}) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0) {
+    throw new Error("tenantIdRequired");
+  }
+  const cat = String(category || "").trim();
+  if (!cat) {
+    throw new Error("categoryRequired");
+  }
+  return {
+    tenantId: tid,
+    dateFrom: String(dateFrom || "").trim(),
+    dateTo: String(dateTo || "").trim(),
+    process: String(process || "").trim() || null,
+    category: cat,
+    q: String(q || "").trim() || null,
+  };
+}
+
+/** Spring TransactionLineMaintenanceRow → table row fields (aligned to backend camelCase). */
+export function normalizeSpringTransactionMaintenanceRow(row) {
+  if (!row || typeof row !== "object") return null;
+  const isDeleted = row.deleted === true || row.deleted === 1 || row.deleted === "1";
+  return {
+    id: row.id ?? null,
+    dts_created: formatTransactionMaintenanceCreatedAt(row.dtsCreated),
+    process: row.process ?? "",
+    id_product: row.idProduct ?? "",
+    account: row.account ?? "",
+    description: row.description ?? "",
+    remark: row.remark ?? "",
+    percent: row.percent ?? "",
+    currency: String(row.currency || "").trim().toUpperCase(),
+    rate: row.rate ?? "",
+    cr: row.cr,
+    dr: row.dr,
+    created_by: row.createdBy ?? "",
+    is_deleted: isDeleted ? 1 : 0,
+    deleted_by: row.deletedBy ?? "",
+    dts_deleted: formatTransactionMaintenanceCreatedAt(row.deletedAt),
+  };
+}
+
+/** Single-tenant fetch via Spring POST /api/maintenance/transaction-maintenance/list (no pagination). */
+async function fetchTransactionMaintenanceOnce({
+  tenantId,
+  dateFrom,
+  dateTo,
+  process,
+  category,
+  q,
+  signal,
+}) {
+  const body = buildSpringTransactionMaintenanceRequest({
+    tenantId,
+    dateFrom,
+    dateTo,
+    process,
+    category,
+    q,
+  });
+
+  let response;
+  try {
+    response = await fetch(buildApiUrl("api/maintenance/transaction-maintenance/list"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      cache: "no-store",
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (err) {
+    rethrowIfAborted(err, signal);
+    const wrapped = new Error(err?.message || "Failed to fetch");
+    wrapped.isMaintenanceTransfer = true;
+    throw wrapped;
+  }
+
+  const data = await response.json();
+  if (!data?.success) {
+    throw new Error(data?.message || "Search failed");
+  }
+
+  const rows = Array.isArray(data.data) ? data.data : [];
+  return renumberMaintenanceRows(
+    rows.map(normalizeSpringTransactionMaintenanceRow).filter(Boolean),
+  );
+}
+
+/** Resolve the single tenantId a scope points at (company mode / one leg of an aggregate loop). */
+function resolveTransactionMaintenanceTenantId(scope) {
+  const id = Number(scope?.scopeCompanyId ?? scope?.uiCompanyId);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+/**
+ * Search transaction maintenance data via the Spring endpoint (tenant-only, no pagination).
+ * Group "aggregate" scope still loops per company client-side and merges — the backend has
+ * never supported cross-company queries, that behavior was always driven from the frontend.
  */
 export async function searchTransactionData({
   dateFrom,
@@ -337,7 +421,7 @@ export async function searchTransactionData({
   onProgress,
 }) {
   const processFilter = normalizeMaintenanceProcessFilter(process);
-  const categoryFilter = resolveTransactionMaintenanceCategory(category, scope);
+  const categoryFilter = resolveTransactionMaintenanceCategory(category);
   const emitProgress = (rows) => {
     if (!rows.length) return;
     const snapshot = renumberMaintenanceRows([...rows]);
@@ -356,352 +440,42 @@ export async function searchTransactionData({
       if (signal?.aborted) {
         throw new DOMException("The operation was aborted.", "AbortError");
       }
-      const subScope = {
-        ...scope,
-        mode: "company",
-        scopeCompanyId: Number(scopedCompanyId),
-        uiCompanyId: Number(scopedCompanyId),
-        mergeCompanyIds: [Number(scopedCompanyId)],
-        groupsAllMode: false,
-        groupAllMode: false,
-      };
-      const part = await fetchMaintenanceDateRangeResilient({
+      const rows = await fetchTransactionMaintenanceOnce({
+        tenantId: Number(scopedCompanyId),
         dateFrom,
         dateTo,
         process: processFilter,
         category: categoryFilter,
-        scope: subScope,
+        q: null,
         signal,
-        onProgress:
-          typeof onProgress === "function"
-            ? (rows) => {
-                if (!rows.length) return;
-                merged = merged.length
-                  ? mergeSortedMaintenanceRows(merged, finalizeMaintenanceRows(rows))
-                  : finalizeMaintenanceRows(rows);
-                emitProgress(merged);
-              }
-            : undefined,
       });
-      if (!part.length) continue;
-      merged = merged.length
-        ? mergeSortedMaintenanceRows(merged, finalizeMaintenanceRows(part))
-        : finalizeMaintenanceRows(part);
-      if (typeof onProgress === "function") emitProgress(merged);
+      if (!rows.length) continue;
+      merged = merged.length ? mergeSortedMaintenanceRows(merged, rows) : rows;
+      emitProgress(merged);
     }
     return renumberMaintenanceRows(merged);
   }
 
-  const merged = await fetchMaintenanceDateRangeResilient({
+  const tenantId = resolveTransactionMaintenanceTenantId(scope);
+  if (!tenantId) {
+    throw new Error("tenantIdRequired");
+  }
+  const rows = await fetchTransactionMaintenanceOnce({
+    tenantId,
     dateFrom,
     dateTo,
     process: processFilter,
     category: categoryFilter,
-    scope,
+    q: null,
     signal,
-    onProgress: emitProgress,
   });
-  return renumberMaintenanceRows(merged);
-}
-
-async function fetchMaintenanceDateRangeResilient({
-  dateFrom,
-  dateTo,
-  process,
-  category,
-  scope,
-  signal,
-  onProgress,
-}) {
-  const daySpan = maintenanceDateSpanDays(dateFrom, dateTo);
-  const ranges =
-    daySpan > MAINTENANCE_CHUNK_THRESHOLD_DAYS
-      ? splitMaintenanceDateRange(dateFrom, dateTo, MAINTENANCE_CHUNK_DAYS)
-      : [{ dateFrom, dateTo }];
-  const rangesNewestFirst = [...ranges].reverse();
-
-  if (rangesNewestFirst.length === 1) {
-    return fetchMaintenanceRangeWithSplit({
-      dateFrom: rangesNewestFirst[0].dateFrom,
-      dateTo: rangesNewestFirst[0].dateTo,
-      process,
-      category,
-      scope,
-      signal,
-      onProgress,
-    });
-  }
-
-  let merged = [];
-  for (const range of rangesNewestFirst) {
-    if (signal?.aborted) {
-      throw new DOMException("The operation was aborted.", "AbortError");
-    }
-    const part = await fetchMaintenanceRangeWithSplit({
-      dateFrom: range.dateFrom,
-      dateTo: range.dateTo,
-      process,
-      category,
-      scope,
-      signal,
-    });
-    if (!part.length) continue;
-    merged = merged.length
-      ? mergeSortedMaintenanceRows(merged, finalizeMaintenanceRows(part))
-      : finalizeMaintenanceRows(part);
-    if (typeof onProgress === "function") onProgress(merged);
-  }
-  return merged;
-}
-
-async function fetchMaintenanceRangeWithSplit(params) {
-  const { onProgress, ...rest } = params;
-  try {
-    return await fetchAllPagesForRange(rest, 0, onProgress);
-  } catch (err) {
-    rethrowIfAborted(err, params.signal);
-    if (!isMaintenanceTransferError(err)) throw err;
-
-    const daySpan = maintenanceDateSpanDays(params.dateFrom, params.dateTo);
-    if (daySpan <= 1) {
-      return fetchAllPagesForRange(rest, MAINTENANCE_PAGE_SIZES.length - 1, onProgress);
-    }
-
-    const [olderRange, newerRange] = splitMaintenanceDateRangeHalf(params.dateFrom, params.dateTo);
-    const newer = await fetchMaintenanceRangeWithSplit({
-      ...rest,
-      dateFrom: newerRange.dateFrom,
-      dateTo: newerRange.dateTo,
-      onProgress,
-    });
-    const older = await fetchMaintenanceRangeWithSplit({
-      ...rest,
-      dateFrom: olderRange.dateFrom,
-      dateTo: olderRange.dateTo,
-    });
-    if (!newer.length) return finalizeMaintenanceRows(older);
-    if (!older.length) return newer;
-    return mergeSortedMaintenanceRows(newer, finalizeMaintenanceRows(older));
-  }
-}
-
-function maintenancePageSizeForRequest(isFirstPage, pageSizeIndex) {
-  if (isFirstPage) return MAINTENANCE_FIRST_PAGE_SIZE;
-  return MAINTENANCE_PAGE_SIZES[Math.min(pageSizeIndex, MAINTENANCE_PAGE_SIZES.length - 1)];
-}
-
-async function fetchAllPagesForRange(params, pageSizeIndex, onProgress) {
-  const fetchBatch = async ({ cursor, page }) => {
-    const pageSize = maintenancePageSizeForRequest(page === 1 && !cursor, pageSizeIndex);
-    try {
-      return await fetchMaintenancePageWithRetries({
-        ...params,
-        cursor,
-        pageSize,
-        page: cursor ? 1 : page,
-      });
-    } catch (err) {
-      rethrowIfAborted(err, params.signal);
-      if (isMaintenanceTransferError(err) && pageSizeIndex < MAINTENANCE_PAGE_SIZES.length - 1) {
-        return fetchAllPagesForRange(params, pageSizeIndex + 1, onProgress);
-      }
-      throw err;
-    }
-  };
-
-  let all = [];
-  let cursor = null;
-  let currentPage = 1;
-  let loops = 0;
-
-  while (loops < MAINTENANCE_MAX_PAGES) {
-    if (params.signal?.aborted) {
-      throw new DOMException("The operation was aborted.", "AbortError");
-    }
-    const result = await fetchBatch({ cursor, page: currentPage });
-    if (result.data?.length) {
-      all = appendMaintenancePageRows(all, result.data);
-      if (typeof onProgress === "function") onProgress(all);
-    }
-    if (!result.pagination?.has_more) break;
-    const nextCursor = result.pagination?.next_cursor;
-    if (nextCursor) {
-      cursor = nextCursor;
-      currentPage = 1;
-    } else {
-      cursor = null;
-      currentPage += 1;
-    }
-    loops += 1;
-  }
-
-  return all;
-}
-
-async function fetchMaintenancePageWithRetries(params) {
-  let lastErr;
-  for (let attempt = 0; attempt < MAINTENANCE_FETCH_RETRIES; attempt += 1) {
-    try {
-      return await searchTransactionMaintenanceOnce(params);
-    } catch (err) {
-      lastErr = err;
-      rethrowIfAborted(err, params.signal);
-      if (!isMaintenanceTransferError(err)) throw err;
-      if (attempt < MAINTENANCE_FETCH_RETRIES - 1) {
-        await sleep(MAINTENANCE_RETRY_BASE_MS * (attempt + 1));
-      }
-    }
-  }
-  throw lastErr;
-}
-
-function splitMaintenanceDateRangeHalf(dateFrom, dateTo) {
-  const start = parseMaintenanceDmyDate(dateFrom);
-  const totalDays = maintenanceDateSpanDays(dateFrom, dateTo);
-  const mid = new Date(start);
-  mid.setDate(mid.getDate() + Math.floor(totalDays / 2) - 1);
-  const rightStart = new Date(mid);
-  rightStart.setDate(rightStart.getDate() + 1);
-  return [
-    { dateFrom, dateTo: formatDmy(mid) },
-    { dateFrom: formatDmy(rightStart), dateTo },
-  ];
-}
-
-function maintenanceDateSpanDays(dateFrom, dateTo) {
-  const start = parseMaintenanceDmyDate(dateFrom);
-  const end = parseMaintenanceDmyDate(dateTo);
-  if (!start || !end || start > end) return 0;
-  return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
-}
-
-function parseMaintenanceDmyDate(dmy) {
-  const ymd = parseDdMmYyyyToYmd(dmy);
-  return ymd ? parseYmd(ymd) : null;
-}
-
-function splitMaintenanceDateRange(dateFrom, dateTo, maxDays) {
-  const start = parseMaintenanceDmyDate(dateFrom);
-  const end = parseMaintenanceDmyDate(dateTo);
-  if (!start || !end || start > end) return [{ dateFrom, dateTo }];
-
-  const chunks = [];
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    const chunkEnd = new Date(cursor);
-    chunkEnd.setDate(chunkEnd.getDate() + maxDays - 1);
-    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
-    chunks.push({ dateFrom: formatDmy(cursor), dateTo: formatDmy(chunkEnd) });
-    cursor.setTime(chunkEnd.getTime());
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return chunks;
-}
-
-function parseMaintenanceDtsTimestamp(value) {
-  const raw = String(value ?? "").trim();
-  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
-  if (!m) return 0;
-  return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]).getTime();
-}
-
-function compareMaintenanceRows(a, b) {
-  const dateA = a.transaction_date ?? "";
-  const dateB = b.transaction_date ?? "";
-  if (dateA !== dateB) return dateB.localeCompare(dateA);
-
-  const tsA = parseMaintenanceDtsTimestamp(a.dts_created);
-  const tsB = parseMaintenanceDtsTimestamp(b.dts_created);
-  if (tsA !== tsB) return tsB - tsA;
-
-  const capA = Number(a.capture_id ?? 0);
-  const capB = Number(b.capture_id ?? 0);
-  if (capA !== capB) return capB - capA;
-
-  const detA = Number(a.capture_detail_id ?? 0);
-  const detB = Number(b.capture_detail_id ?? 0);
-  if (detA !== detB) return detB - detA;
-
-  return Number(b.transaction_id ?? 0) - Number(a.transaction_id ?? 0);
-}
-
-async function searchTransactionMaintenanceOnce({
-  dateFrom,
-  dateTo,
-  process,
-  category,
-  scope,
-  signal,
-  page = 1,
-  pageSize = MAINTENANCE_FIRST_PAGE_SIZE,
-  cursor = null,
-}) {
-  const params = new URLSearchParams();
-  params.append("date_from", dateFrom);
-  params.append("date_to", dateTo);
-  params.append("page_size", String(pageSize));
-  if (cursor) {
-    params.append("cursor", cursor);
-    params.append("page", "1");
-  } else {
-    params.append("page", String(page));
-  }
-  if (process) params.append("process", process);
-  appendMaintenanceScopeToParams(params, scope);
-  if (category) params.append("category", category);
-
-  const url = buildApiUrl(`api/transactions/maintenance_search_api.php?${params.toString()}`);
-  let response;
-  try {
-    response = await fetch(url, {
-      credentials: "include",
-      signal,
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-  } catch (err) {
-    rethrowIfAborted(err, signal);
-    if (isMaintenanceTransferError(err)) throw err;
-    throwMaintenanceTransferError(err?.message || "Failed to fetch");
-  }
-
-  let data;
-  try {
-    data = await response.json();
-  } catch {
-    if (!response.ok) {
-      const status = response.status || 0;
-      if (status >= 500 || status === 0 || status === 413 || status === 524) {
-        throwMaintenanceTransferError("Failed to fetch");
-      }
-      throw new Error(`HTTP ${status}`);
-    }
-    throwMaintenanceTransferError("Failed to fetch");
-  }
-
-  if (!response.ok || !data.success) {
-    const detail = data.error || data.message;
-    const status = response.status || 0;
-    if (!detail && (status >= 500 || status === 0 || status === 413 || status === 524)) {
-      throwMaintenanceTransferError("Failed to fetch");
-    }
-    throw new Error(detail || `HTTP ${status}`);
-  }
-
-  const rows = Array.isArray(data.data) ? data.data : [];
-  const pagination = data.pagination ?? {
-    page,
-    page_size: pageSize,
-    total: rows.length,
-    has_more: false,
-    next_cursor: null,
-  };
-
-  return { data: rows, pagination };
+  emitProgress(rows);
+  return rows;
 }
 
 export async function updateSessionCompany(companyId) {
   const response = await fetch(buildApiUrl(`auth/switch-tenant?tenant_id=${companyId}`), {
+    method: "POST",
     credentials: "include",
   });
   const result = await response.json();
@@ -739,7 +513,7 @@ export function isMaintenanceRecoverableError(err) {
 
 export function getMaintenanceSearchUserMessage(
   err,
-  { loadingMessage = "Loading dataâ€¦", narrowRangeMessage = "Loading is taking longer. Try a shorter date range or select a Process." } = {},
+  { loadingMessage = "Loading data…", narrowRangeMessage = "Loading is taking longer. Try a shorter date range or select a Process." } = {},
 ) {
   if (!err || isMaintenanceRecoverableError(err)) {
     return loadingMessage;
@@ -758,25 +532,7 @@ export function formatAmount(value) {
   });
 }
 
-/** React Query ç¼“å­˜ï¼šåŒºåˆ†ã€ŒåŠ è½½å®Œæˆã€ä¸Žã€Œä¸­é€”åˆ‡æ¢å…¬å¸è¢«ä¸­æ–­çš„åŠæˆå“ã€ã€‚ */
-export function packMaintenanceCache(rows, complete = false) {
-  return { rows: Array.isArray(rows) ? rows : [], complete: Boolean(complete) };
-}
-
-export function getMaintenanceCacheRows(data) {
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  return Array.isArray(data.rows) ? data.rows : [];
-}
-
-/** ä»… complete===true è§†ä¸ºå¯é•¿æœŸå¤ç”¨çš„å®Œæ•´ç»“æžœï¼›æ— ç¼“å­˜/æ•°ç»„æ—§ç¼“å­˜è§†ä¸ºæœªå®Œæˆã€‚ */
-export function isMaintenanceCacheComplete(data) {
-  if (!data) return false;
-  if (Array.isArray(data)) return false;
-  return data.complete === true;
-}
-
-/** React Query queryKeyï¼ˆä¸Ž TransactionMaintenancePage ä¸€è‡´ï¼‰ã€‚ */
+/** React Query queryKey（与 TransactionMaintenancePage 一致）。 */
 export function buildTransactionMaintenanceQueryKey({
   scope,
   dateFrom,

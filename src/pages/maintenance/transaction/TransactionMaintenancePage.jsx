@@ -35,12 +35,14 @@ import "../../../../public/css/report-outlined-fields.css";
 import "../../../../public/css/transaction_maintenance.css";
 import "../../../../public/css/maintenance_unified_filters.css";
 import { useGroupAnchorSessionSync } from "../../../utils/company/useGroupAnchorSessionSync.js";
+import { notifyCompanySessionUpdated } from "../../../utils/company/companySessionEvents.js";
 import {
   fetchCompanyPermissions,
   fetchProcessesForPermission,
   normalizeMaintenanceProcessFilter,
   filterTransactionMaintenancePermissions,
   pickTransactionMaintenancePermission,
+  resolveTransactionMaintenanceActivePermission,
   filterTransactionMaintenanceRowsBySearch,
   searchTransactionData,
   updateSessionCompany,
@@ -758,7 +760,10 @@ export default function TransactionMaintenancePage() {
           }
 
           try {
-            await updateSessionCompany(initialCompanyId);
+            const sessionData = await updateSessionCompany(initialCompanyId);
+            // Warm the bank/games flags cache so isBankOnlyCompanyRow() below sees this company's
+            // real category on a cold boot, not just after a same-session pill switch.
+            if (sessionData) notifyCompanySessionUpdated(sessionData);
           } catch (err) {
             console.error("Session company sync error:", err);
           }
@@ -766,15 +771,19 @@ export default function TransactionMaintenancePage() {
 
           setPermissions(companyPerms);
 
-          const savedPerm = localStorage.getItem(`selectedPermission_${code}`);
-          const initialActive = pickTransactionMaintenancePermission(companyPerms, savedPerm);
-          setActivePermission(initialActive);
-
           const bootScope = resolveTransactionMaintenanceScope({
             companies: filtered,
             selectedGroup: bootGroup,
             companyId: initialCompanyId,
           });
+          const savedPerm = localStorage.getItem(`selectedPermission_${code}`);
+          const initialActive = resolveTransactionMaintenanceActivePermission(
+            companyPerms,
+            savedPerm,
+            bootScope,
+          );
+          setActivePermission(initialActive);
+
           pendingBootSearchRef.current = { scope: bootScope, category: initialActive };
           try {
             const procList = await fetchProcessesForPermission(
@@ -871,9 +880,10 @@ export default function TransactionMaintenancePage() {
         if (cancelled) return;
         setPermissions(permList);
 
-        const nextPerm = pickTransactionMaintenancePermission(
+        const nextPerm = resolveTransactionMaintenanceActivePermission(
           permList,
           permCode ? localStorage.getItem(`selectedPermission_${permCode}`) : null,
+          scope,
         );
         setActivePermission(nextPerm);
 
@@ -1053,11 +1063,6 @@ export default function TransactionMaintenancePage() {
             navigate(spaPath("dashboard"), { replace: true });
             return;
           }
-          const nextActive = pickTransactionMaintenancePermission(perms, savedPerm);
-          switchPermsCacheRef.current = { companyCode: code, perms };
-          setActivePermission(nextActive);
-          setPermissions(perms);
-
           const nextScope = resolveTransactionMaintenanceScope({
             companies,
             selectedGroup: newGroup,
@@ -1065,6 +1070,15 @@ export default function TransactionMaintenancePage() {
             groupsAllMode,
             groupAllMode,
           });
+          const nextActive = resolveTransactionMaintenanceActivePermission(
+            perms,
+            savedPerm,
+            nextScope,
+          );
+          switchPermsCacheRef.current = { companyCode: code, perms };
+          setActivePermission(nextActive);
+          setPermissions(perms);
+
           handledMetaScopeKeyRef.current = buildMaintenanceMetaEffectKey(
             transactionMaintenanceScopeCacheKey(nextScope),
             nextCompanyId,
