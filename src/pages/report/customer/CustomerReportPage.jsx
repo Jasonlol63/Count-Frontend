@@ -60,6 +60,7 @@ import {
   resolveCustomerReportScope,
 } from "../shared/reportScope.js";
 import { useAuthSession } from "../../../context/AuthSessionContext.jsx";
+import { sessionHasTenantGame } from "../../../utils/auth/sessionTenant.js";
 import { canUseGroupOnlyMode } from "../../../utils/company/loginScope.js";
 import { syncCompanySessionInBackground } from "../../../utils/company/companySessionSwitchCore.js";
 
@@ -209,7 +210,7 @@ export default function CustomerReportPage() {
     const perms = Array.isArray(u.permissions) ? u.permissions : [];
     const hasFull = perms.length === 0;
     const canReport = hasFull || perms.includes("report");
-    if (!canReport || !u.company_has_gambling) {
+    if (!canReport || !sessionHasTenantGame(u)) {
       navigate(spaPath("dashboard"), { replace: true });
       return;
     }

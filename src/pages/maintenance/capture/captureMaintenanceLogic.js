@@ -5,7 +5,7 @@ import { fetchDomainCompanyPermissions } from "../shared/maintenanceCompanyApi.j
 import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
 import { mapDomainGroupProcesses } from "../../report/domain/domainReportGroupProcesses.js";
 import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
-import { captureMaintenanceScopeApiParams, captureMaintenanceUsesGroupProcesses } from "./captureMaintenanceScope.js";
+import { captureMaintenanceUsesGroupProcesses } from "./captureMaintenanceScope.js";
 
 /** ProcessSelect expects process_name; domain report rows use process / display_text. */
 export function mapProcessesForMaintenanceSelect(apiList) {
@@ -175,32 +175,35 @@ export async function searchCaptureData(
 }
 
 /**
- * Delete selected capture items
- * NOTE: still calling the legacy PHP endpoint — Capture Maintenance delete (soft-delete archive
- * table + Spring service/controller) has not been implemented yet, out of scope for this pass.
+ * Delete selected capture items via Spring POST /api/maintenance/capture-maintenance/delete.
+ * The list is already one row per capture (data_captures.id), so `row.capture_id` per row IS the
+ * capture id — this just forwards the selected ids as `captureIds` as-is, no per-line resolution.
+ * `dateFrom`/`dateTo` are accepted (existing call site passes them) but unused — the delete endpoint
+ * doesn't take a date range.
  */
-export async function deleteCaptureItems({ items, dateFrom, dateTo, scope }) {
-  const payload = {
-    date_from: dateFrom,
-    date_to: dateTo,
-    items,
-  };
-  const { companyId, viewGroup, groupId, reportScope, groupOnly, groupAggregate } =
-    captureMaintenanceScopeApiParams(scope);
-  if (companyId) payload.company_id = companyId;
-  if (viewGroup) payload.view_group = viewGroup;
-  if (groupId) payload.group_id = groupId;
-  if (reportScope) payload.report_scope = reportScope;
-  if (groupOnly) payload.group_only = "1";
-  if (groupAggregate) payload.group_aggregate = "1";
+export async function deleteCaptureItems({ items, scope }) {
+  const tenantId = resolveCaptureMaintenanceTenantId(scope);
+  if (!tenantId) {
+    throw new Error("tenantIdRequired");
+  }
+  const captureIds = [];
+  const seen = new Set();
+  for (const item of Array.isArray(items) ? items : []) {
+    const id = Number(item?.capture_id ?? item);
+    if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue;
+    seen.add(id);
+    captureIds.push(id);
+  }
+  if (captureIds.length === 0) {
+    throw new Error("Please select at least one record");
+  }
 
-  const response = await fetch(buildApiUrl("api/capture_maintenance/delete_api.php"), {
+  const response = await fetch(buildApiUrl("api/maintenance/capture-maintenance/delete"), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify(payload),
+    cache: "no-store",
+    body: JSON.stringify({ tenantId, captureIds }),
   });
 
   const data = await response.json();

@@ -732,6 +732,7 @@ export default function CaptureMaintenancePage() {
         onClose={() => setShowDeleteModal(false)}
         onConfirm={confirmDeleteAction}
         count={selectedIds.length}
+        messageKey="deleteConfirmCaptureRecords"
         t={t}
       />
     </div>
