@@ -1,75 +1,72 @@
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
-import { isApiSuccess } from "./shared/ownershipHelpers.js";
-import {
-  getOwnershipCurrentMonthKey,
-  isOwnershipHistoricalMonth,
-} from "./shared/ownershipMonthHelpers.js";
+import { fetchAccessibleTenants, tenantAccessibleRowToUiTenant } from "../../utils/company/tenantAccessibleApi.js";
 
+const CACHE_KEY = "all";
 const cache = new Map();
 const inflight = new Map();
 
-function cacheKey(monthKey) {
-  return monthKey || getOwnershipCurrentMonthKey();
+function fetchAllTenants({ force = false } = {}) {
+  if (force) {
+    cache.delete(CACHE_KEY);
+    inflight.delete(CACHE_KEY);
+  } else {
+    const hit = cache.get(CACHE_KEY);
+    if (hit) return Promise.resolve(hit);
+  }
+
+  const pending = inflight.get(CACHE_KEY);
+  if (pending) return pending;
+
+  const promise = fetchAccessibleTenants({ all: true, throwOnError: true })
+    .then(({ tenants }) => {
+      const rows = tenants
+        .map((t) => tenantAccessibleRowToUiTenant(t))
+        .filter(Boolean)
+        // Ownership UI displays `name` — Spring tenants only carry a `code` (no separate
+        // business name), matching the original PHP `get_companies_api.php` which set
+        // `name` = company code too.
+        .map((row) => ({ ...row, name: row.company_id }));
+      cache.set(CACHE_KEY, rows);
+      return rows;
+    })
+    .finally(() => {
+      inflight.delete(CACHE_KEY);
+    });
+
+  inflight.set(CACHE_KEY, promise);
+  return promise;
 }
 
-function companiesApiUrl(monthKey, force = false) {
-  const monthQs = isOwnershipHistoricalMonth(monthKey)
-    ? `&month=${encodeURIComponent(monthKey)}`
-    : "";
-  const bustQs = force ? `&_=${Date.now()}` : "";
-  return buildApiUrl(`api/ownership/get_companies_api.php?all=1${monthQs}${bustQs}`);
+/** Read warm tenant list (UI shape) from sidebar hover prefetch, filtered to COMPANY rows. */
+export function peekOwnershipCompaniesCache() {
+  const rows = cache.get(CACHE_KEY);
+  return rows ? rows.filter((t) => t.tenant_type === "COMPANY") : null;
 }
 
-/** Read warm company list from sidebar hover prefetch (same shape as get_companies_api JSON). */
-export function peekOwnershipCompaniesCache(monthKey = getOwnershipCurrentMonthKey()) {
-  return cache.get(cacheKey(monthKey)) ?? null;
+/** Drop cached tenant list so the next load hits the API (after join/ungroup/save). */
+export function invalidateOwnershipCompaniesCache() {
+  cache.delete(CACHE_KEY);
+  inflight.delete(CACHE_KEY);
 }
 
-/** Drop cached company list so the next load hits the API (after join/ungroup/save). */
-export function invalidateOwnershipCompaniesCache(monthKey = getOwnershipCurrentMonthKey()) {
-  const key = cacheKey(monthKey);
-  cache.delete(key);
-  inflight.delete(key);
-}
-
-/** Drop every month's ownership company warm (shell realtime). */
+/** Drop the ownership tenant warm cache (shell realtime). */
 export function clearAllOwnershipCompaniesCache() {
   cache.clear();
   inflight.clear();
 }
 
-export async function prefetchOwnershipCompanies(
-  monthKey = getOwnershipCurrentMonthKey(),
-  { force = false } = {},
-) {
-  const key = cacheKey(monthKey);
-  if (force) {
-    cache.delete(key);
-    inflight.delete(key);
-  } else {
-    const hit = cache.get(key);
-    if (hit) return hit;
-  }
+export async function prefetchOwnershipCompanies(_monthKeyOrOptions, maybeOptions) {
+  // Legacy call sites pass (monthKey, { force }) — the tenant list itself does not vary
+  // by month (only per-tenant ownership rows do), so month is accepted and ignored here.
+  const { force = false } =
+    typeof _monthKeyOrOptions === "object" && _monthKeyOrOptions !== null
+      ? _monthKeyOrOptions
+      : maybeOptions || {};
+  const rows = await fetchAllTenants({ force });
+  return rows.filter((t) => t.tenant_type === "COMPANY");
+}
 
-  const pending = inflight.get(key);
-  if (pending) return pending;
-
-  const promise = fetch(companiesApiUrl(monthKey, force), {
-    credentials: "include",
-    cache: force ? "no-store" : "default",
-  })
-    .then((res) => res.json())
-    .then((json) => {
-      if (isApiSuccess(json)) {
-        cache.set(key, json);
-        return json;
-      }
-      throw new Error(json?.message || "Failed to load ownership companies");
-    })
-    .finally(() => {
-      inflight.delete(key);
-    });
-
-  inflight.set(key, promise);
-  return promise;
+/** GROUP-type tenants for the Group Earnings tab — shares the same underlying fetch/cache. */
+export async function prefetchOwnershipGroups({ force = false } = {}) {
+  const rows = await fetchAllTenants({ force });
+  return rows.filter((t) => t.tenant_type === "GROUP");
 }

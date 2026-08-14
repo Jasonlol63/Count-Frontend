@@ -30,7 +30,7 @@ export default function ConflictModal({ conflict, onResolve, onCancel, t }) {
             >
               {t("joinAsGroup")}
               <br />
-              <strong>{conflict.data?.group_partner}</strong>
+              <strong>{conflict.data?.tenant_partner}</strong>
             </button>
           </div>
         </div>

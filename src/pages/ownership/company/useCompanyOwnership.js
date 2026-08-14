@@ -120,7 +120,7 @@ export function useCompanyOwnership(shell) {
         const pairs = await Promise.all(
           companiesData.map(async (c) => {
             const cid = Number(c.id);
-            const url = `api/ownership/get_owners_api.php?company_id=${cid}&month=${encodeURIComponent(selectedMonth)}`;
+            const url = `api/ownership/list?tenant_id=${cid}&month=${encodeURIComponent(selectedMonth)}`;
             const oRes = await fetch(buildApiUrl(url), { credentials: "include" }).then((r) => r.json());
             return { cid, oRes };
           }),
@@ -196,10 +196,10 @@ export function useCompanyOwnership(shell) {
         const compData = allCompanies.find((c) => Number(c.id) === cid);
         const compGid = compData?.group_id || "";
         const ownersUrl = isHistoricalView
-          ? `api/ownership/get_owners_api.php?company_id=${cid}&month=${encodeURIComponent(selectedMonth)}`
-          : `api/ownership/get_owners_api.php?company_id=${cid}`;
+          ? `api/ownership/list?tenant_id=${cid}&month=${encodeURIComponent(selectedMonth)}`
+          : `api/ownership/list?tenant_id=${cid}`;
         const [aRes, oRes] = await Promise.all([
-          fetch(buildApiUrl(`api/ownership/get_available_accounts_api.php?company_id=${cid}`), {
+          fetch(buildApiUrl(`api/ownership/available-accounts?tenant_id=${cid}`), {
             credentials: "include",
           }).then((r) => r.json()),
           fetch(buildApiUrl(ownersUrl), {
@@ -285,31 +285,11 @@ export function useCompanyOwnership(shell) {
     [readOnlyMode, showToast],
   );
 
+  // Spring `batch-save-ownership` always fully replaces a tenant's row set on Confirm, so
+  // removing a row here only needs to update local state — Confirm persists the new set.
   const removeRow = useCallback(
-    async (cid, idx) => {
+    (cid, idx) => {
       if (readOnlyMode) return showToast("Read-only: only owner can modify ownership", "error");
-      const st = companyStates[cid];
-      if (!st) return;
-      const row = st.rows[idx];
-      if (row?.ownership_id && !isHistoricalView) {
-        try {
-          const body = new FormData();
-          body.append("ownership_id", String(row.ownership_id));
-          const res = await fetch(buildApiUrl("api/ownership/remove_owner_api.php"), {
-            method: "POST",
-            credentials: "include",
-            body,
-          });
-          const json = await res.json();
-          if (!isApiSuccess(json)) {
-            showToast(getApiMessage(json, "Remove failed"), "error");
-            return;
-          }
-        } catch {
-          showToast("Server error", "error");
-          return;
-        }
-      }
       setCompanyStates((prev) => {
         const cur = prev[cid];
         if (!cur) return prev;
@@ -318,7 +298,7 @@ export function useCompanyOwnership(shell) {
         return { ...prev, [cid]: { ...cur, rows } };
       });
     },
-    [companyStates, readOnlyMode, isHistoricalView, showToast],
+    [readOnlyMode, showToast],
   );
 
   const reorderRows = useCallback((cid, from, to, insertAfter) => {
@@ -336,11 +316,11 @@ export function useCompanyOwnership(shell) {
         return false;
       }
       try {
-        const res = await fetch(buildApiUrl("api/ownership/add_external_partner_api.php"), {
+        const res = await fetch(buildApiUrl("api/ownership/link-partner"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ company_id: cid, login_id: loginId, force_type: forceType }),
+          body: JSON.stringify({ tenant_id: cid, login_id: loginId, force_type: forceType }),
         });
         const json = await res.json();
         if (isApiSuccess(json)) {
@@ -381,11 +361,11 @@ export function useCompanyOwnership(shell) {
       setSavingCompanyId(cid);
       try {
         const payload = {
-          company_id: cid,
+          tenant_id: cid,
           owners: rowsToSavePayload(rows),
         };
         if (isHistoricalView) payload.month = selectedMonth;
-        const res = await fetch(buildApiUrl("api/ownership/batch_save_owners_api.php"), {
+        const res = await fetch(buildApiUrl("api/ownership/batch-save-ownership"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -415,11 +395,11 @@ export function useCompanyOwnership(shell) {
     async (cid, gid, companyName) => {
       if (adminLocked) return showToast("Read-only: only owner can modify ownership", "error");
       try {
-        const res = await fetch(buildApiUrl("api/ownership/update_company_group_api.php"), {
+        const res = await fetch(buildApiUrl("api/ownership/update-parent-tenant"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ company_id: cid, group_id: gid }),
+          body: JSON.stringify({ tenant_id: cid, parent_code: gid }),
         });
         const json = await res.json();
         if (isApiSuccess(json)) {
@@ -449,11 +429,11 @@ export function useCompanyOwnership(shell) {
     async (cid, companyName) => {
       if (adminLocked) return showToast("Read-only: only owner can modify ownership", "error");
       try {
-        const res = await fetch(buildApiUrl("api/ownership/update_company_group_api.php"), {
+        const res = await fetch(buildApiUrl("api/ownership/update-parent-tenant"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ company_id: cid, group_id: null }),
+          body: JSON.stringify({ tenant_id: cid, parent_code: null }),
         });
         const json = await res.json();
         if (isApiSuccess(json)) {
@@ -505,11 +485,11 @@ export function useCompanyOwnership(shell) {
         const ids = Array.from(selectedCompanyIds);
         const results = await Promise.all(
           ids.map((cid) =>
-            fetch(buildApiUrl("api/ownership/update_company_group_api.php"), {
+            fetch(buildApiUrl("api/ownership/update-parent-tenant"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               credentials: "include",
-              body: JSON.stringify({ company_id: cid, group_id: gid }),
+              body: JSON.stringify({ tenant_id: cid, parent_code: gid }),
             }).then((r) => r.json()),
           ),
         );
@@ -546,11 +526,11 @@ export function useCompanyOwnership(shell) {
       const ids = Array.from(selectedCompanyIds);
       const results = await Promise.all(
         ids.map((cid) =>
-          fetch(buildApiUrl("api/ownership/update_company_group_api.php"), {
+          fetch(buildApiUrl("api/ownership/update-parent-tenant"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            body: JSON.stringify({ company_id: cid, group_id: null }),
+            body: JSON.stringify({ tenant_id: cid, parent_code: null }),
           }).then((r) => r.json()),
         ),
       );

@@ -21,46 +21,6 @@ export function buildApiUrl(pathAndQuery) {
     if (raw.startsWith("api/subscription/auto_renew_api.php")) {
       return "api/auto-renew/list";
     }
-    if (raw.startsWith("api/ownership/get_companies_api.php")) {
-      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-      return `auth/tenant-accessible${q}`;
-    }
-    if (raw.startsWith("api/ownership/get_group_earnings_api.php")) {
-      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-      return `auth/tenant-accessible${q}`;
-    }
-    if (raw.startsWith("api/ownership/get_owners_api.php")) {
-      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
-      const companyId = params.get("company_id");
-      const month = params.get("month");
-      const newParams = new URLSearchParams();
-      if (companyId) newParams.set("tenant_id", companyId);
-      if (month) newParams.set("month", month);
-      return `api/ownership/list?${newParams.toString()}`;
-    }
-    if (raw.startsWith("api/ownership/get_group_owners_api.php")) {
-      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
-      const groupId = params.get("group_id");
-      const month = params.get("month");
-      const newParams = new URLSearchParams();
-      if (groupId) newParams.set("tenant_id", groupId);
-      if (month) newParams.set("month", month);
-      return `api/ownership/list?${newParams.toString()}`;
-    }
-    if (raw.startsWith("api/ownership/get_available_accounts_api.php")) {
-      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
-      const companyId = params.get("company_id");
-      return `api/ownership/available-accounts?tenant_id=${companyId || ""}`;
-    }
-    if (raw.startsWith("api/ownership/get_group_available_accounts_api.php")) {
-      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
-      const groupId = params.get("group_id");
-      return `api/ownership/available-accounts?tenant_id=${groupId || ""}`;
-    }
     if (raw.startsWith("api/announcements/announcement_list_api.php")) {
       return "api/announcement/listAnnouncement";
     }

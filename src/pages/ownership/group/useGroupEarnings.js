@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+import { prefetchOwnershipGroups } from "../ownershipRoutePrefetch.js";
 import { getApiMessage, isApiConflict, isApiSuccess } from "../shared/ownershipHelpers.js";
 import { formatOwnershipSavedAt } from "../shared/ownershipMonthHelpers.js";
 import {
@@ -48,21 +49,14 @@ export function useGroupEarnings(shell) {
   const loadGeGroups = useCallback(async () => {
     setGeLoading(true);
     try {
-      const monthQs = isHistoricalView
-        ? `?month=${encodeURIComponent(selectedMonth)}`
-        : "";
-      const res = await fetch(buildApiUrl(`api/ownership/get_group_earnings_api.php${monthQs}`), {
-        credentials: "include",
-      });
-      const json = await res.json();
-      if (isApiSuccess(json)) setGeGroups(json.data || []);
-      else showToast(getApiMessage(json, "Failed to load groups"), "error");
-    } catch {
-      showToast("Server error", "error");
+      const groups = await prefetchOwnershipGroups();
+      setGeGroups(groups || []);
+    } catch (e) {
+      showToast(e?.message || "Server error", "error");
     } finally {
       setGeLoading(false);
     }
-  }, [showToast, isHistoricalView, selectedMonth]);
+  }, [showToast]);
 
   useEffect(() => {
     if (activeTab === "group-earnings") void loadGeGroups();
@@ -76,7 +70,7 @@ export function useGroupEarnings(shell) {
         const pairs = await Promise.all(
           geGroups.map(async (grp) => {
             const gid = grp.group_id;
-            const url = `api/ownership/get_group_owners_api.php?group_id=${encodeURIComponent(gid)}&month=${encodeURIComponent(selectedMonth)}`;
+            const url = `api/ownership/list?tenant_id=${encodeURIComponent(gid)}&month=${encodeURIComponent(selectedMonth)}`;
             const oRes = await fetch(buildApiUrl(url), { credentials: "include" }).then((r) => r.json());
             return { gid, oRes };
           }),
@@ -129,13 +123,11 @@ export function useGroupEarnings(shell) {
       setGeLoadingGid(gid);
       try {
         const ownersUrl = isHistoricalView
-          ? `api/ownership/get_group_owners_api.php?group_id=${encodeURIComponent(gid)}&month=${encodeURIComponent(selectedMonth)}`
-          : `api/ownership/get_group_owners_api.php?group_id=${encodeURIComponent(gid)}`;
+          ? `api/ownership/list?tenant_id=${encodeURIComponent(gid)}&month=${encodeURIComponent(selectedMonth)}`
+          : `api/ownership/list?tenant_id=${encodeURIComponent(gid)}`;
         const [aRes, oRes] = await Promise.all([
           fetch(
-            buildApiUrl(
-              `api/ownership/get_group_available_accounts_api.php?group_id=${encodeURIComponent(gid)}`,
-            ),
+            buildApiUrl(`api/ownership/available-accounts?tenant_id=${encodeURIComponent(gid)}`),
             { credentials: "include" },
           ).then((r) => r.json()),
           fetch(buildApiUrl(ownersUrl), { credentials: "include" }).then((r) => r.json()),
@@ -209,31 +201,11 @@ export function useGroupEarnings(shell) {
     [readOnlyMode, showToast],
   );
 
+  // Spring `batch-save-ownership` always fully replaces a tenant's row set on Confirm, so
+  // removing a row here only needs to update local state — Confirm persists the new set.
   const geRemoveRow = useCallback(
-    async (gid, idx) => {
+    (gid, idx) => {
       if (readOnlyMode) return showToast("Read-only: only owner can modify ownership", "error");
-      const st = geStates[gid];
-      if (!st) return;
-      const row = st.rows[idx];
-      if (row?.ownership_id && !isHistoricalView) {
-        try {
-          const body = new FormData();
-          body.append("ownership_id", String(row.ownership_id));
-          const res = await fetch(buildApiUrl("api/ownership/remove_owner_api.php"), {
-            method: "POST",
-            credentials: "include",
-            body,
-          });
-          const json = await res.json();
-          if (!isApiSuccess(json)) {
-            showToast(getApiMessage(json, "Remove failed"), "error");
-            return;
-          }
-        } catch {
-          showToast("Server error", "error");
-          return;
-        }
-      }
       setGeStates((prev) => {
         const cur = prev[gid];
         if (!cur) return prev;
@@ -242,7 +214,7 @@ export function useGroupEarnings(shell) {
         return { ...prev, [gid]: { ...cur, rows } };
       });
     },
-    [geStates, readOnlyMode, isHistoricalView, showToast],
+    [readOnlyMode, showToast],
   );
 
   const geConfirm = useCallback(
@@ -264,11 +236,11 @@ export function useGroupEarnings(shell) {
       setGeSavingGid(groupId);
       try {
         const payload = {
-          group_id: groupId,
+          tenant_id: groupId,
           owners: rowsToSavePayload(rows),
         };
         if (isHistoricalView) payload.month = selectedMonth;
-        const res = await fetch(buildApiUrl("api/ownership/batch_save_group_owners_api.php"), {
+        const res = await fetch(buildApiUrl("api/ownership/batch-save-ownership"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -301,11 +273,11 @@ export function useGroupEarnings(shell) {
         return false;
       }
       try {
-        const res = await fetch(buildApiUrl("api/ownership/add_group_external_partner_api.php"), {
+        const res = await fetch(buildApiUrl("api/ownership/link-partner"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ group_id: groupId, login_id: loginId, force_type: forceType }),
+          body: JSON.stringify({ tenant_id: groupId, login_id: loginId, force_type: forceType }),
         });
         const json = await res.json();
         if (isApiSuccess(json)) {

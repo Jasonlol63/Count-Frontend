@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getOwnershipText } from "../../../translateFile/pages/ownershipTranslate.js";
 import { prefetchOwnershipCompanies, peekOwnershipCompaniesCache, invalidateOwnershipCompaniesCache } from "../ownershipRoutePrefetch.js";
-import { getApiMessage, isApiSuccess } from "./ownershipHelpers.js";
 import {
   getOwnershipCurrentMonthKey,
   isOwnershipHistoricalMonth,
@@ -69,12 +68,11 @@ export function useOwnershipPageShell() {
       // Cold start only — force/realtime refreshes must not wipe the list into a full-page spinner.
       if (!cached && !force) setLoadingList(true);
       try {
-        const json = await prefetchOwnershipCompanies(monthKey, { force });
-        if (isApiSuccess(json)) setAllCompanies(json.data || []);
-        else showToast(getApiMessage(json, "Failed to load companies"), "error");
+        const companies = await prefetchOwnershipCompanies(monthKey, { force });
+        setAllCompanies(companies || []);
         setReadOnlyMode(false);
-      } catch {
-        if (!cached && !force) showToast("Server error", "error");
+      } catch (e) {
+        if (!cached && !force) showToast(e?.message || "Server error", "error");
       } finally {
         setLoadingList(false);
       }
