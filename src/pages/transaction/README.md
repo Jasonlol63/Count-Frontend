@@ -15,14 +15,14 @@ Route: `/transaction` (see `App.jsx`). Entry: `TransactionPaymentPage.jsx`.
 | Account dropdown (from/to) | `components/AccountSelect.jsx` |
 | Permissions, categories, accounts, currencies | `hooks/useTransactionData.js` |
 | List search, filters, grid state | `hooks/useTransactionSearch.js` |
-| Right-side type search (all-time transaction rows) | `api/transactions/type_transaction_search_api.php` + `runTypeSearch` in `useTransactionSearch.js` |
+| Right-side type search | `POST /api/transaction/search` + `runTypeSearch` in `useTransactionSearch.js` |
 | Submit payment / rate / invalidate cache | `hooks/useTransactionForm.js` |
 | Toast, history query, contra inbox | `hooks/useTransactionUI.js` |
 | Date range picker init | `hooks/useTransactionDateRange.js` |
 | First-load defaults (dates, currency selection) | `hooks/useTransactionInitialization.js` |
 | Cross-tab / localStorage list refresh | `hooks/useTransactionSync.js` |
 | Cross-device live sync (SSE) | `lib/transactionRealtime.js` + `deploy/TX_REALTIME.md` |
-| PHP API calls + React Query keys | `lib/transactionApi.js` |
+| PHP API calls + React Query keys | `lib/transactionApi.js` (Spring `/api/transaction/*` + account/currency meta) |
 | Money/rate/date formatting (legacy-aligned) | `lib/transactionFormat.js` |
 | Grid filters, totals, session keys, W/L logic | `lib/transactionPaymentLogic.js` |
 | Submit payload builders | `lib/transactionSubmitHelpers.js` |
@@ -35,9 +35,12 @@ Route: `/transaction-maintenance` — `pages/maintenance/transaction/` (separate
 
 ## RATE 手动交易逻辑
 
-完整说明（字段、Fee、计算、description/remark、落库、历史展示）：
+表单字段 / 即时计算 / description 规则等，仍以 legacy PHP 参考文档为准（不在本仓库内，见
+`count168test/docs/transaction-rate-manual-logic.md`、`transaction-rate-service-platform-fee.md`）。
 
-- [`docs/transaction-rate-manual-logic.md`](../../../docs/transaction-rate-manual-logic.md)
+**提交到 Spring Boot 这一段**（payload 映射、leg1/leg2、Middle-Man/Rate-Mul/Platform Fee 字段对齐）：
+
+- [`docs/transaction-rate-springboot-submit.md`](../../../docs/transaction-rate-springboot-submit.md)
 
 ## Styles & i18n
 

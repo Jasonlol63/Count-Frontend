@@ -318,6 +318,31 @@ export function buildRatePayload({
     rate_account_to_amount: "",
   };
 
+  // ---- Spring Boot submit fields (unambiguous leg1/leg2 naming — buildSpringSubmitRequest
+  // reads these directly; the legacy rate_*/rate_transfer_* fields above stay for description
+  // text + any other consumer, but are NOT what Spring parses). ----
+  // Spring's TransactionMoneyFormat.RATE_AMOUNT_SCALE is 8dp HALF_UP (normalizeComputedRate),
+  // NOT the 6dp TRUNCATE that `store`/RATE_STORE_MAX_DECIMALS uses for the legacy PHP fields.
+  // leg2_amount in particular must match the backend's own recomputation to within 1e-8 — a
+  // Rate-Mul commission with repeating decimals (e.g. divide-mode) only stabilizes at 7-8dp, so
+  // truncating to 6dp here would make submits fail with "Leg2 amount must equal ...".
+  const storeRate8 = (v) => MoneyDecimal.formatFixedHalfUp(v, 8);
+  payload.leg1_to_account_id = toId;
+  payload.leg1_from_account_id = fromId;
+  payload.leg1_currency = rateCurrencyFrom;
+  payload.leg1_amount = storeRate8(fromDec.toString());
+  payload.rate_expression = rateExchangeRateRaw;
+  payload.exchange_rate = String(parsedRateNormalizedStr ?? "");
+
+  if (middleId) {
+    payload.middleman_account_id = middleId;
+    const middlemanRateRaw = cleanAmt(rateMiddlemanRate);
+    if (middlemanRateRaw) payload.middleman_rate_expression = middlemanRateRaw;
+    const feeFaceDec = parsePositiveAmt(rateMiddlemanInputAmount);
+    if (feeFaceDec.gt(0)) payload.middleman_fee_amount = feeFaceDec.toString();
+    if (platformInputDec.gt(0)) payload.middleman_platform_fee_amount = platformInputDec.toString();
+  }
+
   if (transferToId && transferFromId) {
     // To = full gross（已含 Service Fee 口径，不另扣）
     // From RATE = gross − rateMul − Service Fee（PT-Fee 不动 From RATE，改由 PLATFORM_FEE 行体现）
@@ -360,6 +385,25 @@ export function buildRatePayload({
         `charge ${String(rateCurrencyTo ?? "").trim().toUpperCase()} ${store(platformInputDec.toString())} PlatForm Fee`;
       payload.rate_platform_fee_from_credit = "1";
     }
+
+    // Spring leg2: single symmetric amount = gross − (Rate-Mul commission, if >0) − (Fee − PT, if >0).
+    // Must match TransactionSubmitServiceImpl#resolveMiddleman's expectedNet to within 1e-8 (same
+    // formula, same 8dp HALF_UP rounding on each portion BEFORE subtracting — not 6dp truncate) or
+    // the backend rejects with "Leg2 amount must equal ...". Rate-Mul commission in particular can
+    // have repeating decimals (divide mode) that only stabilize at the 7th/8th decimal place.
+    const ratePortionRounded = MoneyDecimal.toDecimal(storeRate8(rateMulDec.toString()), 0);
+    const ratePortionForLeg2 = ratePortionRounded.gt(0) ? ratePortionRounded : MoneyDecimal.toDecimal("0", 0);
+    const feeNetRounded = MoneyDecimal.toDecimal(
+      storeRate8(serviceFeeDec.minus(platformInputDec).toString()),
+      0,
+    );
+    const feePortionForLeg2 = feeNetRounded.gt(0) ? feeNetRounded : MoneyDecimal.toDecimal("0", 0);
+    const leg2AmountDec = grossDec.minus(ratePortionForLeg2).minus(feePortionForLeg2);
+
+    payload.leg2_to_account_id = transferToId;
+    payload.leg2_from_account_id = transferFromId;
+    payload.leg2_currency = rateCurrencyTo;
+    payload.leg2_amount = storeRate8(leg2AmountDec.toString());
   }
 
   // Ensure skip flag survives even if transfer block early-returned somehow.

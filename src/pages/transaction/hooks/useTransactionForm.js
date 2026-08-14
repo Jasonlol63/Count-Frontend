@@ -380,6 +380,14 @@ export function useTransactionForm({
         pushToast(m.pleaseSelectBothCurrencies, "error");
         return;
       }
+      // Spring backend requires a real leg2 (second currency) transaction — Transfer accounts
+      // are mandatory, unlike Middle-Man which stays optional.
+      const transferToId = rateTransferToAccount?.id ? String(rateTransferToAccount.id) : "";
+      const transferFromId = rateTransferFromAccount?.id ? String(rateTransferFromAccount.id) : "";
+      if (!transferToId || !transferFromId) {
+        pushToast(m.pleaseSelectRateTransferAccounts, "error");
+        return;
+      }
       const finalRateAmount = rateFullAmount || rateCurrencyFromAmount;
       const fromAmt = toNumberLike(finalRateAmount);
       const toGrossRaw = String(rateToAmountGrossStr || "").trim().replace(/,/g, "");

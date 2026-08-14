@@ -453,9 +453,13 @@ export function calculateTotals(rows) {
       /* skip */
     }
   }
-  const bfTot = MoneyDecimal.formatFixed(bfAcc.toString(), 2);
+  // HALF_UP for all four — must match per-row display (formatTransactionGridMoneyHalfUp) and the
+  // backend precision policy (UI 展示一律 HALF_UP → 2，见 transaction-amount-precision.md). Previously
+  // bf/cr_dr used ROUND_DOWN (truncate) while win_loss/balance used HALF_UP, so the Total row's B/F
+  // could land a cent below what the displayed per-row B/F values actually sum to.
+  const bfTot = MoneyDecimal.formatFixedHalfUp(bfAcc.toString(), 2);
   const wlTot = MoneyDecimal.formatFixedHalfUp(wlAcc.toString(), 2);
-  const crTot = MoneyDecimal.formatFixed(crAcc.toString(), 2);
+  const crTot = MoneyDecimal.formatFixedHalfUp(crAcc.toString(), 2);
   const balTot = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(MoneyDecimal.add(bfTot, wlTot), crTot).toString(), 2);
   return { bf: bfTot, win_loss: wlTot, cr_dr: crTot, balance: balTot };
 }
@@ -497,11 +501,11 @@ export function applySummaryWinLossDisplayTolerance(totals) {
   return { bf: totals.bf, win_loss: wl0, cr_dr: totals.cr_dr, balance: balance2 };
 }
 
-/** Merge left+right footer totals (each already `calculateTotals` output). */
+/** Merge left+right footer totals (each already `calculateTotals` output). HALF_UP throughout — see calculateTotals. */
 export function mergeTotals(leftT, rightT) {
-  const bf = MoneyDecimal.formatFixed(MoneyDecimal.add(String(leftT?.bf ?? "0"), String(rightT?.bf ?? "0")).toString(), 2);
+  const bf = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(String(leftT?.bf ?? "0"), String(rightT?.bf ?? "0")).toString(), 2);
   const wl = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(String(leftT?.win_loss ?? "0"), String(rightT?.win_loss ?? "0")).toString(), 2);
-  const cr = MoneyDecimal.formatFixed(MoneyDecimal.add(String(leftT?.cr_dr ?? "0"), String(rightT?.cr_dr ?? "0")).toString(), 2);
+  const cr = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(String(leftT?.cr_dr ?? "0"), String(rightT?.cr_dr ?? "0")).toString(), 2);
   const bal = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(MoneyDecimal.add(bf, wl), cr).toString(), 2);
   return { bf, win_loss: wl, cr_dr: cr, balance: bal };
 }

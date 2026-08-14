@@ -83,7 +83,9 @@ export function buildSpringSubmitRequest({ companyId, payload } = {}) {
     }
 
     const leg1Amount = parseSignedAmount(p.leg1_amount ?? p.rate_from_amount ?? p.amount);
-    const leg2Amount = parseSignedAmount(p.leg2_amount ?? p.rate_currency_to_amount);
+    // leg2_amount is the Spring-only net amount (gross - Rate-Mul commission - net fee); the
+    // legacy rate_currency_to_amount is gross and would fail the backend's expectedNet check.
+    const leg2Amount = parseSignedAmount(p.leg2_amount);
     if (leg1Amount <= 0 || leg2Amount <= 0) {
       throw new Error("invalidAmount");
     }
@@ -93,7 +95,7 @@ export function buildSpringSubmitRequest({ companyId, payload } = {}) {
       throw new Error("invalidAmount");
     }
 
-    const rateExpression = String(p.rate_expression ?? p.rate_exchange_rate_raw ?? "").trim();
+    const rateExpression = String(p.rate_expression ?? "").trim();
 
     const body = {
       tenantId,
@@ -112,30 +114,37 @@ export function buildSpringSubmitRequest({ companyId, payload } = {}) {
       remark: remark || undefined,
     };
 
-    const middleAccountId = Number(p.rate_middleman_account_id ?? p.middleman_account_id);
-    const middleRateRaw = String(p.rate_middleman_rate ?? p.middleman_rate ?? "")
+    const middleAccountId = Number(p.middleman_account_id ?? p.rate_middleman_account_id);
+    // Raw Rate-Mul text (e.g. "/1.55" or "2.93") — backend parses divide vs multiply mode itself.
+    const middleRateRaw = String(p.middleman_rate_expression ?? p.rate_middleman_rate ?? "")
       .replace(/,/g, "")
       .trim();
-    // Fee input in first currency (prefer rate_middleman_fee / input; fall back to middleman_amount).
-    const middleFeeRaw = String(
-      p.rate_middleman_fee ?? p.rate_middleman_input_amount ?? p.middleman_amount ?? p.rate_middleman_amount ?? "",
+    // Fee face value, second (leg2) currency. Do NOT fall back to rate_middleman_amount /
+    // middleman_amount — those hold the TOTAL middleman profit (rate-mul + fee - platform fee),
+    // not the raw fee input, and would silently mislabel Rate-Mul-only submits as a Fee.
+    const middleFeeRaw = String(p.middleman_fee_amount ?? p.rate_middleman_input_amount ?? "")
+      .replace(/,/g, "")
+      .trim();
+    const platformFeeRaw = String(
+      p.middleman_platform_fee_amount ?? p.rate_platform_fee_amount ?? p.rate_middleman_platform_fee ?? "",
     )
       .replace(/,/g, "")
       .trim();
     const hasMiddleAccount = Number.isFinite(middleAccountId) && middleAccountId > 0;
-    const hasMiddleRate = middleRateRaw !== "" && Number(middleRateRaw) > 0;
+    const hasMiddleRate = middleRateRaw !== "";
     const hasMiddleFee = middleFeeRaw !== "" && Number(middleFeeRaw) > 0;
+    const hasMiddlePlatformFee = platformFeeRaw !== "" && Number(platformFeeRaw) > 0;
 
-    if ((hasMiddleRate || hasMiddleFee) && !hasMiddleAccount) {
+    if ((hasMiddleRate || hasMiddleFee || hasMiddlePlatformFee) && !hasMiddleAccount) {
       throw new Error("middleManAccountRequired");
     }
-    if (hasMiddleAccount && !hasMiddleRate && !hasMiddleFee) {
+    if (hasMiddleAccount && !hasMiddleRate && !hasMiddleFee && !hasMiddlePlatformFee) {
       throw new Error("middleManRateOrFeeRequired");
     }
-    if (hasMiddleAccount && (hasMiddleRate || hasMiddleFee)) {
+    if (hasMiddleAccount) {
       body.middlemanAccountId = middleAccountId;
       if (hasMiddleRate) {
-        body.middlemanRate = Number(middleRateRaw);
+        body.middlemanRateExpression = middleRateRaw;
       }
       if (hasMiddleFee) {
         const feeInput = parseSignedAmount(middleFeeRaw);
@@ -143,6 +152,13 @@ export function buildSpringSubmitRequest({ companyId, payload } = {}) {
           throw new Error("invalidAmount");
         }
         body.middlemanAmount = feeInput;
+      }
+      if (hasMiddlePlatformFee) {
+        const platformInput = parseSignedAmount(platformFeeRaw);
+        if (platformInput <= 0) {
+          throw new Error("invalidAmount");
+        }
+        body.platformFeeAmount = platformInput;
       }
     }
 
