@@ -2,16 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { LOGIN_I18N, localizeAuthApiMessage } from "../../translateFile/auth/authTranslate.js";
 import { buildApiUrl, buildSpaPath } from "../../utils/core/apiUrl.js";
-import { fetchCurrentUser, loginWithTenant } from "../../utils/auth/authApi.js";
 import { resolveDefaultLandingPath } from "../../utils/auth/sidebarPermissions.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
 import {
   clearDashboardFilterSession,
   seedDashboardFilterFromLogin,
 } from "../../utils/company/sharedCompanyFilter.js";
+import { fetchCurrentUser, loginWithTenant } from "../../utils/auth/authApi.js";
 import { useAuthBackground } from "./useAuthBackground.js";
 import { safeLocal, safeSession } from "../../utils/storage/safeStorage.js";
 import { extractPlainTextFromRichText } from "../../utils/content/richTextSanitizer.js";
+import PasswordInput from "../../components/PasswordInput.jsx";
 
 const LOGIN_ASSET_RETRY_KEY = "ec_login_asset_retry";
 
@@ -91,7 +92,7 @@ export default function LoginPage() {
     },
     [navigate, searchParams],
   );
-  const [tenantCode, setTenantCode] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [userField, setUserField] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -215,9 +216,14 @@ export default function LoginPage() {
       "transaction-page",
       "member-winloss-page",
       "dashboard-page",
+      "dashboard-home-page",
       "account-page",
+      "account-page--show-all",
       "announcement-page",
+      "announcement-modal-open",
       "datacapture-page",
+      "datacapture-summary-page",
+      "datacapture-table-expanded",
       "report-page",
       "process-page",
       "process-page--bank",
@@ -225,6 +231,20 @@ export default function LoginPage() {
       "process-page--bank-show-all",
       "user-page",
       "user-page--show-all",
+      "auto-renew-page-body",
+      "maintenance-page",
+      "ownership-page",
+      "domain-page",
+      "deleted-log-page",
+      "transaction-payment-history-page",
+      "transaction-payment-history-page--popup",
+      "transaction-payment-history-page--popup-compact",
+      "ec-auth-shell",
+      "ec-payment-history-chromeless",
+      "ec-login-scope-group",
+      "ec-login-scope-company",
+      "sidebar-collapsed",
+      "sidebar-tablet-expanded",
       "page-ready",
     );
   }, []);
@@ -235,7 +255,7 @@ export default function LoginPage() {
     const ac = new AbortController();
     (async () => {
       try {
-        const res = await fetch(buildApiUrl("api/maintenance/get_public_api.php"), {
+        const res = await fetch(buildApiUrl("api/announcement/getMaintenanceInLogin"), {
           signal: ac.signal,
           credentials: "include",
         });
@@ -263,13 +283,14 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       const { ok, status, json: data, parsed } = await loginWithTenant({
-        tenantCode,
+        tenantCode: companyId,
         password,
         loginRole: role,
-        loginId: role === "member" ? undefined : userField,
-        accountId: role === "member" ? userField : undefined,
+        loginId: userField,
+        accountId: userField,
         rememberMe,
       });
+
       if (!parsed) {
         const msg = ok
           ? i18n.loginInvalidResponse
@@ -281,21 +302,18 @@ export default function LoginPage() {
       if (data.status === "success" && data.redirect) {
         safeSession.removeItem(LOGIN_ASSET_RETRY_KEY);
         clearDashboardFilterSession();
-        const sessionTenant = data.tenant && typeof data.tenant === "object" ? data.tenant : {};
-        const loginTenant =
-          data.login_tenant && typeof data.login_tenant === "object" ? data.login_tenant : {};
-        const loginScope = String(loginTenant.type || sessionTenant.type || "")
-          .trim()
-          .toLowerCase();
-        const loginIdentifier = String(loginTenant.code || sessionTenant.code || tenantCode)
-          .trim()
-          .toUpperCase();
+
+        // Spring returns the resolved tenant (id/code/type), not the legacy
+        // scope/company_id/group_id fields — derive the dashboard filter from it.
+        const tenant = data.tenant || {};
+        const loginScope = String(tenant.type || "").trim().toLowerCase();
+        const loginIdentifier = String(tenant.code || companyId).trim().toUpperCase();
         if (loginScope === "group" || loginScope === "company") {
           seedDashboardFilterFromLogin({
             loginScope,
             loginIdentifier,
-            sessionTenantId: sessionTenant.id != null ? Number(sessionTenant.id) : null,
-            sessionTenantCode: loginScope === "company" ? loginIdentifier : null,
+            sessionCompanyId: loginScope === "company" && tenant.id != null ? Number(tenant.id) : null,
+            sessionCompanyCode: loginScope === "company" ? loginIdentifier : null,
           });
         }
 
@@ -316,22 +334,21 @@ export default function LoginPage() {
           if (/user[-_]secondary[-_]password/i.test(r) || r === "/user-secondary-password") {
             return "/user-secondary-password";
           }
-          if (r === "/dashboard" || /dashboard/i.test(r)) return "/dashboard";
           if (r.startsWith("/") && !r.startsWith("//")) return r;
           return null;
         })();
 
         if (internalPath) {
-          if (internalPath === "/dashboard") {
+          if (internalPath === "/dashboard" || /dashboard/i.test(internalPath)) {
             try {
-              const userRes = await fetchCurrentUser();
-              if (userRes.ok && userRes.json?.success && userRes.json?.data) {
-                const landing = resolveDefaultLandingPath(userRes.json.data);
+              const { ok: curOk, json: curJson } = await fetchCurrentUser();
+              if (curOk && curJson?.success && curJson?.data) {
+                const landing = resolveDefaultLandingPath(curJson.data);
                 navigate(landing || spaPath("login"), { replace: true });
                 return;
               }
             } catch {
-              /* fall through; layout guard will correct */
+              /* fall through to dashboard redirect; layout guard will correct */
             }
           }
           navigate(buildSpaPath(internalPath), { replace: true });
@@ -400,13 +417,14 @@ export default function LoginPage() {
               <div className="sc-login-input-row">
                 <i className="fas fa-building sc-login-input-icon" />
                 <input
-                  id="tenant-code"
+                  id="company-id"
                   type="text"
                   className="sc-login-input"
                   placeholder={i18n.companyPlaceholder}
                   required
-                  value={tenantCode}
-                  onChange={(e) => setTenantCode(e.target.value.toUpperCase())}
+                  value={companyId}
+                  onChange={(e) => setCompanyId(e.target.value)}
+                  style={{ textTransform: "uppercase" }}
                 />
               </div>
 
@@ -419,20 +437,23 @@ export default function LoginPage() {
                   placeholder={userPlaceholder}
                   required
                   value={userField}
-                  onChange={(e) => setUserField(e.target.value.toUpperCase())}
+                  onChange={(e) => setUserField(e.target.value)}
+                  style={{ textTransform: "uppercase" }}
                 />
               </div>
 
               <div className="sc-login-input-row">
                 <i className="fas fa-lock sc-login-input-icon" />
-                <input
+                <PasswordInput
                   id="password"
-                  type="password"
                   className="sc-login-input"
                   placeholder={i18n.passwordPlaceholder}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  showLabel={i18n.showPassword}
+                  hideLabel={i18n.hidePassword}
+                  autoComplete="current-password"
                 />
               </div>
 

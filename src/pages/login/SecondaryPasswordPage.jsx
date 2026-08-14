@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SECONDARY_VERIFY_I18N, localizeAuthApiMessage } from "../../translateFile/auth/authTranslate.js";
-import SecondaryVerifyBackButton from "./SecondaryVerifyBackButton.jsx";
-import { useAuthBackground } from "./useAuthBackground.js";
 import {
   fetchCurrentUser,
   logoutSession,
   verifyOwnerSecondaryPassword,
   verifyUserSecondaryPassword,
 } from "../../utils/auth/authApi.js";
+import SecondaryVerifyBackButton from "./SecondaryVerifyBackButton.jsx";
+import { useAuthBackground } from "./useAuthBackground.js";
 import { resolveDefaultLandingPath } from "../../utils/auth/sidebarPermissions.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
+import PasswordInput from "../../components/PasswordInput.jsx";
 
 const VARIANT_CONFIG = {
   owner: {
@@ -121,9 +122,9 @@ export default function SecondaryPasswordPage({ variant }) {
       const { ok, json } = await config.verify(value);
       if (ok && json?.success) {
         try {
-          const userRes = await fetchCurrentUser();
-          if (userRes.ok && userRes.json?.success && userRes.json?.data) {
-            const landing = resolveDefaultLandingPath(userRes.json.data);
+          const { ok: curOk, json: curJson } = await fetchCurrentUser();
+          if (curOk && curJson?.success && curJson?.data) {
+            const landing = resolveDefaultLandingPath(curJson.data);
             navigate(landing || spaPath("login"), { replace: true });
             return;
           }
@@ -156,19 +157,21 @@ export default function SecondaryPasswordPage({ variant }) {
           <form className="login-form" onSubmit={onSubmit}>
             <div className="input-group">
               <i className="fas fa-lock input-icon" />
-              <input
+              <PasswordInput
                 id="secondary_password"
                 ref={inputRef}
-                type="password"
                 placeholder={i18n.placeholder}
                 maxLength={6}
                 pattern="[0-9]{6}"
                 autoComplete="off"
+                inputMode="numeric"
                 required
                 autoFocus
                 value={password}
                 onChange={onChange}
                 onPaste={onPaste}
+                showLabel={i18n.showPassword}
+                hideLabel={i18n.hidePassword}
               />
             </div>
 

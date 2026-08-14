@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchAvailableCurrencies } from "../../../utils/api/currencyApi.js";
-import { resolveDataCaptureEffectiveTenantId } from "../../datacapture/lib/dataCaptureTenant.js";
+import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { fetchSummaryFormCatalog } from "../lib/summaryApi.js";
 import {
   addSelectedDescriptionToForm,
@@ -17,15 +16,37 @@ import {
   rowToEditFormulaForm,
 } from "../formula/editFormulaFormState.js";
 import { applyFormulaSaveToRows } from "../formula/summaryFormulaSaveTarget.js";
-import {
-  saveAddFormulaSpring,
-  saveUpdateFormulaSpring,
-} from "../formula/summarySaveTemplatePure.js";
+import { saveSummaryTemplatePure } from "../formula/summarySaveTemplatePure.js";
 import {
   resequenceSubOrdersInRows,
+  syncSubOrderTemplates,
 } from "../table/summarySubOrderResequence.js";
 import { pushSummaryNotification } from "../lib/summaryNotify.js";
 import { removeSuppressedRow } from "../lib/summarySuppressedRows.js";
+import {
+  applyTenantLedgerToParams,
+  LEDGER_GROUP,
+  resolvePageLedgerScope,
+} from "../../../utils/company/tenantLedgerParams.js";
+
+function resolveEditFormulaLedgerScope(captureScope, companyId) {
+  const groupId = String(captureScope?.groupId || "")
+    .trim()
+    .toUpperCase();
+  const isGroupLedger =
+    captureScope?.mode === "group" &&
+    (captureScope?.resolveCompanyViaGroupId || Number(captureScope?.scopeCompanyId ?? 0) <= 0);
+
+  if (isGroupLedger && groupId) {
+    return { ledger: LEDGER_GROUP, groupId, companyId: null };
+  }
+
+  return resolvePageLedgerScope({
+    groupOnly: false,
+    selectedGroup: groupId || null,
+    companyId: companyId != null && Number(companyId) > 0 ? Number(companyId) : null,
+  });
+}
 
 function normalizeAccountCurrencyRow(c) {
   const id = c?.currency_id ?? c?.id;
@@ -57,24 +78,40 @@ function pickDefaultAccountCurrency(list, preferredCurrencyId = null) {
   return pool[0];
 }
 
-/**
- * Currencies linked to the selected account (Spring POST /api/currency/available).
- * Only {@code is_linked} rows become Currency dropdown options.
- */
 async function fetchAccountCurrencies(accountId, captureScope, companyId) {
   if (!accountId) return [];
-  const tenantId = resolveDataCaptureEffectiveTenantId(captureScope, companyId);
-  if (!tenantId) return [];
+  const ledger = resolveEditFormulaLedgerScope(captureScope, companyId);
+  const ownedParams = new URLSearchParams({ action: "get_account_currencies" });
+  ownedParams.set("account_id", String(accountId));
+  applyTenantLedgerToParams(ownedParams, ledger);
+  const ownedRes = await fetch(
+    buildApiUrl(`api/accounts/account_currency_api.php?${ownedParams.toString()}`),
+    { credentials: "include" }
+  );
+  const ownedJson = await ownedRes.json();
+  if (ownedJson.success && Array.isArray(ownedJson.data) && ownedJson.data.length > 0) {
+    return ownedJson.data.map(normalizeAccountCurrencyRow);
+  }
 
-  const rows = await fetchAvailableCurrencies({
-    tenantId,
-    companyId,
-    accountId,
-  });
-  const linked = rows
-    .map((row) => normalizeAccountCurrencyRow(row))
-    .filter((row) => row.id != null && String(row.id).trim() !== "" && row.is_linked);
-  return linked;
+  // Group ledger: account may exist without account_currency rows (old AP / new acc).
+  // Fall back to scope currencies so Edit Formula Currency is selectable.
+  const availParams = new URLSearchParams({ action: "get_available_currencies" });
+  availParams.set("account_id", String(accountId));
+  applyTenantLedgerToParams(availParams, ledger);
+  const availRes = await fetch(
+    buildApiUrl(`api/accounts/account_currency_api.php?${availParams.toString()}`),
+    { credentials: "include" }
+  );
+  const availJson = await availRes.json();
+  if (availJson.success && Array.isArray(availJson.data)) {
+    return availJson.data.map((c) =>
+      normalizeAccountCurrencyRow({
+        ...c,
+        is_linked: c?.is_linked != null ? !!c.is_linked : false,
+      }),
+    );
+  }
+  return [];
 }
 
 /**
@@ -174,7 +211,7 @@ export function useSummaryEditFormulaPure({
     async (newAccountId) => {
       if (!open || !captureScope) return;
       try {
-        const catalog = await fetchSummaryFormCatalog(captureScope, companyId);
+        const catalog = await fetchSummaryFormCatalog(captureScope);
         const next = catalog.accounts || [];
         setAccounts(next);
         if (!newAccountId) return;
@@ -188,7 +225,7 @@ export function useSummaryEditFormulaPure({
         console.error("Account list refresh after create failed:", e);
       }
     },
-    [open, captureScope, companyId, loadCurrenciesForAccount]
+    [open, captureScope, loadCurrenciesForAccount]
   );
 
   const closeEditFormula = useCallback(() => {
@@ -243,7 +280,7 @@ export function useSummaryEditFormulaPure({
     let alive = true;
     void (async () => {
       try {
-        const catalog = await fetchSummaryFormCatalog(captureScope, companyId);
+        const catalog = await fetchSummaryFormCatalog(captureScope);
         if (!alive) return;
         setAccounts(catalog.accounts || []);
         if (!anchorRef.current?.accountId) {
@@ -257,7 +294,7 @@ export function useSummaryEditFormulaPure({
     return () => {
       alive = false;
     };
-  }, [open, sessionKey, captureScope, companyId]);
+  }, [open, sessionKey, captureScope]);
 
   const handleCalculatorPress = useCallback((payload) => {
     setForm((prev) => {
@@ -353,20 +390,12 @@ export function useSummaryEditFormulaPure({
       if (!isEmptyNewSub) {
         try {
           const rowToSave = nextRows.find((r) => r.key === targetRow.key) || targetRow;
-          const tpl =
-            mode === "new"
-              ? await saveAddFormulaSpring(rowToSave, {
-                  captureScope,
-                  companyId,
-                  processId,
-                  processCode,
-                })
-              : await saveUpdateFormulaSpring(rowToSave, {
-                  captureScope,
-                  companyId,
-                  processId,
-                  processCode,
-                });
+          const tpl = await saveSummaryTemplatePure(rowToSave, {
+            captureScope,
+            companyId,
+            processId,
+            processCode,
+          });
           if (!tpl.success) {
             pushSummaryNotification(
               "Error",
@@ -375,10 +404,7 @@ export function useSummaryEditFormulaPure({
             );
             return;
           }
-          if (tpl.templateId || tpl.templateKey || tpl.formulaVariant != null || tpl.subOrder != null) {
-            const keepMainType =
-              applied.action === "update" &&
-              String(targetRow.productType || "").toLowerCase() !== "sub";
+          if (tpl.templateId || tpl.templateKey || tpl.formulaVariant != null) {
             nextRows = nextRows.map((r) =>
               r.key === targetRow.key
                 ? {
@@ -386,17 +412,16 @@ export function useSummaryEditFormulaPure({
                     templateId: tpl.templateId ?? r.templateId,
                     templateKey: tpl.templateKey ?? r.templateKey,
                     formulaVariant: tpl.formulaVariant ?? r.formulaVariant,
-                    // Never downgrade an in-place MAIN update to SUB (server may still insert SUB).
-                    ...(tpl.productType && !keepMainType ? { productType: tpl.productType } : {}),
-                    ...(keepMainType ? { productType: "main" } : {}),
-                    ...(tpl.parentIdProduct != null && !keepMainType
-                      ? { parentIdProduct: tpl.parentIdProduct }
-                      : {}),
-                    ...(tpl.subOrder != null && !keepMainType ? { subOrder: tpl.subOrder } : {}),
                   }
                 : r
             );
             replaceRows(nextRows);
+          }
+          if (targetRow.productType === "sub" || applied.action === "insertSub") {
+            const parentId = targetRow.parentIdProduct || anchor.idProduct;
+            await syncSubOrderTemplates(nextRows, parentId, (row) =>
+              saveSummaryTemplatePure(row, { captureScope, companyId, processId, processCode })
+            );
           }
         } catch (e) {
           console.warn("Template save failed:", e);

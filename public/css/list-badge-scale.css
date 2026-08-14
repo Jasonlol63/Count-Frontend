@@ -5,12 +5,12 @@
    ========================================================================== */
 
 @media (max-width: 1440px) {
-  body.ec-auth-shell:not(.user-page):not(.process-page) {
+  body.ec-auth-shell:not(.user-page):not(.account-page):not(.process-page) {
     --user-gc-segment-padding: 3px 9px;
   }
 
   /* Status / Role pills（不含 Account / User / Games Process 分页表） */
-  body.ec-auth-shell:not(.user-page):not(.process-page) .role-badge,
+  body.ec-auth-shell:not(.user-page):not(.account-page):not(.process-page) .role-badge,
   body.ec-auth-shell:not(.process-page) .contract-badge,
   body.ec-auth-shell:not(.process-page) .status-badge,
   body.ec-auth-shell:not(.process-page) .member-badge {
@@ -24,47 +24,47 @@
     border-width: 1px !important;
   }
 
-  /* Group / Company segment pills（User / Process 分页模式由 page CSS 覆盖） */
-  body.ec-auth-shell:not(.user-page):not(.process-page) .user-gc-segment {
+  /* Group / Company segment pills（User / Account / Process 分页模式由 page CSS 覆盖） */
+  body.ec-auth-shell:not(.user-page):not(.account-page):not(.process-page) .user-gc-segment {
     font-size: 11px !important;
     padding: var(--user-gc-segment-padding) !important;
     line-height: 1.2 !important;
   }
 
-  body.ec-auth-shell:not(.user-page):not(.process-page) .user-gc-inline-label {
+  body.ec-auth-shell:not(.user-page):not(.account-page):not(.process-page) .user-gc-inline-label {
     font-size: 12px !important;
   }
 
-  body.ec-auth-shell:not(.user-page):not(.process-page) .user-gc-inline-panel {
+  body.ec-auth-shell:not(.user-page):not(.account-page):not(.process-page) .user-gc-inline-panel {
     padding: 8px 12px 9px;
     row-gap: 5px;
   }
 
   /* Show Inactive / Show All */
-  body.ec-auth-shell:not(.user-page):not(.process-page) .user-filter-chip {
+  body.ec-auth-shell:not(.user-page):not(.account-page):not(.process-page) .user-filter-chip {
     padding: 3px 9px 3px 6px;
     gap: 5px;
     font-size: 10px !important;
     line-height: 1.2 !important;
   }
 
-  body.ec-auth-shell:not(.user-page):not(.process-page) .user-filter-chip__dot {
+  body.ec-auth-shell:not(.user-page):not(.account-page):not(.process-page) .user-filter-chip__dot {
     width: 13px !important;
     height: 13px !important;
     min-width: 13px !important;
     min-height: 13px !important;
   }
 
-  body.ec-auth-shell:not(.user-page):not(.process-page) .user-filter-chip__check {
+  body.ec-auth-shell:not(.user-page):not(.account-page):not(.process-page) .user-filter-chip__check {
     width: 8px !important;
     height: 8px !important;
   }
 
-  body.ec-auth-shell:not(.user-page):not(.process-page) .userlist-filter-chips .user-filter-chip:nth-child(1) {
+  body.ec-auth-shell:not(.user-page):not(.account-page):not(.process-page) .userlist-filter-chips .user-filter-chip:nth-child(1) {
     min-width: 6rem !important;
   }
 
-  body.ec-auth-shell:not(.user-page):not(.process-page) .userlist-filter-chips .user-filter-chip:nth-child(2) {
+  body.ec-auth-shell:not(.user-page):not(.account-page):not(.process-page) .userlist-filter-chips .user-filter-chip:nth-child(2) {
     min-width: 5rem !important;
   }
 }

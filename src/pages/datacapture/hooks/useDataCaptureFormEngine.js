@@ -17,6 +17,7 @@ import {
   isGroupPayrollDraftProcessId,
   selectedProcessFromGroupOnlySession,
 } from "../lib/dataCaptureGroupOnlyProcesses.js";
+import { resolvePayrollDraftProcessKey } from "../lib/dataCaptureGamesPayrollProcesses.js";
 import {
   normalizeGroupOnlyDraftCurrencyId,
   restoreGroupOnlyTableDraft,
@@ -48,10 +49,10 @@ const PROCESS_PLACEHOLDER = "Select Process";
 const PROCESS_OPTIONS_RENDER_CAP = 80;
 
 const BANK_PROCESSES = [
-  { id: "profit", processId: "PROFIT", processDisplay: "PROFIT", descriptionName: null },
-  { id: "salary", processId: "SALARY", processDisplay: "SALARY", descriptionName: null },
-  { id: "commission", processId: "COMMISSION", processDisplay: "COMMISSION", descriptionName: null },
-  { id: "bonus", processId: "BONUS", processDisplay: "BONUS", descriptionName: null },
+  { id: "profit", process_id: "PROFIT", process_display: "PROFIT", description_name: null },
+  { id: "salary", process_id: "SALARY", process_display: "SALARY", description_name: null },
+  { id: "commission", process_id: "COMMISSION", process_display: "COMMISSION", description_name: null },
+  { id: "bonus", process_id: "BONUS", process_display: "BONUS", description_name: null }
 ];
 function readRestoredProcessData() {
   try {
@@ -86,8 +87,9 @@ function readRestoredSelectedProcess(restoredProcessData, selectedGroup = null, 
   return {
     id: pid,
     displayText: pname || pcode || pid,
-    processId: pcode,
-    descriptionName: null,
+    process_id: pcode,
+    description_name: null,
+    enable_save_draft: Boolean(restoredProcessData.enableSaveDraft),
   };
 }
 
@@ -105,33 +107,20 @@ function applyProcessDetailToFields(data, setters, currenciesSnapshot, applyComp
   const pd = data || {};
 
   if (applyCompanyOnlyFields) {
-    if (pd.removeWord ?? pd.remove_word) {
-      setRemoveWord(normalizeRemoveWordValue(pd.removeWord ?? pd.remove_word));
-    }
-    if (pd.replaceWordFrom ?? pd.replace_word_from) {
-      setReplaceFrom(toDataCaptureWordFieldCase(pd.replaceWordFrom ?? pd.replace_word_from));
-    }
-    if (pd.replaceWordTo ?? pd.replace_word_to) {
-      setReplaceTo(toDataCaptureWordFieldCase(pd.replaceWordTo ?? pd.replace_word_to));
-    }
+    if (pd.remove_word) setRemoveWord(normalizeRemoveWordValue(pd.remove_word));
+    if (pd.replace_word_from) setReplaceFrom(toDataCaptureWordFieldCase(pd.replace_word_from));
+    if (pd.replace_word_to) setReplaceTo(toDataCaptureWordFieldCase(pd.replace_word_to));
 
-    const descriptionNames = pd.descriptionNames ?? pd.description_names;
-    if (descriptionNames) {
-      const arr = Array.isArray(descriptionNames) ? descriptionNames : [descriptionNames];
+    if (pd.description_names) {
+      const arr = Array.isArray(pd.description_names) ? pd.description_names : [pd.description_names];
       setSelectedDescriptions?.(arr);
       setDescriptionDisplay(arr.join(", "));
     }
   }
 
-  const remarkValue = pd.remark ?? pd.remarks;
-  if (remarkValue) setRemark(toDataCaptureWordFieldCase(remarkValue));
+  if (pd.remarks) setRemark(toDataCaptureWordFieldCase(pd.remarks));
 
-  const currencyIdStr =
-    pd.currencyId != null
-      ? String(pd.currencyId)
-      : pd.currency_id != null
-        ? String(pd.currency_id)
-        : "";
+  const currencyIdStr = pd.currency_id != null ? String(pd.currency_id) : "";
   const list = currenciesSnapshot || [];
   if (currencyIdStr && list.length) {
     const exists = list.some((c) => String(c.id) === currencyIdStr);
@@ -140,13 +129,8 @@ function applyProcessDetailToFields(data, setters, currenciesSnapshot, applyComp
       return;
     }
   }
-  const currencyCode = pd.currencyCode ?? pd.currency_code;
-  if (pd.currency_warning && currencyCode && list.length) {
-    const code = String(currencyCode).toUpperCase();
-    const match = list.find((c) => String(c.code).toUpperCase() === code);
-    if (match) setCurrencyId(String(match.id));
-  } else if (currencyCode && list.length) {
-    const code = String(currencyCode).toUpperCase();
+  if (pd.currency_warning && pd.currency_code && list.length) {
+    const code = String(pd.currency_code).toUpperCase();
     const match = list.find((c) => String(c.code).toUpperCase() === code);
     if (match) setCurrencyId(String(match.id));
   }
@@ -274,6 +258,7 @@ export function useDataCaptureFormEngine(
           setDescriptionDisplay("");
         }
         setRemark("");
+        callDataCaptureRuntime("clearGridCells");
       }
       scheduleRecomputeSubmitState();
       return;
@@ -298,6 +283,7 @@ export function useDataCaptureFormEngine(
         setDescriptionDisplay("");
       }
       setRemark("");
+      callDataCaptureRuntime("clearGridCells");
     }
     scheduleRecomputeSubmitState();
   }, [clearSelectedDescriptions]);
@@ -391,7 +377,7 @@ export function useDataCaptureFormEngine(
       if (!proc?.id) return;
       saveGroupOnlyProcessPrefs(payrollPrefsKeyRef.current, {
         process: proc.id,
-        processCode: proc.processId,
+        processCode: proc.process_id,
         processName: proc.displayText,
         currency: currencyId,
         date: captureDate,
@@ -405,8 +391,8 @@ export function useDataCaptureFormEngine(
     const next = {
       id: String(option.id),
       displayText: option.displayText || String(option.id),
-      processId: option.processId || String(option.id).toUpperCase(),
-      descriptionName: null,
+      process_id: option.process_id || String(option.id).toUpperCase(),
+      description_name: null,
     };
     const prev = selectedProcessRef.current;
     if (prev?.id && prev.id !== next.id && isGroupPayrollDraftProcessId(prev.id)) {
@@ -425,7 +411,7 @@ export function useDataCaptureFormEngine(
     setSelectedProcess(next);
     saveGroupOnlyProcessPrefs(payrollPrefsKeyRef.current, {
       process: next.id,
-      processCode: next.processId,
+      processCode: next.process_id,
       processName: next.displayText,
       currency: currencyId,
       date: captureDate,
@@ -448,18 +434,21 @@ export function useDataCaptureFormEngine(
 
   const selectProcessRow = useCallback(async (row) => {
     if (!applyCompanyOnlyFieldsRef.current) return;
+    // Flush the outgoing process's draft (no-op unless it's a matched payroll process).
+    await callDataCaptureRuntime("flushGroupOnlyTableDraftNow");
     const displayText = displayTextFromProcessRow(row);
     setSelectedProcess({
       id: String(row.id),
       displayText,
-      processId: row.processId ?? row.process_id,
-      descriptionName: row.descriptionName ?? row.description_name ?? null,
+      process_id: row.process_id,
+      description_name: row.description_name || null,
+      enable_save_draft: Boolean(row.enable_save_draft),
     });
     setProcessOpen(false);
     setProcessFilter("");
     setRemoveWord("");
-    const scope = captureScopeRef.current;
-    const res = await fetchProcessDetail(row.id, scope, captureDate);
+    const cid = companyIdRef.current;
+    const res = await fetchProcessDetail(row.id, cid);
     if (res.success && res.data) {
       applyProcessDetailToFields(
         res.data,
@@ -477,7 +466,7 @@ export function useDataCaptureFormEngine(
       );
     }
     scheduleRecomputeSubmitState();
-  }, [captureDate, setSelectedDescriptions]);
+  }, [setSelectedDescriptions]);
 
   const clearCompanyOnlyFields = useCallback(() => {
     setRemoveWord("");
@@ -566,7 +555,7 @@ export function useDataCaptureFormEngine(
       if (proc?.id) {
         saveGroupOnlyProcessPrefs(prefsKey, {
           process: proc.id,
-          processCode: proc.processId || pcode,
+          processCode: proc.process_id || pcode,
           processName: proc.displayText || pname,
           currency: processData.currency,
           date: processData.date,
@@ -575,24 +564,24 @@ export function useDataCaptureFormEngine(
     } else {
       let row = null;
       if (pid) row = rows.find((r) => String(r.id) === pid);
-      if (!row && pcode) {
-        row = rows.find((r) => String(r.processId ?? r.process_id ?? "").trim() === pcode);
-      }
+      if (!row && pcode) row = rows.find((r) => String(r.process_id || "").trim() === pcode);
       if (!row && pname) row = rows.find((r) => displayTextFromProcessRow(r) === pname);
 
       if (row) {
         setSelectedProcess({
           id: String(row.id),
           displayText: displayTextFromProcessRow(row),
-          processId: row.processId ?? row.process_id,
-          descriptionName: row.descriptionName ?? row.description_name ?? null,
+          process_id: row.process_id,
+          description_name: row.description_name || null,
+          enable_save_draft: Boolean(row.enable_save_draft),
         });
       } else if (pid || pcode || pname) {
         setSelectedProcess({
           id: pid || pcode,
           displayText: pname || pcode || pid,
-          processId: pcode,
-          descriptionName: null,
+          process_id: pcode,
+          description_name: null,
+          enable_save_draft: Boolean(processData.enableSaveDraft),
         });
       }
     }
@@ -690,11 +679,16 @@ export function useDataCaptureFormEngine(
     persistGroupOnlyFormPrefs();
   }, [applyCompanyOnlyFields, selectedGroup, selectedProcess?.id, currencyId, captureDate, persistGroupOnlyFormPrefs]);
 
-  /** Restore saved group-only table draft when process/currency is set and grid is ready. */
+  /**
+   * Restore saved payroll table draft when process/currency is set and grid is ready.
+   * Covers both the Bank/AP-IG group payroll UI (fixed synthetic ids) and the
+   * Games company UI (real SALARY/BONUS/COMMISSION process rows, matched by name).
+   */
   useEffect(() => {
     const draftBucket = payrollPrefsKeyRef.current;
-    if (applyCompanyOnlyFields || !draftBucket || !selectedProcess?.id) return;
-    if (!isGroupPayrollDraftProcessId(selectedProcess.id)) return;
+    if (!draftBucket) return;
+    const processKey = resolvePayrollDraftProcessKey(selectedProcess, !applyCompanyOnlyFields);
+    if (!processKey) return;
     if (!scriptsReady) return;
     if (!normalizeGroupOnlyDraftCurrencyId(currencyId)) return;
     if (getDataCaptureState().isRestoring) return;
@@ -703,19 +697,40 @@ export function useDataCaptureFormEngine(
     } catch {
       /* ignore */
     }
-    void restoreGroupOnlyTableDraft(draftBucket, selectedProcess.id, currencyId, {
+    void restoreGroupOnlyTableDraft(draftBucket, processKey, currencyId, {
       captureScope,
       serverSync: payrollDraftServerSync,
     });
   }, [
     applyCompanyOnlyFields,
     payrollPrefsKey,
-    selectedProcess?.id,
+    selectedProcess,
     currencyId,
     scriptsReady,
     captureScope,
     payrollDraftServerSync,
   ]);
+
+  /**
+   * When the current process/currency has no payroll draft to restore (normal
+   * process, or a payroll process whose enable_save_draft isn't checked), keep
+   * the capture table empty on process/currency switch instead of leaking the
+   * previous selection's unsaved grid content.
+   */
+  useEffect(() => {
+    if (!selectedProcess?.id) return;
+    if (!scriptsReady) return;
+    if (getDataCaptureState().isRestoring) return;
+    try {
+      if (new URLSearchParams(window.location.search).get("restore") === "1") return;
+    } catch {
+      /* ignore */
+    }
+    const draftBucket = payrollPrefsKeyRef.current;
+    const processKey = resolvePayrollDraftProcessKey(selectedProcess, !applyCompanyOnlyFields);
+    if (draftBucket && processKey) return; // handled by the restore effect above instead
+    callDataCaptureRuntime("clearGridCells");
+  }, [applyCompanyOnlyFields, payrollPrefsKey, selectedProcess, currencyId, scriptsReady]);
 
   applyGroupOnlyPrefsForGroupRef.current = applyGroupOnlyPrefsForGroup;
 

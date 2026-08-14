@@ -65,35 +65,21 @@ function SummaryTableRowInner({ row, onRowChange, onNewFormula, onEditFormula, o
     setDraftValue("");
   }, []);
 
-  const saveFormulaEdit = useCallback(
-    (nextValue) => {
-      const patch = buildFormulaInlineEditPatch(
-        row,
-        nextValue ?? draftValue,
-        editOriginalRef.current
-      );
-      setEditingField(null);
-      setDraftValue("");
-      if (!patch) return;
-      onInlineEditSave?.(row, patch);
-    },
-    [row, draftValue, onInlineEditSave]
-  );
+  const saveFormulaEdit = useCallback(() => {
+    const patch = buildFormulaInlineEditPatch(row, draftValue);
+    setEditingField(null);
+    setDraftValue("");
+    if (!patch) return;
+    onInlineEditSave?.(row, patch);
+  }, [row, draftValue, onInlineEditSave]);
 
-  const saveSourceEdit = useCallback(
-    (nextValue) => {
-      const patch = buildSourceInlineEditPatch(
-        row,
-        nextValue ?? draftValue,
-        editOriginalRef.current
-      );
-      setEditingField(null);
-      setDraftValue("");
-      if (!patch) return;
-      onInlineEditSave?.(row, patch);
-    },
-    [row, draftValue, onInlineEditSave]
-  );
+  const saveSourceEdit = useCallback(() => {
+    const patch = buildSourceInlineEditPatch(row, draftValue);
+    setEditingField(null);
+    setDraftValue("");
+    if (!patch) return;
+    onInlineEditSave?.(row, patch);
+  }, [row, draftValue, onInlineEditSave]);
 
   const saveRateValue = useCallback(
     (cell) => {
@@ -128,7 +114,9 @@ function SummaryTableRowInner({ row, onRowChange, onNewFormula, onEditFormula, o
     [saveRateValue]
   );
 
-  if (!row?.idProduct?.trim()) return null;
+  // Allow empty Id Product when the row came from a money-only capture footer
+  // (C8 Win Loss Subtotal). Still skip completely missing row objects.
+  if (!row) return null;
 
   const isSub = row.productType === "sub";
   const idCellClass = isSub ? "id-product sub-id-product" : "id-product";

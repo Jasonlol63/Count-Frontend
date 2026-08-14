@@ -1,8 +1,25 @@
-/** Strip trailing *(...) Source suffix only; never strip row coefficients like *0.9. */
-export function removeTrailingSourcePercentExpression(formulaText) {
+function normalizeSourceExpressionForCompare(value) {
+  const compact = String(value ?? "").trim().replace(/\s+/g, "");
+  if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(compact)) {
+    const numeric = Number(compact);
+    if (Number.isFinite(numeric)) return String(numeric);
+  }
+  return compact;
+}
+
+/**
+ * Strip trailing *(...) Source suffix.
+ * When expectedSourcePercent is supplied, only a text-equivalent Source suffix
+ * may be removed; an unrelated formula-body multiplier must be preserved.
+ */
+export function removeTrailingSourcePercentExpression(formulaText, expectedSourcePercent = null) {
   if (!formulaText) return "";
   let result = String(formulaText).trim();
   let previous = "";
+  const expected =
+    expectedSourcePercent == null
+      ? null
+      : normalizeSourceExpressionForCompare(expectedSourcePercent);
 
   while (result && previous !== result) {
     previous = result;
@@ -16,7 +33,11 @@ export function removeTrailingSourcePercentExpression(formulaText) {
     const isStarInsideParens = openParens > closeParens;
 
     const trailingPattern = /^\*\s*\(([0-9.+\-*/\s]+)\)\s*$/;
-    if (!isStarInsideParens && trailingPattern.test(afterStar)) {
+    const trailingMatch = afterStar.match(trailingPattern);
+    const trailingMatchesExpected =
+      expected == null ||
+      normalizeSourceExpressionForCompare(trailingMatch?.[1] ?? "") === expected;
+    if (!isStarInsideParens && trailingMatch && trailingMatchesExpected) {
       result = beforeStar.trim();
       continue;
     }

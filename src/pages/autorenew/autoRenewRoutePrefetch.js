@@ -38,6 +38,11 @@ export function clearAutoRenewListCache({ dateFrom, dateTo, entityType } = {}) {
   }
 }
 
+/** Drop every Auto Renew warm entry (ledger / approve SSE). */
+export function clearAllAutoRenewListCache() {
+  cache.clear();
+}
+
 export async function prefetchAutoRenewApprovals(status = "pending", range = {}) {
   const key = cacheKey(status, range.dateFrom, range.dateTo, range.entityType);
   if (cache.has(key)) return cache.get(key);

@@ -6,18 +6,181 @@ import { formatNumberToTwoDecimals } from "../core/dataCapturePasteMoneyUtils.js
 import { applyParsedMatrixToGrid } from "../core/dataCapturePasteApply.js";
 import { notifyPasteUser, recomputeSubmitStateAfterPaste } from "../../lib/dataCaptureBridge.js";
 
+/**
+ * AWC WinLoss Summary report (gciag.usplaynet.com and sibling AWC agent
+ * portals) — single tool shared by 1.TEXT / 2.FORMAT / 3.CITIBET so a paste
+ * of this specific report behaves the same regardless of which capture mode
+ * is selected, without touching those modes' generic parsing for every other
+ * report source.
+ *
+ * Two bugs this closes, both rooted in the SAME cause — the source page's
+ * el-table renders a hidden row-selection checkbox <td> before every real
+ * data row (but not before Sub Total rows, and not inside whatever row the
+ * user's drag-select started on):
+ *
+ * 1. Truncation: a single/short selection's text/plain lands as one value per
+ *    line (no tabs). The shared vertical-dump reshaper (detectVerticalFieldDump)
+ *    guesses a short fixed row width from a coincidental "label + N money
+ *    tokens" run and silently drops whatever came before that guess.
+ * 2. Column shift: a multi-row selection's HTML keeps that leading empty
+ *    checkbox <td> on every FULLY-CONTAINED row except the first (the first
+ *    row's selection anchor starts past it), shifting those rows one column
+ *    right of their siblings.
+ *
+ * Fix: extract only NON-EMPTY cell text, from HTML when available (so the
+ * true column count and every row survive) or from plain text otherwise, then
+ * regroup by recognizing this report's own row-start markers (a lowercase
+ * User ID, or a "Sub Total[ ... ]" label) via the existing
+ * parseAWCPatternBasedData — this never invents a fixed width and empty
+ * cells never became tokens in the first place, so neither the truncation
+ * nor the column-shift artifact can occur.
+ */
+
+const AWC_WIN_LOSS_TYPE_TOKENS = new Set(["LIVE", "TABLE", "SLOT", "SPORTS"]);
+
+function awcWinLossLooksLikeMoneyToken(token) {
+    const raw = String(token ?? "").replace(/ /g, " ").trim();
+    if (!raw) return false;
+    const stripped = raw
+        .replace(/[,$]/g, "")
+        .replace(/^\((.*)\)$/, "-$1")
+        .replace(/\s*%$/, "");
+    return /^-?\d+(?:\.\d+)?$/.test(stripped);
+}
+
+function awcWinLossLooksLikeUserId(token) {
+    const t = String(token ?? "").trim();
+    return /^[a-z][a-z0-9]{2,14}$/i.test(t) && !/^\d+$/.test(t);
+}
+
+/**
+ * Detection gate — only this report's shape may use this tool. Requires
+ * either a "Sub Total[ ... ]" marker (this report's subtotal rows), or a
+ * lowercase User ID immediately followed within a few tokens by a known
+ * report Type ("LIVE"/"TABLE"/"SLOT"/"SPORTS"), plus enough money-shaped
+ * tokens overall to rule out a coincidental match on an unrelated report.
+ */
+export function looksLikeAwcWinLossReportTokens(tokens) {
+    if (!Array.isArray(tokens) || tokens.length < 6) return false;
+
+    const hasSubTotalMarker = tokens.some((t) => /^SUB\s*TOTAL\s*\[/i.test(String(t ?? "").trim()));
+
+    const hasUserIdThenType = tokens.some((token, index) => {
+        if (!awcWinLossLooksLikeUserId(token)) return false;
+        for (let j = index + 1; j < Math.min(index + 4, tokens.length); j += 1) {
+            if (AWC_WIN_LOSS_TYPE_TOKENS.has(String(tokens[j] ?? "").trim().toUpperCase())) return true;
+        }
+        return false;
+    });
+
+    if (!hasSubTotalMarker && !hasUserIdThenType) return false;
+
+    const moneyCount = tokens.filter(awcWinLossLooksLikeMoneyToken).length;
+    return moneyCount >= 3;
+}
+
+/** Non-empty cell text only, in document order — structurally-empty <td>s (e.g. the source page's row-selection checkbox column) never become tokens, so the leading-column shift they cause elsewhere can't happen here. */
+function extractNonEmptyHtmlCellTokens(table) {
+    const tokens = [];
+    table.querySelectorAll("tr").forEach((tr) => {
+        tr.querySelectorAll("td, th").forEach((cell) => {
+            const text = (cell.textContent || cell.innerText || "").replace(/\s+/g, " ").trim();
+            if (text) tokens.push(text);
+        });
+    });
+    return tokens;
+}
+
+function buildAwcWinLossMatrixFromHtml(html) {
+    if (!html || !/<table\b/i.test(html)) return null;
+    try {
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = html;
+        // A drag-select can span sibling <table>s (e.g. the source page keeps
+        // the "Total" footer as a separate <table> from the data rows) — walk
+        // every top-level table in document order so none of the selection is
+        // silently dropped.
+        const tables = Array.from(tempDiv.querySelectorAll("table")).filter(
+            (t) => !t.parentElement?.closest("table"),
+        );
+        if (!tables.length) return null;
+        const tokens = tables.flatMap((table) => extractNonEmptyHtmlCellTokens(table));
+        if (!looksLikeAwcWinLossReportTokens(tokens)) return null;
+        return parseAWCPatternBasedData(tokens);
+    } catch (err) {
+        console.error("AWC WinLoss: error extracting HTML table tokens:", err);
+        return null;
+    }
+}
+
+function buildAwcWinLossMatrixFromPlainText(pastedData) {
+    const normalized = String(pastedData ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const lines = normalized
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== "");
+    if (!looksLikeAwcWinLossReportTokens(lines)) return null;
+    return parseAWCPatternBasedData(lines);
+}
+
+/** @returns {string[][] | null} */
+export function buildAwcWinLossReportMatrix(html, pastedData) {
+    const fromHtml = buildAwcWinLossMatrixFromHtml(html);
+    if (fromHtml?.length) return fromHtml;
+    return buildAwcWinLossMatrixFromPlainText(pastedData);
+}
+
+/**
+ * Shared entry point for 1.TEXT / 2.FORMAT / 3.CITIBET. Pass either
+ * `anchorCell`, or `startRowOverride`/`startColOverride` (2.FORMAT's
+ * convention) via `applyOptions`.
+ * @returns {boolean}
+ */
+export function tryHandleAwcWinLossReportPaste(html, pastedData, applyOptions = {}) {
+    const dataMatrix = buildAwcWinLossReportMatrix(html, pastedData);
+    if (!dataMatrix?.length) return false;
+
+    const { anchorCell = null, ...gridOptions } = applyOptions;
+    const { successCount, maxRows, maxCols } = applyParsedMatrixToGrid(dataMatrix, anchorCell, {
+        ...gridOptions,
+        trimValues: false,
+        alignTotalRows: false,
+        successMessage: null,
+    });
+
+    if (successCount > 0) {
+        notifyPasteUser(
+            `AWC WinLoss Summary: 成功粘贴 ${successCount} 个单元格 (${maxRows} 行 x ${maxCols} 列)!`,
+            "success",
+        );
+        recomputeSubmitStateAfterPaste();
+        return true;
+    }
+    return false;
+}
+
 export function parseAWCPatternBasedData(lines) {
     try {
         console.log('AWC (2.7): Parsing pattern-based data, total lines:', lines.length);
 
-        // 识别行起始标识符：用户ID、Sub Total等
+        // Sub Total[ xxx ] rows AND the report-level Total / Grand Total rows
+        // share the same 3-col-label layout (User ID + Platform + Type merged
+        // into one label cell) — treat them the same for row-start detection
+        // and column padding below.
+        const isAggregateLabel = (text) => {
+            const trimmed = String(text ?? '').trim().toUpperCase();
+            if (trimmed.startsWith('SUB TOTAL[') || trimmed.startsWith('SUBTOTAL[')) return true;
+            return trimmed === 'TOTAL' || trimmed === 'GRAND TOTAL';
+        };
+
+        // 识别行起始标识符：用户ID、Sub Total、Total 等
         const isRowStart = (text, index, allLines) => {
             if (!text || text.trim() === '') return false;
             const originalText = text.trim();
             const trimmed = originalText.toUpperCase();
 
-            // 1. 匹配 Sub Total[ xxx ] 格式 - 优先检查
-            if (trimmed.startsWith('SUB TOTAL[') || trimmed.startsWith('SUBTOTAL[')) {
+            // 1. 匹配 Sub Total[ xxx ] / Total / Grand Total 格式 - 优先检查
+            if (isAggregateLabel(trimmed)) {
                 return true;
             }
 
@@ -156,10 +319,7 @@ export function parseAWCPatternBasedData(lines) {
         // 验证并统一列数：找出最常见的列数（排除Sub Total行）
         if (dataMatrix.length > 0) {
             const dataRowLengths = dataMatrix
-                .filter(row => {
-                    const first = (row[0] || '').toUpperCase();
-                    return !first.includes('SUB TOTAL');
-                })
+                .filter(row => !isAggregateLabel(row[0]))
                 .map(row => row.length);
 
             if (dataRowLengths.length > 0) {
@@ -183,13 +343,12 @@ export function parseAWCPatternBasedData(lines) {
                 // 确保所有行都有相同的列数（填充或截断）
                 // 特殊处理：Sub Total 行需要在前面插入空白单元格以保持列对齐
                 dataMatrix.forEach((row, index) => {
-                    const firstCell = (row[0] || '').toUpperCase();
-                    const isSubTotalRow = firstCell.includes('SUB TOTAL');
+                    const isSubTotalRow = isAggregateLabel(row[0]);
 
                     if (isSubTotalRow) {
-                        // Sub Total 行的格式：第一列是 "Sub Total[ xxx ]"，后面跟着数值
+                        // Sub Total[ xxx ] / Total / Grand Total 行的格式：第一列是标签，后面跟着数值
                         // 但数值应该从第4列开始（跳过 User ID、Platform、Type 三列）
-                        // 所以需要在 "Sub Total[ xxx ]" 后面插入2个空白单元格
+                        // 所以需要在标签后面插入2个空白单元格
 
                         // 检查当前行的结构
                         if (row.length > 0 && row.length < mostCommonLength) {

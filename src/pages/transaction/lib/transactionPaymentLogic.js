@@ -1,7 +1,9 @@
 import { parseBalanceValue } from "./transactionFormat.js";
 import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
 import { resolveSavedCurrencyOrder } from "../../../utils/company/currencyDisplayOrder.js";
+import { invalidateDashboardCachesForLedgerChange } from "../../../utils/dashboard/dashboardCache.js";
 import { clearTxSearchCache } from "../../../utils/transaction/transactionSearchCache.js";
+import { clearReportSnapshots } from "../../report/shared/reportPageSnapshotCache.js";
 
 export const TRANSACTION_CURRENCY_FILTER_KEY_PREFIX = "transaction_currency_filter_v1_";
 export const TX_LIST_SESSION_PREFIX = "count168_txlist_v1_";
@@ -9,8 +11,21 @@ export const TX_LIST_INVALIDATE_LS_KEY = "count168_tx_invalidate_ts";
 export const TX_LIST_INVALIDATE_HANDLED_KEY = "count168_tx_invalidate_handled";
 export const TX_DATA_CHANGED_EVENT = "tx-data-changed";
 
-/** Broadcast that transaction balances changed elsewhere (maintenance delete, process post, etc.). */
-export function notifyTransactionListInvalidated(source = "unknown") {
+/** Current ledger-list invalidate timestamp (0 if unset). Used by route warm to drop stale fills. */
+export function readTxListInvalidateTs() {
+  try {
+    const n = Number(localStorage.getItem(TX_LIST_INVALIDATE_LS_KEY) || 0);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Central ledger-client invalidate: Dashboard session caches, TX search Map,
+ * report remount snapshots, and tx-data-changed broadcast for mounted listeners.
+ */
+export function invalidateLedgerClientCaches(source = "unknown") {
   const ts = Date.now();
   try {
     localStorage.setItem(TX_LIST_INVALIDATE_LS_KEY, String(ts));
@@ -18,8 +33,15 @@ export function notifyTransactionListInvalidated(source = "unknown") {
     /* ignore */
   }
   clearTxSearchCache();
+  invalidateDashboardCachesForLedgerChange();
+  clearReportSnapshots();
   window.dispatchEvent(new CustomEvent(TX_DATA_CHANGED_EVENT, { detail: { ts, source } }));
   return ts;
+}
+
+/** Broadcast that transaction balances changed elsewhere (maintenance delete, process post, etc.). */
+export function notifyTransactionListInvalidated(source = "unknown") {
+  return invalidateLedgerClientCaches(source);
 }
 
 /** @param {string|null|undefined} role */
@@ -35,7 +57,7 @@ export function getRoleClass(role) {
     company: "transaction-role-company",
     partner: "transaction-role-partner",
     staff: "transaction-role-staff",
-    supplier: "transaction-role-supplier",
+    upline: "transaction-role-upline",
     agent: "transaction-role-agent",
     member: "transaction-role-member",
     debtor: "transaction-role-debtor",
@@ -55,7 +77,7 @@ export function getRoleSortOrder(role) {
     expenses: 5,
     company: 6,
     staff: 7,
-    supplier: 8,
+    upline: 8,
     agent: 9,
     member: 10,
     none: 11,
@@ -207,14 +229,13 @@ export function applyOptimisticSubmitBalancePatch(rawSearchData, { currency, del
           : crDr;
 
       const balanceFull = MoneyDecimal.add(MoneyDecimal.add(bf, nextWlFull), nextCrDr).toString();
-      // Keep full precision in row data; UI cells round half-up to 2 for display only.
       const next = {
         ...row,
-        win_loss: nextWlFull,
+        win_loss: MoneyDecimal.formatFixedHalfUp(nextWlFull, 2),
         win_loss_full: nextWlFull,
-        cr_dr: nextCrDr,
+        cr_dr: MoneyDecimal.formatFixedHalfUp(nextCrDr, 2),
         balance_full: balanceFull,
-        balance: balanceFull,
+        balance: MoneyDecimal.formatFixedHalfUp(balanceFull, 2),
       };
       if (delta.crDrDelta && !MoneyDecimal.toDecimal(delta.crDrDelta, 0).isZero()) {
         next.has_crdr_transactions = 1;
@@ -269,31 +290,27 @@ export function rowIsZeroBalance(row) {
 }
 
 /**
- * 本期是否有 Payment/CrDr 动账：展示净额非 0，或 API 标志 period 内有 Cr/Dr 流水（含正负轧成 0）。
- * 仅看 Cr/Dr（has_crdr_transactions / cr_dr）；不含仅有 Win/Loss 的账户。
+ * 本期是否有 Payment/CrDr 动账：展示净额非 0，或 API 标志有流水（含轧成 0.00 / CONTRA 清账）。
+ * 与 search_api has_crdr_transactions / has_contra_clear_period 对齐。
  */
 export function rowHasPeriodCrdr(row) {
-  const crdr = parseBalanceValue(String(row?.cr_dr ?? "").replace(/,/g, ""));
+  const crdr = parseBalanceValue(row?.cr_dr);
   if (crdr !== null && Math.abs(crdr) > TX_FILTER_EPS) return true;
   return txRowFlag(row?.has_crdr_transactions) || txRowFlag(row?.has_contra_clear_period);
 }
 
 /**
- * 本期是否有 Win/Loss 动账：展示净额非 0，或 API 标志 period 内有 W/L 流水（含正负轧成 0）。
- * 仅看 Win/Loss（has_win_loss_transactions / win_loss）；不含仅有 Cr/Dr 的账户。
+ * 本期是否有 Win/Loss 动账：展示净额非 0，或 API 标志有流水（含当日正负轧成 0.00）。
+ * 与 search_api has_win_loss_transactions / has_period_id_product_rows 对齐。
  */
 export function rowHasPeriodWinLoss(row) {
   const wl = parseBalanceValue(String(row?.win_loss ?? "").replace(/,/g, ""));
   if (wl !== null && Math.abs(wl) > TX_FILTER_EPS) return true;
-  const wlFull = parseBalanceValue(
-    String(row?.win_loss_full != null ? row.win_loss_full : "").replace(/,/g, ""),
-  );
-  if (wlFull !== null && Math.abs(wlFull) > TX_FILTER_EPS) return true;
-  return txRowFlag(row?.has_win_loss_transactions);
+  return txRowFlag(row?.has_win_loss_transactions) || txRowFlag(row?.has_period_id_product_rows);
 }
 
 /**
- * API 查询参数 / session key：与勾选状态一致（过滤在前端展示层执行）。
+ * API 查询参数：Show all 0 balance 与 Payment/Win-Loss Only 联动的覆盖规则。
  * @returns {{ showInactiveForQuery: boolean, showCaptureOnlyForQuery: boolean, hideZeroBalanceForQuery: boolean }}
  */
 export function buildTransactionSearchQueryFilters({
@@ -302,52 +319,43 @@ export function buildTransactionSearchQueryFilters({
   showCaptureOnly = false,
 }) {
   return {
-    showInactiveForQuery: !!showPaymentOnly,
-    showCaptureOnlyForQuery: !!showCaptureOnly,
+    showInactiveForQuery: showZeroBalance && showPaymentOnly ? false : !!showPaymentOnly,
+    showCaptureOnlyForQuery: showZeroBalance && showCaptureOnly ? false : !!showCaptureOnly,
     hideZeroBalanceForQuery: !showZeroBalance,
   };
 }
 
-/** 从未执行过任何账单的账户×币种壳行（Show all 0 balance 补全）。 */
-export function rowIsNeverTransacted(row) {
-  return txRowFlag(row?.never_transacted) || txRowFlag(row?.neverTransacted);
-}
-
-/** Layer B：零余额过滤（balance=0 但本期有已勾选类型的动账时仍显示；Payment∩WinLoss 为 OR）。 */
+/** Layer B：零余额过滤（balance=0 但本期有 Cr/Dr 或 Win/Loss 动账时仍显示）。 */
 export function rowPassesHideZeroBalanceFilter(showZero, row, opts = {}) {
   if (showZero) return true;
   if (!rowIsZeroBalance(row)) return true;
-  const keepForPayment = opts.showPaymentOnly && rowHasPeriodCrdr(row);
-  const keepForWinLoss = opts.showWinLossOnly && rowHasPeriodWinLoss(row);
-  return keepForPayment || keepForWinLoss;
+  if (opts.showPaymentOnly && rowHasPeriodCrdr(row)) return true;
+  if (opts.showWinLossOnly && rowHasPeriodWinLoss(row)) return true;
+  return false;
 }
 
 /**
- * Layer A + B 完整过滤。
- * Show all 0 balance + Payment/WinLoss：活动账户 ∪ 从未动账账户（neverTransacted）。
- * 同时勾选 Payment + Win/Loss：活动条件为 OR。
+ * Layer A + B 完整过滤（与 transaction.js applyFilters 一致）。
+ * @param {object[]} rows
+ * @param {{ showZero?: boolean, showPaymentOnly?: boolean, showWinLossOnly?: boolean }} opts
  */
 export function applyTransactionDisplayFilters(rows, { showZero = false, showPaymentOnly = false, showWinLossOnly = false } = {}) {
   let filtered = Array.isArray(rows) ? rows : [];
   if (showPaymentOnly || showWinLossOnly) {
     if (showPaymentOnly && showWinLossOnly) {
-      filtered = filtered.filter((row) => {
-        const active = rowHasPeriodCrdr(row) || rowHasPeriodWinLoss(row);
-        if (showZero) return active || rowIsNeverTransacted(row);
-        return active;
-      });
+      filtered = filtered.filter((row) =>
+        showZero
+          ? rowIsZeroBalance(row) || rowHasPeriodCrdr(row) || rowHasPeriodWinLoss(row)
+          : rowHasPeriodCrdr(row) || rowHasPeriodWinLoss(row),
+      );
     } else if (showPaymentOnly) {
-      filtered = filtered.filter((row) => {
-        const active = rowHasPeriodCrdr(row);
-        if (showZero) return active || rowIsNeverTransacted(row);
-        return active;
-      });
+      filtered = filtered.filter((row) =>
+        showZero ? rowIsZeroBalance(row) || rowHasPeriodCrdr(row) : rowHasPeriodCrdr(row),
+      );
     } else {
-      filtered = filtered.filter((row) => {
-        const active = rowHasPeriodWinLoss(row);
-        if (showZero) return active || rowIsNeverTransacted(row);
-        return active;
-      });
+      filtered = filtered.filter((row) =>
+        showZero ? rowIsZeroBalance(row) || rowHasPeriodWinLoss(row) : rowHasPeriodWinLoss(row),
+      );
     }
   }
   const layerBOpts = { showPaymentOnly, showWinLossOnly };
@@ -367,33 +375,16 @@ export function filterTransactionTableRows(rawLeft, rawRight, { showZeroBalance,
   };
 }
 
-export function normalizeRateRowsByCrDr(leftRows, rightRows, isRate) {
-  const safeLeft = Array.isArray(leftRows) ? leftRows : [];
-  const safeRight = Array.isArray(rightRows) ? rightRows : [];
-  if (!isRate) {
-    return { leftRows: [...safeLeft], rightRows: [...safeRight] };
-  }
-  const normalizedLeft = [];
-  const normalizedRight = [];
-  safeLeft.forEach((row) => {
-    const crDr = parseBalanceValue(row?.cr_dr);
-    if (crDr === null || Math.abs(crDr) < 1e-5) {
-      normalizedLeft.push(row);
-      return;
-    }
-    if (crDr > 0) normalizedLeft.push(row);
-    else normalizedRight.push(row);
-  });
-  safeRight.forEach((row) => {
-    const crDr = parseBalanceValue(row?.cr_dr);
-    if (crDr === null || Math.abs(crDr) < 1e-5) {
-      normalizedRight.push(row);
-      return;
-    }
-    if (crDr > 0) normalizedLeft.push(row);
-    else normalizedRight.push(row);
-  });
-  return { leftRows: normalizedLeft, rightRows: normalizedRight };
+/**
+ * Historically re-split RATE rows by Cr/Dr sign. Product rule is now unified with
+ * CONTRA/PAYMENT: keep search_api Balance-based left/right for all types.
+ * Kept as a passthrough so older call sites stay safe.
+ */
+export function normalizeRateRowsByCrDr(leftRows, rightRows, _isRate = false) {
+  return {
+    leftRows: Array.isArray(leftRows) ? [...leftRows] : [],
+    rightRows: Array.isArray(rightRows) ? [...rightRows] : [],
+  };
 }
 
 /** @deprecated Use {@link filterTransactionTableRows} — kept for legacy two-step callers. */
@@ -440,8 +431,7 @@ function cleanMoneyCell(value) {
   return s;
 }
 
-/** Match `js/transaction.js` calculateTotals (bf/cr_dr sum; win_loss from win_loss_full; balance = bf+wl+cr).
- * Accumulate at full precision; UI footers round half-up to 2 for display only. */
+/** Match `js/transaction.js` calculateTotals (bf/cr_dr sum; win_loss from win_loss_full; balance = bf+wl+cr). */
 export function calculateTotals(rows) {
   let bfAcc = MoneyDecimal.toDecimal("0", 0);
   let wlAcc = MoneyDecimal.toDecimal("0", 0);
@@ -463,10 +453,10 @@ export function calculateTotals(rows) {
       /* skip */
     }
   }
-  const bfTot = MoneyDecimal.toPlainAmount(bfAcc.toString());
-  const wlTot = MoneyDecimal.toPlainAmount(wlAcc.toString());
-  const crTot = MoneyDecimal.toPlainAmount(crAcc.toString());
-  const balTot = MoneyDecimal.toPlainAmount(MoneyDecimal.add(MoneyDecimal.add(bfTot, wlTot), crTot).toString());
+  const bfTot = MoneyDecimal.formatFixed(bfAcc.toString(), 2);
+  const wlTot = MoneyDecimal.formatFixedHalfUp(wlAcc.toString(), 2);
+  const crTot = MoneyDecimal.formatFixed(crAcc.toString(), 2);
+  const balTot = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(MoneyDecimal.add(bfTot, wlTot), crTot).toString(), 2);
   return { bf: bfTot, win_loss: wlTot, cr_dr: crTot, balance: balTot };
 }
 
@@ -502,17 +492,17 @@ export function applySummaryWinLossDisplayTolerance(totals) {
   if (absWl.gt(tol)) return totals;
   const bf2 = String(totals.bf ?? "0").replace(/,/g, "").trim();
   const cr2 = String(totals.cr_dr ?? "0").replace(/,/g, "").trim();
-  const wl0 = "0";
-  const balance2 = MoneyDecimal.toPlainAmount(MoneyDecimal.add(MoneyDecimal.add(bf2, wl0), cr2).toString());
+  const wl0 = MoneyDecimal.formatFixedHalfUp("0", 2);
+  const balance2 = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(MoneyDecimal.add(bf2, wl0), cr2).toString(), 2);
   return { bf: totals.bf, win_loss: wl0, cr_dr: totals.cr_dr, balance: balance2 };
 }
 
 /** Merge left+right footer totals (each already `calculateTotals` output). */
 export function mergeTotals(leftT, rightT) {
-  const bf = MoneyDecimal.toPlainAmount(MoneyDecimal.add(String(leftT?.bf ?? "0"), String(rightT?.bf ?? "0")).toString());
-  const wl = MoneyDecimal.toPlainAmount(MoneyDecimal.add(String(leftT?.win_loss ?? "0"), String(rightT?.win_loss ?? "0")).toString());
-  const cr = MoneyDecimal.toPlainAmount(MoneyDecimal.add(String(leftT?.cr_dr ?? "0"), String(rightT?.cr_dr ?? "0")).toString());
-  const bal = MoneyDecimal.toPlainAmount(MoneyDecimal.add(MoneyDecimal.add(bf, wl), cr).toString());
+  const bf = MoneyDecimal.formatFixed(MoneyDecimal.add(String(leftT?.bf ?? "0"), String(rightT?.bf ?? "0")).toString(), 2);
+  const wl = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(String(leftT?.win_loss ?? "0"), String(rightT?.win_loss ?? "0")).toString(), 2);
+  const cr = MoneyDecimal.formatFixed(MoneyDecimal.add(String(leftT?.cr_dr ?? "0"), String(rightT?.cr_dr ?? "0")).toString(), 2);
+  const bal = MoneyDecimal.formatFixedHalfUp(MoneyDecimal.add(MoneyDecimal.add(bf, wl), cr).toString(), 2);
   return { bf, win_loss: wl, cr_dr: cr, balance: bal };
 }
 
@@ -560,15 +550,18 @@ export function dedupeCurrencyRowsByCode(rows) {
 /**
  * Apply saved API/global/local order to currency rows from get_company_currencies_api.
  */
-export function orderCurrencyRows(orderedData, orderData, explicitCompanyId = null) {
+export function orderCurrencyRows(orderedData, orderData, explicitOrderKey = null) {
   let ordered = dedupeCurrencyRowsByCode(orderedData);
   try {
-    const companyId =
-      explicitCompanyId != null && explicitCompanyId !== ""
-        ? Number(explicitCompanyId)
-        : orderData?.data?.company_id;
+    let orderKey = explicitOrderKey;
+    if (orderKey == null || orderKey === "") {
+      const cid = orderData?.data?.company_id;
+      const gid = orderData?.data?.group_id;
+      if (cid != null && Number(cid) > 0) orderKey = Number(cid);
+      else if (gid) orderKey = `g:${String(gid).trim().toUpperCase()}`;
+    }
     const savedOrder = resolveSavedCurrencyOrder(
-      companyId,
+      orderKey,
       orderData?.success ? orderData?.data?.order : null,
     );
     if (!savedOrder?.length) return ordered;
@@ -603,10 +596,9 @@ export function orderCurrencyRows(orderedData, orderData, explicitCompanyId = nu
   }
 }
 
-/** Transaction page cold boot: MYR when available, otherwise first listed currency. */
+/** Default = first currency in the caller's ordered list (user drag order). */
 export function pickTransactionDefaultCurrency(codes) {
   const list = (codes || []).map((c) => String(c || "").toUpperCase().trim()).filter(Boolean);
-  if (list.includes("MYR")) return "MYR";
   return list[0] || "";
 }
 
@@ -667,8 +659,7 @@ export function countDisplayedRows(rawSearchData, searchState, txType, typeSearc
     showPaymentOnly: typeSearchActive ? false : searchState.showPaymentOnly,
     showCaptureOnly: typeSearchActive ? false : searchState.showCaptureOnly,
   });
-  const norm = normalizeRateRowsByCrDr(z.left, z.right, txType === "RATE");
-  return (norm.leftRows?.length || 0) + (norm.rightRows?.length || 0);
+  return (z.left?.length || 0) + (z.right?.length || 0);
 }
 
 /** Read cached transaction list payload from sessionStorage (same format as saveTxListToSession). */

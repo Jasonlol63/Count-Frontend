@@ -93,6 +93,8 @@
 .ec-page-shell-loading .ec-app-boot-loading__spinner {
   width: 36px;
   height: 36px;
+  /* Route switch: no spin — Acc-style instant paint when chunk already cached */
+  animation: none;
 }
 
 /* Data Capture Summary — same single-page scroll as Ownership (all viewport widths) */

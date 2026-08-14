@@ -1,6 +1,5 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { assetUrl, buildApiUrl } from "../../utils/core/apiUrl.js";
-import { fetchCurrentUser, logoutSession } from "../../utils/auth/authApi.js";
 import { injectStylesheet } from "../../utils/core/injectStylesheet.js";
 import { MAINTENANCE_I18N } from "../../translateFile/pages/maintenanceTranslate.js";
 import { formatMemberRole, getMemberText } from "../../translateFile/pages/memberTranslate.js";
@@ -88,8 +87,9 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
     let cancelled = false;
     (async () => {
       try {
-        const { ok, json: meJson } = await fetchCurrentUser();
-        if (!ok || !meJson.success || !meJson.data) {
+        const meRes = await fetch(buildApiUrl("api/session/current_user_api.php"), { credentials: "include" });
+        const meJson = await meRes.json();
+        if (!meRes.ok || !meJson.success || !meJson.data) {
           navigate(spaPath("login"), { replace: true });
           return;
         }
@@ -122,8 +122,9 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
 
   const refreshSession = useCallback(async () => {
     try {
-      const { ok, json: meJson } = await fetchCurrentUser();
-      if (ok && meJson.success && meJson.data) {
+      const meRes = await fetch(buildApiUrl("api/session/current_user_api.php"), { credentials: "include" });
+      const meJson = await meRes.json();
+      if (meRes.ok && meJson.success && meJson.data) {
         setMe(meJson.data);
         return meJson.data;
       }
@@ -136,10 +137,26 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
   useEffect(() => {
     if (loading || !me) return undefined;
     let stopped = false;
+    let inFlight = false;
+    /** Maintenance probe — keep light; cross-tab bus already broadcasts enable events. */
+    const POLL_MS = 30000;
+
     const tick = async () => {
+      if (stopped || inFlight) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      inFlight = true;
       try {
-        const { ok, json } = await fetchCurrentUser({ cache: "no-store" });
-        if (!ok && !stopped && (json?.maintenance_mode === true || json?.data?.maintenance_mode === true)) {
+        const res = await fetch(buildApiUrl("api/session/current_user_api.php"), {
+          credentials: "include",
+          cache: "no-store",
+        });
+        let json = null;
+        try {
+          json = await res.json();
+        } catch {
+          json = null;
+        }
+        if (!res.ok && !stopped && (json?.maintenance_mode === true || json?.data?.maintenance_mode === true)) {
           if (typeof json?.message === "string" && json.message.trim() !== "") {
             sessionStorage.setItem("ec_maintenance_notice", json.message.trim());
           }
@@ -154,14 +171,22 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
         }
       } catch {
         // silent: next tick retries
+      } finally {
+        inFlight = false;
       }
     };
 
-    tick();
-    const timer = window.setInterval(tick, 2000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+
+    // Session was just loaded — do not fire an immediate duplicate request.
+    const timer = window.setInterval(tick, POLL_MS);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       stopped = true;
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [loading, me]);
 
@@ -246,7 +271,11 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
     setLogoutLoading(true);
     try {
       sessionStorage.setItem("ec_skip_session_bootstrap", "1");
-      await logoutSession();
+      await fetch(buildApiUrl("api/session/logout_api.php"), {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      });
     } finally {
       clearDashboardFilterSession();
       clearOwnerCompaniesCache();

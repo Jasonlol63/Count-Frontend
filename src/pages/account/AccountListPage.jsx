@@ -6,10 +6,6 @@ import { syncCompanySessionApi } from "../../utils/company/companySessionSync.js
 import { pathnameIs, spaPath } from "../../utils/routing/pageRoutes.js";
 import { replaceBrowserPathOnly } from "../../utils/routing/privateBrowserUrl.js";
 import {
-  resolveModalLedgerScope,
-  resolvePageLedgerScope,
-} from "../../utils/company/tenantLedgerParams.js";
-import {
   clearDashboardGroupFilterKeepCompany,
   companiesInGroupList,
   dashboardFilterEventMatchesPersisted,
@@ -40,6 +36,8 @@ import {
   resolveAccountListRouteCache,
   warmAccountListRouteCache,
 } from "./accountRoutePrefetch.js";
+import { useRealtimeDomain } from "../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS, requestRealtimeReconnect } from "../../lib/realtime/realtimeEvents.js";
 import {
   canClearCompanySelection,
   canUseGroupOnlyMode,
@@ -49,10 +47,7 @@ import {
   isGroupLogin,
   normalizeCompanyCode,
 } from "../../utils/company/loginScope.js";
-import {
-  groupIdsForGroupsAllAggregate,
-  useGcFilterWithAllModes,
-} from "../../utils/company/useGcFilterWithAllModes.js";
+import { useGcFilterWithAllModes } from "../../utils/company/useGcFilterWithAllModes.js";
 import GcInlineFilterPanel from "../../components/GcInlineFilterPanel.jsx";
 import { assetUrl } from "../../utils/core/apiUrl.js";
 import "../../../public/css/account-list.css";
@@ -71,9 +66,6 @@ import {
   normalizeCompanyRow,
   isVirtualGroupLinkCompanyRow,
   buildAccountsFetchKey,
-  fetchMergedAccounts,
-  deriveAccountRolesFromRows,
-  resolveGroupCodeToTenantId,
   accountListHasMutationScope,
   isCompanyInAccountListPicker,
   pickDefaultAddCurrencyIds,
@@ -85,32 +77,28 @@ import {
   formatAccountLastLoginTimeTitle,
 } from "./accountLogic.js";
 import {
-  accountRowToEditForm,
+  fetchFilteredAccountListByTenantId,
+  fetchMergedAccountLists,
+  createAccountUser,
+  updateAccountUser,
+  toggleAccountUserStatus,
+  toggleAccountUserPaymentAlert,
+  deleteAccountUser,
   buildAccountCreateRequest,
   buildAccountUpdateRequest,
-  createAccountUser,
-  deleteAccountUser,
-  fetchAccountLinkedAccounts,
-  fetchFilteredAccountListByTenantId,
-  fetchAccountListByTenantId,
-  linkAccountPair,
-  resolveActiveScopeTenantId,
+  accountRowToEditForm,
   resolveRowScopeTenantId,
-  tenantIdToPickerCompanyIds,
-  toggleAccountUserPaymentAlert,
-  toggleAccountUserStatus,
+  tenantIdsToPickerCompanyIds,
+  fetchAvailableCurrencies,
+  createTenantCurrency,
+  deleteTenantCurrency,
+  fetchAccountsLinkedToCurrency,
+  updateAccountsLinkedToCurrency,
+  fetchAccountLinkedAccounts,
+  linkAccountPair,
   unlinkAccountPair,
   updateAccountLinkPair,
-  updateAccountUser,
 } from "./accountListApi.js";
-import {
-  bulkUpdateAccountCurrency,
-  createCurrency as createTenantCurrency,
-  deleteCurrency,
-  fetchAvailableCurrencies,
-  fetchLinkedAccountsByCurrency,
-  resolveCurrencyTenantIdFromScope,
-} from "../../utils/api/currencyApi.js";
 
 // Components
 import AccountModal from "../../components/AccountModal.jsx";
@@ -124,9 +112,7 @@ import {
   formatAccountAlertDisplay,
   formatAccountRoleDisplay,
   formatAccountStatusDisplay,
-  formatCurrencyUsageDetail,
   getAccountText,
-  isHistoricalOnlyCurrencyDeleteBlock,
   parseAccountsFromCurrencyDeleteMessage,
   translateAccountApiMessage,
 } from "../../translateFile/pages/accountTranslate.js";
@@ -135,14 +121,26 @@ import { useAuthSession } from "../../context/AuthSessionContext.jsx";
 import { useAutoListPageSize } from "../../hooks/useAutoListPageSize.js";
 import { PAGE_SIZE_MAX, PAGE_SIZE_MIN } from "../../constants/listPageSize.js";
 
-function resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll) {
-  return `${scopeKey}|${String(searchTerm || "").trim()}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
+function resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll, showActive = false) {
+  return `${scopeKey}|${String(searchTerm || "").trim()}|${showActive ? "1" : "0"}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
 }
 
-function accountRowVisibleAfterStatusChange(newStatus, { showInactive, showAll }) {
+/** Intersection of account-id Sets (empty input → empty Set). */
+function intersectAccountIdSets(sets) {
+  let out = null;
+  for (const ids of sets) {
+    if (out === null) {
+      out = new Set(ids);
+      continue;
+    }
+    out = new Set([...out].filter((id) => ids.has(id)));
+  }
+  return out || new Set();
+}
+
+function accountRowVisibleAfterStatusChange(newStatus, { showActive = false, showInactive = false } = {}) {
   const status = String(newStatus || "").toLowerCase();
-  if (showAll && showInactive) return status === "inactive";
-  if (showAll) return status === "active";
+  if (showActive && showInactive) return status === "active" || status === "inactive";
   if (showInactive) return status === "inactive";
   return status === "active";
 }
@@ -239,6 +237,7 @@ export default function AccountListPage() {
 
   // -- Filters --
   const [searchTerm, setSearchTerm] = useState("");
+  const [showActive, setShowActive] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [sortColumn, setSortColumn] = useState("account");
@@ -247,13 +246,13 @@ export default function AccountListPage() {
   const listRegionRef = useRef(null);
   const [selectedGroup, setSelectedGroup] = useState(() => initialBootGc.selectedGroup);
   const [selectedDeleteIds, setSelectedDeleteIds] = useState(new Set());
+  const [selectAllAccounts, setSelectAllAccounts] = useState(false);
 
   // -- Modals & Forms --
   const [toast, setToast] = useState(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [forceCurrencyDeletePrompt, setForceCurrencyDeletePrompt] = useState(null);
   const [currencySettingOpen, setCurrencySettingOpen] = useState(false);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [form, setForm] = useState(DEFAULT_FORM);
@@ -279,11 +278,21 @@ export default function AccountListPage() {
     modalLedgerScopeRef.current = scope;
     setModalLedgerScope(scope);
   }, []);
-  const [settingCurrencyId, setSettingCurrencyId] = useState(null);
+  const [settingCurrencyIds, setSettingCurrencyIds] = useState(() => new Set());
   const [settingLinked, setSettingLinked] = useState(new Set());
-  const [settingInitial, setSettingInitial] = useState(new Set());
+  /** Per selected currency: account ids linked at last load (for save diff / unlink). */
+  const [settingInitialByCurrency, setSettingInitialByCurrency] = useState(() => new Map());
   const [settingSearch, setSettingSearch] = useState("");
   const [settingRole, setSettingRole] = useState("");
+  const settingCurrencyIdsKey = useMemo(
+    () => [...settingCurrencyIds].map(Number).filter((id) => id > 0).sort((a, b) => a - b).join(","),
+    [settingCurrencyIds],
+  );
+  /** Full-match (intersection) baseline size — enables Save after unchecking all lit accounts. */
+  const settingInitialAccountCount = useMemo(
+    () => intersectAccountIdSets([...settingInitialByCurrency.values()]).size,
+    [settingInitialByCurrency],
+  );
 
   const toastTimerRef = useRef(null);
   const bootFetchedAccountsKeyRef = useRef(null);
@@ -303,10 +312,10 @@ export default function AccountListPage() {
   const bootForUserRef = useRef(null);
   const onSwitchCompanyRef = useRef(null);
   const gcScopeRef = useRef({});
-  const listFiltersRef = useRef({ showInactive: false, showAll: false, searchTerm: "" });
+  const listFiltersRef = useRef({ showActive: false, showInactive: false, showAll: false, searchTerm: "" });
   const listPaginationScopeRef = useRef("");
   const accountsLenRef = useRef(0);
-  listFiltersRef.current = { showInactive, showAll, searchTerm };
+  listFiltersRef.current = { showActive, showInactive, showAll, searchTerm };
   accountsLenRef.current = accounts.length;
 
   const accountModalCurrencies = useMemo(() => {
@@ -351,7 +360,8 @@ export default function AccountListPage() {
 
     return () => {
       document.body.classList.remove("account-page", "account-page--show-all", "bg");
-      document.body.classList.add("dashboard-page");
+      // Layout owns dashboard/process body classes by pathname — do not re-add dashboard-page
+      // here (causes Acc→Process middle flash when cleanup races the process-page layout effect).
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
@@ -394,9 +404,9 @@ export default function AccountListPage() {
         isListScopeReady: ready,
         groupOnlyMode: useGroupOnly,
       });
-      lastAccountsFetchKeyRef.current = buildAccountsFetchKey(scopeKey, searchTerm, showInactive, showAll);
+      lastAccountsFetchKeyRef.current = buildAccountsFetchKey(scopeKey, searchTerm, showInactive, showAll, showActive);
     },
-    [searchTerm, showInactive, showAll, resolveGroupOnlyFetch],
+    [searchTerm, showActive, showInactive, showAll, resolveGroupOnlyFetch],
   );
 
   const resolveListPaginationScopeKey = useCallback(
@@ -417,6 +427,7 @@ export default function AccountListPage() {
   const resetAccountListPagination = useCallback(() => {
     setCurrentPage(1);
     setSelectedDeleteIds(new Set());
+    setSelectAllAccounts(false);
   }, []);
 
   const resetPaginationForGcScope = useCallback(
@@ -456,6 +467,7 @@ export default function AccountListPage() {
   const matchesLiveListFilters = useCallback((requested) => {
     const live = listFiltersRef.current;
     return (
+      live.showActive === requested.showActive &&
       live.showInactive === requested.showInactive &&
       live.showAll === requested.showAll &&
       String(live.searchTerm || "").trim() === String(requested.searchTerm || "").trim()
@@ -476,14 +488,14 @@ export default function AccountListPage() {
       } = scope;
       if (!ready) return;
 
-      const requestedFilters = { showInactive, showAll, searchTerm };
+      const requestedFilters = { showActive, showInactive, showAll, searchTerm };
       const useGroupOnly = groupOnly ?? resolveGroupOnlyFetch(scope);
       const scopeKey = resolveAccountScopeKey({
         companyId: cid,
         selectedGroup: sg,
         groupOnly: useGroupOnly,
       });
-      const cacheKey = resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll);
+      const cacheKey = resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll, showActive);
 
       listFetchAbortRef.current?.abort();
       const ac = new AbortController();
@@ -514,48 +526,17 @@ export default function AccountListPage() {
       };
 
       const loadPromise = (async () => {
-        let nextAccounts = [];
-        const filters = { searchTerm, showInactive, showAll };
+        // Spring `/api/account/list` is single-tenant only (no group_id/group_only) — a
+        // single company hits it directly, every other scope (company-all inside a group,
+        // groups-all, or a bare group-only view) merges per-tenant across mergeIds, which
+        // useGcFilterWithAllModes already resolves to real company/tenant ids for all three.
         if (cid) {
-          nextAccounts = await fetchFilteredAccountListByTenantId(cid, filters, ac.signal);
-        } else if (cAll) {
-          const merged = await fetchMergedAccounts({
-            companyIds: mergeIds,
-            companies,
-            searchTerm,
-            showInactive,
-            showAll,
-            signal: ac.signal,
-          });
-          if (!merged.success) {
-            throw new Error(merged.message || "failedToLoadAccounts");
-          }
-          nextAccounts = merged.accounts;
-        } else if (gAll) {
-          const merged = await fetchMergedAccounts({
-            groupIds: groupIdsForGroupsAllAggregate(companies, gids),
-            companies,
-            searchTerm,
-            showInactive,
-            showAll,
-            signal: ac.signal,
-          });
-          if (!merged.success) {
-            throw new Error(merged.message || "failedToLoadAccounts");
-          }
-          nextAccounts = merged.accounts;
-        } else if (useGroupOnly && sg) {
-          const groupTenantId = resolveGroupCodeToTenantId(sg, companies);
-          if (!groupTenantId) return null;
-          nextAccounts = await fetchFilteredAccountListByTenantId(
-            groupTenantId,
-            filters,
-            ac.signal,
-          );
-        } else {
-          return null;
+          return fetchFilteredAccountListByTenantId(cid, { searchTerm, showInactive, showAll }, ac.signal);
         }
-        return nextAccounts;
+        if (cAll || gAll || (useGroupOnly && sg)) {
+          return fetchMergedAccountLists({ tenantIds: mergeIds, searchTerm, showInactive, showAll }, ac.signal);
+        }
+        return null;
       })();
 
       try {
@@ -570,7 +551,7 @@ export default function AccountListPage() {
         if (!silent) notifyApi(e?.message, "failedToLoadAccounts", "danger");
       }
     },
-    [companies, searchTerm, showInactive, showAll, applyAccountListResult, notifyApi, resolveGroupOnlyFetch, matchesLiveListFilters],
+    [companies, searchTerm, showActive, showInactive, showAll, applyAccountListResult, notifyApi, resolveGroupOnlyFetch, matchesLiveListFilters],
   );
 
   const applyAccountListCache = useCallback(
@@ -587,7 +568,7 @@ export default function AccountListPage() {
         selectedGroup: sg,
         groupOnly: useGroupOnly,
       });
-      const cacheKey = resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll);
+      const cacheKey = resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll, showActive);
       const cached = accountListCacheRef.current.get(cacheKey);
       if (!cached) return false;
       setAccounts((prev) =>
@@ -595,7 +576,7 @@ export default function AccountListPage() {
       );
       return true;
     },
-    [searchTerm, showInactive, showAll, resolveGroupOnlyFetch],
+    [searchTerm, showActive, showInactive, showAll, resolveGroupOnlyFetch],
   );
 
   const applyCacheOrClearAccounts = useCallback(
@@ -619,11 +600,12 @@ export default function AccountListPage() {
         selectedGroup: sg,
         groupOnly: useGroupOnly,
       });
-      const listCacheKey = resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll);
+      const listCacheKey = resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll, showActive);
       const routeWarm = consumeAccountListRouteCache({
         companyId: cid,
         groupId: sg,
         search: searchTerm,
+        showActive,
         showInactive,
         showAll,
       });
@@ -636,7 +618,7 @@ export default function AccountListPage() {
       }
       return applyAccountListCache(gcScope, { groupOnly: useGroupOnly });
     },
-    [applyAccountListCache, resolveGroupOnlyFetch, resetPaginationForGcScope, searchTerm, showInactive, showAll],
+    [applyAccountListCache, resolveGroupOnlyFetch, resetPaginationForGcScope, searchTerm, showActive, showInactive, showAll],
   );
 
   const invalidateAccountListCacheForScope = useCallback(
@@ -648,52 +630,43 @@ export default function AccountListPage() {
         selectedGroup: sg,
         groupOnly: useGroupOnly,
       });
-      const cacheKey = resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll);
+      const cacheKey = resolveAccountListCacheKey(scopeKey, searchTerm, showInactive, showAll, showActive);
       accountListCacheRef.current.delete(cacheKey);
     },
-    [searchTerm, showInactive, showAll, resolveGroupOnlyFetch],
+    [searchTerm, showActive, showInactive, showAll, resolveGroupOnlyFetch],
   );
-
-  const loadRoles = useCallback(async ({ companyId: cid = null, groupId = null } = {}) => {
-    try {
-      const numericCid =
-        cid != null ? Number(cid) : companyId != null ? Number(companyId) : null;
-      const gid = (groupId ?? selectedGroup)
-        ? String(groupId ?? selectedGroup).trim().toUpperCase()
-        : null;
-      const tenantId =
-        Number.isFinite(numericCid) && numericCid > 0
-          ? numericCid
-          : gid
-            ? resolveGroupCodeToTenantId(gid, companies)
-            : null;
-      if (!tenantId) {
-        setRoles(getAccountModalOrderedRoles([]));
-        return;
-      }
-      const rows = await fetchAccountListByTenantId(tenantId);
-      setRoles(getAccountModalOrderedRoles(deriveAccountRolesFromRows(rows)));
-    } catch {
-      setRoles(getAccountModalOrderedRoles([]));
-    }
-  }, [companyId, selectedGroup, companies]);
 
   const fetchAccountsRef = useRef(fetchAccounts);
   fetchAccountsRef.current = fetchAccounts;
-  const loadRolesRef = useRef(loadRoles);
-  loadRolesRef.current = loadRoles;
 
   /** Refetch list after add/edit/delete — must pass gc scope (bare fetchAccounts() is a no-op). */
   const refreshAccountList = useCallback(
     (options = {}) => {
       const scope = gcScopeRef.current;
-      if (!scope?.isListScopeReady) return;
+      if (!scope) return;
+      const hasScope = Boolean(scope.companyId || scope.selectedGroup || scope.groupsAllMode || scope.groupAllMode);
+      if (scope.isListScopeReady === false && !hasScope) return;
       const groupOnly = options.groupOnly ?? resolveGroupOnlyFetch(scope);
       invalidateAccountListCacheForScope(scope, { groupOnly });
-      void fetchAccounts(scope, { groupOnly, silent: options.silent ?? false });
+      void fetchAccounts(scope, {
+        groupOnly,
+        silent: options.silent ?? false,
+        trustRequestScope: true,
+      });
     },
     [fetchAccounts, invalidateAccountListCacheForScope, resolveGroupOnlyFetch],
   );
+
+  useRealtimeDomain(
+    [REALTIME_DOMAINS.ACCOUNTS, REALTIME_DOMAINS.USERS],
+    () => {
+      refreshAccountList({ silent: true });
+    },
+  );
+
+  useEffect(() => {
+    requestRealtimeReconnect();
+  }, []);
 
   const sessionUserId = sessionMe?.user_id ?? sessionMe?.id ?? null;
 
@@ -764,6 +737,7 @@ export default function AccountListPage() {
         }
 
         const initialSearchTerm = toUpper(url.searchParams.get("search") || "");
+        const initialShowActive = url.searchParams.get("showActive") === "1";
         const initialShowInactive = url.searchParams.get("showInactive") === "1";
         const initialShowAll = url.searchParams.get("showAll") === "1";
 
@@ -855,10 +829,10 @@ export default function AccountListPage() {
         setCompanyId(resolvedCompanyId);
         setSelectedGroup(bootGroup);
         setSearchTerm(initialSearchTerm);
+        setShowActive(initialShowActive);
         setShowInactive(initialShowInactive);
         setShowAll(initialShowAll);
         skipInitialGcSyncRef.current = true;
-        void loadRolesRef.current({ companyId: resolvedCompanyId, groupId: bootGroup });
 
         const syncCompanyId =
           resolvedCompanyId != null && Number.isFinite(Number(resolvedCompanyId))
@@ -896,10 +870,10 @@ export default function AccountListPage() {
               : null
           : null;
         const listCacheKey = scopeKey
-          ? resolveAccountListCacheKey(scopeKey, initialSearchTerm, initialShowInactive, initialShowAll)
+          ? resolveAccountListCacheKey(scopeKey, initialSearchTerm, initialShowInactive, initialShowAll, initialShowActive)
           : null;
         const fetchKey = scopeKey
-          ? buildAccountsFetchKey(scopeKey, initialSearchTerm, initialShowInactive, initialShowAll)
+          ? buildAccountsFetchKey(scopeKey, initialSearchTerm, initialShowInactive, initialShowAll, initialShowActive)
           : null;
 
         const warmed = scopeKey
@@ -907,6 +881,7 @@ export default function AccountListPage() {
               companyId: groupOnlyBoot ? null : resolvedCompanyId,
               groupId: groupOnlyBoot ? bootGroup : null,
               search: initialSearchTerm,
+              showActive: initialShowActive,
               showInactive: initialShowInactive,
               showAll: initialShowAll,
             })
@@ -1060,7 +1035,7 @@ export default function AccountListPage() {
         selectedGroup: vg,
         groupOnly: false,
       });
-      const fetchKey = buildAccountsFetchKey(scopeKey, searchTerm, showInactive, showAll);
+      const fetchKey = buildAccountsFetchKey(scopeKey, searchTerm, showInactive, showAll, showActive);
       bootFetchedAccountsKeyRef.current = fetchKey;
 
       const fetchScope = {
@@ -1100,6 +1075,7 @@ export default function AccountListPage() {
       notify,
       notifyApi,
       searchTerm,
+      showActive,
       showInactive,
       showAll,
       selectedGroup,
@@ -1431,11 +1407,12 @@ export default function AccountListPage() {
         companyId: cid,
         groupId: gid,
         search: searchTerm,
+        showActive,
         showInactive,
         showAll,
       });
     },
-    [searchTerm, showInactive, showAll, selectedGroup],
+    [searchTerm, showActive, showInactive, showAll, selectedGroup],
   );
 
   const onPickCompanyPill = useCallback(
@@ -1696,7 +1673,7 @@ export default function AccountListPage() {
 
   useLayoutEffect(() => {
     if (bootLoading) return;
-    const filterKey = `${String(searchTerm || "").trim()}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
+    const filterKey = `${String(searchTerm || "").trim()}|${showActive ? "1" : "0"}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
     const combined = `${accountsListFetchScopeKey}|${filterKey}`;
     if (!accountsListFetchScopeKey) return;
     if (combined === listPaginationScopeRef.current) return;
@@ -1706,6 +1683,7 @@ export default function AccountListPage() {
     bootLoading,
     accountsListFetchScopeKey,
     searchTerm,
+    showActive,
     showInactive,
     showAll,
     resetAccountListPagination,
@@ -1768,7 +1746,7 @@ export default function AccountListPage() {
 
   useEffect(() => {
     bootFetchedAccountsKeyRef.current = null;
-  }, [showInactive, showAll, searchTerm]);
+  }, [showActive, showInactive, showAll, searchTerm]);
 
   useEffect(() => {
     if (!accountsListFetchScopeKey) return;
@@ -1777,18 +1755,18 @@ export default function AccountListPage() {
       searchTerm,
       showInactive,
       showAll,
+      showActive,
     );
     if (skipCompanyFetchEffectRef.current) {
       skipCompanyFetchEffectRef.current = false;
       return;
     }
     if (bootFetchedAccountsKeyRef.current === fetchKey) {
+      // Warm/boot may have painted; always silent-refetch so remount cannot stick on stale warm.
       bootFetchedAccountsKeyRef.current = null;
       lastAccountsFetchKeyRef.current = fetchKey;
-      const bootCacheHit = applyAccountListCache(gcScopeRef.current);
-      if (!bootCacheHit) {
-        void fetchAccounts(gcScopeRef.current, { silent: true, trustRequestScope: true });
-      }
+      applyAccountListCache(gcScopeRef.current);
+      void fetchAccounts(gcScopeRef.current, { silent: true, trustRequestScope: true });
       return;
     }
     postBootEmptyRetryRef.current = false;
@@ -1799,7 +1777,7 @@ export default function AccountListPage() {
     }
     void fetchAccounts(scope, { silent: true });
     const settleRetryTimer = window.setTimeout(() => {
-      if (!matchesLiveListFilters({ showInactive, showAll, searchTerm })) return;
+      if (!matchesLiveListFilters({ showActive, showInactive, showAll, searchTerm })) return;
       if (accountsLenRef.current > 0) return;
       void fetchAccounts(gcScopeRef.current, { silent: true, trustRequestScope: true });
     }, 320);
@@ -1807,6 +1785,7 @@ export default function AccountListPage() {
   }, [
     accountsListFetchScopeKey,
     searchTerm,
+    showActive,
     showInactive,
     showAll,
     fetchAccounts,
@@ -1871,6 +1850,9 @@ export default function AccountListPage() {
 
   const accountMutationsBlocked = usePartnershipAuditReadOnlyLocked(sessionMe);
 
+  /** 仅「显示停用」模式展示批量删除勾选列；与 Admin User List 一致 */
+  const showBulkDeleteColumn = showInactive;
+
   const pageSize = useAutoListPageSize({
     listRegionRef,
     enabled: !showAll,
@@ -1883,6 +1865,7 @@ export default function AccountListPage() {
     remeasureDeps: [
       filteredForMode.length,
       showAll,
+      showActive,
       showInactive,
       searchTerm,
       lang,
@@ -1892,6 +1875,7 @@ export default function AccountListPage() {
       selectedGroup,
       groupAllMode,
       groupsAllMode,
+      showBulkDeleteColumn,
     ],
   });
 
@@ -1958,8 +1942,11 @@ export default function AccountListPage() {
   );
 
   useEffect(() => {
-    if (!showInactive && !showAll) setSelectedDeleteIds(new Set());
-  }, [showInactive, showAll]);
+    if (!showInactive) {
+      setSelectedDeleteIds(new Set());
+      setSelectAllAccounts(false);
+    }
+  }, [showInactive]);
 
   const togglePaymentAlert = async (id) => {
     if (accountMutationsBlocked) {
@@ -1969,25 +1956,15 @@ export default function AccountListPage() {
     try {
       const row = accounts.find((a) => Number(a.id) === Number(id));
       if (!row) return;
-      const scopeTenantId = resolveRowScopeTenantId(row, companyId ?? scopeCompanyId);
-      if (!scopeTenantId) return;
-      const currencyRows = await fetchAvailableCurrencies({
-        tenantId: scopeTenantId,
-        accountId: id,
-      });
+      const tenantId = resolveRowScopeTenantId(row, scopeCompanyId);
+      const currencyRows = await fetchAvailableCurrencies(tenantId, id);
       const currencyIds = currencyRows.filter((c) => c.is_linked).map((c) => Number(c.id));
-      const updated = await toggleAccountUserPaymentAlert(row, scopeTenantId, currencyIds);
-      if (updated) {
-        setAccounts((prev) =>
-          prev.map((a) =>
-            Number(a.id) === Number(id)
-              ? { ...a, payment_alert: updated.payment_alert ?? a.payment_alert }
-              : a,
-          ),
-        );
-      }
-    } catch {
-      notify(t("toggleFailed"), "danger");
+      const updated = await toggleAccountUserPaymentAlert(row, tenantId, currencyIds);
+      setAccounts((prev) =>
+        prev.map((a) => (Number(a.id) === Number(id) ? { ...a, payment_alert: updated.payment_alert } : a)),
+      );
+    } catch (e) {
+      notifyApi(e?.message, "toggleFailed", "danger");
     }
   };
 
@@ -1996,89 +1973,54 @@ export default function AccountListPage() {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
+    const row = accounts.find((a) => Number(a.id) === Number(id));
+    if (!row) return;
     try {
-      const row = accounts.find((a) => Number(a.id) === Number(id));
-      if (!row) return;
-      const scopeTenantId = resolveRowScopeTenantId(row, companyId ?? scopeCompanyId);
-      if (!scopeTenantId) return;
-      const updated = await toggleAccountUserStatus({ id, scopeTenantId });
-      const next = updated?.status ?? row.status;
+      const tenantId = resolveRowScopeTenantId(row, scopeCompanyId);
+      const updated = await toggleAccountUserStatus({ id, scopeTenantId: tenantId });
       setAccounts((prev) => {
-        const updatedRows = prev.map((a) => (Number(a.id) === Number(id) ? { ...a, status: next } : a));
-        return updatedRows.filter((a) =>
-          accountRowVisibleAfterStatusChange(a.status, { showInactive, showAll }),
-        );
+        const next = prev.map((a) => (Number(a.id) === Number(id) ? { ...a, status: updated.status } : a));
+        return next.filter((a) => accountRowVisibleAfterStatusChange(a.status, { showActive, showInactive }));
       });
       lastAccountsFetchKeyRef.current = "";
       refreshAccountList({ silent: true });
-    } catch {
-      notify(t("toggleFailed"), "danger");
+    } catch (e) {
+      notifyApi(e?.message, "toggleFailed", "danger");
     }
   };
 
-  const pageLedgerScope = useMemo(
-    () =>
-      resolvePageLedgerScope({
-        groupOnly: groupOnlyAccountMode,
-        selectedGroup,
-        companyId,
-        sessionMe,
-      }),
-    [groupOnlyAccountMode, selectedGroup, companyId, sessionMe],
-  );
+  /** Tenant used by Add/Currency-setting when no specific row is being edited. */
+  const resolveModalTenantId = useCallback(() => {
+    const explicit = modalLedgerScopeRef.current ?? modalLedgerScope;
+    return explicit ?? scopeCompanyId ?? null;
+  }, [modalLedgerScope, scopeCompanyId]);
 
-  const resolveActiveModalLedgerScope = useCallback(() => {
-    const modal = modalLedgerScopeRef.current ?? modalLedgerScope;
-    return resolveModalLedgerScope(pageLedgerScope, modal);
-  }, [pageLedgerScope, modalLedgerScope]);
-
-  const resolveSelectionMetaTenantId = useCallback(
-    (scopeForRequest, { forcePageLedgerScope = false } = {}) => {
-      if (forcePageLedgerScope) {
-        return resolveCurrencyTenantIdFromScope({
-          ledgerScope: pageLedgerScope,
-          companyId,
-        });
-      }
-      const modalScope =
-        scopeForRequest !== undefined
-          ? scopeForRequest
-          : modalLedgerScopeRef.current ?? modalLedgerScope;
-      const effective = resolveModalLedgerScope(pageLedgerScope, modalScope);
-      return resolveCurrencyTenantIdFromScope({
-        ledgerScope: effective,
-        companyId: companyId ?? scopeCompanyId,
-      });
+  /** Resolve the anchor company (real tenant) behind a group code in the group-only picker. */
+  const resolveAnchorCompanyIdForGroup = useCallback(
+    (groupCode) => {
+      const gc = String(groupCode || "").trim().toUpperCase();
+      if (!gc) return null;
+      const entity = allCompanyButtons.find(
+        (c) => String(c.company_id || "").trim().toUpperCase() === gc,
+      );
+      return entity?.id ? Number(entity.id) : null;
     },
-    [pageLedgerScope, modalLedgerScope, companyId, scopeCompanyId],
+    [allCompanyButtons],
   );
 
-  const loadSelectionMeta = async (
-    id,
-    isEdit,
-    { selectCode = null, ledgerScope = undefined, forcePageLedgerScope = false } = {},
-  ) => {
-    const scopeForRequest = forcePageLedgerScope
-      ? undefined
-      : ledgerScope !== undefined
-        ? ledgerScope
-        : modalLedgerScopeRef.current ?? modalLedgerScope;
+  const loadSelectionMeta = async (id, isEdit, { selectCode = null, tenantId = undefined } = {}) => {
+    const effectiveTenantId = tenantId !== undefined ? tenantId : resolveModalTenantId();
+    if (!effectiveTenantId) return;
     try {
-      const tenantId = resolveSelectionMetaTenantId(scopeForRequest, { forcePageLedgerScope });
-      if (!tenantId) return;
-
-      const rows = await fetchAvailableCurrencies({
-        tenantId,
-        accountId: id,
-      });
+      const rows = await fetchAvailableCurrencies(effectiveTenantId, id || null);
       setCurrencies(rows);
       const wantCode = selectCode ? toUpper(String(selectCode)).trim() : "";
       const matched = wantCode ? rows.find((c) => toUpper(c.code).trim() === wantCode) : null;
       if (isEdit) {
-        const linkedIds = rows.filter((c) => c.is_linked).map((c) => Number(c.id));
-        const base = matched ? [...new Set([...linkedIds, Number(matched.id)])] : linkedIds;
+        const ids = rows.filter((c) => c.is_linked).map((c) => Number(c.id));
+        const base = matched ? [...new Set([...ids, Number(matched.id)])] : ids;
         setSelectedCurrencyIds(base);
-        setInitialEditCurrencyIds(linkedIds);
+        setInitialEditCurrencyIds(ids);
       } else if (matched) {
         setSelectedCurrencyIds((prev) =>
           prev.map(Number).includes(Number(matched.id)) ? prev : [...prev, Number(matched.id)],
@@ -2086,30 +2028,12 @@ export default function AccountListPage() {
       } else {
         setSelectedCurrencyIds(pickDefaultAddCurrencyIds(rows));
       }
-
-      if (groupOnlyAccountMode) {
-        const defaultGroupEntity =
-          groupPickerCompanies.find(
-            (c) => String(c.group_id || c.company_id || "") === String(selectedGroup || ""),
-          ) ||
-          groupPickerCompanies[0] ||
-          null;
-        setSelectedCompanyIds(defaultGroupEntity?.id ? [String(defaultGroupEntity.id)] : []);
-      } else {
-        setSelectedCompanyIds(
-          tenantIdToPickerCompanyIds(tenantId).length
-            ? tenantIdToPickerCompanyIds(tenantId)
-            : companyId
-              ? [String(companyId)]
-              : [],
-        );
-      }
-    } catch {
-      /* silent */
+    } catch (e) {
+      notifyApi(e?.message, "loadLinksFailed", "danger");
     }
   };
 
-  const openAdd = () => {
+  const openAdd = async () => {
     if (accountMutationsBlocked) {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
@@ -2121,12 +2045,22 @@ export default function AccountListPage() {
     setHiddenCurrencyIds([]);
     syncModalLedgerScope(null);
     setAddModalOpen(true);
-    if (!groupOnlyAccountMode && companyId) {
+    if (groupOnlyAccountMode && selectedGroup) {
+      const groupCode = String(selectedGroup).trim().toUpperCase();
+      setSelectedCompanyIds(groupCode ? [groupCode] : []);
+    } else if (!groupOnlyAccountMode && companyId) {
       setSelectedCompanyIds([String(companyId)]);
+    } else {
+      setSelectedCompanyIds([]);
     }
-    void loadRoles({ companyId, groupId: selectedGroup });
-    loadSelectionMeta(null, false);
+    void loadSelectionMeta(null, false, { tenantId: scopeCompanyId });
   };
+
+  const clearCurrencySettingSelection = useCallback(() => {
+    setSettingCurrencyIds(new Set());
+    setSettingLinked(new Set());
+    setSettingInitialByCurrency(new Map());
+  }, []);
 
   const openCurrencySetting = () => {
     if (accountMutationsBlocked) {
@@ -2135,15 +2069,9 @@ export default function AccountListPage() {
     }
     if (!hasAccountMutationScope) return;
     syncModalLedgerScope(null);
+    clearCurrencySettingSelection();
     setCurrencySettingOpen(true);
-    void loadSelectionMeta(null, false, { forcePageLedgerScope: true });
-    if (settingCurrencyId) void loadCurrencyLinks(settingCurrencyId);
-  };
-
-  const clearCurrencySettingSelection = () => {
-    setSettingCurrencyId(null);
-    setSettingLinked(new Set());
-    setSettingInitial(new Set());
+    void loadSelectionMeta(null, false, { tenantId: scopeCompanyId });
   };
 
   const openEdit = async (id) => {
@@ -2151,22 +2079,28 @@ export default function AccountListPage() {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
-    try {
-      const row = accounts.find((a) => Number(a.id) === Number(id));
-      if (!row) return notify(t("errorLoadingAccount"), "danger");
-      const editForm = accountRowToEditForm(row);
-      if (!editForm) return notify(t("errorLoadingAccount"), "danger");
-
-      setIsEditMode(true);
-      setHiddenCurrencyIds([]);
-      syncModalLedgerScope(null);
-      setForm(editForm);
-      await loadRoles({ companyId, groupId: selectedGroup });
-      await loadSelectionMeta(id, true);
-      setEditModalOpen(true);
-    } catch {
+    const row = accounts.find((a) => Number(a.id) === Number(id));
+    if (!row) {
       notify(t("errorLoadingAccount"), "danger");
+      return;
     }
+    const form_ = accountRowToEditForm(row);
+    const tenantId = resolveRowScopeTenantId(row, scopeCompanyId);
+    setIsEditMode(true);
+    setHiddenCurrencyIds([]);
+    syncModalLedgerScope(tenantId);
+    setForm(form_);
+    if (groupOnlyAccountMode) {
+      // The group-only picker is a single-select of group codes, not real tenant ids —
+      // reverse-map the account's tenant back to the group-anchor company's code.
+      const anchorRow = allCompanyButtons.find((c) => Number(c.id) === Number(tenantId));
+      const groupCode = anchorRow?.company_id ? String(anchorRow.company_id).toUpperCase() : "";
+      setSelectedCompanyIds(groupCode ? [groupCode] : []);
+    } else {
+      setSelectedCompanyIds(tenantIdsToPickerCompanyIds(row.tenant_ids));
+    }
+    await loadSelectionMeta(id, true, { tenantId });
+    setEditModalOpen(true);
   };
 
   const confirmDelete = async () => {
@@ -2174,22 +2108,30 @@ export default function AccountListPage() {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
-    try {
-      for (const id of selectedDeleteIds) {
-        const row = accounts.find((a) => Number(a.id) === Number(id));
-        const scopeTenantId = resolveRowScopeTenantId(row, companyId ?? scopeCompanyId);
-        if (!scopeTenantId) {
-          throw new Error("invalidRequest");
-        }
-        await deleteAccountUser({ id, scopeTenantId });
+    const ids = [...selectedDeleteIds];
+    if (!ids.length) return;
+    // Spring /api/account/delete takes one account (per its own tenant) at a time.
+    let firstError = null;
+    let deletedCount = 0;
+    for (const id of ids) {
+      const row = accounts.find((a) => Number(a.id) === Number(id));
+      const tenantId = row ? resolveRowScopeTenantId(row, scopeCompanyId) : scopeCompanyId;
+      try {
+        await deleteAccountUser({ id, scopeTenantId: tenantId });
+        deletedCount += 1;
+      } catch (e) {
+        if (!firstError) firstError = e;
       }
-      setConfirmDeleteOpen(false);
-      setSelectedDeleteIds(new Set());
-      notifyApi(null, "accountsDeletedSuccessfully");
-      refreshAccountList();
-    } catch (e) {
-      notifyApi(e?.message, "deleteFailed", "danger");
     }
+    setConfirmDeleteOpen(false);
+    setSelectedDeleteIds(new Set());
+    setSelectAllAccounts(false);
+    if (firstError) {
+      notifyApi(firstError.message, "deleteFailed", "danger");
+    } else {
+      notify(t("accountsDeletedSuccessfully"));
+    }
+    if (deletedCount) refreshAccountList();
   };
 
   const saveForm = async (e) => {
@@ -2202,33 +2144,44 @@ export default function AccountListPage() {
       notify(t("paymentAlertRequiredFields"), "danger");
       return;
     }
-    const amount = normalizeAlertAmount(form.alert_amount);
-    const scopeTenantId = resolveActiveScopeTenantId({
-      companyId: companyId ?? scopeCompanyId,
-      scopeTenantId: form.scope_tenant_id,
-      form,
-    });
-    if (!scopeTenantId) {
-      notify(t("pleaseSelectCompanyFirst"), "danger");
-      return;
+    let tenantIds;
+    let primaryTenantId;
+    if (groupOnlyAccountMode) {
+      const groupCode = String(selectedCompanyIds[0] || "").trim().toUpperCase();
+      const anchorId = resolveAnchorCompanyIdForGroup(groupCode);
+      if (!anchorId) {
+        notify(t("pleaseSelectCompanyFirst"), "danger");
+        return;
+      }
+      tenantIds = [anchorId];
+      primaryTenantId = anchorId;
+    } else {
+      tenantIds = selectedCompanyIds.map(Number).filter((id) => Number.isFinite(id) && id > 0);
+      if (!tenantIds.length) {
+        notify(t("pleaseSelectCompanyFirst"), "danger");
+        return;
+      }
+      primaryTenantId = resolveModalTenantId();
+      if (!primaryTenantId || !tenantIds.includes(Number(primaryTenantId))) {
+        primaryTenantId = tenantIds[0];
+      }
     }
-    const formPayload = { ...form, alert_amount: amount };
     const currencyIds = selectedCurrencyIds.map(Number).filter((id) => Number.isFinite(id) && id > 0);
-
     try {
       if (isEditMode) {
-        await updateAccountUser(buildAccountUpdateRequest(formPayload, scopeTenantId, currencyIds));
+        const request = buildAccountUpdateRequest(form, primaryTenantId, currencyIds, tenantIds);
+        await updateAccountUser(request);
       } else {
-        await createAccountUser(buildAccountCreateRequest(formPayload, scopeTenantId, currencyIds));
+        const request = buildAccountCreateRequest(form, primaryTenantId, currencyIds, tenantIds);
+        await createAccountUser(request);
       }
-      setInitialEditCurrencyIds([...currencyIds]);
-      setAddModalOpen(false);
-      setEditModalOpen(false);
+      setAddModalOpen(false); setEditModalOpen(false);
       setHiddenCurrencyIds([]);
+      setInitialEditCurrencyIds([...currencyIds]);
       notify(t("accountSavedSuccessfully"));
       refreshAccountList();
-    } catch (e) {
-      notifyApi(e?.message, "saveFailed", "danger");
+    } catch (err) {
+      notifyApi(err?.message, "saveFailed", "danger");
     }
   };
 
@@ -2237,8 +2190,7 @@ export default function AccountListPage() {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
-    const code = toUpper(currencyInput).trim();
-    if (!code) return;
+    const code = toUpper(currencyInput).trim(); if (!code) return;
     const existing = currencies.find((c) => toUpper(c.code).trim() === code);
     if (existing) {
       const existingId = Number(existing.id);
@@ -2247,27 +2199,34 @@ export default function AccountListPage() {
       setCurrencyInput("");
       return;
     }
+    const tenantId = currencySettingOpen ? scopeCompanyId : resolveModalTenantId();
+    if (!tenantId) {
+      notify(t("pleaseSelectCompanyFirst"), "danger");
+      return;
+    }
     try {
-      const modalScope = currencySettingOpen ? pageLedgerScope : resolveActiveModalLedgerScope();
-      const tenantId = resolveCurrencyTenantIdFromScope({
-        ledgerScope: modalScope,
-        companyId: companyId ?? scopeCompanyId,
-      });
       const created = await createTenantCurrency({ code, tenantId });
-      const newId = Number(created.id);
+      const newId = Number(created?.id);
+      const idValid = Number.isFinite(newId) && newId > 0;
       if (currencySettingOpen) {
-        await loadSelectionMeta(null, false, { forcePageLedgerScope: true, selectCode: code });
+        await loadSelectionMeta(null, false, { tenantId, selectCode: code });
+      } else if (!idValid) {
+        // API returned id=0 (stale lastInsertId): reload list and select by code.
+        await loadSelectionMeta(isEditMode && form.id ? form.id : null, isEditMode, {
+          tenantId,
+          selectCode: code,
+        });
       } else {
-        setCurrencies((prev) => [...prev, { id: newId, code: created.code, is_linked: false }]);
+        setCurrencies((prev) => [...prev, { id: newId, code: created.code, is_linked: false, deletable: true }]);
         setSelectedCurrencyIds((prev) => (prev.map(Number).includes(newId) ? prev : [...prev, newId]));
       }
       setCurrencyInput("");
-    } catch (e) {
-      const msg = String(e?.message || e?.response?.message || "");
-      if (/already exists/i.test(msg)) {
+    } catch (err) {
+      const msg = String(err?.message || "");
+      if (/already exists/i.test(msg) || /duplicate/i.test(msg)) {
         await loadSelectionMeta(isEditMode && form.id ? form.id : null, isEditMode, {
+          tenantId,
           selectCode: code,
-          forcePageLedgerScope: currencySettingOpen,
         });
         setCurrencyInput("");
         return;
@@ -2276,23 +2235,81 @@ export default function AccountListPage() {
     }
   };
 
-  const fetchAccountsUsingCurrency = async (currencyId, scopeOverride = undefined) => {
+  /** GET-ish lookup: which accounts currently use a currency, for this tenant. */
+  const fetchCurrencyLinkInfo = useCallback(
+    async (currencyId, tenantIdOverride = undefined) => {
+      const tenantId = tenantIdOverride !== undefined ? tenantIdOverride : resolveModalTenantId();
+      if (!tenantId) return { linkedAccountIds: [], linkedAccounts: [] };
+      return fetchAccountsLinkedToCurrency(currencyId, tenantId);
+    },
+    [resolveModalTenantId],
+  );
+
+  const fetchLinkedAccountIdsByCurrency = useCallback(
+    async (currencyId, tenantIdOverride = undefined) => {
+      const { linkedAccountIds } = await fetchCurrencyLinkInfo(currencyId, tenantIdOverride);
+      return linkedAccountIds;
+    },
+    [fetchCurrencyLinkInfo],
+  );
+
+  const fetchAccountsUsingCurrency = async (currencyId, tenantIdOverride = undefined) => {
     try {
-      const ledgerScope = scopeOverride ?? resolveActiveModalLedgerScope();
-      const tenantId = resolveCurrencyTenantIdFromScope({
-        ledgerScope,
-        companyId: companyId ?? scopeCompanyId,
-      });
-      if (!tenantId) return [];
-      const { linkedAccounts } = await fetchLinkedAccountsByCurrency({
-        currencyId,
-        tenantId,
-      });
-      return linkedAccounts;
+      const { linkedAccountIds, linkedAccounts } = await fetchCurrencyLinkInfo(currencyId, tenantIdOverride);
+      if (linkedAccounts.length > 0) return linkedAccounts;
+      const linkedIds = new Set(linkedAccountIds);
+      return accounts
+        .filter((a) => linkedIds.has(Number(a.id)))
+        .map((a) => ({
+          id: Number(a.id),
+          name: String(a.name ?? ""),
+          account_id: String(a.account_id ?? ""),
+        }));
     } catch {
       return [];
     }
   };
+
+  /** When currency pills change, reload linked accounts (intersection) for checkbox回显. */
+  useEffect(() => {
+    if (!currencySettingOpen) return undefined;
+    const currencyIds = settingCurrencyIdsKey
+      ? settingCurrencyIdsKey.split(",").map(Number).filter((id) => id > 0)
+      : [];
+    if (!currencyIds.length) {
+      setSettingLinked(new Set());
+      setSettingInitialByCurrency(new Map());
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const entries = await Promise.all(
+          currencyIds.map(async (currencyId) => {
+            const ids = await fetchLinkedAccountIdsByCurrency(currencyId, scopeCompanyId);
+            return [currencyId, new Set(ids)];
+          }),
+        );
+        if (cancelled) return;
+        const nextInitial = new Map(entries);
+        const intersection = intersectAccountIdSets([...nextInitial.values()]);
+        setSettingInitialByCurrency(nextInitial);
+        setSettingLinked(intersection);
+      } catch {
+        if (!cancelled) notify(t("loadLinksFailed"), "danger");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currencySettingOpen,
+    settingCurrencyIdsKey,
+    fetchLinkedAccountIdsByCurrency,
+    scopeCompanyId,
+    notify,
+    t,
+  ]);
 
   const handleCurrencyDeleteBlocked = async (currencyId, json, msg) => {
     const editingAccountId = isEditMode ? Number(form.id) : 0;
@@ -2316,59 +2333,28 @@ export default function AccountListPage() {
     setSelectedCurrencyIds((prev) => prev.filter((x) => Number(x) !== id));
     setHiddenCurrencyIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
     setCurrencies((prev) => prev.filter((c) => Number(c.id) !== id));
-    setSettingCurrencyId((prev) => {
-      if (Number(prev) === id) {
-        setSettingLinked(new Set());
-        setSettingInitial(new Set());
-        return null;
-      }
-      return prev;
+    setSettingCurrencyIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setSettingInitialByCurrency((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
     });
   }, []);
 
   const requestCurrencyDelete = useCallback(
-    async (currencyId, { force = false, scope = null } = {}) => {
-      const id = Number(currencyId);
-      const ledgerScope = scope ?? resolveActiveModalLedgerScope();
-      const tenantId = resolveCurrencyTenantIdFromScope({
-        ledgerScope,
-        companyId: companyId ?? scopeCompanyId,
-      });
-      const result = await deleteCurrency({
-        id,
-        tenantId,
-        ledgerScope,
-        companyId: companyId ?? scopeCompanyId,
-        force,
-      });
-      return {
-        success: Boolean(result.success),
-        json: result,
-        msg: String(result.message || ""),
-      };
+    async (currencyId, { tenantId: tenantIdOverride = undefined } = {}) => {
+      const tenantId = tenantIdOverride !== undefined ? tenantIdOverride : resolveModalTenantId();
+      const { success, json, message } = await deleteTenantCurrency({ id: currencyId, tenantId });
+      return { success, json, msg: message };
     },
-    [companyId, scopeCompanyId, resolveActiveModalLedgerScope],
+    [resolveModalTenantId],
   );
-
-  const confirmForceCurrencyDelete = useCallback(async () => {
-    const prompt = forceCurrencyDeletePrompt;
-    setForceCurrencyDeletePrompt(null);
-    if (!prompt?.id) return;
-    try {
-      const { success, msg } = await requestCurrencyDelete(prompt.id, {
-        force: true,
-        scope: prompt.scope ?? null,
-      });
-      if (success) {
-        dropCurrencyFromUi(prompt.id);
-        notifyApi(msg, "currencyDeleted", "success");
-        return;
-      }
-      notifyApi(msg, "failedDeleteCurrency", "danger");
-    } catch {
-      notify(t("failedDeleteCurrency"), "danger");
-    }
-  }, [dropCurrencyFromUi, forceCurrencyDeletePrompt, notify, notifyApi, requestCurrencyDelete, t]);
 
   /** Delete currency from Currency Setting page (no edit-account unlink). */
   const removeSettingCurrency = async (currencyId) => {
@@ -2382,28 +2368,18 @@ export default function AccountListPage() {
       notify(t("apiCurrencySyncedFromSubsidiary"), "danger");
       return;
     }
-    if (settingCurrencyId != null && Number(settingCurrencyId) === id) {
+    if (settingCurrencyIds.has(id)) {
       notify(t("deselectCurrencyBeforeDelete"), "danger");
       return;
     }
 
-    const settingScope = pageLedgerScope;
+    const tenantId = scopeCompanyId;
     try {
-      const otherAccountsInUse = await fetchAccountsUsingCurrency(id, settingScope);
-      const { success, json, msg } = await requestCurrencyDelete(id, { scope: settingScope });
+      const otherAccountsInUse = await fetchAccountsUsingCurrency(id, tenantId);
+      const { success, json, msg } = await requestCurrencyDelete(id, { tenantId });
       if (success) {
         dropCurrencyFromUi(id);
         notifyApi(msg, "currencyDeleted", "success");
-        return;
-      }
-      if (isHistoricalOnlyCurrencyDeleteBlock(msg, otherAccountsInUse)) {
-        const code = currencies.find((c) => Number(c.id) === id)?.code || "";
-        setForceCurrencyDeletePrompt({
-          id,
-          code: toUpper(String(code)),
-          detail: formatCurrencyUsageDetail(lang, msg),
-          scope: settingScope,
-        });
         return;
       }
       const apiData =
@@ -2411,8 +2387,8 @@ export default function AccountListPage() {
           ? { ...(json?.data || {}), accounts_in_use: otherAccountsInUse }
           : json?.data ?? null;
       await handleCurrencyDeleteBlocked(id, { ...json, data: apiData }, msg);
-    } catch {
-      notify(t("failedDeleteCurrency"), "danger");
+    } catch (e) {
+      notifyApi(e?.message, "failedDeleteCurrency", "danger");
     }
   };
 
@@ -2435,6 +2411,8 @@ export default function AccountListPage() {
       return;
     }
 
+    const tenantId = resolveModalTenantId();
+
     const unlinkCurrentAccountFromCurrency = async () => {
       const wasSavedOnAccount = accountId > 0 && initialEditCurrencyIds.map(Number).includes(id);
 
@@ -2442,7 +2420,7 @@ export default function AccountListPage() {
 
       let needsUnlink = wasSavedOnAccount;
       if (!needsUnlink) {
-        const using = await fetchAccountsUsingCurrency(id);
+        const using = await fetchAccountsUsingCurrency(id, tenantId);
         needsUnlink = using.some((a) => Number(a.id) === accountId);
       }
       if (!needsUnlink) {
@@ -2453,19 +2431,8 @@ export default function AccountListPage() {
       }
 
       try {
-        const scopeTenantId = resolveActiveScopeTenantId({
-          companyId: companyId ?? scopeCompanyId,
-          form,
-        });
-        if (!scopeTenantId) return false;
-        const remaining = initialEditCurrencyIds
-          .map(Number)
-          .filter((cid) => Number.isFinite(cid) && cid > 0 && cid !== id);
-        await updateAccountUser(
-          buildAccountUpdateRequest(form, scopeTenantId, remaining),
-        );
-        setInitialEditCurrencyIds(remaining);
-        setSelectedCurrencyIds((prev) => prev.filter((x) => Number(x) !== id));
+        await updateAccountsLinkedToCurrency({ tenantId, currencyId: id, unlinkedAccountIds: [accountId] });
+        setInitialEditCurrencyIds((prev) => prev.filter((x) => Number(x) !== id));
         setCurrencies((prev) =>
           prev.map((c) => (Number(c.id) === id ? { ...c, is_linked: false } : c)),
         );
@@ -2479,25 +2446,16 @@ export default function AccountListPage() {
     const unlinked = await unlinkCurrentAccountFromCurrency();
     if (!unlinked) return;
 
-    let otherAccountsInUse = await fetchAccountsUsingCurrency(id);
+    let otherAccountsInUse = await fetchAccountsUsingCurrency(id, tenantId);
     if (accountId > 0) {
       otherAccountsInUse = otherAccountsInUse.filter((a) => Number(a.id) !== accountId);
     }
 
     try {
-      const { success, json, msg } = await requestCurrencyDelete(id);
+      const { success, json, msg } = await requestCurrencyDelete(id, { tenantId });
       if (success) {
         dropCurrencyFromUi(id);
         notifyApi(msg, "currencyDeleted", "success");
-        return;
-      }
-      if (isHistoricalOnlyCurrencyDeleteBlock(msg, otherAccountsInUse)) {
-        const code = currencies.find((c) => Number(c.id) === id)?.code || "";
-        setForceCurrencyDeletePrompt({
-          id,
-          code: toUpper(String(code)),
-          detail: formatCurrencyUsageDetail(lang, msg),
-        });
         return;
       }
       const apiData =
@@ -2505,27 +2463,8 @@ export default function AccountListPage() {
           ? { ...(json?.data || {}), accounts_in_use: otherAccountsInUse }
           : json?.data ?? null;
       await handleCurrencyDeleteBlocked(id, { ...json, data: apiData }, msg);
-    } catch {
-      notify(t("failedDeleteCurrency"), "danger");
-    }
-  };
-
-  const loadCurrencyLinks = async (curId) => {
-    try {
-      const tenantId = resolveCurrencyTenantIdFromScope({
-        ledgerScope: pageLedgerScope,
-        companyId: companyId ?? scopeCompanyId,
-      });
-      if (!tenantId) return;
-      const { linkedAccountIds } = await fetchLinkedAccountsByCurrency({
-        currencyId: curId,
-        tenantId,
-      });
-      const ids = new Set(linkedAccountIds.map(Number));
-      setSettingLinked(ids);
-      setSettingInitial(new Set(ids));
-    } catch {
-      notify(t("loadLinksFailed"), "danger");
+    } catch (e) {
+      notifyApi(e?.message, "failedDeleteCurrency", "danger");
     }
   };
 
@@ -2534,76 +2473,95 @@ export default function AccountListPage() {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
-    const linked = [];
-    const unlinked = [];
+    const currencyIds = [...settingCurrencyIds]
+      .map(Number)
+      .filter((id) => id > 0 && currencies.some((c) => Number(c.id) === id));
+    if (!currencyIds.length) {
+      notify(t("pleaseSelectCurrencyFirst"), "danger");
+      return;
+    }
+    // Baseline = full match at load. Only toggled accounts change (partial untouched).
+    const baseline = intersectAccountIdSets(
+      currencyIds.map((currencyId) => settingInitialByCurrency.get(currencyId) || new Set()),
+    );
+    const toggledOn = [];
+    const toggledOff = [];
     accounts.forEach((a) => {
-      const aid = Number(a.id);
-      const was = settingInitial.has(aid);
-      const now = settingLinked.has(aid);
-      if (now && !was) linked.push(aid);
-      if (!now && was) unlinked.push(aid);
+      const id = Number(a.id);
+      if (!(id > 0)) return;
+      const was = baseline.has(id);
+      const now = settingLinked.has(id);
+      if (now && !was) toggledOn.push(id);
+      if (!now && was) toggledOff.push(id);
     });
+    const updates = currencyIds.map((currencyId) => {
+      const initial = settingInitialByCurrency.get(currencyId) || new Set();
+      return {
+        currencyId,
+        linked: toggledOn.filter((id) => !initial.has(id)),
+        unlinked: toggledOff.filter((id) => initial.has(id)),
+      };
+    });
+    const changed = updates.filter((u) => u.linked.length > 0 || u.unlinked.length > 0);
+    if (!changed.length) {
+      notify(t("pleaseSelectAccountFirst"), "danger");
+      return;
+    }
+    const tenantId = scopeCompanyId;
     try {
-      const tenantId = resolveCurrencyTenantIdFromScope({
-        ledgerScope: pageLedgerScope,
-        companyId: companyId ?? scopeCompanyId,
-      });
-      if (!tenantId) return;
-      await bulkUpdateAccountCurrency({
-        tenantId,
-        currencyId: settingCurrencyId,
-        linkedAccountIds: linked,
-        unlinkedAccountIds: unlinked,
-      });
-      setSettingInitial(new Set(settingLinked));
+      for (const { currencyId, linked, unlinked } of changed) {
+        await updateAccountsLinkedToCurrency({
+          tenantId,
+          currencyId,
+          linkedAccountIds: linked,
+          unlinkedAccountIds: unlinked,
+        });
+      }
+      clearCurrencySettingSelection();
       setCurrencySettingOpen(false);
       notify(t("currencySettingsSaved"));
       refreshAccountList();
-      if (editModalOpen && form.id) void loadSelectionMeta(form.id, true);
+      if (editModalOpen && form.id) void loadSelectionMeta(form.id, true, { tenantId: resolveModalTenantId() });
     } catch (e) {
       notifyApi(e?.message, "saveFailed", "danger");
     }
   };
 
-  const resolveLinkTenantId = useCallback(() => {
-    if (groupOnlyAccountMode && selectedGroup) {
-      return resolveGroupCodeToTenantId(selectedGroup, companies);
-    }
-    return resolveActiveScopeTenantId({ companyId: companyId ?? scopeCompanyId });
-  }, [groupOnlyAccountMode, selectedGroup, companies, companyId, scopeCompanyId]);
+  /** Linking is tenant-scoped server-side (validated against the session's own tenant). */
+  const resolveLinkTenantId = useCallback(
+    () => (groupOnlyAccountMode ? scopeCompanyId : companyId),
+    [groupOnlyAccountMode, scopeCompanyId, companyId],
+  );
 
   const openLink = async (id) => {
     if (accountMutationsBlocked) {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
+    const tenantId = resolveLinkTenantId();
+    if (!tenantId) {
+      notify(t("pleaseSelectCompanyFirst"), "danger");
+      return;
+    }
     try {
-      if (!companyId && !(groupOnlyAccountMode && selectedGroup)) {
-        return notify(t("pleaseSelectCompanyFirst"), "danger");
-      }
-      const tenantId = resolveLinkTenantId();
-      if (!tenantId) return notify(t("pleaseSelectCompanyFirst"), "danger");
-
       setLinkingAccountId(Number(id));
       setLinkType("bidirectional");
       setLinkSearchTerm("");
-
-      const [pool, linkedData] = await Promise.all([
-        fetchFilteredAccountListByTenantId(tenantId, { showAll: true }),
+      const [pool, linked] = await Promise.all([
+        fetchAccountListByTenantId(tenantId),
         fetchAccountLinkedAccounts(id, tenantId),
       ]);
       setLinkAccountsPool(pool);
-      setLinkTypeMap(linkedData.linkTypesMap || {});
-      const types = linkedData.linkTypesMap || {};
+      const types = linked.linkTypesMap || {};
+      setLinkTypeMap(types);
       const initial = new Set(
-        (linkedData.accounts || [])
-          .filter((a) => types[a.id] === "bidirectional")
-          .map((a) => Number(a.id)),
+        linked.accounts.filter((a) => types[a.id] === "bidirectional").map((a) => Number(a.id)),
       );
       setSelectedLinkedIds(initial);
       setLinkModalOpen(true);
-    } catch {
-      notify(t("failedOpenLinkModal"), "danger");
+    } catch (e) {
+      console.error("openLink failed", e);
+      notifyApi(e?.message, "failedOpenLinkModal", "danger");
     }
   };
 
@@ -2622,38 +2580,27 @@ export default function AccountListPage() {
       notify(t("readOnlyActionBlocked"), "danger");
       return;
     }
-    if (!linkingAccountId || (!companyId && !(groupOnlyAccountMode && selectedGroup))) return;
+    const tenantId = resolveLinkTenantId();
+    if (!linkingAccountId || !tenantId) return;
     try {
-      const tenantId = resolveLinkTenantId();
-      if (!tenantId) {
-        notify(t("pleaseSelectCompanyFirst"), "danger");
-        return;
-      }
-
-      const ref = await fetchAccountLinkedAccounts(linkingAccountId, tenantId);
-      const typesMap = ref.linkTypesMap || {};
+      const refData = await fetchAccountLinkedAccounts(linkingAccountId, tenantId);
+      const typesMap = refData.linkTypesMap || {};
       const currentTypeIds = new Set(
-        (ref.accounts || [])
-          .filter((a) => typesMap[a.id] === linkType)
-          .map((a) => Number(a.id)),
+        refData.accounts.filter((a) => typesMap[a.id] === linkType).map((a) => Number(a.id)),
       );
       const desiredIds = new Set([...selectedLinkedIds]);
       const toAdd = [...desiredIds].filter((id) => !currentTypeIds.has(id));
       const toRemove = [...currentTypeIds].filter((id) => !desiredIds.has(id));
 
       for (const linkedId of toRemove) {
-        await unlinkAccountPair({
-          accountId1: linkingAccountId,
-          accountId2: linkedId,
-          tenantId,
-        });
+        await unlinkAccountPair({ accountId1: linkingAccountId, accountId2: linkedId, tenantId });
       }
       for (const linkedId of toAdd) {
         await linkAccountPair({
           accountId1: linkingAccountId,
           accountId2: linkedId,
           linkType,
-          sourceAccountId: linkType === "unidirectional" ? linkingAccountId : null,
+          sourceAccountId: linkType === "unidirectional" ? Number(linkingAccountId) : null,
         });
       }
       if (toAdd.length === 0 && toRemove.length === 0 && desiredIds.size > 0) {
@@ -2662,7 +2609,7 @@ export default function AccountListPage() {
             accountId1: linkingAccountId,
             accountId2: linkedId,
             linkType,
-            sourceAccountId: linkType === "unidirectional" ? linkingAccountId : null,
+            sourceAccountId: linkType === "unidirectional" ? Number(linkingAccountId) : null,
           });
         }
       }
@@ -2738,36 +2685,51 @@ export default function AccountListPage() {
                   />
                 </div>
                 <div className="userlist-filter-chips" role="group">
-                  <button
-                    type="button"
-                    className={`user-filter-chip${showInactive ? " is-selected" : ""}`}
-                    aria-pressed={showInactive}
-                    onClick={() => setShowInactive((prev) => !prev)}
-                  >
-                    <span className="user-filter-chip__dot" aria-hidden>
-                      {showInactive ? (
-                        <svg className="user-filter-chip__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M6 12l4 4 8-8" />
-                        </svg>
-                      ) : null}
-                    </span>
-                    <span className="user-filter-chip__label">{t("showInactive")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`user-filter-chip${showAll ? " is-selected" : ""}`}
-                    aria-pressed={showAll}
-                    onClick={() => setShowAll((prev) => !prev)}
-                  >
-                    <span className="user-filter-chip__dot" aria-hidden>
-                      {showAll ? (
-                        <svg className="user-filter-chip__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M6 12l4 4 8-8" />
-                        </svg>
-                      ) : null}
-                    </span>
-                    <span className="user-filter-chip__label">{t("showAll")}</span>
-                  </button>
+                    <button
+                      type="button"
+                      className={`user-filter-chip${showAll ? " is-selected" : ""}`}
+                      aria-pressed={showAll}
+                      onClick={() => setShowAll((prev) => !prev)}
+                    >
+                      <span className="user-filter-chip__dot" aria-hidden>
+                        {showAll ? (
+                          <svg className="user-filter-chip__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M6 12l4 4 8-8" />
+                          </svg>
+                        ) : null}
+                      </span>
+                      <span className="user-filter-chip__label">{t("showAll")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`user-filter-chip${showActive ? " is-selected" : ""}`}
+                      aria-pressed={showActive}
+                      onClick={() => setShowActive((prev) => !prev)}
+                    >
+                      <span className="user-filter-chip__dot" aria-hidden>
+                        {showActive ? (
+                          <svg className="user-filter-chip__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M6 12l4 4 8-8" />
+                          </svg>
+                        ) : null}
+                      </span>
+                      <span className="user-filter-chip__label">{t("showActive")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`user-filter-chip${showInactive ? " is-selected" : ""}`}
+                      aria-pressed={showInactive}
+                      onClick={() => setShowInactive((prev) => !prev)}
+                    >
+                      <span className="user-filter-chip__dot" aria-hidden>
+                        {showInactive ? (
+                          <svg className="user-filter-chip__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M6 12l4 4 8-8" />
+                          </svg>
+                        ) : null}
+                      </span>
+                      <span className="user-filter-chip__label">{t("showInactive")}</span>
+                    </button>
                 </div>
                 </div>
                 <div className="user-toolbar-actions-right" style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
@@ -2809,7 +2771,10 @@ export default function AccountListPage() {
             />
           </div>
 
-          <div ref={listRegionRef} className="account-table-wrapper account-list-table">
+          <div
+            ref={listRegionRef}
+            className={`account-table-wrapper account-list-table${showBulkDeleteColumn ? " account-table-wrapper--bulk-delete-col" : ""}`}
+          >
             <div className="account-table-header account-list-table-header">
               <div className="account-header-item">{t("no")}</div>
               {renderSortableHeader(t("account"), "account")}
@@ -2820,6 +2785,24 @@ export default function AccountListPage() {
               {renderSortableHeader(t("lastLogin"), "lastLogin")}
               {renderSortableHeader(t("remark"), "remark")}
               <div className="account-header-item account-header-item--action">{t("action")}</div>
+              {showBulkDeleteColumn && (
+                <div className="account-header-item account-header-item--select">
+                  <input
+                    type="checkbox"
+                    aria-label={t("selectAllDeletableAria")}
+                    checked={selectAllAccounts}
+                    disabled={accountMutationsBlocked}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      const eligible = pageRows
+                        .filter((row) => String(row.status || "").toLowerCase() === "inactive")
+                        .map((row) => Number(row.id));
+                      setSelectedDeleteIds(on ? new Set(eligible) : new Set());
+                      setSelectAllAccounts(on);
+                    }}
+                  />
+                </div>
+              )}
             </div>
             <div
               className={`account-cards${showAll ? " account-cards--show-all" : ""}${usePagedFill ? " account-cards--paged-fill" : ""}`}
@@ -2854,7 +2837,7 @@ export default function AccountListPage() {
                         </span>
                       </label>
                     </div>
-                    <div className="account-card-item"><span className={`account-role-badge ${isInactive ? "account-status-inactive" : "account-status-active"}${accountMutationsBlocked ? "" : " status-clickable"}`} onClick={accountMutationsBlocked ? () => notify(t("readOnlyActionBlocked"), "danger") : () => toggleAccountStatus(a.id)} style={accountMutationsBlocked ? { cursor: "not-allowed" } : undefined}>{formatAccountStatusDisplay(t, a.status)}</span></div>
+                    <div className="account-card-item"><span className={`account-role-badge ${isInactive ? "account-status-inactive" : "account-status-active"}${accountMutationsBlocked ? "" : " status-clickable"}`} onClick={accountMutationsBlocked ? () => notify(t("readOnlyActionBlocked"), "danger") : () => toggleAccountStatus(a.id)} title={accountMutationsBlocked ? t("readOnlyActionBlocked") : t("clickToggleStatus")} style={accountMutationsBlocked ? { cursor: "not-allowed" } : undefined}>{formatAccountStatusDisplay(t, a.status)}</span></div>
                     <div
                       className="account-card-item"
                       title={formatAccountLastLoginTimeTitle(a.last_login) || undefined}
@@ -2874,16 +2857,30 @@ export default function AccountListPage() {
                           </svg>
                         </button>
                         </div>
-                        {isInactive && (
-                          <input
-                            type="checkbox"
-                            disabled={accountMutationsBlocked}
-                            checked={selectedDeleteIds.has(Number(a.id))}
-                            onChange={(e) => setSelectedDeleteIds(prev => { const n = new Set(prev); if (e.target.checked) n.add(Number(a.id)); else n.delete(Number(a.id)); return n; })}
-                          />
-                        )}
                       </div>
                     </div>
+                    {showBulkDeleteColumn && (
+                      <div className="account-card-item account-card-item--select">
+                        {isInactive ? (
+                          <input
+                            type="checkbox"
+                            aria-label={t("rowDeleteCheckboxAria")}
+                            disabled={accountMutationsBlocked}
+                            checked={selectedDeleteIds.has(Number(a.id))}
+                            onChange={(e) =>
+                              setSelectedDeleteIds((prev) => {
+                                const n = new Set(prev);
+                                if (e.target.checked) n.add(Number(a.id));
+                                else n.delete(Number(a.id));
+                                return n;
+                              })
+                            }
+                          />
+                        ) : (
+                          <span className="account-row-select-placeholder" aria-hidden="true" />
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -2950,24 +2947,31 @@ export default function AccountListPage() {
         t={t}
       />
       <AccountConfirmModal open={confirmDeleteOpen} message={t("deleteConfirmMessage", { count: selectedDeleteIds.size })} onConfirm={confirmDelete} onClose={() => setConfirmDeleteOpen(false)} t={t} />
-      <AccountConfirmModal
-        modalId="forceDeleteCurrencyModal"
-        open={Boolean(forceCurrencyDeletePrompt)}
-        title={t("currencyInUseTitle")}
-        message={
-          forceCurrencyDeletePrompt
-            ? t("forceDeleteCurrencyConfirm", {
-                code: forceCurrencyDeletePrompt.code,
-                detail: forceCurrencyDeletePrompt.detail,
-              })
-            : ""
-        }
-        confirmLabel={t("forceDeleteCurrency")}
-        onConfirm={confirmForceCurrencyDelete}
-        onClose={() => setForceCurrencyDeletePrompt(null)}
+      <CurrencySettingModal
+        open={currencySettingOpen}
+        onClose={() => {
+          clearCurrencySettingSelection();
+          setCurrencySettingOpen(false);
+        }}
+        currencies={currencies}
+        settingCurrencyIds={settingCurrencyIds}
+        setSettingCurrencyIds={setSettingCurrencyIds}
+        settingLinked={settingLinked}
+        setSettingLinked={setSettingLinked}
+        settingInitialAccountCount={settingInitialAccountCount}
+        settingSearch={settingSearch}
+        setSettingSearch={setSettingSearch}
+        settingRole={settingRole}
+        setSettingRole={setSettingRole}
+        onSave={saveCurrencySetting}
+        accounts={accounts}
+        roles={orderedRoles}
+        currencyInput={currencyInput}
+        setCurrencyInput={setCurrencyInput}
+        onCreateCurrency={createCurrency}
+        onRemoveCurrency={removeSettingCurrency}
         t={t}
       />
-      <CurrencySettingModal open={currencySettingOpen} onClose={() => setCurrencySettingOpen(false)} currencies={currencies} settingCurrencyId={settingCurrencyId} setSettingCurrencyId={setSettingCurrencyId} settingLinked={settingLinked} setSettingLinked={setSettingLinked} settingSearch={settingSearch} setSettingSearch={setSettingSearch} settingRole={settingRole} setSettingRole={setSettingRole} onLoadCurrencyLinks={loadCurrencyLinks} onClearCurrencySelection={clearCurrencySettingSelection} onSave={saveCurrencySetting} accounts={accounts} roles={roles} currencyInput={currencyInput} setCurrencyInput={setCurrencyInput} onCreateCurrency={createCurrency} onRemoveCurrency={removeSettingCurrency} t={t} />
       <LinkAccountModal open={linkModalOpen} accounts={linkAccountsPool} currentAccountId={linkingAccountId} selectedIds={selectedLinkedIds} setSelectedIds={setSelectedLinkedIds} linkType={linkType} setLinkType={setLinkType} searchTerm={linkSearchTerm} setSearchTerm={setLinkSearchTerm} onSave={saveLinks} onClose={() => setLinkModalOpen(false)} t={t} />
     </>
   );

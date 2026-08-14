@@ -8,6 +8,7 @@ import { replaceBrowserPathOnly } from "../../../utils/routing/privateBrowserUrl
 import {
   filterCompaniesWithDisplayId,
   fetchOwnerCompaniesAll,
+  fetchOwnerGroupsAll,
   getCachedOwnerCompanies,
   clearDashboardGroupFilterKeepCompany,
   DASHBOARD_GROUP_FILTER_OPT_OUT_KEY,
@@ -43,14 +44,18 @@ import {
   resolveTransactionScope,
   transactionScopeApiParams,
   transactionScopeCacheKey,
-  resolveTransactionCurrencyOrderCompanyId,
+  resolveTransactionCurrencyOrderParams,
+  resolveTransactionCurrencyOrderCacheKey,
 } from "../lib/transactionScope.js";
 import { useGroupAnchorSessionSync } from "../../../utils/company/useGroupAnchorSessionSync.js";
 import { buildTransactionCompanyStripRows } from "../lib/transactionCompanyStrip.js";
+import { useRealtimeDomain } from "../../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS } from "../../../lib/realtime/realtimeEvents.js";
 import {
   applyTransactionBootPersistence,
   buildTransactionBootSnapshot,
   mergeOwnerCompaniesIntoSnapshot,
+  resolveTransactionSnapGroupIds,
 } from "../lib/transactionBootSnapshot.js";
 import {
   hydrateTransactionScopeMetadataFromCache,
@@ -72,6 +77,8 @@ export function useTransactionData({
   const [currencyOptions, setCurrencyOptions] = useState([]);
   /** scopeKey + rows updated atomically — restore never sees stale rows for a new company. */
   const [currencyScopeBundle, setCurrencyScopeBundle] = useState({ scopeKey: null, rows: [] });
+  /** Bumped on accounts realtime so To/From options refetch into local state. */
+  const [accountsRealtimeNonce, setAccountsRealtimeNonce] = useState(0);
   const filterSnapshotRef = useRef(null);
   const scopeSwitchSeqRef = useRef(0);
   const scopeCacheKeyRef = useRef("");
@@ -131,9 +138,8 @@ export function useTransactionData({
       return;
     }
 
-    setAccountOptions([]);
-    setCurrencyOptions([]);
-    setCurrencyScopeBundle({ scopeKey: null, rows: [] });
+    // Keep previous currency / account pills until the new scope fetch lands —
+    // clearing here painted Group+Company with a missing Currency row on refresh/switch.
   }, [scopeCacheKey, queryClient, transactionScope]);
 
   const setCurrencyRowsOrdered = useCallback((next) => {
@@ -184,7 +190,8 @@ export function useTransactionData({
       return;
     }
     const cached = getCachedOwnerCompanies();
-    if (!cached?.length) return;
+    // Empty Group: cache may be [] — still allow boot via group login scope.
+    if (cached == null) return;
     const queryCompany = new URL(window.location.href).searchParams.get("company_id");
     const bootSnap = buildTransactionBootSnapshot(u, cached, { queryCompany });
     if (!bootSnap) return;
@@ -223,6 +230,9 @@ export function useTransactionData({
 
         const rows = await fetchOwnerCompaniesAll({ me: u });
         if (cancelled) return;
+        // Warm Domain groups cache so snapGroupIds includes owner portfolio (empty Group KK).
+        await fetchOwnerGroupsAll(u).catch(() => null);
+        if (cancelled) return;
 
         const url = new URL(window.location.href);
         const queryCompany = url.searchParams.get("company_id");
@@ -236,9 +246,20 @@ export function useTransactionData({
         };
 
         if (filterSnapshotRef.current) {
-          const merged = mergeOwnerCompaniesIntoSnapshot(filterSnapshotRef.current, rows, u);
-          if (merged !== filterSnapshotRef.current) {
-            commitFilterSnapshot(merged);
+          let next = mergeOwnerCompaniesIntoSnapshot(filterSnapshotRef.current, rows, u);
+          const gids = resolveTransactionSnapGroupIds(rows, u);
+          const prevGids = filterSnapshotRef.current.snapGroupIds || [];
+          const groupsChanged =
+            gids.length !== prevGids.length || gids.some((g, i) => g !== prevGids[i]);
+          if (next !== filterSnapshotRef.current || groupsChanged) {
+            if (next === filterSnapshotRef.current) next = { ...filterSnapshotRef.current };
+            next.snapGroupIds = gids;
+            next.companyStripRows = buildTransactionCompanyStripRows(next, {
+              selectedGroup: next.selectedGroup,
+              companyId: next.companyId,
+              groupsAllMode: Boolean(next.groupsAllMode),
+            });
+            commitFilterSnapshot(next);
           }
           await syncUrlCompanySessionOnce();
         } else {
@@ -332,11 +353,14 @@ export function useTransactionData({
       filterSnapshotRef.current?.snapCompaniesAll ||
       filterSnapshotRef.current?.snapCompanies ||
       [];
-    const orderCompanyId = resolveTransactionCurrencyOrderCompanyId(transactionScope, snapCompanies);
+    const orderParams = resolveTransactionCurrencyOrderParams(transactionScope, snapCompanies);
+    const orderCacheKey = resolveTransactionCurrencyOrderCacheKey(transactionScope, snapCompanies);
+    const forceFresh = accountsRealtimeNonce > 0;
     (async () => {
       const fetchScopeAccountsAndCurrencies = async () => {
         let accData = [];
         let curRows = [];
+        const accountsStaleTime = forceFresh ? 0 : 60_000;
         if (transactionScope.mode === "aggregate" && transactionScope.mergeCompanyIds?.length) {
           const ids = transactionScope.mergeCompanyIds;
           const [accResults, curResults] = await Promise.all([
@@ -345,7 +369,7 @@ export function useTransactionData({
                 queryClient.fetchQuery({
                   queryKey: transactionQueryKeys.accounts(`${scopeCacheKey}:${cid}`),
                   queryFn: ({ signal }) => getAccounts({ companyId: cid, signal }),
-                  staleTime: 60_000,
+                  staleTime: accountsStaleTime,
                 }),
               ),
             ),
@@ -354,7 +378,7 @@ export function useTransactionData({
                 queryClient.fetchQuery({
                   queryKey: transactionQueryKeys.companyCurrencies(`${scopeCacheKey}:${cid}`),
                   queryFn: ({ signal }) => getCompanyCurrencies({ companyId: cid, signal }),
-                  staleTime: 60_000,
+                  staleTime: accountsStaleTime,
                 }),
               ),
             ),
@@ -390,7 +414,7 @@ export function useTransactionData({
                 queryClient.fetchQuery({
                   queryKey: transactionQueryKeys.accounts(`${scopeCacheKey}:group:${gid}`),
                   queryFn: ({ signal }) => getAccounts({ groupId: gid, signal }),
-                  staleTime: 60_000,
+                  staleTime: accountsStaleTime,
                 }),
               ),
             ),
@@ -399,7 +423,7 @@ export function useTransactionData({
                 queryClient.fetchQuery({
                   queryKey: transactionQueryKeys.companyCurrencies(`${scopeCacheKey}:${cid}`),
                   queryFn: ({ signal }) => getCompanyCurrencies({ companyId: cid, signal }),
-                  staleTime: 60_000,
+                  staleTime: accountsStaleTime,
                 }),
               ),
             ),
@@ -425,13 +449,13 @@ export function useTransactionData({
             queryClient.fetchQuery({
               queryKey: transactionQueryKeys.accounts(scopeCacheKey),
               queryFn: ({ signal }) => getAccounts({ ...scopeApi, signal }),
-              staleTime: 60_000,
+              staleTime: accountsStaleTime,
               gcTime: 10 * 60_000,
             }),
             queryClient.fetchQuery({
               queryKey: transactionQueryKeys.companyCurrencies(scopeCacheKey),
               queryFn: ({ signal }) => getCompanyCurrencies({ ...scopeApi, signal }),
-              staleTime: 60_000,
+              staleTime: accountsStaleTime,
               gcTime: 10 * 60_000,
             }),
           ]);
@@ -448,10 +472,15 @@ export function useTransactionData({
           staleTime: 5 * 60_000,
           gcTime: 30 * 60_000,
         });
-        const orderPromise = orderCompanyId
+        const orderPromise = orderCacheKey
           ? queryClient.fetchQuery({
-              queryKey: [...transactionQueryKeys.userCurrencyOrder(), orderCompanyId],
-              queryFn: ({ signal }) => getUserCurrencyOrder({ companyId: orderCompanyId, signal }),
+              queryKey: [...transactionQueryKeys.userCurrencyOrder(), orderCacheKey],
+              queryFn: ({ signal }) =>
+                getUserCurrencyOrder({
+                  companyId: orderParams.companyId,
+                  groupId: orderParams.groupId,
+                  signal,
+                }),
               staleTime: 60_000,
               gcTime: 10 * 60_000,
             })
@@ -465,27 +494,43 @@ export function useTransactionData({
         setCategories(roles.map((r) => String(r).toUpperCase()));
 
         const { accData, curRows } = scope;
-        const ordered = orderCurrencyRows(curRows, ord, orderCompanyId);
+        const ordered = orderCurrencyRows(curRows, ord, orderCacheKey);
         const codes = ordered.map((x) => String(x.code || x.currency || "").toUpperCase().trim()).filter(Boolean);
-        if (orderCompanyId && codes.length) {
-          persistCurrencyDisplayOrder(orderCompanyId, codes);
+        if (orderCacheKey && codes.length) {
+          persistCurrencyDisplayOrder(orderCacheKey, codes);
         }
         setAccountOptions(accData);
         setCurrencyScopeBundle({ scopeKey: fetchScopeKey, rows: ordered });
         setCurrencyOptions([...new Set(codes)]);
       } catch {
+        // Keep last-good currency/account options on network blip so filter package stays solid.
         if (!cancelled && fetchScopeKey === scopeCacheKeyRef.current) {
           setCategories([]);
-          setAccountOptions([]);
-          setCurrencyOptions([]);
-          setCurrencyScopeBundle({ scopeKey: null, rows: [] });
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [loading, forbidden, scopeCacheKey, todayDmy, queryClient, transactionScope, authScopeKey]);
+  }, [loading, forbidden, scopeCacheKey, todayDmy, queryClient, transactionScope, authScopeKey, accountsRealtimeNonce]);
+
+  useRealtimeDomain(
+    REALTIME_DOMAINS.ACCOUNTS,
+    () => {
+      void queryClient.removeQueries({
+        predicate: (q) => {
+          const k = q.queryKey?.[0];
+          return (
+            k === "tx-accounts" ||
+            k === "tx-company-currencies" ||
+            k === "tx-scope-account-currencies"
+          );
+        },
+      });
+      setAccountsRealtimeNonce((n) => n + 1);
+    },
+    { enabled: !forbidden && Boolean(transactionScope) },
+  );
 
   useEffect(() => {
     if (!filterSnapshot) return;
@@ -748,7 +793,7 @@ export function useTransactionData({
       const g = String(gid || "").trim().toUpperCase();
       if (!g) return;
 
-      // Re-click active group: close group and show independent companies.
+      // Re-click active group: close Group and keep/pick a company (not stuck in group-only).
       if (g === snap.selectedGroup && !snap.groupsAllMode) {
         await deselectGroupKeepCompany(snap);
         return;

@@ -23,7 +23,7 @@ export function notifyAutoRenewPendingChanged(pendingCount) {
   );
 }
 
-/** Runs server-side window sync and broadcasts the latest pending total. */
+/** Fetches pending badge count (read-only; no server window sync) and broadcasts. */
 export async function syncAutoRenewPendingCount({ signal } = {}) {
   const count = await fetchAutoRenewPendingCount({ signal });
   if (count == null) return null;

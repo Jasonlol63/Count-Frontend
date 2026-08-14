@@ -6,7 +6,7 @@ import {
 } from "./mergeFormulaTail.js";
 import { isMisplacedCommission } from "./isMisplacedCommission.js";
 
-function pickFormulaBodyFromRow(row, form) {
+function pickFormulaBodyFromRow(row, form, sourcePercent) {
   const fromTemplate = row?.getAttribute?.("data-template-formula-operators");
   if (fromTemplate && String(fromTemplate).trim() !== "") {
     return String(fromTemplate).trim();
@@ -19,7 +19,7 @@ function pickFormulaBodyFromRow(row, form) {
     return String(form.formulaValue).trim();
   }
   const display = form?.formulaDisplay || row?.getAttribute?.("data-formula-display") || "";
-  return removeTrailingSourcePercentExpression(String(display).trim());
+  return removeTrailingSourcePercentExpression(String(display).trim(), sourcePercent);
 }
 
 function normalizeSourcePercent(row, form) {
@@ -37,10 +37,10 @@ function normalizeSourcePercent(row, form) {
 
 /** formula_operators body for save: includes row *0.90, excludes *(source). */
 export function resolveFormulaOperatorsBodyForSave(row, form) {
-  let body = pickFormulaBodyFromRow(row, form);
-  body = removeTrailingSourcePercentExpression(body);
-
   const source = normalizeSourcePercent(row, form);
+  let body = pickFormulaBodyFromRow(row, form, source);
+  body = removeTrailingSourcePercentExpression(body, source);
+
   const lsv = form?.lastSourceValue || row?.getAttribute?.("data-last-source-value") || "";
   const display = form?.formulaDisplay || "";
 
@@ -48,7 +48,7 @@ export function resolveFormulaOperatorsBodyForSave(row, form) {
     body = mergeFormulaOperatorsWithResolvedTail(
       body,
       lsv,
-      removeTrailingSourcePercentExpression(display)
+      removeTrailingSourcePercentExpression(display, source)
     );
   }
 
@@ -59,7 +59,8 @@ export function resolveFormulaOperatorsBodyForSave(row, form) {
 export function resolveLastSourceValueForSave(row, form) {
   const display = form?.formulaDisplay || row?.getAttribute?.("data-formula-display") || "";
   if (display && String(display).trim() !== "" && display !== "Formula") {
-    return removeTrailingSourcePercentExpression(String(display).trim());
+    const source = normalizeSourcePercent(row, form);
+    return removeTrailingSourcePercentExpression(String(display).trim(), source);
   }
   return resolveFormulaOperatorsBodyForSave(row, form);
 }

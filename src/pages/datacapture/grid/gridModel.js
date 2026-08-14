@@ -73,6 +73,28 @@ function swapRowDataCells(a, b) {
   b.col = tempCol;
 }
 
+function cellLooksLikeAmountToken(value) {
+  const raw = String(value || "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+  if (!raw) return false;
+  if (/^\$/.test(raw)) return true;
+  const normalized = raw.replace(/[,$]/g, "").replace(/^\((.*)\)$/, "-$1");
+  return /^-?\d+(?:\.\d+)?$/.test(normalized);
+}
+
+/** Currency / decimal / thousands — not bare integers (those can be product ids). */
+function cellLooksLikeRichMoneyToken(value) {
+  const raw = String(value || "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+  if (!raw) return false;
+  if (/^\$/.test(raw)) return true;
+  if (/,\d{3}/.test(raw)) return true;
+  if (/\d\.\d{1,4}\b/.test(raw)) return true;
+  return false;
+}
+
 function normalizeIdProductColumnForRow(rowData, captureType, rowIndex) {
   if (!["1.Text", "2.Format", "4.RETURN"].includes(captureType) || rowData.length <= 1) {
     return;
@@ -87,6 +109,21 @@ function normalizeIdProductColumnForRow(rowData, captureType, rowIndex) {
       if (cell?.type !== "data") continue;
       const candidate = String(cell.value || "").trim();
       if (!candidate || FORMAT_LABEL_FIRST_COLUMNS.has(candidate.toUpperCase())) continue;
+      // Kendo / Win Loss Subtotal: leading empties then money — do not pull amount into col1.
+      // Bare integers (e.g. product id 12345) are not treated as footer money.
+      if (cellLooksLikeAmountToken(candidate)) {
+        let leadingEmpty = 0;
+        for (let j = 1; j < i; j += 1) {
+          if (String(rowData[j]?.value || "").trim()) break;
+          leadingEmpty += 1;
+        }
+        if (leadingEmpty >= 2) {
+          const amountCount = rowData.filter(
+            (c, idx) => idx > 1 && c?.type === "data" && cellLooksLikeAmountToken(c.value),
+          ).length;
+          if (cellLooksLikeRichMoneyToken(candidate) || amountCount >= 2) continue;
+        }
+      }
       swapRowDataCells(firstDataCell, cell);
       console.log(
         `${captureType}: Row ${rowIndex} - adjusted id product from column ${cell.col + 1} (value: "${candidate}") to first column`,
@@ -260,17 +297,10 @@ export function gridToSnapshot(grid, captureType = "1.Text") {
   return tableData;
 }
 
-/**
- * Restore grid model from a session snapshot.
- * `fallbackRows`/`fallbackCols` are the caller-resolved *required* size (e.g. the
- * fixed 11-col Bank/group-only grid) — never shrink below them, only grow to fit
- * a snapshot that holds more data than that floor.
- */
+/** Restore grid model from a session snapshot. */
 export function snapshotToGrid(snapshot, fallbackRows = 26, fallbackCols = 20) {
-  const snapshotRows = snapshot?.rowCount || snapshot?.rows?.length || 0;
-  const snapshotCols = snapshot?.colCount ? Math.max(1, snapshot.colCount - 1) : 0;
-  const rows = Math.max(fallbackRows, snapshotRows);
-  const cols = Math.max(fallbackCols, snapshotCols);
+  const rows = snapshot?.rowCount || snapshot?.rows?.length || fallbackRows;
+  const cols = Math.max(1, (snapshot?.colCount || fallbackCols + 1) - 1);
   const grid = createEmptyGrid(rows, cols);
 
   if (!snapshot?.rows?.length) return grid;

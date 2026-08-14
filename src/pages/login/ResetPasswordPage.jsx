@@ -1,11 +1,12 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RESET_PASSWORD_I18N } from "../../translateFile/auth/authTranslate.js";
+import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { useAuthBackground } from "./useAuthBackground.js";
-import { logoutSession } from "../../utils/auth/authApi.js";
 import { sendResetTac, submitResetPassword } from "./resetPassword.js";
 import { sanitizeEmailInput, validateEmail } from "../../utils/input/emailValidation.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
+import PasswordInput from "../../components/PasswordInput.jsx";
 
 function AlertModal({ open, title, message, confirmText, onClose }) {
   useEffect(() => {
@@ -49,7 +50,7 @@ function AlertModal({ open, title, message, confirmText, onClose }) {
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
   const [lang, setLang] = useState(() => localStorage.getItem("login_lang") || "en");
-  const [tenantCode, setTenantCode] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [email, setEmail] = useState("");
   const [tac, setTac] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -103,10 +104,10 @@ export default function ResetPasswordPage() {
   }, [newPassword, confirmPassword]);
 
   const onSendTac = async () => {
-    const normalizedTenantCode = tenantCode.toUpperCase().trim();
+    const normalizedCompanyId = companyId.toUpperCase().trim();
     const trimmedEmail = validateEmail(email).normalized;
 
-    if (!normalizedTenantCode) {
+    if (!normalizedCompanyId) {
       showModal(i18n.notice, i18n.companyIdFirst);
       return;
     }
@@ -122,7 +123,7 @@ export default function ResetPasswordPage() {
     setIsSendingTac(true);
     try {
       const data = await sendResetTac({
-        tenantCode: normalizedTenantCode,
+        companyId: normalizedCompanyId,
         email: trimmedEmail,
       });
 
@@ -156,7 +157,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    const normalizedTenantCode = tenantCode.toUpperCase().trim();
+    const normalizedCompanyId = companyId.toUpperCase().trim();
     const emailCheck = validateEmail(email);
     const trimmedEmail = emailCheck.normalized;
     const trimmedTac = tac.trim();
@@ -166,7 +167,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (!normalizedTenantCode || !trimmedEmail) {
+    if (!normalizedCompanyId || !trimmedEmail) {
       showModal(i18n.notice, i18n.companyEmailRequired);
       return;
     }
@@ -178,7 +179,7 @@ export default function ResetPasswordPage() {
     setIsResetting(true);
     try {
       const data = await submitResetPassword({
-        tenantCode: normalizedTenantCode,
+        companyId: normalizedCompanyId,
         email: trimmedEmail,
         tac: trimmedTac,
         newPassword,
@@ -187,7 +188,11 @@ export default function ResetPasswordPage() {
       if (data.success) {
         sessionStorage.setItem("ec_skip_session_bootstrap", "1");
         try {
-          await logoutSession();
+          await fetch(buildApiUrl("api/session/logout_api.php"), {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+          });
         } catch {
           /* proceed to login even if logout request fails */
         }
@@ -221,8 +226,9 @@ export default function ResetPasswordPage() {
                 <input
                   type="text"
                   placeholder={i18n.companyPlaceholder}
-                  value={tenantCode}
-                  onChange={(event) => setTenantCode(event.target.value.toUpperCase())}
+                  value={companyId}
+                  onChange={(event) => setCompanyId(event.target.value)}
+                  style={{ textTransform: "uppercase" }}
                   required
                 />
               </div>
@@ -259,24 +265,28 @@ export default function ResetPasswordPage() {
 
               <div className="input-group">
                 <i className="fas fa-lock input-icon" />
-                <input
-                  type="password"
+                <PasswordInput
                   placeholder={i18n.newPasswordPlaceholder}
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                   required
+                  showLabel={i18n.showPassword}
+                  hideLabel={i18n.hidePassword}
+                  autoComplete="new-password"
                 />
               </div>
 
               <div className="input-group">
                 <i className="fas fa-lock input-icon" />
-                <input
-                  type="password"
+                <PasswordInput
                   placeholder={i18n.confirmPasswordPlaceholder}
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   className={!passwordMatched && confirmPassword ? "input--mismatch" : undefined}
                   required
+                  showLabel={i18n.showPassword}
+                  hideLabel={i18n.hidePassword}
+                  autoComplete="new-password"
                 />
               </div>
 
@@ -292,7 +302,7 @@ export default function ResetPasswordPage() {
                     onClick={() => setLang("zh")}
                     aria-pressed={lang === "zh"}
                   >
-                    ä¸­
+                    中
                   </button>
                   <button
                     type="button"

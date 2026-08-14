@@ -20,7 +20,7 @@ import { BankNoteModal, BankRemarkModal } from "./components/bankProcessTextModa
 import AccountingDueModal from "./components/AccountingDueModal.jsx";
 import ResendModal from "./components/ResendModal.jsx";
 import { DashboardCalendarPopup } from "../dashboard/components/DashboardCalendarPopup.jsx";
-import { bankProcessFrequencyNormalized, normalizeBankProcessStatus, isoToDmy } from "./lib/bankProcessHelpers.js";
+import { bankProcessFrequencyNormalized, normalizeBankProcessStatus } from "./lib/bankProcessHelpers.js";
 import { useBankProcessListPage } from "./hooks/useBankProcessListPage.js";
 import { useBankProcessFilterCollapse } from "./hooks/useBankProcessFilterCollapse.js";
 import { useC168ProcessRouteGuard } from "../processlist/useC168ProcessRouteGuard.js";
@@ -77,6 +77,7 @@ export default function BankProcessListPage() {
     setDateFrom,
     dateTo,
     setDateTo,
+    toolbarDateRangeText,
     toast,
     setToast,
     accounts,
@@ -190,6 +191,7 @@ export default function BankProcessListPage() {
     loadAccountModalSelectionMeta,
     resetAccountModalToAdd,
     closeAccountModal,
+    fetchAccountDetailJson,
     createAccountModalCurrency,
     removeAccountModalCurrency,
     submitAccountModal,
@@ -428,28 +430,20 @@ export default function BankProcessListPage() {
                     <div
                       className="date-range-picker"
                       id="date-range-picker"
+                      data-drp-from="date_from"
+                      data-drp-to="date_to"
+                      data-drp-display="date-range-display"
                       role="button"
                       tabIndex={0}
                       aria-label={t("selectDateRange")}
                     >
                       <i className="fas fa-calendar-alt" aria-hidden="true" />
-                      {/* Text is driven by MaintenanceDateRangePicker (must not set React children or they overwrite picker + stale i18n). */}
-                      <span id="date-range-display" aria-live="polite" />
+                      <span id="date-range-display" aria-live="polite">{toolbarDateRangeText}</span>
                       <button type="button" className="process-list-date-clear" id="processListDateClearBtn" title={t("clearDateRange")} aria-label={t("clearDateRange")}>&times;</button>
                       <i className="fas fa-chevron-down transaction-date-range-chevron" aria-hidden="true" />
                     </div>
-                    <input
-                      type="hidden"
-                      id="date_from"
-                      readOnly
-                      value={dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom) ? isoToDmy(dateFrom) : ""}
-                    />
-                    <input
-                      type="hidden"
-                      id="date_to"
-                      readOnly
-                      value={dateTo && /^\d{4}-\d{2}-\d{2}$/.test(dateTo) ? isoToDmy(dateTo) : ""}
-                    />
+                    <input type="hidden" id="date_from" readOnly />
+                    <input type="hidden" id="date_to" readOnly />
                   </div>
                   <div
                     ref={searchBarRef}
@@ -662,7 +656,6 @@ export default function BankProcessListPage() {
             setSelectedIds={setSelectedIds}
             showHeaderSelectAll={showAll || showActive || showInactive || showOfficial || showEInvoice || showBlock}
             notify={notify}
-            tenantId={companyId}
             fetchRows={fetchRows}
             onBankStatusUpdated={handleBankStatusUpdated}
             loadAccountingInbox={loadAccountingInbox}
@@ -715,6 +708,7 @@ export default function BankProcessListPage() {
           editMode={editMode} form={form} setForm={setForm} accounts={accounts}
           countriesList={selectedCountryChips}
           banksList={selectedBanksByCountry[String(form.country || "").trim()] || []}
+          calendarI18n={calendarI18n}
           onClose={() => setModalOpen(false)} onSubmit={submitForm}
           onOpenCountryModal={() => {
             setSelectedCountryChips((prev) => {
@@ -765,7 +759,7 @@ export default function BankProcessListPage() {
             }
             if (!ordered.length) return;
             setSelectedCountryChips(ordered);
-            void persistSelectedCountries();
+            void persistSelectedCountries(ordered);
             setForm((f) => {
               const cur = String(f.country || "").trim().toUpperCase();
               const nextCountry = ordered.includes(cur) ? f.country : ordered[0];
@@ -800,7 +794,7 @@ export default function BankProcessListPage() {
             const nextMap = { ...selectedBanksByCountry, [country]: ordered };
             setSelectedBanksByCountry(nextMap);
             setSelectedBankChips(ordered);
-            void persistSelectedBanksByCountry();
+            void persistSelectedBanksByCountry(nextMap);
             setForm((f) => {
               const cur = String(f.bank || "").trim().toUpperCase();
               const nextBank = ordered.includes(cur) ? f.bank : ordered[0];
@@ -816,8 +810,10 @@ export default function BankProcessListPage() {
       {profitShareModalOpen && (
         <ProfitSharingModal
           profitShareRows={profitShareRows} setProfitShareRows={setProfitShareRows} accounts={accounts}
+          cost={form.cost} price={form.price}
           onConfirm={confirmProfitShareModal} onClose={() => setProfitShareModalOpen(false)}
           onOpenAddAccountForField={openAddAccountForField}
+          notify={notify}
           t={t}
         />
       )}
@@ -836,8 +832,10 @@ export default function BankProcessListPage() {
 
       {resendModalOpen && (
         <ResendModal
-          resendTarget={resendTarget} resendDayStart={resendDayStart}
+          resendTarget={resendTarget}
+          resendDayStart={resendDayStart} setResendDayStart={setResendDayStart}
           resendDayEnd={resendDayEnd} setResendDayEnd={setResendDayEnd}
+          calendarI18n={calendarI18n}
           resendFrequency={resendFrequency} setResendFrequency={setResendFrequency}
           resendInlineError={resendInlineError} setResendInlineError={setResendInlineError}
           resendConfirmDisabled={resendConfirmDisabled}

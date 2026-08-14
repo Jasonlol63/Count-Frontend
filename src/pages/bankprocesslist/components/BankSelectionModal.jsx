@@ -1,7 +1,15 @@
 import React from "react";
 import ProcessModalPortal, { processModalBackdropStyle } from "../../../components/ProcessModalPortal.jsx";
-import { sanitizeCapitalLettersOnly } from "../../../utils/input/sanitizeCapitalLettersOnly.js";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
+
+function TrashRemoveIcon() {
+  return (
+    <svg className="country-list-delete-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M9 3h6l1 2h5v2H3V5h5l1-2z" fill="currentColor" opacity="0.9" />
+      <path d="M5 9h14l-1 12H6L5 9z" fill="currentColor" />
+    </svg>
+  );
+}
 
 export default function BankSelectionModal({
   banksList,
@@ -45,7 +53,8 @@ export default function BankSelectionModal({
                       id="new_bank_name"
                       placeholder={t("addNewBank")}
                       value={newBankName}
-                      onChange={(e) => setNewBankName(sanitizeCapitalLettersOnly(e.target.value))}
+                      onChange={(e) => setNewBankName(e.target.value)}
+                      style={{ textTransform: "uppercase" }}
                     />
                     <button type="submit" className="btn btn-save bank-selection-add-btn" disabled={addingBank}>
                       {addingBank ? t("saving") : t("add")}
@@ -60,11 +69,12 @@ export default function BankSelectionModal({
                   id="bankSearch"
                   placeholder={t("searchBanks")}
                   value={bankSearch}
-                  onChange={(e) => setBankSearch(e.target.value.toUpperCase())}
+                  onChange={(e) => setBankSearch(e.target.value)}
+                  style={{ textTransform: "uppercase" }}
                 />
               </div>
               <div className="bank-list" id="existingBanks">
-                {availableBanks.filter((b) => !bankSearch.trim() || b.toUpperCase().includes(bankSearch.trim())).map((b) => (
+                {availableBanks.filter((b) => !bankSearch.trim() || b.toUpperCase().includes(bankSearch.trim().toUpperCase())).map((b) => (
                   <div
                     key={b}
                     className="country-item"
@@ -83,7 +93,7 @@ export default function BankSelectionModal({
                     </div>
                     <button
                       type="button"
-                      className="country-list-delete remove-country-modal"
+                      className="country-list-delete"
                       aria-label={t("removeBankChipAria", { bank: b })}
                       title={t("removeBankChipAria", { bank: b })}
                       onClick={(e) => {
@@ -92,7 +102,7 @@ export default function BankSelectionModal({
                         void onRemoveAvailableBank(b);
                       }}
                     >
-                      ×
+                      <TrashRemoveIcon />
                     </button>
                   </div>
                 ))}

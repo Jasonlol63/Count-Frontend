@@ -154,13 +154,13 @@
         padding-bottom: 4px !important;
     }
 
-    /* User List 表头蓝条：单独用 --text-base */
+    /* User List 表头蓝条：与 Acc 一致 1.6rem（不再用更小的 --text-base） */
     body.ec-auth-shell.user-page .table-header:not(.user-list-table-header) {
-        font-size: var(--text-base) !important;
+        font-size: 1.6rem !important;
     }
 
     body.ec-auth-shell.user-page .user-list-table .user-list-table-header {
-        font-size: var(--text-base) !important;
+        font-size: 1.6rem !important;
         padding: var(--table-header-height) !important;
     }
 
@@ -168,13 +168,14 @@
         font-size: 1.6rem !important;
     }
 
-    /* Process List（Games 等）：与 User / Account 表头一致 — 字号 + padding token */
+    /* Process List（Games）：表头字号/padding 与 Acc 一致；格内 padding 由下方 Acc 规则清零 */
     body.ec-auth-shell.process-page:not(.process-page--bank) .table-header:not(.bank-virtual-head-row) {
         font-size: 1.6rem !important;
         padding: var(--table-header-height) !important;
+        line-height: normal !important;
     }
 
-    body.ec-auth-shell .table-header:not(.bank-virtual-head-row):not(.user-list-table-header) .header-item,
+    body.ec-auth-shell .table-header:not(.bank-virtual-head-row):not(.user-list-table-header):not(.games-process-table-header) .header-item,
     body.ec-auth-shell .account-table-header .header-item,
     body.ec-auth-shell .card-item:not(.user-list-row .card-item),
     body.ec-auth-shell .account-card-item,
@@ -204,8 +205,12 @@
         min-height: 20px !important;
     }
 
-    /* Account List：行高/宽度与 process-card 一致 */
-    body.ec-auth-shell.account-page:not(.account-page--show-all) .account-card {
+    /*
+     * Acc / Admin 列表行：含 Show All 一律 Acc 密度（padding 0 + 紧凑行高）。
+     * 勿再用 :not(--show-all) —— Show All 否则会落到上方 padding:10px，行高变 ~40–50px。
+     */
+    body.ec-auth-shell.account-page .account-card,
+    body.ec-auth-shell.account-page .account-list-row.account-card {
         padding: 0 22px !important;
         min-height: 0 !important;
         flex: 0 0 auto !important;
@@ -220,20 +225,22 @@
         letter-spacing: 0.015em !important;
     }
 
-    body.ec-auth-shell.account-page:not(.account-page--show-all) .account-list-row .account-card-item {
+    body.ec-auth-shell.account-page .account-list-row .account-card-item {
         font-size: 1.4rem !important;
         line-height: 1.1 !important;
         letter-spacing: 0 !important;
     }
 
-    body.ec-auth-shell.user-page:not(.user-page--show-all) .user-list-row .card-item {
+    body.ec-auth-shell.user-page .user-list-row .card-item {
+        font-size: 1.4rem !important;
+        font-weight: bold !important;
         line-height: 1.3 !important;
         letter-spacing: 0 !important;
     }
 
-    body.ec-auth-shell.user-page:not(.user-page--show-all) .user-card.user-list-row {
+    body.ec-auth-shell.user-page .user-card.user-list-row {
         padding: 0 22px !important;
-        min-height: 0 !important;
+        min-height: var(--user-list-row-min-height, 30px) !important;
         flex: 0 0 auto !important;
     }
 
@@ -452,10 +459,26 @@
         padding: 0 !important;
     }
 
+    /* Acc：Games 表头格与 Account header-item 同为 0 padding + normal 行高 */
+    body.ec-auth-shell.process-page:not(.process-page--bank) .games-process-table-header {
+        line-height: normal !important;
+        align-items: center !important;
+    }
+
+    body.ec-auth-shell.process-page:not(.process-page--bank) .games-process-table-header .header-item,
+    body.ec-auth-shell.process-page:not(.process-page--bank) .games-process-table-header .header-item.header-item--with-sort-icon {
+        line-height: normal !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 5px !important;
+    }
+
+    /* Acc 同屏：13" 下列表行 line-height 与 Account 覆写一致；略紧以减少 @ 裁切 */
     body.ec-auth-shell.process-page:not(.process-page--bank):not(.process-page--show-all) .games-process-row .card-item {
         font-size: 1.4rem !important;
         font-weight: bold !important;
         line-height: 1.1 !important;
+        letter-spacing: 0 !important;
     }
 
     /* ----------------------------------------------------
@@ -519,6 +542,29 @@ body.ec-auth-shell .member-card:hover {
     position: relative;
 }
 
+/* Acc / Admin 列表：对齐 Acc 静态斑马纹，勿行悬停抬升 */
+body.ec-auth-shell.user-page .user-card:hover,
+body.ec-auth-shell.user-page .user-list-row:hover,
+body.ec-auth-shell.account-page .account-card:hover,
+body.ec-auth-shell.account-page .account-list-row:hover {
+    box-shadow: none !important;
+    transform: none !important;
+    background-color: inherit !important;
+    border-radius: 0;
+    z-index: auto;
+    position: static;
+}
+
+body.ec-auth-shell.user-page .user-card.row-even:hover,
+body.ec-auth-shell.account-page .account-card:nth-child(even):hover {
+    background: #cceeff99 !important;
+}
+
+body.ec-auth-shell.user-page .user-card.row-odd:hover,
+body.ec-auth-shell.account-page .account-card:nth-child(odd):hover {
+    background: #ffffff !important;
+}
+
 /* For native table rows */
 body.ec-auth-shell .transaction-table tbody tr:hover td,
 body.ec-auth-shell .datacapture-table tbody tr:hover td {
@@ -565,7 +611,7 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
     body.ec-auth-shell .btn:active,
     body.ec-auth-shell .transaction-search-btn:active,
     body.ec-auth-shell .transaction-submit-btn:active,
-    body.ec-auth-shell button:not(.fc-button):active {
+    body.ec-auth-shell button:not(.fc-button):not(.bank-form-datepicker-clear):active {
         transform: translateY(1px) scale(0.98) !important;
         transition: all 0.1s;
     }
@@ -589,16 +635,18 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
    Global "WOW Factor" Final Polish
    ========================================================================== */
 
-    /* 4. SPA-like Entrance Animation (Makes PHP page loads feel modern) */
+    /*
+     * 4. SPA-like Entrance Animation
+     * Opacity only — translateY expands body scrollHeight under overflow-y:auto
+     * and flashes a window scrollbar on short pages (Transaction / Admin / Process).
+     */
     @keyframes premiumEntrance {
         from {
             opacity: 0;
-            transform: translateY(12px);
         }
 
         to {
             opacity: 1;
-            transform: translateY(0);
         }
     }
 
@@ -607,6 +655,35 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
     body.ec-auth-shell .modal-content,
     body.ec-auth-shell .datacapture-container {
         animation: premiumEntrance 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Admin / Acc / Games Process：切回列表页时整页淡入会让搜索条「隐约闪一下」 */
+    body.ec-auth-shell.user-page .container,
+    body.ec-auth-shell.account-page .container,
+    body.ec-auth-shell.process-page:not(.process-page--bank) .container {
+        animation: none !important;
+    }
+
+    /* User edit modal mounts hundreds of Acc/Process cards — entrance fade feels frozen */
+    body.ec-auth-shell.user-page #userModal .modal-content,
+    body.ec-auth-shell.user-page #userModal .user-modal-content {
+        animation: none !important;
+        transition: none !important;
+        opacity: 1 !important;
+    }
+
+    body.ec-auth-shell.user-page .search-container.userlist-search-bar,
+    body.ec-auth-shell.user-page .search-container.userlist-search-bar .userlist-search-input,
+    body.ec-auth-shell.user-page .search-container.userlist-search-bar .search-input,
+    body.ec-auth-shell.user-page input.search-input {
+        transition: none !important;
+        animation: none !important;
+    }
+
+    body.ec-auth-shell.user-page .search-container.userlist-search-bar .userlist-search-input:focus,
+    body.ec-auth-shell.user-page .search-container.userlist-search-bar .userlist-search-input:focus-visible,
+    body.ec-auth-shell.user-page .search-input:focus {
+        transition: none !important;
     }
 
     /* 5. Custom Brand Text Selection */
@@ -1063,21 +1140,32 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
         flex-direction: column !important;
     }
 
+    /* Acc standard：paged-fill flex 与 Account 同为 1 1 auto；轨道下限防末行裁字 */
     body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards.process-cards--paged-fill:not(.bank-virtual-scroll) {
         display: grid !important;
         grid-template-columns: 1fr !important;
-        grid-template-rows: repeat(var(--games-process-page-size, 15), minmax(0, 1fr)) !important;
-        flex: 1 1 0 !important;
+        grid-template-rows: repeat(var(--games-process-page-size, 15), minmax(var(--games-process-row-min-height, 30px), 1fr)) !important;
+        flex: 1 1 auto !important;
         min-height: 0 !important;
         align-content: stretch !important;
     }
 
     body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards.process-cards--paged-fill .games-process-row {
         flex: unset !important;
+        min-height: var(--games-process-row-min-height, 30px) !important;
+        height: 100% !important;
+        align-items: stretch !important;
+        align-self: stretch !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards.process-cards--paged-fill .games-process-row .card-item {
+        align-self: stretch !important;
         min-height: 0 !important;
         height: 100% !important;
         align-items: center !important;
-        align-self: stretch !important;
+        box-sizing: border-box !important;
     }
 
     /* Games Process List Show All：小屏下覆盖 global unlock，整页可滚 */
@@ -1126,7 +1214,7 @@ body.ec-auth-shell .datacapture-table tbody tr:hover td {
     body.process-page.process-page--show-all:not(.process-page--bank) .process-card.games-process-row {
         flex: none !important;
         flex-shrink: 0 !important;
-        min-height: 26px !important;
+        min-height: var(--games-process-row-min-height, 30px) !important;
         align-items: center !important;
     }
 

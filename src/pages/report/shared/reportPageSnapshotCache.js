@@ -20,3 +20,9 @@ export function setReportSnapshot(pageKey, key, data) {
   if (!pageKey || !key) return;
   snapshots[pageKey] = { key, data };
 }
+
+/** Drop remount paint snapshots after ledger writes so reports do not flash stale totals. */
+export function clearReportSnapshots() {
+  snapshots.customer = null;
+  snapshots.domain = null;
+}

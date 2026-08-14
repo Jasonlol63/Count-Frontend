@@ -17,6 +17,11 @@ function normalizeCurrencyId(currencyId) {
   return id;
 }
 
+/** "company:5" buckets scope by company_id (via captureScope) — never send it as group_id. */
+function isCompanyDraftBucket(bucketId) {
+  return /^company:/i.test(String(bucketId || "").trim());
+}
+
 async function parseJson(response) {
   const json = await response.json();
   if (!response.ok) {
@@ -32,15 +37,16 @@ async function parseJson(response) {
  * @param {string|number} currencyId
  */
 export async function fetchGroupCaptureDraft(captureScope, groupId, processKey, currencyId, signal) {
-  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
+  const isCompany = isCompanyDraftBucket(groupId);
+  const gid = !isCompany && groupId ? String(groupId).trim().toUpperCase() : "";
   const pid = processKey ? String(processKey).trim().toLowerCase() : "";
   const cid = normalizeCurrencyId(currencyId);
-  if (!gid || !pid || !cid) return null;
+  if ((!gid && !isCompany) || !pid || !cid) return null;
 
   const params = withScopeParams(
     {
       action: "get_group_capture_draft",
-      group_id: gid,
+      ...(gid ? { group_id: gid } : {}),
       process_key: pid,
       currency_id: cid,
     },
@@ -78,15 +84,16 @@ export async function saveGroupCaptureDraft(
   currencyId,
   payload = {},
 ) {
-  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
+  const isCompany = isCompanyDraftBucket(groupId);
+  const gid = !isCompany && groupId ? String(groupId).trim().toUpperCase() : "";
   const pid = processKey ? String(processKey).trim().toLowerCase() : "";
   const cid = normalizeCurrencyId(currencyId);
-  if (!gid || !pid || !cid) return false;
+  if ((!gid && !isCompany) || !pid || !cid) return false;
 
   const params = withScopeParams(
     {
       action: "save_group_capture_draft",
-      group_id: gid,
+      ...(gid ? { group_id: gid } : {}),
       process_key: pid,
       currency_id: cid,
     },
@@ -99,7 +106,7 @@ export async function saveGroupCaptureDraft(
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        group_id: gid,
+        ...(gid ? { group_id: gid } : {}),
         process_key: pid,
         currency_id: cid,
         tableData: payload.tableData ?? null,
@@ -115,15 +122,16 @@ export async function saveGroupCaptureDraft(
 }
 
 export async function clearGroupCaptureDraft(captureScope, groupId, processKey, currencyId) {
-  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
+  const isCompany = isCompanyDraftBucket(groupId);
+  const gid = !isCompany && groupId ? String(groupId).trim().toUpperCase() : "";
   const pid = processKey ? String(processKey).trim().toLowerCase() : "";
   const cid = normalizeCurrencyId(currencyId);
-  if (!gid || !pid || !cid) return false;
+  if ((!gid && !isCompany) || !pid || !cid) return false;
 
   const params = withScopeParams(
     {
       action: "clear_group_capture_draft",
-      group_id: gid,
+      ...(gid ? { group_id: gid } : {}),
       process_key: pid,
       currency_id: cid,
     },

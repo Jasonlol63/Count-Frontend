@@ -1,8 +1,8 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 
-const DEFAULT_PERMISSIONS_FULL = ["Games", "Bank", "Loan", "Rate", "Money"];
-const DEFAULT_PERMISSIONS_FORMULA = ["Games", "Bank", "Loan", "Rate", "Money"];
-const DEFAULT_PERMISSIONS_BANKPROCESS = ["Bank", "Loan", "Rate", "Money"];
+/** Fallback when domain_api permissions are unavailable (access guards only; no Category UI). */
+const DEFAULT_PERMISSIONS_FULL = ["Games", "Bank"];
+const DEFAULT_PERMISSIONS_FORMULA = ["Games", "Bank"];
 
 async function fetchPermissionsFromApi(companyCode, { credentials = false } = {}) {
   const init = {
@@ -30,7 +30,6 @@ async function fetchPermissionsFromApi(companyCode, { credentials = false } = {}
 export async function fetchDomainCompanyPermissions(companyCode, options = {}) {
   const {
     emptyForC168 = false,
-    excludeGames = false,
     defaultPermissions = DEFAULT_PERMISSIONS_FULL,
     credentials = false,
   } = options;
@@ -43,7 +42,7 @@ export async function fetchDomainCompanyPermissions(companyCode, options = {}) {
   try {
     const fromApi = await fetchPermissionsFromApi(companyCode, { credentials });
     if (fromApi) {
-      return excludeGames ? fromApi.filter((p) => p !== "Games") : fromApi;
+      return fromApi;
     }
   } catch (err) {
     console.error("Error fetching company permissions:", err);
@@ -97,5 +96,3 @@ export async function fetchMaintenanceProcesses(
   }
   return data.data || [];
 }
-
-export { DEFAULT_PERMISSIONS_BANKPROCESS };

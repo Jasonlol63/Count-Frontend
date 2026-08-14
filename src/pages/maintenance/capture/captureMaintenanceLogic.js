@@ -1,11 +1,18 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { isC168CompanyCode } from "../../../utils/company/c168CaptureChannel.js";
-import { companiesNativeInGroupList } from "../../../utils/company/sharedCompanyFilter.js";
-import { fetchDomainCompanyPermissions } from "../shared/maintenanceCompanyApi.js";
+import {
+  fetchDomainCompanyPermissions,
+  fetchMaintenanceProcesses,
+} from "../shared/maintenanceCompanyApi.js";
 import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
-import { mapDomainGroupProcesses } from "../../report/domain/domainReportGroupProcesses.js";
-import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
-import { captureMaintenanceUsesGroupProcesses } from "./captureMaintenanceScope.js";
+import {
+  GROUP_ONLY_PROCESS_CODES,
+  mapGroupPayrollProcesses,
+} from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
+import {
+  captureMaintenanceScopeApiParams,
+  captureMaintenanceUsesGroupProcesses,
+} from "./captureMaintenanceScope.js";
 
 /** ProcessSelect expects process_name; domain report rows use process / display_text. */
 export function mapProcessesForMaintenanceSelect(apiList) {
@@ -21,13 +28,26 @@ export function mapProcessesForMaintenanceSelect(apiList) {
   });
 }
 
+function appendScopeToParams(params, scope) {
+  const { companyId, viewGroup, groupId, reportScope, groupOnly, groupAggregate } =
+    captureMaintenanceScopeApiParams(scope);
+  if (companyId) params.append("company_id", String(companyId));
+  const vg = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
+  if (vg) params.append("view_group", vg);
+  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
+  if (gid) params.append("group_id", gid);
+  if (reportScope) params.append("report_scope", reportScope);
+  if (groupOnly) params.append("group_only", "1");
+  if (groupAggregate) params.append("group_aggregate", "1");
+}
+
 export async function fetchCompanyPermissions(companyCode) {
   const code = String(companyCode ?? "").trim().toUpperCase();
   if (isC168CompanyCode(code)) {
     return ["Games", "Gambling"];
   }
   const perms = await fetchDomainCompanyPermissions(companyCode);
-  return perms.length > 0 ? perms : ["Games", "Gambling", "Bank", "Loan", "Rate", "Money"];
+  return perms.length > 0 ? perms : ["Games", "Bank"];
 }
 
 export async function fetchProcesses(companyId, scope = null) {
@@ -42,101 +62,22 @@ export async function fetchProcesses(companyId, scope = null) {
   }
   if (scope && captureMaintenanceUsesGroupProcesses(scope) && !payrollChannel) {
     const apiList = await fetchDomainReportProcesses(scope, { credentials: "include" });
-    return mapProcessesForMaintenanceSelect(mapDomainGroupProcesses(apiList));
+    return mapProcessesForMaintenanceSelect(mapGroupPayrollProcesses(apiList));
   }
-  // Company mode: every GAME-category process under the current tenant (Spring `/api/process/process-list`,
-  // same source as the Process List page — BANK rows are already filtered out by normalizeProcessListRows).
   const effectiveId = scope?.scopeCompanyId ?? companyId;
-  const rows = await fetchProcessListByTenantId(effectiveId);
-  return mapProcessesForMaintenanceSelect(rows);
+  const rows = await fetchMaintenanceProcesses(effectiveId, { credentials: "include" });
+  let mapped = mapProcessesForMaintenanceSelect(rows);
+  if (payrollChannel) {
+    const payrollCodes = new Set(GROUP_ONLY_PROCESS_CODES);
+    mapped = mapped.filter((p) =>
+      payrollCodes.has(String(p.process_name ?? "").trim().toUpperCase()),
+    );
+  }
+  return mapped;
 }
 
 /**
- * Permissions + process list when Group is selected without Company (group-only).
- */
-export async function bootstrapCaptureMaintenanceMeta({ companies, groupId = null }) {
-  const anchor =
-    (groupId ? companiesNativeInGroupList(companies, groupId)[0] : null) ??
-    (Array.isArray(companies) ? companies[0] : null) ??
-    null;
-  const code = anchor?.company_id ? String(anchor.company_id) : "";
-  const companyPerms = code
-    ? await fetchCompanyPermissions(code)
-    : ["Games", "Gambling", "Bank", "Loan", "Rate", "Money"];
-  const savedPerm = code ? localStorage.getItem(`selectedPermission_${code}`) : null;
-  const initialActive =
-    savedPerm && companyPerms.includes(savedPerm) ? savedPerm : companyPerms.length > 0 ? companyPerms[0] : "";
-  return { permissions: companyPerms, activePermission: initialActive };
-}
-
-/** Select All 误传占位文案时视为未选 Process（ProcessSelect 在部分 valueMode 下可能透传显示文案）。 */
-function normalizeCaptureMaintenanceProcessFilter(process) {
-  const raw = String(process ?? "").trim();
-  if (!raw) return "";
-  const lower = raw.toLowerCase();
-  if (lower === "select all" || lower === "--select all--" || raw === "全部" || raw === "--全部--") {
-    return "";
-  }
-  return raw;
-}
-
-/**
- * Category sent to the Spring endpoint — required, hard-filters `data_captures.category` so
- * GAME/BANK rows never mix. Capture Maintenance has no explicit Category tab; it's derived the
- * same way `fetchProcesses` already picks the process source: payroll-channel/C168 (bank-only)
- * companies are Bank, everyone else is Games.
- */
-function resolveCaptureMaintenanceCategory(scope) {
-  const payrollChannel = Boolean(scope?.c168Channel || scope?.companyPayrollChannel);
-  return payrollChannel ? "Bank" : "Games";
-}
-
-/** Resolve the single tenantId a scope points at (same field Payment/Transaction Maintenance use). */
-function resolveCaptureMaintenanceTenantId(scope) {
-  const id = Number(scope?.scopeCompanyId ?? scope?.uiCompanyId);
-  return Number.isFinite(id) && id > 0 ? id : null;
-}
-
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
-
-/** Spring LocalDateTime → dd/MM/yyyy HH:mm:ss for existing table display. */
-function formatCaptureMaintenanceCreatedAt(value) {
-  if (value == null || value === "") return "";
-  if (Array.isArray(value) && value.length >= 3) {
-    const [y, m, d, hh = 0, mm = 0, ss = 0] = value;
-    return `${pad2(d)}/${pad2(m)}/${y} ${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`;
-  }
-  const raw = String(value).trim();
-  if (/^\d{2}\/\d{2}\/\d{4}/.test(raw)) return raw;
-  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/);
-  if (m) {
-    return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}:${m[6] || "00"}`;
-  }
-  return raw;
-}
-
-/** Spring CaptureMaintenanceRow → table row fields (aligned to backend camelCase). */
-function normalizeSpringCaptureMaintenanceRow(row) {
-  if (!row || typeof row !== "object") return null;
-  const isDeleted = row.deleted === true || row.deleted === 1 || row.deleted === "1";
-  return {
-    capture_id: row.id ?? null,
-    dts_created: formatCaptureMaintenanceCreatedAt(row.dtsCreated),
-    product: row.product ?? "",
-    process: row.process ?? "",
-    currency: String(row.currency || "").trim().toUpperCase(),
-    wl_group: row.wlGroup ?? "",
-    submitted_by: row.createdBy ?? "",
-    is_deleted: isDeleted ? 1 : 0,
-    deleted_by: row.deletedBy ?? "",
-    dts_deleted: formatCaptureMaintenanceCreatedAt(row.deletedAt),
-  };
-}
-
-/**
- * Search capture data via Spring POST /api/maintenance/capture-maintenance/list (tenant-only, no pagination).
+ * Search capture data
  * @param {AbortSignal} [options.signal] — 切换公司等场景取消过时请求，避免列表闪动与竞态
  */
 export async function searchCaptureData(
@@ -144,66 +85,52 @@ export async function searchCaptureData(
   options = {},
 ) {
   const { signal } = options;
-  const tenantId = resolveCaptureMaintenanceTenantId(scope);
-  if (!tenantId) {
-    throw new Error("tenantIdRequired");
+  const params = new URLSearchParams();
+  params.append("date_from", dateFrom);
+  params.append("date_to", dateTo);
+  if (process) {
+    params.append("process", process);
   }
-  const body = {
-    tenantId,
-    dateFrom: String(dateFrom || "").trim(),
-    dateTo: String(dateTo || "").trim(),
-    process: normalizeCaptureMaintenanceProcessFilter(process) || null,
-    category: resolveCaptureMaintenanceCategory(scope),
-    q: String(query || "").trim() || null,
-  };
+  if (query?.trim()) {
+    params.set("q", query.trim().toUpperCase());
+  }
+  appendScopeToParams(params, scope);
 
-  const response = await fetch(buildApiUrl("api/maintenance/capture-maintenance/list"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    cache: "no-store",
-    body: JSON.stringify(body),
-    signal,
-  });
+  const url = buildApiUrl(`api/capture_maintenance/search_api.php?${params.toString()}`);
+  const response = await fetch(url, { signal, credentials: "include" });
   const data = await response.json();
 
   if (!data.success) {
     throw new Error(data.message || data.error || "Search failed");
   }
-  const rows = Array.isArray(data.data) ? data.data : [];
-  return rows.map(normalizeSpringCaptureMaintenanceRow).filter(Boolean);
+  return data.data || [];
 }
 
 /**
- * Delete selected capture items via Spring POST /api/maintenance/capture-maintenance/delete.
- * The list is already one row per capture (data_captures.id), so `row.capture_id` per row IS the
- * capture id — this just forwards the selected ids as `captureIds` as-is, no per-line resolution.
- * `dateFrom`/`dateTo` are accepted (existing call site passes them) but unused — the delete endpoint
- * doesn't take a date range.
+ * Delete selected capture items
  */
-export async function deleteCaptureItems({ items, scope }) {
-  const tenantId = resolveCaptureMaintenanceTenantId(scope);
-  if (!tenantId) {
-    throw new Error("tenantIdRequired");
-  }
-  const captureIds = [];
-  const seen = new Set();
-  for (const item of Array.isArray(items) ? items : []) {
-    const id = Number(item?.capture_id ?? item);
-    if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue;
-    seen.add(id);
-    captureIds.push(id);
-  }
-  if (captureIds.length === 0) {
-    throw new Error("Please select at least one record");
-  }
+export async function deleteCaptureItems({ items, dateFrom, dateTo, scope }) {
+  const payload = {
+    date_from: dateFrom,
+    date_to: dateTo,
+    items,
+  };
+  const { companyId, viewGroup, groupId, reportScope, groupOnly, groupAggregate } =
+    captureMaintenanceScopeApiParams(scope);
+  if (companyId) payload.company_id = companyId;
+  if (viewGroup) payload.view_group = viewGroup;
+  if (groupId) payload.group_id = groupId;
+  if (reportScope) payload.report_scope = reportScope;
+  if (groupOnly) payload.group_only = "1";
+  if (groupAggregate) payload.group_aggregate = "1";
 
-  const response = await fetch(buildApiUrl("api/maintenance/capture-maintenance/delete"), {
+  const response = await fetch(buildApiUrl("api/capture_maintenance/delete_api.php"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+    },
     credentials: "include",
-    cache: "no-store",
-    body: JSON.stringify({ tenantId, captureIds }),
+    body: JSON.stringify(payload),
   });
 
   const data = await response.json();
@@ -217,8 +144,7 @@ export async function deleteCaptureItems({ items, scope }) {
  * Update session company
  */
 export async function updateSessionCompany(companyId) {
-  const response = await fetch(buildApiUrl(`auth/switch-tenant?tenant_id=${companyId}`), {
-    method: "POST",
+  const response = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`), {
     credentials: "include",
   });
   const result = await response.json();

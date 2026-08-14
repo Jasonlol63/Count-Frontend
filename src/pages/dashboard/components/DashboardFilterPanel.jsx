@@ -1,12 +1,18 @@
-export function DashboardFilterPanel({
+import { memo } from "react";
+
+export const DashboardFilterPanel = memo(function DashboardFilterPanel({
   i18n,
   effectiveDateRangeText,
   groupIds,
   selectedGroup,
+  displaySelectedGroup,
   groupsAllMode,
+  displayGroupsAllMode,
   groupAllMode,
+  displayGroupAllMode,
   companiesForPicker,
   companyId,
+  displayCompanyId,
   mergedSubsetIds,
   currencies,
   currencyCode,
@@ -18,9 +24,17 @@ export function DashboardFilterPanel({
   onCurrencyDropOn,
 }) {
   const showCompanyAll = companiesForPicker.length > 1;
-  const showCompanyRow = groupIds.length > 0 || companiesForPicker.length > 0;
+  // Never paint bare "Company:" label without pills (refresh mid-frame flicker).
+  const showCompanyRow = companiesForPicker.length > 0;
+  // Parent only mounts this panel when Date+Group+Company+Currency package is ready.
   const showPanel =
     groupIds.length > 0 || companiesForPicker.length > 0 || currencies.length > 0;
+  const paintedGroupAll =
+    displayGroupAllMode !== undefined ? displayGroupAllMode : groupAllMode;
+  const paintedSelectedGroup =
+    displaySelectedGroup !== undefined ? displaySelectedGroup : selectedGroup;
+  const paintedGroupsAll =
+    displayGroupsAllMode !== undefined ? displayGroupsAllMode : groupsAllMode;
 
   return (
     <div className="dashboard-card dashboard-filter-panel action-buttons-container">
@@ -58,7 +72,7 @@ export function DashboardFilterPanel({
                 <div className="user-gc-segment-group" role="group" aria-label={i18n.groupId}>
                   <button
                     type="button"
-                    className={`user-gc-segment${groupsAllMode ? " is-on" : ""}`}
+                    className={`user-gc-segment${paintedGroupsAll ? " is-on" : ""}`}
                     onClick={() => void onPickAllGroups?.()}
                   >
                     {i18n.all}
@@ -67,7 +81,9 @@ export function DashboardFilterPanel({
                     <button
                       key={gid}
                       type="button"
-                      className={`user-gc-segment${selectedGroup === gid && !groupsAllMode ? " is-on" : ""}`}
+                      className={`user-gc-segment${
+                        paintedSelectedGroup === gid && !paintedGroupsAll ? " is-on" : ""
+                      }`}
                       onClick={() => void onPickGroup(gid)}
                     >
                       {gid}
@@ -85,7 +101,7 @@ export function DashboardFilterPanel({
                   {showCompanyAll && (
                     <button
                       type="button"
-                      className={`user-gc-segment${groupAllMode ? " is-on" : ""}`}
+                      className={`user-gc-segment${paintedGroupAll ? " is-on" : ""}`}
                       onClick={() => void onPickAllInGroup()}
                     >
                       {i18n.all}
@@ -93,11 +109,13 @@ export function DashboardFilterPanel({
                   )}
                   {companiesForPicker.map((c) => {
                     const id = parseInt(c.id, 10);
-                    const active = groupAllMode
+                    const paintedId =
+                      displayCompanyId !== undefined ? displayCompanyId : companyId;
+                    const active = paintedGroupAll
                       ? false
                       : mergedSubsetIds && mergedSubsetIds.length > 1
                         ? mergedSubsetIds.includes(id)
-                        : parseInt(companyId, 10) === id;
+                        : parseInt(paintedId, 10) === id;
                     return (
                       <button
                         key={c.id}
@@ -152,4 +170,4 @@ export function DashboardFilterPanel({
       )}
     </div>
   );
-}
+});

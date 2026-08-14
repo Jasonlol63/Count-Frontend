@@ -80,7 +80,7 @@ export function mapBatchCurrencies(data, currencySortOrderRef) {
 }
 
 /** 单账户单币种：与 Payment History 同口径取区间末 Balance */
-export async function fetchAccountHistoryClosingBalance(accountId, currency, fromDate, toDate, companyId, signal) {
+export async function fetchAccountHistoryClosingBalance(accountId, currency, fromDate, toDate, companyId, groupId, signal) {
   const cu = String(currency || "")
     .trim()
     .toUpperCase();
@@ -88,7 +88,7 @@ export async function fetchAccountHistoryClosingBalance(accountId, currency, fro
     account_id: String(accountId),
     date_from: fromDate,
     date_to: toDate,
-    company_id: String(companyId),
+    ...(groupId ? { group_id: groupId } : { company_id: String(companyId) }),
     currency: cu,
   });
   const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params}&_t=${Date.now()}`), {

@@ -1,6 +1,5 @@
 import React from "react";
 import ProcessModalPortal, { processModalBackdropStyle } from "../../../components/ProcessModalPortal.jsx";
-import { sanitizeCapitalLettersOnly } from "../../../utils/input/sanitizeCapitalLettersOnly.js";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
 
 function TrashRemoveIcon() {
@@ -54,7 +53,8 @@ export default function CountrySelectionModal({
                       id="new_country_name"
                       placeholder={t("newCountryNamePlaceholder")}
                       value={newCountryName}
-                      onChange={(e) => setNewCountryName(sanitizeCapitalLettersOnly(e.target.value))}
+                      onChange={(e) => setNewCountryName(e.target.value)}
+                      style={{ textTransform: "uppercase" }}
                     />
                     <button type="submit" className="btn btn-save country-selection-add-btn" disabled={addingCountry}>
                       {addingCountry ? t("saving") : t("add")}
@@ -69,12 +69,13 @@ export default function CountrySelectionModal({
                   id="countrySearch"
                   placeholder={t("searchCountriesShort")}
                   value={countrySearch}
-                  onChange={(e) => setCountrySearch(e.target.value.toUpperCase())}
+                  onChange={(e) => setCountrySearch(e.target.value)}
+                  style={{ textTransform: "uppercase" }}
                 />
               </div>
               <div className="country-list" id="existingCountries">
                 {availableCountries
-                  .filter((c) => !countrySearch.trim() || c.toUpperCase().includes(countrySearch.trim()))
+                  .filter((c) => !countrySearch.trim() || c.toUpperCase().includes(countrySearch.trim().toUpperCase()))
                   .map((c) => (
                     <div
                       key={c}

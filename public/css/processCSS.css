@@ -47,7 +47,7 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .contain
 body.process-page:not(.process-page--bank):not(.process-page--show-all) .content {
     flex: 1 1 auto !important;
     min-height: 0 !important;
-    height: auto !important;
+    /* height locked by globals.css (Acc standard one-viewport); keep flex + scroll */
     max-height: none !important;
     overflow-y: auto !important;
     display: flex !important;
@@ -249,8 +249,11 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .content
 .process-page .action-buttons-container {
     margin-top: clamp(12px, 1.04vw, 20px);
     background-color: #ffffff;
+    border: none;
     border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-card, 0 2px 8px rgba(0, 0, 0, 0.1));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
@@ -266,6 +269,18 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .content
     align-items: center;
     gap: 12px;
     flex: 0 0 auto;
+}
+
+/* Acc standard：矮屏压缩顶栏 padding（Account 同规则），Games / Bank 一致 */
+@media (max-height: 820px) {
+    body.process-page:not(.process-page--bank) .action-buttons,
+    body.process-page.process-page--bank .action-buttons {
+        padding: 6px 14px;
+    }
+
+    body.process-page:not(.process-page--bank) .action-buttons-container .user-gc-inline-panel {
+        padding: 8px 20px 12px;
+    }
 }
 
 /* Games Process toolbar：对齐 Account / User List 字号密度 */
@@ -1629,13 +1644,16 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .b
 
 /* action-buttons-container 和 action-buttons 不再 override，与 Games 完全统一（margin-top: 20px, padding: 10px 20px）使 separator line 正确显示 */
 
-/* Games + Bank Process：白卡區 segmented 篩選（標籤↔膠囊、膠囊內距勿過緊）；底邊加厚使最後一行（Currency）下至白卡邊緣與各行 row-gap 節奏一致 */
+/* Games + Bank Process：白卡區 segmented 篩選 — Acc standard padding */
 .process-page .action-buttons-container .user-gc-inline-panel {
-    /* 上下留白接近，避免「控制列到 GroupID」空一大块、Currency 底下过紧 */
     flex: 0 0 auto;
-    padding: 12px 18px 14px 18px;
+    padding: 12px 20px 14px;
     column-gap: var(--user-gc-inline-column-gap, 4px);
     row-gap: var(--user-gc-inline-row-gap, 4px);
+}
+
+body.process-page:not(.process-page--bank):not(.process-page--show-all) .action-buttons-container .user-gc-inline-panel {
+    padding: 12px 18px 14px 18px;
 }
 
 body.process-page .action-buttons-container .user-gc-inline-panel .user-gc-inline-label {
@@ -2661,9 +2679,8 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary
     width: clamp(150px, 17vw, 240px);
 }
 
-/* Bank 搜索：供应商/卡号大小写敏感，不强制大写 */
 body.process-page.process-page--bank .search-container.userlist-search-bar .userlist-search-input {
-    text-transform: none !important;
+    text-transform: uppercase !important;
 }
 
 /* Bank 旧式 search-input（无 userlist 外壳时） */
@@ -2755,13 +2772,13 @@ body.process-page.process-page--bank .search-container.userlist-search-bar .user
 }
 
 .process-page .table-header .header-item {
+    /* Games 表头见 .games-process-table-header（Acc：padding 0）；此处仅非 Games */
     padding: 2px 4px;
-    /* Default CSS padding, overridden by global-13inch on small screens */
     white-space: nowrap;
     min-width: 0;
 }
 
-.process-page .table-header .header-item.header-item--with-sort-icon {
+.process-page .table-header:not(.games-process-table-header) .header-item.header-item--with-sort-icon {
     display: inline-flex;
     flex-direction: row;
     align-items: center;
@@ -2848,7 +2865,7 @@ body.process-page.process-page--show-all:not(.process-page--bank) .process-cards
 body.process-page.process-page--show-all:not(.process-page--bank) .process-card.games-process-row {
     flex: none !important;
     flex-shrink: 0 !important;
-    min-height: 26px;
+    min-height: var(--games-process-row-min-height, 30px);
     align-items: center;
 }
 
@@ -4259,6 +4276,11 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .b
     transform: translateY(-1px);
 }
 
+/* Games 分页行：勿 translateY，避免末行文字贴底边时看起来像被裁切 */
+.process-page:not(.process-page--bank) .process-card.games-process-row:hover {
+    transform: none;
+}
+
 .process-page .card-item {
     font-size: var(--text-medium) !important;
     font-weight: bold;
@@ -4543,7 +4565,7 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .b
     font-family: var(--font-heading-page);
 }
 
-.process-page .form-group input,
+.process-page .form-group input:not([type="checkbox"]),
 .process-page .form-group select {
     width: 100%;
     padding: 12px 16px;
@@ -4557,7 +4579,7 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .b
     font-family: inherit;
 }
 
-.process-page .form-group input:focus,
+.process-page .form-group input:not([type="checkbox"]):focus,
 .process-page .form-group select:focus {
     outline: none;
     border-color: #007AFF;
@@ -4728,13 +4750,36 @@ body.ec-auth-shell.process-page.process-page--bank .bank-process-table-region .b
     margin-top: 0 !important;
 }
 
+/* Acc standard：首块顶距需盖过 globals 的 --layout-page-first-block-mt */
+body.process-page:not(.process-page--bank):not(.process-page--show-all) .action-buttons-container {
+    margin-top: clamp(12px, 1.04vw, 20px) !important;
+    flex-shrink: 0;
+}
+
 .process-page:not(.process-page--bank) .action-buttons-container {
     margin-top: clamp(12px, 1.04vw, 20px);
     flex-shrink: 0;
 }
 
+/* Acc standard：搜索条宽度，避免顶栏与表格预算漂移 */
+body.process-page:not(.process-page--bank) .action-controls-row .search-container.userlist-search-bar {
+    width: clamp(150px, 17vw, 240px);
+    max-width: clamp(150px, 17vw, 240px);
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+body.process-page:not(.process-page--bank) .action-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+}
+
 body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-table-wrapper {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -4763,7 +4808,7 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .paginat
 }
 
 body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards {
-    flex: 1 1 auto;
+    flex: 1;
     min-height: 0;
     max-height: none;
     overflow-x: visible;
@@ -4776,7 +4821,8 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .process
 body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards.process-cards--paged-fill {
     display: grid;
     grid-template-columns: 1fr;
-    grid-template-rows: repeat(var(--games-process-page-size, 15), minmax(0, 1fr));
+    /* 轨道不得低于行高下限，避免末行被压扁后 @ 等 descender 被 overflow:hidden 裁切 */
+    grid-template-rows: repeat(var(--games-process-page-size, 15), minmax(var(--games-process-row-min-height, 30px), 1fr));
     flex: 1 1 0;
     min-height: 0;
     align-content: stretch;
@@ -4785,10 +4831,21 @@ body.process-page:not(.process-page--bank):not(.process-page--show-all) .process
 
 body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards.process-cards--paged-fill .games-process-row {
     flex: unset;
+    min-height: var(--games-process-row-min-height, 30px);
+    height: 100%;
+    /* stretch 单元格占满行高；文字在 .card-item 内居中，避免行被压矮时 overflow:hidden 裁 @ */
+    align-items: stretch;
+    align-self: stretch;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-cards.process-cards--paged-fill .games-process-row .card-item {
+    align-self: stretch;
     min-height: 0;
     height: 100%;
     align-items: center;
-    align-self: stretch;
+    box-sizing: border-box;
 }
 
 body.process-page:not(.process-page--bank):not(.process-page--show-all) .process-card {
@@ -4858,7 +4915,7 @@ body.process-page.process-page--show-all:not(.process-page--bank) .pagination-co
  */
 .process-page:not(.process-page--bank) .games-process-table {
     --list-table-min-width: 980px;
-    --games-process-row-min-height: 26px;
+    --games-process-row-min-height: 30px;
     --games-process-pill-height: 20px;
     --games-process-grid-cols:
         38px
@@ -4888,29 +4945,67 @@ body.process-page.process-page--show-all:not(.process-page--bank) .pagination-co
     box-sizing: border-box;
 }
 
+/* Acc standard：蓝条高度 = --table-header-height + 1.6rem 字，格内无额外 padding/line-height */
 .process-page:not(.process-page--bank) .games-process-table-header {
-    padding: var(--table-header-height);
+    padding: var(--table-header-height) !important;
+    gap: 8px !important;
+    font-size: 1.6rem !important;
+    font-weight: bold;
+    line-height: normal;
+    align-items: center;
+    min-height: 0;
+    box-sizing: border-box;
 }
 
-.process-page:not(.process-page--bank) .games-process-table-header .header-item.header-item--with-sort-icon {
+.process-page:not(.process-page--bank) .games-process-table-header .header-item {
+    padding: 0 !important;
+    margin: 0;
+    line-height: normal;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+}
+
+/* Acc .account-header-sortable：flex + gap 5px + padding 0 + line-height 默认 */
+.process-page:not(.process-page--bank) .games-process-table-header .header-item.header-item--with-sort-icon,
+.process-page:not(.process-page--bank) .games-process-table-header .header-item.header-sortable {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 5px;
+    padding: 0 !important;
     overflow: visible;
+    line-height: normal;
 }
 
 .process-page:not(.process-page--bank) .games-process-table-header .header-item.header-item--with-sort-icon .header-item__label {
     overflow: visible;
     text-overflow: clip;
     flex-shrink: 0;
+    white-space: nowrap;
+    line-height: normal;
+}
+
+.process-page:not(.process-page--bank) .games-process-table-header .header-item.header-item--with-sort-icon .account-sort-icon {
+    flex: 0 0 auto;
+    align-self: center;
+    line-height: 0;
+    width: 8px;
+    height: 12px;
 }
 
 .process-page:not(.process-page--bank) .games-process-row {
     padding: 0 22px;
 }
 
+/* Acc 密度：1.2 兼顾可读与 @ 等 descender，避免 1.3 + overflow:hidden 裁切 */
 body.process-page:not(.process-page--bank):not(.process-page--show-all) .games-process-row .card-item,
 body.ec-auth-shell.process-page:not(.process-page--bank):not(.process-page--show-all) .games-process-row .card-item {
     font-size: 1.4rem !important;
     font-weight: bold !important;
-    line-height: 1.1 !important;
+    line-height: 1.2 !important;
     letter-spacing: 0 !important;
 }
 
@@ -5248,7 +5343,6 @@ body.process-page > .process-modal {
 .process-page .process-form.add-grid .add-col > .process-form-section:not(:last-child),
 #addModal .process-form.add-grid .add-col > .process-form-section:not(:last-child),
 #editModal .process-form.add-grid .add-col > .process-form-section:not(:last-child) {
-    margin-bottom: 0.5rem;
     padding-bottom: 0;
     border-bottom: none;
 }
@@ -5294,7 +5388,7 @@ body.process-page > .process-modal {
     letter-spacing: 0.015em;
 }
 
-.process-page .process-form .form-group input:not(.dc-remove-word-chip-input__field),
+.process-page .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]),
 .process-page .process-form .form-group select,
 .process-page .process-form .form-group textarea {
     border-color: #dbe3ee;
@@ -5307,7 +5401,7 @@ body.process-page > .process-modal {
     box-sizing: border-box;
 }
 
-.process-page .process-form .form-group input:not(.dc-remove-word-chip-input__field):focus,
+.process-page .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]):focus,
 .process-page .process-form .form-group select:focus,
 .process-page .process-form .form-group textarea:focus {
     border-color: #0D60FF;
@@ -5447,7 +5541,6 @@ body.process-page > .process-modal {
     font-weight: 600 !important;
     font-family: var(--font-heading-page) !important;
     letter-spacing: 0.015em !important;
-    margin-bottom: 0.5rem !important;
 }
 
 .process-page #editModal .process-form .form-row {
@@ -5938,6 +6031,75 @@ body.process-page > .process-modal {
     font-size: 0.875rem;
     font-weight: normal;
     cursor: pointer;
+}
+
+/* Enable Save Draft row: field-name label + small toggle switch, sized like a field label — not a giant control. */
+.process-form-modal .dc-save-draft-row,
+#addModal .modal-content.process-form-modal .dc-save-draft-row,
+#editModal .modal-content.process-form-modal .dc-save-draft-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0.625rem;
+}
+
+.process-form-modal .dc-save-draft-row__label,
+#addModal .modal-content.process-form-modal .dc-save-draft-row__label,
+#editModal .modal-content.process-form-modal .dc-save-draft-row__label {
+    display: inline !important;
+    margin: 0 !important;
+    font-size: var(--process-form-modal-label-size, var(--text-medium)) !important;
+    font-weight: var(--font-weight-semibold, 600) !important;
+    color: #374151;
+    letter-spacing: normal !important;
+    cursor: default;
+}
+
+/* Pin switch size: leftover page CSS (e.g. datacapture.css .process-form
+   .form-group label { width: clamp(80px…120px) }) and #editModal …
+   form-group label { display:block !important } otherwise stretch this
+   <label class="toggle-switch"> after SPA navigation. */
+.process-form-modal .dc-save-draft-row .toggle-switch,
+#addModal .modal-content.process-form-modal .dc-save-draft-row .toggle-switch,
+#editModal .modal-content.process-form-modal .dc-save-draft-row .toggle-switch {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
+    width: clamp(28px, 2.08vw, 38px) !important;
+    max-width: clamp(28px, 2.08vw, 38px) !important;
+    height: clamp(15px, 1.15vw, 21px) !important;
+    margin: 0 !important;
+    cursor: pointer;
+}
+
+/* global-13inch.css forces body.ec-auth-shell input[type="checkbox"] to 16x16
+   !important on laptop-width viewports, which un-hides the switch's real
+   checkbox (normally opacity:0/width:0/height:0) and makes it render as a
+   long shape next to the pill. Out-specificity that rule for this switch only —
+   global-13inch.css itself is left alone since other checkboxes rely on it. */
+.process-form-modal .dc-save-draft-row .toggle-switch input[type="checkbox"],
+#addModal .modal-content.process-form-modal .dc-save-draft-row .toggle-switch input[type="checkbox"],
+#editModal .modal-content.process-form-modal .dc-save-draft-row .toggle-switch input[type="checkbox"] {
+    position: absolute !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    margin: 0 !important;
+}
+
+/* userlist.css's .toggle-slider ships a 5px downward offset (top:5px; bottom:-5px)
+   tuned for its own Read Only row — cancel it here so the switch centers on the
+   label's text line instead of sitting visibly lower. */
+.dc-save-draft-row .toggle-slider {
+    top: 0;
+    bottom: 0;
+}
+
+.dc-save-draft-row .toggle-switch input:checked + .toggle-slider {
+    top: 0;
+    bottom: 0;
 }
 
 .process-page textarea {
@@ -7722,7 +7884,7 @@ body.ec-auth-shell #confirmBankResendModal .bank-resend-modal-actions .process-b
     line-height: 1.3;
 }
 
-.process-page #addModal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
+.process-page #addModal .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]),
 .process-page #addModal .process-form .form-group select,
 .process-page #addModal .process-form .form-group textarea {
     font-size: var(--text-small) !important;
@@ -7872,7 +8034,7 @@ body.ec-auth-shell #confirmBankResendModal .bank-resend-modal-actions .process-b
     display: block !important;
 }
 
-#addModal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
+#addModal .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]),
 #addModal .process-form .form-group select,
 #addModal .process-form .form-group textarea {
     font-size: var(--text-small) !important;
@@ -8016,7 +8178,7 @@ body.ec-auth-shell #confirmBankResendModal .bank-resend-modal-actions .process-b
     margin-bottom: 0.45rem !important;
 }
 
-#editModal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
+#editModal .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]),
 #editModal .process-form .form-group select,
 #editModal .process-form .form-group textarea {
     font-size: var(--text-small) !important;
@@ -8272,10 +8434,10 @@ body.process-page.process-page--bank.process-page--bank-show-all .process-table-
 }
 
 /* Edit Process 表单控件与 Account add 一致 */
-.process-page #editModal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
+.process-page #editModal .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]),
 .process-page #editModal .process-form .form-group select,
 .process-page #editModal .process-form .form-group textarea,
-#editModal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
+#editModal .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]),
 #editModal .process-form .form-group select,
 #editModal .process-form .form-group textarea {
     font-size: var(--text-small) !important;
@@ -8441,7 +8603,6 @@ body.process-page > #editModal.modal.show > .modal-content.process-form-modal,
 .process-form-modal .process-form.add-grid .add-col > .process-form-section:not(:last-child),
 #addModal .modal-content.process-form-modal .process-form.add-grid .add-col > .process-form-section:not(:last-child),
 #editModal .modal-content.process-form-modal .process-form.add-grid .add-col > .process-form-section:not(:last-child) {
-    margin-bottom: calc(var(--space-gap, 0.75rem) * 0.85);
     padding-bottom: 0;
     border-bottom: none;
 }
@@ -8494,13 +8655,13 @@ body.process-page > #editModal.modal.show > .modal-content.process-form-modal,
     text-transform: uppercase;
 }
 
-.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
+.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]),
 .process-form-modal .process-form .form-group select,
 .process-form-modal .process-form .form-group textarea,
-#addModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
+#addModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]),
 #addModal .modal-content.process-form-modal .process-form .form-group select,
 #addModal .modal-content.process-form-modal .process-form .form-group textarea,
-#editModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
+#editModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]),
 #editModal .modal-content.process-form-modal .process-form .form-group select,
 #editModal .modal-content.process-form-modal .process-form .form-group textarea {
     font-size: var(--process-form-modal-control-size, var(--text-small)) !important;
@@ -8514,10 +8675,10 @@ body.process-page > #editModal.modal.show > .modal-content.process-form-modal,
     color: var(--color-body-strong, #1f2937);
 }
 
-.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field):focus,
+.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]):focus,
 .process-form-modal .process-form .form-group select:focus,
 .process-form-modal .process-form .form-group textarea:focus,
-#addModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field):focus,
+#addModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]):focus,
 #addModal .modal-content.process-form-modal .process-form .form-group textarea:focus {
     border-color: var(--color-primary, #0d60ff) !important;
     outline: none;
@@ -8792,7 +8953,7 @@ body.process-page > #editModal.modal > .modal-content.process-form-modal,
     color: var(--color-body-strong, #0f172a) !important;
 }
 
-#editModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field),
+#editModal .modal-content.process-form-modal .process-form .form-group input:not(.dc-remove-word-chip-input__field):not([type="checkbox"]),
 #editModal .modal-content.process-form-modal .process-form .form-group select,
 #editModal .modal-content.process-form-modal .process-form .form-group textarea,
 #editModal .modal-content.process-form-modal .custom-select-button,

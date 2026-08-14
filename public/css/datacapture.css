@@ -920,7 +920,9 @@ body.datacapture-page .process-form .dc-form-row-full .form-group {
     flex-shrink: 0;
 }
 
-.process-form .form-group label {
+/* Scoped to datacapture-page so SPA leftovers don't stretch Process modal
+   labels (e.g. Enable Save Draft toggle-switch). */
+body.datacapture-page .process-form .form-group label {
     display: block;
     margin-bottom: 0;
     font-size: clamp(9px, 0.94vw, 18px);
@@ -2649,16 +2651,16 @@ body.datacapture-page .excel-table-container--group-only {
 
 @media (max-width: 3000px) {
 
-    .process-form .form-group label {
+    body.datacapture-page .process-form .form-group label {
         font-size: clamp(9px, 0.85vw, 14px);
     }
 
-    .process-form .form-group input,
-    .process-form .form-group select {
+    body.datacapture-page .process-form .form-group input,
+    body.datacapture-page .process-form .form-group select {
         font-size: clamp(9px, 0.85vw, 14px);
     }
 
-    .process-form .form-group {
+    body.datacapture-page .process-form .form-group {
         margin-bottom: clamp(6px, 0.63vw, 12px);
     }
 
@@ -2669,16 +2671,16 @@ body.datacapture-page .excel-table-container--group-only {
 
 @media (max-width: 1400px) {
 
-    .process-form .form-group label {
+    body.datacapture-page .process-form .form-group label {
         font-size: clamp(9px, 0.85vw, 14px);
     }
 
-    .process-form .form-group input,
-    .process-form .form-group select {
+    body.datacapture-page .process-form .form-group input,
+    body.datacapture-page .process-form .form-group select {
         font-size: clamp(9px, 0.85vw, 14px);
     }
 
-    .process-form .form-group {
+    body.datacapture-page .process-form .form-group {
         margin-bottom: clamp(5px, 0.47vw, 7px);
     }
 
@@ -2687,16 +2689,16 @@ body.datacapture-page .excel-table-container--group-only {
 
 @media (max-width: 1200px) {
 
-    .process-form .form-group label {
+    body.datacapture-page .process-form .form-group label {
         font-size: clamp(9px, 0.85vw, 14px);
     }
 
-    .process-form .form-group input,
-    .process-form .form-group select {
+    body.datacapture-page .process-form .form-group input,
+    body.datacapture-page .process-form .form-group select {
         font-size: clamp(9px, 0.85vw, 14px);
     }
 
-    .process-form .form-group {
+    body.datacapture-page .process-form .form-group {
         margin-bottom: 4px;
     }
 

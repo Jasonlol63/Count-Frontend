@@ -66,7 +66,7 @@ export default function RemoveWordChipInput({
       spellCheck={false}
       onChange={(event) => {
         if (disabled) return;
-        onChange?.(event.target.value.toUpperCase());
+        onChange?.(event.target.value);
       }}
       onBlur={(event) => commitNormalized(event.target.value)}
       style={{ textTransform: "uppercase" }}

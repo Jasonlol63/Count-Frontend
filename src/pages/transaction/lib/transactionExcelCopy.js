@@ -1,8 +1,18 @@
 /**
  * Excel 复制保留表格样式（对齐 js/transaction.js initExcelCopyWithStyles）。
  * 仅处理 .transaction-table / .transaction-summary-table 内选中区域。
+ * 跳过 display:none 单元格（如未开启 Show Name 时的 Name 列），避免粘贴进 Excel。
  */
 export function installTransactionExcelCopy() {
+  const isCellVisible = (cell) => {
+    if (!cell) return false;
+    const style = window.getComputedStyle(cell);
+    return style.display !== "none" && style.visibility !== "hidden";
+  };
+
+  const visibleCellsInRow = (row) =>
+    Array.from(row.querySelectorAll("td, th")).filter(isCellVisible);
+
   const onCopy = (e) => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
@@ -75,7 +85,7 @@ export function installTransactionExcelCopy() {
 
     selectedRows.forEach((row) => {
       html += "<tr>";
-      const cells = row.querySelectorAll("td, th");
+      const cells = visibleCellsInRow(row);
       cells.forEach((cell) => {
         const isHeader = cell.tagName === "TH";
         const isFooter = row.closest("tfoot") !== null;
@@ -99,7 +109,7 @@ export function installTransactionExcelCopy() {
             "transaction-role-expenses",
             "transaction-role-company",
             "transaction-role-staff",
-            "transaction-role-supplier",
+            "transaction-role-upline",
             "transaction-role-agent",
             "transaction-role-member",
             "transaction-role-none",
@@ -145,10 +155,8 @@ export function installTransactionExcelCopy() {
 
     let text = "";
     selectedRows.forEach((row, rowIndex) => {
-      const cells = row.querySelectorAll("td, th");
-      const rowText = Array.from(cells)
-        .map((cell) => cell.textContent || "")
-        .join("\t");
+      const cells = visibleCellsInRow(row);
+      const rowText = cells.map((cell) => cell.textContent || "").join("\t");
       text += rowText;
       if (rowIndex < selectedRows.length - 1) text += "\n";
     });

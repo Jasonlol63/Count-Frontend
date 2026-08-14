@@ -32,6 +32,12 @@ export function invalidateOwnershipCompaniesCache(monthKey = getOwnershipCurrent
   inflight.delete(key);
 }
 
+/** Drop every month's ownership company warm (shell realtime). */
+export function clearAllOwnershipCompaniesCache() {
+  cache.clear();
+  inflight.clear();
+}
+
 export async function prefetchOwnershipCompanies(
   monthKey = getOwnershipCurrentMonthKey(),
   { force = false } = {},

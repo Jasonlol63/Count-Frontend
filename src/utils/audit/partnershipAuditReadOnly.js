@@ -1,8 +1,8 @@
 import { useMemo } from "react"
 
 /**
- * Partnership / Audit 且 read_only 时禁止前端发起写操作（与 SessionUser.read_only 一致）。
- * @param {object|null|undefined} sessionMe auth/current-user data
+ * Partnership / Audit 且 read_only 时禁止前端发起写操作（与 current_user_api.read_only 一致）。
+ * @param {object|null|undefined} sessionMe current_user_api.data
  * @returns {boolean}
  */
 export function isPartnershipAuditReadOnlyLocked(sessionMe) {

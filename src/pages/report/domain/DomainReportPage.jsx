@@ -2,6 +2,7 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 import { flushSync } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { spaPath } from "../../../utils/routing/pageRoutes.js";
+import { canShowReportInSidebar } from "../../../utils/auth/sidebarPermissions.js";
 import {
   getCachedOwnerCompanies,
   DASHBOARD_GROUP_FILTER_KEY,
@@ -17,6 +18,7 @@ import {
   resolveInitialSelectedGroupFromSession,
   sortedUniqueGroupIds,
   fetchOwnerCompaniesAll,
+  fetchOwnerGroupsAll,
 } from "../../../utils/company/sharedCompanyFilter.js";
 import {
   resolveReportCompanyWhenClosingGroup,
@@ -46,6 +48,8 @@ import { getReportText, REPORT_I18N } from "../../../translateFile/pages/reportT
 import DomainReportFilters from "./DomainReportFilters.jsx";
 import DomainReportTable from "./DomainReportTable.jsx";
 import { reportToastMaintenanceVariant } from "../shared/reportAmountFormat.js";
+import { useRealtimeDomain } from "../../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS } from "../../../lib/realtime/realtimeEvents.js";
 import {
   buildReportSnapshotKey,
   getReportSnapshot,
@@ -59,7 +63,6 @@ import {
   resolveDomainReportScope,
 } from "./domainReportScope.js";
 import { useAuthSession } from "../../../context/AuthSessionContext.jsx";
-import { sessionHasTenantGame } from "../../../utils/auth/sessionTenant.js";
 import { canUseGroupOnlyMode } from "../../../utils/company/loginScope.js";
 import { syncCompanySessionInBackground } from "../../../utils/company/companySessionSwitchCore.js";
 
@@ -181,10 +184,7 @@ export default function DomainReportPage() {
     pageBootOnceRef.current = true;
 
     const u = me;
-    const perms = Array.isArray(u.permissions) ? u.permissions : [];
-    const hasFull = perms.length === 0;
-    const canReport = hasFull || perms.includes("report");
-    if (!canReport || !sessionHasTenantGame(u)) {
+    if (!canShowReportInSidebar(u)) {
       navigate(spaPath("dashboard"), { replace: true });
       return;
     }
@@ -193,6 +193,7 @@ export default function DomainReportPage() {
     (async () => {
       try {
         const rows = await fetchOwnerCompaniesAll({ me: u });
+        await fetchOwnerGroupsAll(u).catch(() => null);
         if (cancelled) return;
         setCompanies(rows);
 
@@ -288,12 +289,13 @@ export default function DomainReportPage() {
       const comp = companies.find(c => Number(c.id) === Number(compId));
       const perms = await fetchCompanyPermissions(comp?.company_id || "");
       if (isBankOnlyCategoryCompany(perms)) {
-        window.location.assign(new URL(spaPath("process-list"), window.location.origin).href);
+        // Bank-only companies use Bank Process UI, not Games process-list.
+        navigate(spaPath("bank-process-list"), { replace: true });
       }
     } catch (err) {
       console.error("Bank only check error:", err);
     }
-  }, [companies]);
+  }, [companies, navigate]);
 
   const handleClearCompany = useCallback(
     (groupForScope) => {
@@ -376,16 +378,31 @@ export default function DomainReportPage() {
     preferredCompanyId: companyId,
   });
 
+  const scopeCompanyId = useMemo(() => {
+    if (companyId == null) return null;
+    const cid = Number(companyId);
+    if (!Number.isFinite(cid) || cid <= 0) return null;
+    if (!companyButtons.some((c) => Number(c.id) === cid)) return null;
+    return cid;
+  }, [companyId, companyButtons]);
+
+  useEffect(() => {
+    if (companyId == null) return;
+    if (scopeCompanyId != null) return;
+    handleClearCompany(selectedGroup);
+  }, [companyId, scopeCompanyId, selectedGroup, handleClearCompany]);
+
   const reportScope = useMemo(
     () =>
       resolveDomainReportScope({
         companies,
         selectedGroup,
-        companyId,
+        companyId: scopeCompanyId,
         groupsAllMode,
         groupAllMode,
+        me,
       }),
-    [companies, selectedGroup, companyId, groupsAllMode, groupAllMode],
+    [companies, selectedGroup, scopeCompanyId, groupsAllMode, groupAllMode, me],
   );
 
   const isGroupScope = domainReportUsesSalaryBonusProcesses(reportScope);
@@ -432,6 +449,10 @@ export default function DomainReportPage() {
       }
     }
   }, [reportScope, dateFrom, dateTo, reportParams, beginReportFetch, isReportFetchCurrent, t, notify]);
+
+  useRealtimeDomain(REALTIME_DOMAINS.LEDGER, () => {
+    void loadReport();
+  }, { enabled: domainReportScopeIsReady(reportScope) && metaReady });
 
   const loadMetaData = useCallback(async () => {
     if (!domainReportScopeIsReady(reportScope)) return;
@@ -521,8 +542,8 @@ export default function DomainReportPage() {
     <div className="container">
       <div className="content">
         <DomainReportFilters
-          companyId={companyId}
-          highlightCompanyId={companyId}
+          companyId={scopeCompanyId}
+          highlightCompanyId={scopeCompanyId}
           onSwitchCompany={handlePickCompany}
           onClearCompany={handleClearCompany}
           allowClearCompany={allowClearCompany}

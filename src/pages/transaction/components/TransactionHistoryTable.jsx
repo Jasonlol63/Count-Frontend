@@ -90,8 +90,7 @@ export default function TransactionHistoryTable({ rows, histMoney, histBalanceMo
         <tbody id="modal_tbody">
           {rows.map((r, idx) => {
             const isBf = r.row_type === "bf";
-            const idProductDisplay =
-              r.product || (r.is_bank_process_transaction ? r.card_owner : "") || "-";
+            const idProductDisplay = r.is_bank_process_transaction ? r.card_owner || "-" : r.product || "-";
             const createdRaw = r.created_by;
             const createdByDisplay =
               createdRaw === null ||

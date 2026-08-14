@@ -40,7 +40,7 @@ function expirationStatusFromDaysLeft(daysLeft) {
   return "normal";
 }
 
-/** Mirror auth/current-user sidebar expiry fields for optimistic UI updates. */
+/** Mirror `current_user_api.php` sidebar expiry fields for optimistic UI updates. */
 export function buildSidebarExpirationFields(expirationDate) {
   if (!expirationDate) {
     return {

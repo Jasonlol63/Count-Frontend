@@ -1,22 +1,40 @@
 /** Text transforms applied to captured grid before summary rows are built. */
 
+import {
+  isExactRemoveWordChip,
+  parseRemoveWordChips,
+  removeWordChipBody,
+} from "../../../lib/removeWordChips.js";
+
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function applyTextTransformations(text, removeWord, replaceWordFrom, replaceWordTo) {
+/**
+ * Default: contain (substring).
+ * Exact (`=WORD`): ASCII alnum/`_` neighbors block a match so short codes
+ * (XX123) do not carve into longer ones (XX1234). CJK neighbors do not block.
+ */
+function buildRemoveWordRegex(word, exact) {
+  if (exact) {
+    return new RegExp(`(?<![A-Za-z0-9_])${escapeRegex(word)}(?![A-Za-z0-9_])`, "gi");
+  }
+  return new RegExp(escapeRegex(word), "gi");
+}
+
+export function applyTextTransformations(text, removeWord, replaceWordFrom, replaceWordTo) {
   if (!text || typeof text !== "string") return text;
 
   let result = text;
 
   if (removeWord && removeWord.trim() !== "") {
-    const wordsToRemove = removeWord
-      .split(/[,;]+/)
-      .map((word) => word.trim())
-      .filter((word) => word !== "");
-    wordsToRemove.forEach((word) => {
-      const removeRegex = new RegExp(escapeRegex(word), "gi");
-      result = result.replace(removeRegex, "");
+    const wordsToRemove = parseRemoveWordChips(removeWord).sort(
+      (a, b) => removeWordChipBody(b).length - removeWordChipBody(a).length,
+    );
+    wordsToRemove.forEach((chip) => {
+      const word = removeWordChipBody(chip);
+      if (!word) return;
+      result = result.replace(buildRemoveWordRegex(word, isExactRemoveWordChip(chip)), "");
     });
   }
 
@@ -55,7 +73,7 @@ export function parseSummaryProcessMeta(processData) {
     return { processId: null, processCode: null, processData: null };
   }
 
-  let processCodeRaw = processData.processCode ?? processData.process_code ?? "";
+  const processCodeRaw = processData.processCode ?? processData.process_code ?? "";
   let processCode =
     typeof processCodeRaw === "string" && processCodeRaw.trim() !== ""
       ? processCodeRaw.trim().toUpperCase()
@@ -66,24 +84,20 @@ export function parseSummaryProcessMeta(processData) {
   const parsed = rawProcess != null ? Number.parseInt(String(rawProcess), 10) : Number.NaN;
   const processId = Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 
-  // Bank four-code session may keep code in processName / string process id.
-  if (!processCode) {
-    const fromName = String(processData.processName || "").trim().toUpperCase();
-    if (["PROFIT", "SALARY", "COMMISSION", "BONUS"].includes(fromName)) {
-      processCode = fromName;
-    } else if (typeof rawProcess === "string") {
-      const fromRaw = rawProcess.trim().toUpperCase();
-      if (["PROFIT", "SALARY", "COMMISSION", "BONUS"].includes(fromRaw)) {
-        processCode = fromRaw;
-      }
-    }
+  if (
+    !processCode &&
+    rawProcess != null &&
+    typeof rawProcess === "string" &&
+    !Number.isFinite(Number(rawProcess))
+  ) {
+    processCode = String(rawProcess).trim().toUpperCase() || null;
   }
 
-  const normalized = { ...processData, processCode };
-  if (processId != null) {
-    normalized.process = processId;
-  } else if (rawProcess != null && !Number.isFinite(Number(rawProcess))) {
-    normalized.process = null;
+  const normalized = { ...processData };
+  if (processId != null) normalized.process = processId;
+  if (processCode) {
+    normalized.processCode = processCode;
+    if (processId == null) normalized.process = processCode;
   }
 
   return { processId, processCode, processData: normalized };
@@ -101,15 +115,4 @@ export function formatSummaryProcessCurrency(processData) {
   if (!processData) return "-";
   const value = processData.currencyName || processData.currency;
   return value != null && String(value).trim() !== "" ? String(value).trim() : "-";
-}
-
-/** Summary header: prefer display label, then business code, then numeric process pk. */
-export function formatSummaryProcessLabel(processData) {
-  if (!processData || typeof processData !== "object") return "-";
-  const name = String(processData.processName || "").trim();
-  if (name) return name;
-  const code = String(processData.processCode ?? processData.process_code ?? "").trim();
-  if (code) return code;
-  const pk = processData.process ?? processData.processId ?? processData.process_id;
-  return pk != null && String(pk).trim() !== "" ? String(pk).trim() : "-";
 }

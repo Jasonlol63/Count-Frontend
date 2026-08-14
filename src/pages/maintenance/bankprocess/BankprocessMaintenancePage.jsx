@@ -9,8 +9,19 @@ import { runMaintenanceCompanySwitch, syncMaintenanceBootSidebar } from "../shar
 import { useMaintenancePageScrollLock } from "../shared/useMaintenancePageScrollLock.js";
 import { spaPath } from "../../../utils/routing/pageRoutes.js";
 import {
+  isMaintenanceGroupOnlyBoot,
+  isMaintenanceSessionGroupEntityBoot,
+} from "../shared/maintenanceGroupBoot.js";
+import { canUseGroupOnlyMode, isGroupLogin } from "../../../utils/company/loginScope.js";
+import {
+  DASHBOARD_GROUP_FILTER_KEY,
+  DASHBOARD_GROUP_FILTER_OPT_OUT_KEY,
   isDashboardGroupOnlyMode,
   persistDashboardFilterState,
+  persistDashboardGroupOnlyMode,
+  persistDashboardSelectedCompany,
+  readDashboardSelectedCompanyId,
+  readPersistedDashboardGcFilter,
   resolveBootCompanyId,
   resolveInitialSelectedGroupFromSession,
 } from "../../../utils/company/sharedCompanyFilter.js";
@@ -26,7 +37,6 @@ import BankprocessMaintenanceFilters from "./components/BankprocessMaintenanceFi
 import BankprocessMaintenanceTable from "./components/BankprocessMaintenanceTable.jsx";
 import MaintenanceDeleteConfirmModal from "../shared/MaintenanceDeleteConfirmModal.jsx";
 import { useAuthSession } from "../../../context/AuthSessionContext.jsx";
-import { sessionHasTenantBank } from "../../../utils/auth/sessionTenant.js";
 import { fetchOwnerCompaniesAll } from "../../../utils/company/sharedCompanyFilter.js";
 import {
   deleteBankprocessData,
@@ -40,6 +50,8 @@ import {
 import { notifyTransactionListInvalidated } from "../../transaction/lib/transactionPaymentLogic.js";
 import { useLoginLang } from "../../../utils/i18n/useLoginLang.js";
 import { getMaintenanceText, MAINTENANCE_I18N } from "../../../translateFile/pages/maintenanceTranslate.js";
+import { useRealtimeDomain } from "../../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS } from "../../../lib/realtime/realtimeEvents.js";
 
 /** Dedupe empty-result toast (Strict Mode remount + back-to-back searches with same filters). */
 const bankprocessNoDataToastKeys = new Set();
@@ -156,13 +168,28 @@ export default function BankprocessMaintenancePage() {
         const userPerms = Array.isArray(user.permissions) ? user.permissions : [];
         const hasFull = userPerms.length === 0;
         const canMaintenance = hasFull || userPerms.includes("maintenance");
-        if (!canMaintenance || !sessionHasTenantBank(user)) {
+        // Group login session is Games-only (company_has_bank=false); still allow entry to pick a Bank subsidiary.
+        const allowBankPage =
+          Boolean(user.company_has_bank) || canUseGroupOnlyMode(user) || isGroupLogin(user);
+        if (!canMaintenance || !allowBankPage) {
           navigate(spaPath("dashboard"), { replace: true });
           return;
         }
 
         setCompanies(compRows);
 
+        const groupFilterOptOut =
+          typeof sessionStorage !== "undefined" &&
+          sessionStorage.getItem(DASHBOARD_GROUP_FILTER_OPT_OUT_KEY) === "1";
+        const persistedGc = readPersistedDashboardGcFilter();
+        let initialUiCompanyId = null;
+        try {
+          if (!(isDashboardGroupOnlyMode() || persistedGc.groupOnly)) {
+            initialUiCompanyId = readDashboardSelectedCompanyId();
+          }
+        } catch {
+          initialUiCompanyId = null;
+        }
         let initialCompanyId = resolveBootCompanyId({
           sessionCompanyId: user.company_id,
           defaultRowId: compRows[0]?.id,
@@ -173,27 +200,66 @@ export default function BankprocessMaintenancePage() {
         ) {
           initialCompanyId = resolveBootCompanyId({ defaultRowId: compRows[0]?.id });
         }
+        if (groupFilterOptOut && initialUiCompanyId != null) {
+          initialCompanyId = initialUiCompanyId;
+        } else if (
+          !groupFilterOptOut &&
+          (isDashboardGroupOnlyMode() || persistedGc.groupOnly)
+        ) {
+          initialCompanyId = null;
+        } else if (initialUiCompanyId != null) {
+          initialCompanyId = initialUiCompanyId;
+        }
         const currentComp =
           initialCompanyId != null
             ? compRows.find((c) => Number(c.id) === Number(initialCompanyId))
             : null;
-        const bootGroup = resolveInitialSelectedGroupFromSession(compRows, currentComp);
+        let sessionGroup = null;
+        try {
+          const saved = sessionStorage.getItem(DASHBOARD_GROUP_FILTER_KEY);
+          sessionGroup = saved ? String(saved).trim().toUpperCase() : null;
+        } catch {
+          sessionGroup = null;
+        }
+        const bootGroup = groupFilterOptOut
+          ? null
+          : resolveInitialSelectedGroupFromSession(compRows, currentComp, user);
         setSelectedGroup(bootGroup);
-        if (isDashboardGroupOnlyMode()) {
+        let groupOnlyBoot = isMaintenanceGroupOnlyBoot({
+          groupFilterOptOut,
+          sessionGroup: bootGroup ?? sessionGroup,
+          initialUiCompanyId,
+          persistedGc,
+        });
+        if (
+          !groupOnlyBoot &&
+          !groupFilterOptOut &&
+          (isMaintenanceSessionGroupEntityBoot(currentComp, user) ||
+            (bootGroup && initialUiCompanyId == null && canUseGroupOnlyMode(user, bootGroup)))
+        ) {
+          groupOnlyBoot = true;
+        }
+        // Bankprocess has no Group ledger — keep Group-only UI until user (or auto-pick) selects a Bank company.
+        if (groupOnlyBoot || initialCompanyId == null) {
+          if (groupOnlyBoot) {
+            persistDashboardGroupOnlyMode(true);
+            persistDashboardSelectedCompany(null);
+          }
           setCompanyId(null);
           currentCompanyIdRef.current = null;
           setCompanyCode("");
           setCurrenciesReady(true);
+          const effectiveGroup = bootGroup ?? sessionGroup;
+          if (effectiveGroup) {
+            sessionStorage.setItem("dashboard_group_filter", effectiveGroup);
+          }
           return;
         }
         setCompanyId(initialCompanyId);
         currentCompanyIdRef.current = initialCompanyId;
         setCompanyCode(currentComp?.company_id || "");
-        const code = currentComp?.company_id || "";
 
-        // Fetch initial metadata here to ensure the first query starts with the correct selectedPermission
         const currencyList = await fetchCompanyCurrencies(initialCompanyId).catch(() => []);
-
         setCurrencies(currencyList);
         if (currencyList.length === 0) {
           setAllCurrenciesSelected(true);
@@ -306,7 +372,7 @@ export default function BankprocessMaintenancePage() {
       const data = await searchBankprocessData({
         dateFrom,
         dateTo,
-        tenantId: searchCompanyId,
+        companyId,
         currencyCodes: selectedCurrencies,
         allCurrencies: allCurrenciesSelected,
         query,
@@ -359,6 +425,10 @@ export default function BankprocessMaintenancePage() {
     notify,
     t,
   ]);
+
+  useRealtimeDomain(REALTIME_DOMAINS.MAINTENANCE, () => {
+    void performSearch();
+  }, { enabled: !bootLoading && Boolean(companyId) && currenciesReady });
 
   useEffect(() => {
     if (bootLoading || !companyId || !dateFrom || !dateTo || !currenciesReady) return;
@@ -537,13 +607,8 @@ export default function BankprocessMaintenancePage() {
 
   const onConfirmDelete = async () => {
     setIsDeleteModalOpen(false);
-    const tid = Number(companyId);
-    if (!Number.isFinite(tid) || tid <= 0) {
-      notify(t("deleteFailed"), "error");
-      return;
-    }
     try {
-      await deleteBankprocessData(selectedIds, tid);
+      const result = await deleteBankprocessData(selectedIds);
       notifyTransactionListInvalidated("bankprocess_maintenance_delete");
       notify(t("successfullyDeletedBankProcessN", { n: selectedIds.length }), "success");
       setSelectedIds([]);

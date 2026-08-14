@@ -61,26 +61,6 @@ export function normalizeAdminListItem(item) {
   };
 }
 
-/** Owner shadow row from legacy PHP detail — normalized to the same list shape. */
-export function normalizeOwnerShadowRow(detail) {
-  if (!detail) return null;
-  return {
-    id: detail.id,
-    loginId: detail.login_id ?? detail.loginId ?? "",
-    name: detail.name ?? "",
-    email: detail.email ?? "",
-    role: detail.role ?? "owner",
-    permissions: detail.permissions ?? null,
-    status: detail.status ?? "",
-    createdBy: detail.created_by ?? detail.createdBy ?? "",
-    createdAt: detail.created_at ?? detail.createdAt ?? null,
-    lastLogin: detail.last_login ?? detail.lastLogin ?? null,
-    readOnly: false,
-    isOwnerShadow: true,
-    tenantAccess: null,
-  };
-}
-
 /**
  * POST /api/userlist/list?tenant_id=
  * @returns {Promise<object[]>}
@@ -195,11 +175,6 @@ export function resolveAdminTenantIds({
 
   const fallback = companyId != null ? Number(companyId) : Number.NaN;
   return Number.isFinite(fallback) && fallback > 0 ? [fallback] : [];
-}
-
-/** @deprecated Use {@link resolveAdminTenantIds}. */
-export function resolveAdminCreateTenantIds(params) {
-  return resolveAdminTenantIds(params);
 }
 
 /** Build Spring {@link AdminRequest} body for POST /api/userlist/add. */

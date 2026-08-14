@@ -82,6 +82,33 @@ export function mergeEditorAccounts(pickerAccounts, rows) {
   );
 }
 
+/**
+ * After link-partner reload: keep unconfirmed drafts and place partners after accounts.
+ * Order: persisted non-partner rows → local drafts → partner rows.
+ * Draft detection must not use isExternalPartnerRow — selecting a main-owner account
+ * sets role=OWNER client-side and would incorrectly drop that draft.
+ */
+export function mergeServerRowsPreservingDrafts(localRows, serverRows) {
+  const server = Array.isArray(serverRows) ? serverRows : [];
+  const local = Array.isArray(localRows) ? localRows : [];
+  const serverAccountIds = new Set(
+    server.map((r) => String(r.account_id || "")).filter((id) => id && id !== "undefined"),
+  );
+  const drafts = local.filter((r) => {
+    if (!r) return false;
+    if (r.ownership_id) return false;
+    if (r.is_external_partner === true || r.is_external_partner === 1 || r.is_external_partner === "1") {
+      return false;
+    }
+    const aid = String(r.account_id || "");
+    if (aid && serverAccountIds.has(aid)) return false;
+    return true;
+  });
+  const serverNonPartners = server.filter((r) => !isExternalPartnerRow(r));
+  const serverPartners = server.filter((r) => isExternalPartnerRow(r));
+  return [...serverNonPartners, ...drafts, ...serverPartners];
+}
+
 /** Dropdown options: hide external partners unless already selected on this row. */
 export function accountsForRowPicker(accounts, currentAccountId = "") {
   const current = String(currentAccountId || "");
@@ -165,7 +192,8 @@ export function applyOwnershipRowFieldUpdate(row, field, val, accounts, allRows,
         : parseFloat(val);
     if (isNaN(p)) p = 0;
     p = Math.max(0, Math.min(100, p));
-    if (Array.isArray(allRows) && rowIdx >= 0 && !isExternalPartnerRow(row)) {
+    // Link Partner shares the same 100% pool as regular ownership rows.
+    if (Array.isArray(allRows) && rowIdx >= 0) {
       p = Math.min(p, maxAllowedOwnershipPct(allRows, rowIdx));
     }
     r.percentage = Math.round(p * 100) / 100;

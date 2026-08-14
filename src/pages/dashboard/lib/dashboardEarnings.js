@@ -30,8 +30,24 @@ export function mapPanelCurrencyRows(rows, view, { useConverted = false } = {}) 
   });
 }
 
-export function buildEarningsPieSlices(rows, { useConverted = false } = {}) {
-  return rows
+export function buildEarningsPieSlices(rows, { useConverted = false, baseCode = "" } = {}) {
+  const base = String(baseCode || "").toUpperCase();
+  const sourceRows = (() => {
+    // Without FX conversion, native multi-currency amounts are not comparable —
+    // only the display-base slice belongs on the pie (e.g. USDT base).
+    // Skip when base is absent from rows (company-breakdown codes ≠ currency base).
+    if (!useConverted && base) {
+      const codes = new Set(
+        (rows || []).map((row) => String(row.code || "").toUpperCase()).filter(Boolean)
+      );
+      if (codes.size > 1 && codes.has(base)) {
+        return (rows || []).filter((row) => String(row.code || "").toUpperCase() === base);
+      }
+    }
+    return rows || [];
+  })();
+
+  return sourceRows
     .filter((row) => row.earnings != null)
     .map((row, index) => {
       const originalEarnings = row.earnings;
@@ -129,9 +145,31 @@ function resolveRowShareAmount(row, useConverted) {
  * Share % by currency code.
  * Non-base currencies: abs(amount) / sum(abs) × 100.
  * Base (display) currency: 100% − sum(other shares), capped at 0 — never exceeds 100%.
+ * When conversion is off and multiple natives exist: only base is 100%, others null (not mixed).
  */
 export function buildEarningsShareByCode(rows, baseCode, { useConverted = false } = {}) {
   const base = String(baseCode || "").toUpperCase();
+  const shareByCode = {};
+  for (const row of rows || []) {
+    shareByCode[String(row.code || "").toUpperCase()] = 0;
+  }
+
+  const codes = Object.keys(shareByCode).filter(Boolean);
+  // Same guard as pie slices: only collapse to base-100% when base is a real row code.
+  if (!useConverted && base && codes.length > 1 && codes.includes(base)) {
+    const baseAmount = resolveRowShareAmount(
+      (rows || []).find((row) => String(row.code || "").toUpperCase() === base),
+      false
+    );
+    for (const code of codes) {
+      shareByCode[code] = null;
+    }
+    if (baseAmount != null) {
+      shareByCode[base] = 100;
+    }
+    return shareByCode;
+  }
+
   const entries = (rows || [])
     .map((row) => {
       const code = String(row.code || "").toUpperCase();
@@ -140,11 +178,6 @@ export function buildEarningsShareByCode(rows, baseCode, { useConverted = false 
       return { code, abs: Math.abs(amount) };
     })
     .filter(Boolean);
-
-  const shareByCode = {};
-  for (const row of rows || []) {
-    shareByCode[String(row.code || "").toUpperCase()] = 0;
-  }
 
   const absTotal = entries.reduce((sum, entry) => sum + entry.abs, 0);
   if (!absTotal) return shareByCode;
@@ -168,8 +201,11 @@ export function computePieCenterMetrics(rows, selectedCode, { useConverted = fal
   const selected = String(selectedCode || "").toUpperCase();
   const match = (rows || []).find((row) => String(row.code || "").toUpperCase() === selected);
   const shareByCode = buildEarningsShareByCode(rows, selectedCode, { useConverted });
-  const pct = (shareByCode[selected] ?? 0).toFixed(1);
-  return { pct, code: selected || match?.code || "—" };
+  const raw = shareByCode[selected];
+  if (raw == null) {
+    return { pct: null, code: selected || match?.code || "—" };
+  }
+  return { pct: Number(raw).toFixed(1), code: selected || match?.code || "—" };
 }
 
 /** Pie center badge: unit rate of the active filter currency vs display base. */
@@ -202,7 +238,10 @@ export function resolveEarningsRowDisplayAmounts(row, baseCode, rates, useConver
 
 export function computeCurrencySharePct(row, shareByCode) {
   const code = String(row?.code || "").toUpperCase();
-  return shareByCode?.[code] ?? 0;
+  if (!shareByCode || !Object.prototype.hasOwnProperty.call(shareByCode, code)) {
+    return null;
+  }
+  return shareByCode[code];
 }
 
 export function companiesInGroupList(companies, gid) {

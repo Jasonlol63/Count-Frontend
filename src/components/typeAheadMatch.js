@@ -7,8 +7,10 @@ export function isTypeAheadKey(key, { allowSpace = false } = {}) {
 }
 
 /**
- * Native-select style type-ahead: accumulate prefix, jump to first match;
- * repeat the same letter to cycle through options starting with that letter.
+ * First-letter-only type-ahead (native-select style cycling):
+ * - New letter → jump to the first option starting with that letter
+ * - Same letter again → cycle through options with that first letter
+ * Does NOT accumulate multi-char prefixes (A then C → "C…", not "AC…").
  */
 export function matchTypeAheadIndex(labels, key, state) {
   const char = String(key).toLowerCase();
@@ -19,8 +21,7 @@ export function matchTypeAheadIndex(labels, key, state) {
 
   const getLabel = (idx) => String(list[idx] ?? "").toLowerCase();
 
-  if (state.buffer === char && state.lastKey === char) {
-    const start = state.lastIndex + 1;
+  const cycleFrom = (start) => {
     for (let i = 0; i < list.length; i += 1) {
       const idx = (start + i) % list.length;
       if (getLabel(idx).startsWith(char)) {
@@ -32,28 +33,17 @@ export function matchTypeAheadIndex(labels, key, state) {
       }
     }
     return -1;
-  }
+  };
 
-  state.buffer += char;
-  state.lastKey = char;
-  scheduleTypeAheadReset(state);
-
-  const prefix = state.buffer;
-  const idx = list.findIndex((label) => String(label ?? "").toLowerCase().startsWith(prefix));
-  if (idx >= 0) {
-    state.lastIndex = idx;
+  // Same letter again → cycle to the next match
+  if (state.lastKey === char && state.lastIndex >= 0) {
+    const idx = cycleFrom(state.lastIndex + 1);
     return idx;
   }
 
-  state.buffer = state.buffer.slice(0, -1);
-  if (state.buffer) {
-    const retry = list.findIndex((label) => String(label ?? "").toLowerCase().startsWith(state.buffer));
-    if (retry >= 0) {
-      state.lastIndex = retry;
-      return retry;
-    }
-  }
-  return -1;
+  // Different letter (or fresh) → first option starting with this letter
+  const idx = cycleFrom(0);
+  return idx;
 }
 
 export function createTypeAheadState() {

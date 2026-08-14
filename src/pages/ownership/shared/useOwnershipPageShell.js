@@ -6,6 +6,9 @@ import {
   getOwnershipCurrentMonthKey,
   isOwnershipHistoricalMonth,
 } from "./ownershipMonthHelpers.js";
+import { clearOwnerCompaniesCache } from "../../../utils/company/sharedCompanyFilter.js";
+import { useRealtimeDomain } from "../../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS } from "../../../lib/realtime/realtimeEvents.js";
 
 export function useOwnershipPageShell() {
   const [lang, setLang] = useState(() => (localStorage.getItem("login_lang") === "zh" ? "zh" : "en"));
@@ -57,16 +60,21 @@ export function useOwnershipPageShell() {
 
   const fetchCompanies = useCallback(
     async (monthKey = getOwnershipCurrentMonthKey(), { force = false } = {}) => {
-      if (force) invalidateOwnershipCompaniesCache(monthKey);
+      if (force) {
+        invalidateOwnershipCompaniesCache(monthKey);
+        // Join/ungroup also invalidates site-wide Group/Company filter cache.
+        clearOwnerCompaniesCache();
+      }
       const cached = !force ? peekOwnershipCompaniesCache(monthKey) : null;
-      if (!cached) setLoadingList(true);
+      // Cold start only — force/realtime refreshes must not wipe the list into a full-page spinner.
+      if (!cached && !force) setLoadingList(true);
       try {
         const json = await prefetchOwnershipCompanies(monthKey, { force });
         if (isApiSuccess(json)) setAllCompanies(json.data || []);
         else showToast(getApiMessage(json, "Failed to load companies"), "error");
         setReadOnlyMode(false);
       } catch {
-        if (!cached) showToast("Server error", "error");
+        if (!cached && !force) showToast("Server error", "error");
       } finally {
         setLoadingList(false);
       }
@@ -77,6 +85,10 @@ export function useOwnershipPageShell() {
   useEffect(() => {
     void fetchCompanies(selectedMonth);
   }, [fetchCompanies, selectedMonth]);
+
+  useRealtimeDomain(REALTIME_DOMAINS.OWNERSHIP, () => {
+    void fetchCompanies(selectedMonth, { force: true });
+  });
 
   return {
     lang,

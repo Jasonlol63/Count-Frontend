@@ -105,8 +105,10 @@ body.ec-auth-shell.account-page:not(.account-page--show-all) .content {
   min-height: calc(100vh - var(--layout-page-top-inset)) !important;
 }
 
+/* Games Process — 与 Acc/User 同一屏高度，避免 budget 随 toolbar/行出现漂移 */
 body.ec-auth-shell.process-page:not(.process-page--bank):not(.process-page--show-all) .content {
-  min-height: 0 !important;
+  height: calc(100vh - var(--layout-page-top-inset)) !important;
+  min-height: calc(100vh - var(--layout-page-top-inset)) !important;
 }
 
 /* Account List — 全宽度横向滚动安全网（125% 缩放 / 窄屏：列不被压扁） */

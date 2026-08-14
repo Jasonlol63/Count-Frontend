@@ -148,6 +148,31 @@ export function dataCaptureScopeIsReady(scope) {
   return Boolean(scope.resolveCompanyViaGroupId && scope.groupId);
 }
 
+/**
+ * Empty / pure group ledger: mode=group with no company anchor.
+ * Fixed payroll codes only — do not resolve/create process table rows.
+ */
+export function isPureGroupCaptureScope(scope, processMeta = null) {
+  const mode =
+    scope?.mode ||
+    (processMeta?.groupOnlyCapture === true || processMeta?.captureScopeMode === "group"
+      ? "group"
+      : null);
+  if (mode !== "group") return false;
+  const cid =
+    scope?.scopeCompanyId != null && Number(scope.scopeCompanyId) > 0
+      ? Number(scope.scopeCompanyId)
+      : processMeta?.scopeCompanyId != null && Number(processMeta.scopeCompanyId) > 0
+        ? Number(processMeta.scopeCompanyId)
+        : 0;
+  if (cid > 0) return false;
+  return Boolean(
+    scope?.resolveCompanyViaGroupId ||
+      processMeta?.groupOnlyCapture === true ||
+      (scope?.groupId || scope?.viewGroup || processMeta?.captureSelectedGroup),
+  );
+}
+
 /** Params for Data Capture / Summary / submitted-process APIs. */
 export function dataCaptureScopeApiParams(scope) {
   if (!scope) return {};

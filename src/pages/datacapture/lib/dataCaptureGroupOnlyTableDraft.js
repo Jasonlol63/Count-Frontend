@@ -1,6 +1,6 @@
 /**
- * Group payroll table drafts — shared via server for group buckets (AP/IG).
- * Company payroll buckets (e.g. company:5 for C168) stay local-only to avoid AP data mixing.
+ * Payroll table drafts — shared via server for both group buckets (AP/IG, scope_type=group)
+ * and company payroll buckets (e.g. company:5 for C168 / bank-only, scope_type=company).
  */
 import { resolveDataCaptureGridDimensions } from "../grid/dataCaptureGridMeta.js";
 import {
@@ -19,8 +19,6 @@ import {
   isGroupPayrollCaptureSession,
   payrollDraftBucketIsCompany,
 } from "../../../utils/company/c168CaptureChannel.js";
-import { getBankCaptureDraft } from "./dataCaptureSpringApi.js";
-import { resolveDataCaptureTenantId } from "./dataCaptureTenant.js";
 
 export const GROUP_ONLY_TABLE_DRAFTS_KEY = "dc_group_only_table_drafts";
 
@@ -41,9 +39,16 @@ function normalizeDraftBucket(bucketId) {
   return raw.toUpperCase();
 }
 
+/**
+ * Bank/AP-IG group mode uses the fixed salary/bonus/commission codes; Games
+ * mode uses a real process's own numeric id (gated upstream on its
+ * enable_save_draft flag) — accept either shape here.
+ */
 function normalizeProcessKey(processKey) {
   const p = processKey != null ? String(processKey).trim().toLowerCase() : "";
-  return isGroupPayrollDraftProcessId(p) ? p : null;
+  if (!p) return null;
+  if (isGroupPayrollDraftProcessId(p)) return p;
+  return /^\d+$/.test(p) ? p : null;
 }
 
 export function normalizeGroupOnlyDraftCurrencyId(currencyId) {
@@ -77,7 +82,6 @@ function writeAllDrafts(map) {
 
 function draftAllowsServerSync(bucket, options = {}) {
   if (options.serverSync === false) return false;
-  if (payrollDraftBucketIsCompany(bucket)) return false;
   return true;
 }
 
@@ -296,7 +300,7 @@ export function saveGroupOnlyTableDraftFromCaptureSession(session, options = {})
   if (!processKey || !currencyId) return;
 
   const captureScope = options.captureScope || scopeFromGroupId(groupId);
-  const serverSync = !payrollDraftBucketIsCompany(groupId);
+  const serverSync = true;
   saveGroupOnlyTableDraft(
     groupId,
     processKey,
@@ -373,33 +377,8 @@ export async function restoreGroupOnlyTableDraft(
   try {
     callDataCaptureRuntime("clearCaptureTable");
 
-    // Phase 2: prefer Spring BANK draft (tenant + processCode + currency).
-    const tenantId = resolveDataCaptureTenantId(options.captureScope);
-    let draft = null;
-    if (tenantId) {
-      try {
-        draft = await getBankCaptureDraft({
-          tenantId,
-          processCode: String(p).toUpperCase(),
-          currencyId: c,
-        });
-        if (draft?.tableData) {
-          writeLocalDraft(g, p, c, {
-            tableData: draft.tableData,
-            captureType: draft.captureType || "1.Text",
-          });
-        }
-      } catch (err) {
-        console.warn("Spring bank draft load failed — falling back", err);
-      }
-    }
-
-    if (!draft?.tableData) {
-      const scope = payrollDraftBucketIsCompany(g)
-        ? options.captureScope
-        : options.captureScope || scopeFromGroupId(g);
-      draft = await fetchGroupOnlyTableDraft(g, p, c, scope, options);
-    }
+    const scope = payrollDraftBucketIsCompany(g) ? options.captureScope : options.captureScope || scopeFromGroupId(g);
+    const draft = await fetchGroupOnlyTableDraft(g, p, c, scope, options);
     if (seq !== restoreSeq) return;
 
     if (!draft?.tableData) {

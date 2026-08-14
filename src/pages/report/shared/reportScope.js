@@ -1,7 +1,9 @@
 import {
   companiesGroupEntityList,
+  resolveOwnerDashboardGroupIds,
   sortedUniqueGroupIds,
 } from "../../../utils/company/sharedCompanyFilter.js";
+import { resolveVisibleGroupIds } from "../../../utils/company/loginScope.js";
 import {
   resolveTransactionScope,
   transactionScopeApiParams,
@@ -49,6 +51,12 @@ function mapReportScopeToTransactionScope(scope) {
   };
 }
 
+/** Domain / login groups + company.group_id — same as Transaction snapGroupIds. */
+export function resolveReportSnapGroupIds(companies, me = null) {
+  const list = Array.isArray(companies) ? companies : [];
+  return resolveVisibleGroupIds(resolveOwnerDashboardGroupIds(list, me), me, list);
+}
+
 /**
  * Group = group entity company's accounts; Company = selected subsidiary's accounts.
  * Supports groupsAllMode / groupAllMode (All pills — never sent as group_id "ALL").
@@ -59,15 +67,17 @@ export function resolveCustomerReportScope({
   companyId,
   groupsAllMode = false,
   groupAllMode = false,
+  me = null,
 }) {
+  const list = companies ?? [];
   const tx = resolveTransactionScope({
-    snapCompanies: companies ?? [],
-    snapCompaniesAll: companies ?? [],
+    snapCompanies: list,
+    snapCompaniesAll: list,
     selectedGroup,
     companyId,
     groupsAllMode,
     groupAllMode,
-    snapGroupIds: sortedUniqueGroupIds(companies ?? []),
+    snapGroupIds: resolveReportSnapGroupIds(list, me),
   });
   return mapTransactionScopeToReportScope(tx);
 }

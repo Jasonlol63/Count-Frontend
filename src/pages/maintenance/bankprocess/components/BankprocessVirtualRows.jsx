@@ -22,7 +22,6 @@ function BankprocessVirtualTableHead({ selectAllRef, selectAll, toggleSelectAll,
     m.tblDescription,
     m.tblRemark,
     m.tblSubmittedBy,
-    m.tblDeleter,
   ];
 
   return (

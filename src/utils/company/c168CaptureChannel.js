@@ -119,7 +119,7 @@ export function resolvePayrollDraftBucket({
     const id = Number(companyId);
     if (Number.isFinite(id) && id > 0) {
       const tag = `company:${id}`;
-      return { bucket: tag, serverSync: false, prefsKey: tag };
+      return { bucket: tag, serverSync: true, prefsKey: tag };
     }
   }
   const g = selectedGroup ? String(selectedGroup).trim().toUpperCase() : "";

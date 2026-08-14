@@ -1,7 +1,7 @@
 import React from "react";
 import ProcessModalPortal, { processModalBackdropStyle } from "../../../components/ProcessModalPortal.jsx";
 import { BankSearchableAccountPick } from "./bankProcessFormFields.jsx";
-import { sanitizeBankMoneyTyping } from "../lib/bankProcessHelpers.js";
+import { formatBankMoneyFixed2, sanitizeBankMoneyTyping, isValidBankMoneyInput } from "../lib/bankProcessHelpers.js";
 import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
 
 function ProfitSharingAddIcon() {
@@ -12,26 +12,47 @@ function ProfitSharingAddIcon() {
   );
 }
 
-function ProfitSharingDeleteIcon() {
+export function ProfitSharingDeleteIcon({ className = "profit-sharing-delete-row-icon", width = 18, height = 18 }) {
   return (
-    <svg className="profit-sharing-delete-row-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg className={className} width={width} height={height} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M9 3h6l1 2h5v2H3V5h5l1-2z" fill="currentColor" opacity="0.92" />
       <path d="M5 9h14l-1 12H6L5 9z" fill="currentColor" />
     </svg>
   );
 }
 
+/** Profit still available to share = max(0, sell - cost - sum(other rows' amount)). */
+function computeRemainingProfit(cost, price, rows, excludeIdx) {
+  const costDec = isValidBankMoneyInput(cost) ? MoneyDecimal.toDecimal(cost, 0) : MoneyDecimal.toDecimal("0", 0);
+  const priceDec = isValidBankMoneyInput(price) ? MoneyDecimal.toDecimal(price, 0) : MoneyDecimal.toDecimal("0", 0);
+  let usedDec = MoneyDecimal.toDecimal("0", 0);
+  rows.forEach((r, i) => {
+    if (i === excludeIdx) return;
+    if (isValidBankMoneyInput(r.amount)) {
+      usedDec = usedDec.plus(MoneyDecimal.toDecimal(r.amount, 0));
+    }
+  });
+  return MoneyDecimal.max(MoneyDecimal.sub(priceDec, costDec).minus(usedDec), "0");
+}
+
 export default function ProfitSharingModal({
   profitShareRows,
   setProfitShareRows,
   accounts,
+  cost,
+  price,
   onConfirm,
   onClose,
   onOpenAddAccountForField,
+  notify,
   t,
 }) {
   const addRow = () => {
-    setProfitShareRows((prev) => [...prev, { accountId: "", accountLabel: "", amount: "" }]);
+    setProfitShareRows((prev) => [...prev, { accountId: "", accountLabel: "", amount: "", amountMode: "", percentInput: "" }]);
+  };
+
+  const rejectExceedsRemaining = (remaining) => {
+    notify?.(t("profitSharingExceedsRemaining", { remaining: formatBankMoneyFixed2(remaining.toString()) }), "danger");
   };
 
   const blurAmount = (idx, raw) => {
@@ -40,12 +61,51 @@ export default function ProfitSharingModal({
       setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, amount: "" } : r)));
       return;
     }
-    try {
-      const plain = MoneyDecimal.requireNormalAmount(trimmed, "Amount");
-      setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, amount: plain } : r)));
-    } catch {
-      // Keep typed value if over scale / invalid — submit validation will catch.
+    const formatted = formatBankMoneyFixed2(trimmed, { emptyAsZero: false });
+    const remaining = computeRemainingProfit(cost, price, profitShareRows, idx);
+    if (isValidBankMoneyInput(formatted) && MoneyDecimal.cmp(formatted, remaining.toString()) > 0) {
+      rejectExceedsRemaining(remaining);
+      return;
     }
+    setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, amount: formatted } : r)));
+  };
+
+  const deactivateAmountMode = (idx) => {
+    setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, amountMode: "" } : r)));
+  };
+
+  /** Recomputes amount live from a percentage input; rejects keystrokes over 100% outright and does not touch amount when the text is incomplete/invalid mid-typing. */
+  const handlePercentInputChange = (idx, rawText) => {
+    const sanitized = sanitizeBankMoneyTyping(rawText);
+    const trimmed = sanitized.trim();
+    if (!trimmed) {
+      setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, percentInput: sanitized, amount: "" } : r)));
+      return;
+    }
+    if (!isValidBankMoneyInput(trimmed)) {
+      setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, percentInput: sanitized } : r)));
+      return;
+    }
+    if (MoneyDecimal.cmp(trimmed, "100") > 0) {
+      notify?.(t("profitSharingPercentMax100"), "danger");
+      return;
+    }
+    const remaining = computeRemainingProfit(cost, price, profitShareRows, idx);
+    const pctDec = MoneyDecimal.toDecimal(trimmed, 0);
+    const amountDec = remaining.times(pctDec).div(100);
+    if (MoneyDecimal.cmp(amountDec.toString(), remaining.toString()) > 0) {
+      rejectExceedsRemaining(remaining);
+      setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, percentInput: sanitized } : r)));
+      return;
+    }
+    const formatted = formatBankMoneyFixed2(amountDec.toString(), { emptyAsZero: false });
+    setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, percentInput: sanitized, amount: formatted } : r)));
+  };
+
+  const activatePercentMode = (idx) => {
+    setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, amountMode: "percent" } : r)));
+    const prevPercent = profitShareRows[idx]?.percentInput;
+    if (prevPercent) handlePercentInputChange(idx, prevPercent);
   };
 
   const removeRow = (idx) => {
@@ -96,16 +156,47 @@ export default function ProfitSharingModal({
                         inputMode="decimal"
                         autoComplete="off"
                         placeholder="0.00"
+                        readOnly={row.amountMode === "percent"}
                         value={row.amount}
-                        onChange={(e) => setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, amount: sanitizeBankMoneyTyping(e.target.value) } : r)))}
+                        onChange={(e) => setProfitShareRows((rows) => rows.map((r, i) => (i === idx ? { ...r, amount: sanitizeBankMoneyTyping(e.target.value), amountMode: "" } : r)))}
                         onBlur={(e) => blurAmount(idx, e.target.value)}
                       />
+                      {row.amountMode === "percent" ? (
+                        <div className="profit-sharing-percent-input-wrap">
+                          <input
+                            type="text"
+                            className="profit-sharing-percent-input"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            placeholder="%"
+                            autoFocus
+                            value={row.percentInput || ""}
+                            onChange={(e) => handlePercentInputChange(idx, e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="profit-sharing-percent-suffix-btn"
+                            onClick={() => deactivateAmountMode(idx)}
+                            aria-label="%"
+                          >
+                            %
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="profit-sharing-amount-mode-btn profit-sharing-amount-percent-btn"
+                          onClick={() => activatePercentMode(idx)}
+                          aria-label="%"
+                        >
+                          %
+                        </button>
+                      )}
                       {idx > 0 ? (
                         <button
                           type="button"
                           className="profit-sharing-delete-row-btn"
                           onClick={() => removeRow(idx)}
-                          title={t("removeRow")}
                           aria-label={t("removeRow")}
                         >
                           <ProfitSharingDeleteIcon />

@@ -9,7 +9,50 @@
  * - On viewports that fit --login-shell-width + body padding, use a fixed width so we do not depend
  *   on `100%` (scrollbar appearance can change the percentage base and look like "撐開").
  * - Input border/chrome: src/styles/login-auth-fields.css (imported after this file).
+ *
+ * Viewport pin (after Tailwind/app-shell): keep the auth card from jumping when focus,
+ * browser scroll-into-view, or async height changes (maintenance banner / lang) reflow flex centering.
  */
+
+html:has(body.bg) {
+  height: 100% !important;
+  overflow: hidden !important;
+  scrollbar-gutter: stable;
+}
+
+body.bg {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  min-height: 100dvh !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: none !important;
+  justify-content: safe center;
+}
+
+/*
+ * Defensive reset: some authenticated-area pages toggle their own layout classes on
+ * <body> (e.g. body.dashboard-home-page) and, if that class is ever left behind after a
+ * forced/SPA redirect back to /login (session expiry does not do a full page reload),
+ * its #root rules (height/overflow/display) can hijack this shell before we get a chance
+ * to reset. Force #root back to an auto-sized block regardless of any other body class
+ * so body.bg's flex centering always governs on the login screen.
+ */
+body.bg #root {
+  min-width: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 0 0 auto !important;
+  box-sizing: border-box !important;
+  display: block !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
 
 @media (min-width: 480px) {
   body.bg #root .sc-login-column,

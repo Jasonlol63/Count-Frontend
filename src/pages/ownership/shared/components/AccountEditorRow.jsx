@@ -44,7 +44,8 @@ export default function AccountEditorRow({
   const rowClientId = ownershipRowClientId(row, idx);
   const pctMax = Math.max(0, Math.min(100, Number(maxPercentage) || 0));
   const isPartnerRow = isExternalPartnerRow(row);
-  const effectivePctMax = isPartnerRow ? 100 : pctMax;
+  // Link Partner is capped by remaining allocation (same as regular rows).
+  const effectivePctMax = pctMax;
   const storedPct = normalizePct(row.percentage);
   const [displayPct, setDisplayPct] = useState(storedPct);
   const [inputValue, setInputValue] = useState(() => `${storedPct}%`);
@@ -84,7 +85,8 @@ export default function AccountEditorRow({
     onUpdate(idx, "slider", next);
   };
 
-  const sliderDisabled = readOnlyMode || (!isPartnerRow && pctMax <= 0 && storedPct <= 0);
+  // No remaining room (e.g. others already at 100%): block slider / input — includes Link Partner.
+  const sliderDisabled = readOnlyMode || pctMax <= 0;
   const layoutLocked = readOnlyMode || structureLocked;
 
   const clearDragStyles = () => {
@@ -185,7 +187,7 @@ export default function AccountEditorRow({
           className="own-percent-input"
           id={`input-${companyId}-${rowClientId}`}
           value={inputValue}
-          disabled={readOnlyMode || (!isPartnerRow && pctMax <= 0 && storedPct <= 0)}
+          disabled={sliderDisabled}
           onFocus={() => {
             isEditingPctRef.current = true;
           }}

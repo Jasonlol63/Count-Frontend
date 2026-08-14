@@ -14,18 +14,31 @@
     box-sizing: border-box;
 }
 
+/* Pin auth shell to the viewport so focus/scroll/height changes cannot shove the card up. */
+html:has(body.bg) {
+    height: 100%;
+    overflow: hidden;
+    scrollbar-gutter: stable;
+}
+
 body.bg {
     color-scheme: light;
     --login-input-cursor: text;
     font-family: var(--font-ui, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
     background: url('/images/count_bg.png') center/cover no-repeat;
-    min-height: 100vh;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    min-height: 100dvh;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: safe center;
     padding: 20px;
-    position: relative;
     overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: none;
 }
 
 body.bg::before {

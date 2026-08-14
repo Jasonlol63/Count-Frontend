@@ -6,7 +6,6 @@ import { formatDmyDash, formatYmd, parseDdMmYyyyToYmd, parseYmd } from "../../ut
 // true: Company Settings 弹窗中 Permissions 只能选择一个分类（互斥）
 export const SINGLE_CATEGORY_MODE = true;
 
-export const ROWS_PER_PAGE = 20;
 export const MAX_VISIBLE_CHIPS = 3;
 
 // ===================== Date Helpers =====================
@@ -274,6 +273,14 @@ export function companyToDomainPayloadEntry(c) {
     apply_commission_payments_on_domain_save:
       !!c.apply_commission_payments_on_domain_save,
   };
+  const period = String(c.selectedPeriod ?? c.period ?? "").trim();
+  if (period && DOMAIN_FEE_PERIOD_KEYS.includes(period)) {
+    entry.selectedPeriod = period;
+  }
+  const startYmd = normalizeDomainStartDateYmd(c.startDate ?? c.start_date ?? "");
+  if (startYmd) {
+    entry.startDate = startYmd;
+  }
   const previousId = String(c.previous_company_id ?? "").trim().toUpperCase();
   if (previousId && previousId !== companyId) {
     entry.previous_company_id = previousId;
@@ -284,11 +291,10 @@ export function companyToDomainPayloadEntry(c) {
 export function createEmptyGroup(groupCode) {
   const code = String(groupCode || "").trim().toUpperCase();
   const today = new Date().toISOString().split("T")[0];
-  const exp = calculateExpirationDate("1month", today);
   return {
     group_code: code,
-    expiration_date: exp,
-    originalExpirationDate: exp,
+    expiration_date: null,
+    originalExpirationDate: null,
     startDate: today,
     selectedPeriod: null,
     isExtending: false,
@@ -302,7 +308,6 @@ export function createEmptyGroup(groupCode) {
 export function groupFromApiRow(row) {
   const code = String(row?.group_code ?? "").trim().toUpperCase();
   const g = {
-    id: row?.id ?? null,
     group_code: code,
     expiration_date: row?.expiration_date || null,
     permissions: Array.isArray(row?.permissions) ? row.permissions : [],
@@ -328,6 +333,14 @@ export function groupToDomainPayloadEntry(g) {
     apply_commission_payments_on_domain_save:
       !!g.apply_commission_payments_on_domain_save,
   };
+  const period = String(g.selectedPeriod ?? g.period ?? "").trim();
+  if (period && DOMAIN_FEE_PERIOD_KEYS.includes(period)) {
+    entry.selectedPeriod = period;
+  }
+  const startYmd = normalizeDomainStartDateYmd(g.startDate ?? g.start_date ?? "");
+  if (startYmd) {
+    entry.startDate = startYmd;
+  }
   const previousCode = String(g.previous_group_code ?? "").trim().toUpperCase();
   if (previousCode && previousCode !== groupCode) {
     entry.previous_group_code = previousCode;
@@ -339,6 +352,71 @@ export function tempGroupCode(groupOrCode) {
   if (groupOrCode == null) return "";
   if (typeof groupOrCode === "string") return groupOrCode.trim().toUpperCase();
   return String(groupOrCode.group_code ?? "").trim().toUpperCase();
+}
+
+/** Normalize Start Date / daystart to YYYY-MM-DD (empty if invalid). */
+export function normalizeDomainStartDateYmd(raw) {
+  if (raw == null || raw === "") return "";
+  const s = String(raw).trim();
+  if (!s) return "";
+  if (s.includes("-")) {
+    const ymd = s.split("T")[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+    return "";
+  }
+  return parseDdMmYyyyToYmd(s) || "";
+}
+
+/**
+ * Non-C168 companies/groups must have an expiration date before domain Confirm.
+ * @returns {{ id: string, kind: 'company'|'group' }|null}
+ */
+export function findMissingExpirationDate(companies, groups) {
+  const cos = Array.isArray(companies) ? companies : [];
+  for (const c of cos) {
+    const id = String(c?.company_id ?? "").trim().toUpperCase();
+    if (!id || id === "C168") continue;
+    const exp = c?.expiration_date;
+    if (exp == null || String(exp).trim() === "") {
+      return { id, kind: "company" };
+    }
+  }
+  const gs = Array.isArray(groups) ? groups : [];
+  for (const g of gs) {
+    const id = String(g?.group_code ?? "").trim().toUpperCase();
+    if (!id || id === "C168") continue;
+    const exp = g?.expiration_date;
+    if (exp == null || String(exp).trim() === "") {
+      return { id, kind: "group" };
+    }
+  }
+  return null;
+}
+
+/**
+ * When Charge is On, Start Date is required (used as transaction_date).
+ * @returns {{ id: string, kind: 'company'|'group' }|null}
+ */
+export function findChargeMissingStartDate(companies, groups) {
+  const cos = Array.isArray(companies) ? companies : [];
+  for (const c of cos) {
+    if (!c?.apply_commission_payments_on_domain_save) continue;
+    const id = String(c.company_id ?? "").trim().toUpperCase();
+    if (!id || id === "C168") continue;
+    if (!normalizeDomainStartDateYmd(c.startDate ?? c.start_date ?? "")) {
+      return { id, kind: "company" };
+    }
+  }
+  const gs = Array.isArray(groups) ? groups : [];
+  for (const g of gs) {
+    if (!g?.apply_commission_payments_on_domain_save) continue;
+    const id = String(g.group_code ?? "").trim().toUpperCase();
+    if (!id || id === "C168") continue;
+    if (!normalizeDomainStartDateYmd(g.startDate ?? g.start_date ?? "")) {
+      return { id, kind: "group" };
+    }
+  }
+  return null;
 }
 
 // ===================== Display Helpers =====================
@@ -471,19 +549,7 @@ export function resolveDomainFeePriceForPeriod(feeSettings, period, feeKind = "c
   return 0;
 }
 
-/** 工具栏紧凑标签：仅 6 个月 / 1 年，如 6M/1Y: 1200/2400 */
-export function formatDomainFeeToolbarChip(periodPrices) {
-  if (!periodPrices || typeof periodPrices !== "object") {
-    return "6M/1Y: 0.00/0.00";
-  }
-  const six = formatDomainFeeDisplay2(periodPrices["6months"]);
-  const one = formatDomainFeeDisplay2(periodPrices["1year"]);
-  const sixDisp = six === "—" ? "0.00" : six;
-  const oneDisp = one === "—" ? "0.00" : one;
-  return `6M/1Y: ${sixDisp}/${oneDisp}`;
-}
-
-/** 工具栏摘要：列出已配置的非零周期价 */
+/** 摘要：列出已配置的非零周期价 */
 export function formatDomainPeriodPricesInlineSummary(periodPrices, t) {
   if (!periodPrices || typeof periodPrices !== "object") return "";
   const parts = [];
@@ -585,203 +651,6 @@ export function forceSearchValue(value) {
  * and the domain fee price.
  * Returns { profit, sales, cs, it } totals and per-row amounts.
  */
-// ===================== Spring ↔ UI adapters =====================
-
-const UI_PERMISSION_TO_MODULE = {
-  Games: { id: 1, code: "GAME" },
-  Bank: { id: 2, code: "BANK" },
-  Loan: { id: 3, code: "LOAN" },
-  Rate: { id: 4, code: "RATE" },
-  Money: { id: 5, code: "MONEY" },
-};
-
-const MODULE_CODE_TO_UI_PERMISSION = {
-  GAME: "Games",
-  BANK: "Bank",
-  LOAN: "Loan",
-  RATE: "Rate",
-  MONEY: "Money",
-};
-
-export function featureModulesToPermissionNames(modules) {
-  if (!Array.isArray(modules) || modules.length === 0) return [];
-  const out = [];
-  const seen = new Set();
-  for (const m of modules) {
-    if (!m) continue;
-    const code = String(m.code ?? m.moduleCode ?? "").trim().toUpperCase();
-    const label = MODULE_CODE_TO_UI_PERMISSION[code] ?? (m.name ? String(m.name) : code);
-    if (!label || seen.has(label)) continue;
-    seen.add(label);
-    out.push(label);
-  }
-  return out;
-}
-
-export function permissionNamesToFeatureModules(permissions) {
-  if (!Array.isArray(permissions) || permissions.length === 0) return [];
-  const out = [];
-  const seen = new Set();
-  for (const p of permissions) {
-    const mod = UI_PERMISSION_TO_MODULE[String(p || "").trim()];
-    if (!mod || seen.has(mod.id)) continue;
-    seen.add(mod.id);
-    out.push({ id: mod.id, code: mod.code });
-  }
-  return out;
-}
-
-/**
- * Spring `TenantFeeShareAllocate[]` → UI `{ profit, sales, cs, it }`.
- * Also accepts already-normalized UI shape (idempotent) so aggregate →
- * companies_full / groups_full does not wipe Share % on a second pass.
- */
-export function feeShareSpringToUi(rows) {
-  if (rows && typeof rows === "object" && !Array.isArray(rows)) {
-    // Already UI-shaped (e.g. after first convert in aggregateOwnerTenantRows).
-    return normalizeFeeShareFromServer(rows);
-  }
-  const ui = defaultFeeShareAllocations();
-  if (!Array.isArray(rows)) return ui;
-  for (const row of rows) {
-    if (!row) continue;
-    const role = String(row.shareType ?? row.share_type ?? "")
-      .trim()
-      .toLowerCase();
-    if (!Object.prototype.hasOwnProperty.call(ui, role)) continue;
-    const accountId = parseInt(row.accountId ?? row.account_id, 10);
-    if (!accountId) continue;
-    ui[role].push({
-      account_id: accountId,
-      percentage:
-        row.percentage != null && row.percentage !== ""
-          ? parseFloat(row.percentage)
-          : "",
-    });
-  }
-  return ui;
-}
-
-/**
- * Profit pool = 100 - (sales + cs + it), split evenly across assigned Profit
- * accounts — same remainder rule shown as the read-only "Total" column on the
- * Profit card. Profit has no editable % input, so this is the only source of
- * truth for what percentage each Profit row should persist as.
- */
-export function distributeProfitPercentages(fsa) {
-  const salesSum = sumFeeShareRolePercentages(fsa?.sales);
-  const csSum = sumFeeShareRolePercentages(fsa?.cs);
-  const itSum = sumFeeShareRolePercentages(fsa?.it);
-  const profitPool = Math.max(0, 100 - (salesSum + csSum + itSum));
-
-  const profitRows = Array.isArray(fsa?.profit) ? fsa.profit : [];
-  const profitAssigned = profitRows.filter(
-    (r) => parseInt(r?.account_id, 10) !== 0
-  ).length;
-  const profitPerBase = profitAssigned > 0 ? profitPool / profitAssigned : 0;
-  const profitPerRounded = Math.round(profitPerBase * 10000) / 10000;
-
-  let assignedSoFar = 0;
-  let assignedSumPct = 0;
-  return profitRows.map((r) => {
-    const accountId = parseInt(r?.account_id, 10) || 0;
-    if (accountId === 0) return { account_id: 0, percentage: 0 };
-    assignedSoFar++;
-    const isLast = assignedSoFar === profitAssigned;
-    const percentage = isLast
-      ? Math.round((profitPool - assignedSumPct) * 10000) / 10000
-      : profitPerRounded;
-    if (!isLast) assignedSumPct += percentage;
-    return { account_id: accountId, percentage };
-  });
-}
-
-/**
- * UI Share % → Spring `TenantFeeShareAllocate[]` rows.
- *
- * Business rule (Domain Share %):
- * - Profit  = C168's retained cut of the Domain fee   → ownerType "owner"
- * - Sales/CS/IT = commission paid to staff accounts    → ownerType "user"
- * - Profit's percentage is never typed by the user (no % input on that card);
- *   it is always the remainder split via {@link distributeProfitPercentages}.
- */
-export function feeShareUiToSpring(fsa, tenantId) {
-  const tid = tenantId != null ? parseInt(tenantId, 10) : 0;
-  if (!tid) return [];
-
-  const profitPercentages = distributeProfitPercentages(fsa);
-
-  const roleMap = [
-    ["profit", "PROFIT", "owner"],
-    ["sales", "SALES", "user"],
-    ["cs", "CS", "user"],
-    ["it", "IT", "user"],
-  ];
-  const rows = [];
-  let sortOrder = 0;
-  for (const [uiRole, shareType, ownerType] of roleMap) {
-    const list = Array.isArray(fsa?.[uiRole]) ? fsa[uiRole] : [];
-    list.forEach((r, idx) => {
-      const accountId = parseInt(r?.account_id, 10);
-      if (!accountId) return;
-
-      let percentage;
-      if (uiRole === "profit") {
-        percentage = profitPercentages[idx]?.percentage ?? 0;
-      } else {
-        const pctRaw = r?.percentage;
-        percentage =
-          pctRaw !== undefined && pctRaw !== null && pctRaw !== ""
-            ? parseFloat(pctRaw)
-            : 0;
-      }
-
-      rows.push({
-        tenantId: tid,
-        shareType,
-        accountId,
-        ownerType,
-        percentage: Number.isFinite(percentage) ? percentage : 0,
-        sortOrder: sortOrder++,
-      });
-    });
-  }
-  return rows;
-}
-
-export function groupToTenantSaveEntry(g) {
-  const code = String(g?.code ?? g?.group_code ?? "").trim().toUpperCase();
-  return {
-    code,
-    tenantType: "GROUP",
-    expirationDate: g?.expiration_date ?? g?.expirationDate ?? null,
-  };
-}
-
-export function companyToTenantSaveEntry(c) {
-  const code = String(c?.code ?? c?.company_id ?? "").trim().toUpperCase();
-  const parent = c?.parent_code ?? c?.group_id ?? null;
-  return {
-    code,
-    tenantType: "COMPANY",
-    expirationDate: c?.expiration_date ?? c?.expirationDate ?? null,
-    parentGroupCode: parent ? String(parent).trim().toUpperCase() : null,
-  };
-}
-
-/** UI period edit map → Spring DomainFeeSettingsDTO period keys (snake in JSON). */
-export function periodPricesUiToFeeDto(periodPrices) {
-  const out = {};
-  if (!periodPrices || typeof periodPrices !== "object") return out;
-  DOMAIN_FEE_PERIOD_KEYS.forEach((key) => {
-    const raw = periodPrices[key];
-    if (raw === "" || raw == null) return;
-    const n = Number(raw);
-    if (Number.isFinite(n)) out[key] = n;
-  });
-  return out;
-}
-
 export function computeShareTotals(fsa, price) {
   const p = Number(price) || 0;
   const salesSum = sumFeeShareRolePercentages(fsa.sales);
@@ -791,10 +660,26 @@ export function computeShareTotals(fsa, price) {
   const profitPool = Math.max(0, 100 - otherSum);
 
   // Profit: evenly split remainder among assigned accounts
-  const profitRowAmounts = distributeProfitPercentages(fsa).map((r) => ({
-    percentage: r.percentage,
-    amount: p * (r.percentage / 100),
-  }));
+  const profitRows = Array.isArray(fsa.profit) ? fsa.profit : [];
+  const profitAssigned = profitRows.filter(
+    (r) => parseInt(r.account_id, 10) !== 0
+  ).length;
+  const profitPerBase = profitAssigned > 0 ? profitPool / profitAssigned : 0;
+  const profitPerRounded = Math.round(profitPerBase * 10000) / 10000;
+
+  let assignedSoFar = 0;
+  let assignedSumPct = 0;
+  const profitRowAmounts = profitRows.map((r) => {
+    const aid = parseInt(r.account_id, 10) || 0;
+    if (aid === 0) return { percentage: 0, amount: 0 };
+    assignedSoFar++;
+    const isLast = assignedSoFar === profitAssigned;
+    const pct = isLast
+      ? Math.round((profitPool - assignedSumPct) * 10000) / 10000
+      : profitPerRounded;
+    if (!isLast) assignedSumPct += pct;
+    return { percentage: pct, amount: p * (pct / 100) };
+  });
 
   const computeRowAmounts = (rows) =>
     (rows || []).map((r) => {

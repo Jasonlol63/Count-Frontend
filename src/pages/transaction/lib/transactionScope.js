@@ -1,5 +1,5 @@
 import {
-  companiesNativeInGroupList,
+  companiesForCompanyPicker,
   companyRowIsGroupEntity,
   filterCompaniesWithDisplayId,
   isDashboardGroupOnlyMode,
@@ -54,7 +54,7 @@ export function resolveTransactionScope(filterSnapshot) {
     if (groupAllMode || (groupsAllMode && groupAllMode)) {
       const list = groupsAllMode
         ? filterCompaniesWithDisplayId(snapCompanies).filter((c) => !isVirtualGroupLinkCompanyRow(c))
-        : companiesNativeInGroupList(snapCompanies, selectedGroup);
+        : companiesForCompanyPicker(snapCompanies, selectedGroup);
       return list.map((c) => Number(c.id)).filter((id) => Number.isFinite(id) && id > 0);
     }
     if (groupsAllMode && !groupAllMode) {
@@ -230,9 +230,10 @@ export function transactionScopeCacheKey(scope) {
   return `${companyKey}:${scope.viewGroup || ""}:${scope.mode}:${scope.uiCompanyId ?? ""}`;
 }
 
-/** company_id for user_currency_order_api (per subsidiary / group anchor). */
+/** company_id for user_currency_order_api (per subsidiary; null when pure group). */
 export function resolveTransactionCurrencyOrderCompanyId(scope, snapCompanies = []) {
   if (!scope) return null;
+  if (scope.mode === "group") return null;
   const ui = Number(scope.uiCompanyId);
   if (Number.isFinite(ui) && ui > 0) return ui;
   const scopeCid = Number(scope.scopeCompanyId);
@@ -247,5 +248,31 @@ export function resolveTransactionCurrencyOrderCompanyId(scope, snapCompanies = 
     const first = Number(scope.mergeCompanyIds[0]);
     if (Number.isFinite(first) && first > 0) return first;
   }
+  return null;
+}
+
+/**
+ * Params for user_currency_order_api: company ledger uses company_id;
+ * pure Group ledger uses group_id (API stores under g:{groups.id}).
+ */
+export function resolveTransactionCurrencyOrderParams(scope, snapCompanies = []) {
+  if (!scope) return { companyId: null, groupId: null };
+  if (scope.mode === "group" && scope.selectedGroup) {
+    return {
+      companyId: null,
+      groupId: String(scope.selectedGroup).trim().toUpperCase(),
+    };
+  }
+  return {
+    companyId: resolveTransactionCurrencyOrderCompanyId(scope, snapCompanies),
+    groupId: null,
+  };
+}
+
+/** React Query / localStorage key: company id number, or `g:GROUPCODE`. */
+export function resolveTransactionCurrencyOrderCacheKey(scope, snapCompanies = []) {
+  const { companyId, groupId } = resolveTransactionCurrencyOrderParams(scope, snapCompanies);
+  if (companyId != null && Number(companyId) > 0) return Number(companyId);
+  if (groupId) return `g:${groupId}`;
   return null;
 }

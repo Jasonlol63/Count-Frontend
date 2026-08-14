@@ -1,5 +1,5 @@
-﻿/**
- * Group vs Company login scope â€” mirrors {@link includes/group_company_access.php}.
+/**
+ * Group vs Company login scope — mirrors {@link includes/group_company_access.php}.
  */
 import {
   DASHBOARD_GROUP_FILTER_KEY,
@@ -82,7 +82,7 @@ export function resolveAccessibleGroupIds(me, companies = []) {
   const fromSession = readAccessibleGroupIds(me);
   const set = new Set(fromSession);
   const ident = getLoginIdentifier(me);
-  // Group login: login_identifier is a group id (e.g. AP). Company login: it is a company code â€” do not add as a group pill.
+  // Group login: login_identifier is a group id (e.g. AP). Company login: it is a company code — do not add as a group pill.
   if (ident && isGroupLogin(me)) set.add(ident);
   if (isCompanyLogin(me)) {
     const loginGroup = resolveCompanyLoginGroupId(me, companies);
@@ -128,7 +128,7 @@ export function filterCompaniesForLoginScope(companies, me) {
   return companies.filter((c) => companyMatchesLoginScope(c, me, companies));
 }
 
-/** Admin-assigned group ledger tenants (user_group_map), from auth/current-user. */
+/** Admin-assigned group ledger tenants (user_group_map), from current_user_api. */
 export function getAssignedGroupCodes(me) {
   const raw = me?.assigned_group_codes;
   if (!Array.isArray(raw)) return [];
@@ -191,7 +191,7 @@ export function resolveAssignedScopeGroupIds(me, companies = []) {
 
 /**
  * Restrict owner company rows to a user's explicit per-company / per-group
- * assignment â€” mirrors backend `gc_session_can_access_company_id`:
+ * assignment — mirrors backend `gc_session_can_access_company_id`:
  * a user mapped to specific companies may only see those companies (plus any
  * company under a group they are assigned to). Owners and users without an
  * explicit per-company assignment keep the full list.
@@ -258,10 +258,10 @@ export function canPrefetchCompanyScope(me, companyId, companies = [], viewGroup
   }
 
   if (userType === "member") {
-    return Number(me.tenant_id) === id;
+    return Number(me.company_id) === id;
   }
 
-  if (Number(me.tenant_id) === id) return true;
+  if (Number(me.company_id) === id) return true;
 
   const assignedIds = getAssignedCompanyIds(me);
   if (assignedIds.includes(id)) return true;
@@ -308,7 +308,7 @@ export function filterCompaniesForDashboardApiAccess(
 }
 
 /**
- * Admin assigned group ledger (user_group_map) â€” NOT login_scope.
+ * Admin assigned group ledger (user_group_map) — NOT login_scope.
  */
 export function userHasAssignedGroupLedger(me) {
   return getAssignedGroupCodes(me).length > 0;
@@ -375,11 +375,11 @@ export function canAccessGroupLedgerForGroup(me, groupCode, companies = []) {
 
 /**
  * Runtime: may user deselect company and view group ledger?
- * Company login manager/etc. without Admin-assigned Group â†’ false (group pill wraps company only).
+ * Company login manager/etc. without Admin-assigned Group → false (group pill wraps company only).
  *
  * @param {object|null|undefined} me
  * @param {string|null|undefined} [groupCode] When set, requires access to that specific group.
- * @param {object[]} [companies] Owner company rows â€” refines group access when groupCode is set.
+ * @param {object[]} [companies] Owner company rows — refines group access when groupCode is set.
  */
 export function canUseGroupOnlyMode(me, groupCode = null, companies = null) {
   if (isSystemMaintenanceItUser(me)) return false;
@@ -400,7 +400,7 @@ export function companyLoginRequiresSubsidiaryWithGroup(me) {
 }
 
 /**
- * Company login that may use Group All â†’ AP+IG group-ledger aggregate (same path as group login).
+ * Company login that may use Group All → AP+IG group-ledger aggregate (same path as group login).
  * Owner/admin, or Admin-assigned group ledger (e.g. partnership user with AP/IG).
  */
 export function companyLoginCanUseGroupsAllLedger(me) {
@@ -484,7 +484,7 @@ export function canClearCompanySelection(me, groupCode = null) {
 }
 
 /**
- * Group pills: group/company login â†’ login group + linked groups (AP+IG) from session/API.
+ * Group pills: group/company login → login group + linked groups (AP+IG) from session/API.
  */
 export function resolveVisibleGroupIds(groupIds, me, companies = []) {
   const ids = Array.isArray(groupIds) ? groupIds : [];
@@ -527,7 +527,7 @@ export function resolveVisibleGroupIds(groupIds, me, companies = []) {
   return ids;
 }
 
-/** Group ledger API calls (dashboard group-only / currency warm) â€” skip pills the user cannot access. */
+/** Group ledger API calls (dashboard group-only / currency warm) — skip pills the user cannot access. */
 export function filterGroupIdsForLedgerAccess(me, groupIds, companies = []) {
   if (!me || !Array.isArray(groupIds)) return [];
   return groupIds
@@ -565,20 +565,20 @@ export function appendLoginScopeQueryParams(target, me) {
   return target;
 }
 
-/** Normalize company code for sidebar / session patches (empty â†’ null). */
+/** Normalize company code for sidebar / session patches (empty → null). */
 export function normalizeCompanyCode(value) {
   const code = String(value ?? "").trim().toUpperCase();
   return code || null;
 }
 
 const SIDEBAR_PATCH_FIELD_KEYS = [
-  "tenant_id",
-  "tenant_code",
-  "is_current_tenant_c168",
+  "company_id",
+  "company_code",
+  "is_current_company_c168",
   "has_c168_domain_page_access",
   "has_c168_auto_renew_access",
-  "tenant_has_game",
-  "tenant_has_bank",
+  "company_has_gambling",
+  "company_has_bank",
   "expiration_date",
   "expiration_hint",
   "expiration_status",
@@ -594,8 +594,8 @@ function meSidebarPatchEqual(a, b) {
 }
 
 /**
- * Optimistic sidebar `me` patch when group/company filter changes (before current-user returns).
- * When `companyCode` is supplied in ctx, never fall back to stale `me.tenant_code`.
+ * Optimistic sidebar `me` patch when group/company filter changes (before current_user_api returns).
+ * When `companyCode` is supplied in ctx, never fall back to stale `me.company_code` (fixes 95→C168 sidebar).
  */
 export function patchMeFromCompanyContext(me, ctx = {}) {
   if (!me) return me;
@@ -604,17 +604,26 @@ export function patchMeFromCompanyContext(me, ctx = {}) {
   if (rawId == null || rawId === "" || !Number.isFinite(Number(rawId)) || Number(rawId) <= 0) {
     const next = {
       ...me,
-      tenant_id: null,
-      is_current_tenant_c168: false,
+      company_id: null,
+      is_current_company_c168: false,
       has_c168_domain_page_access: false,
       has_c168_auto_renew_access: false,
-      tenant_code: hasExplicitCode ? normalizeCompanyCode(ctx.companyCode) : "",
+      company_code: hasExplicitCode ? normalizeCompanyCode(ctx.companyCode) : "",
     };
-    if (ctx.hasGambling != null) {
-      next.tenant_has_game = Boolean(ctx.hasGambling);
-    }
-    if (ctx.hasBank != null) {
-      next.tenant_has_bank = Boolean(ctx.hasBank);
+    // Group-only: contract fixes Games category (never wipe Data Capture for empty groups).
+    if (isGroupLogin(me) || ctx.forceGroupGamesCategory === true) {
+      next.company_has_gambling = true;
+      next.company_has_bank = false;
+      next.company_permissions = Array.isArray(me.company_permissions) && me.company_permissions.includes("Games")
+        ? me.company_permissions
+        : ["Games"];
+    } else {
+      if (ctx.hasGambling != null) {
+        next.company_has_gambling = Boolean(ctx.hasGambling);
+      }
+      if (ctx.hasBank != null) {
+        next.company_has_bank = Boolean(ctx.hasBank);
+      }
     }
     if (ctx.expirationDate !== undefined) {
       Object.assign(next, buildSidebarExpirationFields(ctx.expirationDate));
@@ -622,31 +631,33 @@ export function patchMeFromCompanyContext(me, ctx = {}) {
     return meSidebarPatchEqual(me, next) ? me : next;
   }
   const id = Number(rawId);
-  const companyChanged = Number(me.tenant_id) !== id;
+  const companyChanged = Number(me.company_id) !== id;
   const explicitCode = hasExplicitCode ? normalizeCompanyCode(ctx.companyCode) : null;
-  const fallbackCode = normalizeCompanyCode(me.tenant_code) ?? "";
+  const fallbackCode = normalizeCompanyCode(me.company_code) ?? "";
   const code = hasExplicitCode ? explicitCode ?? "" : fallbackCode;
   const isC168 = code === "C168";
   const next = {
     ...me,
-    tenant_id: id,
-    tenant_code: hasExplicitCode ? code : code || me.tenant_code,
-    is_current_tenant_c168: isC168,
+    company_id: id,
+    company_code: hasExplicitCode ? code : code || me.company_code,
+    is_current_company_c168: isC168,
   };
+  // C168 page access flags come from current_user API (PHP session). Do not
+  // optimistically grant them here — sidebar uses role + isActiveCompanyContextC168.
   if (ctx.hasGambling != null) {
-    next.tenant_has_game = Boolean(ctx.hasGambling);
+    next.company_has_gambling = Boolean(ctx.hasGambling);
   } else if (companyChanged) {
     const cached = peekCompanySessionFlags(id);
     if (cached) {
-      next.tenant_has_game = Boolean(cached.has_gambling);
+      next.company_has_gambling = Boolean(cached.has_gambling);
     }
   }
   if (ctx.hasBank != null) {
-    next.tenant_has_bank = Boolean(ctx.hasBank);
+    next.company_has_bank = Boolean(ctx.hasBank);
   } else if (companyChanged) {
     const cached = peekCompanySessionFlags(id);
     if (cached) {
-      next.tenant_has_bank = Boolean(cached.has_bank);
+      next.company_has_bank = Boolean(cached.has_bank);
     }
   }
   if (ctx.expirationDate !== undefined) {
@@ -655,22 +666,22 @@ export function patchMeFromCompanyContext(me, ctx = {}) {
   return meSidebarPatchEqual(me, next) ? me : next;
 }
 
-/** Session / current-user reflects active tenant (after dashboard company pick + session sync). */
+/** Session / current_user reflects active company (after dashboard company pick + session sync). */
 export function isActiveCompanyContextC168(me) {
   if (!me) return false;
   if (isDashboardGroupOnlyMode()) return false;
-  if (me.is_current_tenant_c168) return true;
-  if (String(me.tenant_code || "").trim().toUpperCase() === "C168") return true;
+  if (me.is_current_company_c168) return true;
+  if (String(me.company_code || "").trim().toUpperCase() === "C168") return true;
   const persistedId = readDashboardSelectedCompanyId();
   if (persistedId != null) {
     const row = findOwnerCompanyById(persistedId);
-    if (String(row?.tenant_code || row?.company_id || "").trim().toUpperCase() === "C168") return true;
+    if (String(row?.company_id || "").trim().toUpperCase() === "C168") return true;
   }
   return false;
 }
 
 /**
- * Domain & Announcement â€” only while viewing company C168 (any login: group or company).
+ * Domain & Announcement — only while viewing company C168 (any login: group or company).
  * Hidden in group-only dashboard mode (no company selected) even if anchor session is C168.
  */
 export function canAccessC168DomainPages(me) {
@@ -681,7 +692,7 @@ export function canAccessC168DomainPages(me) {
   return userRoleAllowsC168Domain(me.role) || Boolean(me.has_c168_domain_page_access);
 }
 
-/** Auto Renew â€” same rules as Domain / Announcement. */
+/** Auto Renew — same rules as Domain / Announcement. */
 export function canAccessC168AutoRenew(me) {
   if (!me) return false;
   if (isDashboardGroupOnlyMode()) return false;

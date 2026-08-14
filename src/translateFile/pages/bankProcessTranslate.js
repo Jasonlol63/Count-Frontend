@@ -44,10 +44,10 @@ export const BANK_PROCESS_I18N = {
     switchCompanyFailed: "Switch company failed",
     addCountryFailed: "Add country failed",
     countryAlreadyExists: "Country \"{country}\" already exists",
-    countryCodeLettersOnly: "Use capital letters A–Z only (no numbers or special characters).",
+    countryCodeLettersOnly: "Use capital letters A–Z and spaces only (no numbers or special characters).",
     countryAdded: "Country added",
     addBankFailed: "Add bank failed",
-    bankCodeLettersOnly: "Use capital letters A–Z only (no numbers or special characters).",
+    bankCodeLettersOnly: "Use capital letters A–Z and spaces only (no numbers or special characters).",
     bankAlreadyExists: "Bank \"{bank}\" already exists",
     bankAdded: "Bank added",
     removeCountryFailed: "Remove country failed",
@@ -143,7 +143,6 @@ export const BANK_PROCESS_I18N = {
     weekFrequency: "Week",
     dayFrequency: "Day",
     onceFrequency: "Once",
-    compensationFrequency: "Compensation",
     dayEndNotUsedWhenOnce: "Not used when Frequency is Once",
     contractRequiredUnlessOnce: "Contract is required unless Frequency is Once.",
     contractRequiredUnlessOnceOrWeek: "Contract is required unless Frequency is Once, Week, or Day.",
@@ -187,6 +186,8 @@ export const BANK_PROCESS_I18N = {
     removeRow: "Remove row",
     addAnotherAccountAmount: "Add another Account & Amount",
     addAccountInline: "+ Add Account",
+    profitSharingExceedsRemaining: "This amount exceeds the remaining profit ({remaining}). Please enter a smaller amount or percentage.",
+    profitSharingPercentMax100: "Percentage cannot exceed 100%.",
 
     confirmDeleteTitle: "Confirm Delete",
     confirmDeleteMessage: "Are you sure you want to delete {count} process(es)? This action cannot be undone.",
@@ -243,7 +244,6 @@ export const BANK_PROCESS_I18N = {
     errResendOnlyActive: "Only Active processes can use Resend",
     errResendBlockedStatus: "Processes with Official, E-Invoice, or Block status cannot use Resend",
     errResendSuccessDone: "Done: this process can appear in Accounting Due again.",
-    errEditLockedByStatus: "Processes with Official, E-Invoice, or Block status cannot be edited. Change its status first.",
     errPostLoginRequired: "Please log in first",
     errPostSelectProcess: "Please select at least one process",
     errPostNoProcessesFound: "No process found to post (only active or Accounting Due items in current company)",
@@ -308,10 +308,10 @@ export const BANK_PROCESS_I18N = {
     switchCompanyFailed: "切换公司失败",
     addCountryFailed: "新增国家失败",
     countryAlreadyExists: "国家「{country}」已存在",
-    countryCodeLettersOnly: "仅允许大写字母 A–Z（不可含数字或特殊字符）。",
+    countryCodeLettersOnly: "仅允许大写字母 A–Z 与空格（不可含数字或特殊字符）。",
     countryAdded: "国家已新增",
     addBankFailed: "新增银行失败",
-    bankCodeLettersOnly: "仅允许大写字母 A–Z（不可含数字或特殊字符）。",
+    bankCodeLettersOnly: "仅允许大写字母 A–Z 与空格（不可含数字或特殊字符）。",
     bankAlreadyExists: "银行「{bank}」已存在",
     bankAdded: "银行已新增",
     removeCountryFailed: "删除国家失败",
@@ -406,7 +406,6 @@ export const BANK_PROCESS_I18N = {
     weekFrequency: "按周",
     dayFrequency: "按天",
     onceFrequency: "一次性",
-    compensationFrequency: "赔款",
     dayEndNotUsedWhenOnce: "Frequency 为「一次性」时不使用结束日",
     contractRequiredUnlessOnce: "除 Frequency 为「一次性」外，合同为必填。",
     contractRequiredUnlessOnceOrWeek: "除 Frequency 为「一次性」「按周」或「按天」外，合同为必填。",
@@ -450,6 +449,8 @@ export const BANK_PROCESS_I18N = {
     removeRow: "删除行",
     addAnotherAccountAmount: "新增一行账号与金额",
     addAccountInline: "+ 添加账号",
+    profitSharingExceedsRemaining: "该金额超过剩余利润（{remaining}），请输入更小的金额或百分比。",
+    profitSharingPercentMax100: "百分比不能超过 100%。",
 
     confirmDeleteTitle: "确认删除",
     confirmDeleteMessage: "确定删除 {count} 条流程吗？此操作不可撤销。",
@@ -506,7 +507,6 @@ export const BANK_PROCESS_I18N = {
     errResendOnlyActive: "仅状态为启用的流程可使用重发",
     errResendBlockedStatus: "官方、电子发票、封锁状态的流程不可使用重发",
     errResendSuccessDone: "完成：该流程可再次出现在待入账中。",
-    errEditLockedByStatus: "官方、电子发票、封锁状态的流程不可编辑，请先变更其状态。",
     errPostLoginRequired: "请先登录",
     errPostSelectProcess: "请至少选择一个流程",
     errPostNoProcessesFound: "未找到可入账的流程（仅处理当前公司下启用或待入账中的流程）",
@@ -631,9 +631,6 @@ function translateDynamicApiMessage(lang, message) {
   }
   if (/failed\s+to\s+update\s+status\s+option/i.test(raw)) {
     return getBankProcessText(lang, "statusUpdateFailed");
-  }
-  if (/cannot\s+be\s+edited/i.test(raw) || raw.includes("不可编辑")) {
-    return getBankProcessText(lang, "errEditLockedByStatus");
   }
 
   return null;

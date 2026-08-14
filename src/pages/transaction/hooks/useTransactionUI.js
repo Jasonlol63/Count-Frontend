@@ -6,6 +6,7 @@ import {
   rejectContra as rejectContraApi,
   transactionQueryKeys,
 } from "../lib/transactionApi.js";
+import { notifyTransactionListInvalidated } from "../lib/transactionPaymentLogic.js";
 import { buildPaymentHistoryUrl } from "../lib/transactionPaymentHistoryUrl.js";
 import { buildPaymentHistoryPopupFeatures } from "../lib/transactionPaymentHistoryPopup.js";
 
@@ -56,7 +57,8 @@ export function useTransactionUI() {
         const res = await queryClient.fetchQuery({
           queryKey: transactionQueryKeys.contraInbox(scopeApi),
           queryFn: ({ signal }) => loadContraInbox({ ...scopeApi, signal }),
-          staleTime: 10_000,
+          // Always hit network — SSE / poll must not serve a stale badge count.
+          staleTime: 0,
           gcTime: 5 * 60_000,
         });
         if (res?.success) {
@@ -95,6 +97,7 @@ export function useTransactionUI() {
       try {
         const res = await approveContraMutation.mutateAsync({ id, scopeApi });
         if (res?.success) {
+          notifyTransactionListInvalidated("contra_approve");
           pushToast("Contra approved", "success");
           await refreshContraInboxBadge(scopeApi);
         } else {
@@ -115,6 +118,7 @@ export function useTransactionUI() {
       try {
         const res = await rejectContraMutation.mutateAsync({ id, scopeApi });
         if (res?.success) {
+          notifyTransactionListInvalidated("contra_reject");
           pushToast("Contra rejected", "success");
           await refreshContraInboxBadge(scopeApi);
           if (onSearch) await onSearch({ forceRefresh: true, silent: true });

@@ -1,6 +1,7 @@
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import ReportDatePicker from "../common/ReportDatePicker.jsx";
 import ReportGcFilterPanel from "../shared/ReportGcFilterPanel.jsx";
+import { isTypeAheadKey } from "../../../components/typeAheadMatch.js";
 import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
 
 const QUICK_RANGE_KEYS = ["today", "yesterday", "thisWeek", "lastWeek", "thisMonth", "lastMonth", "thisYear", "lastYear"];
@@ -54,10 +55,17 @@ export default function DomainReportFilters({
     });
   }, [processes, processSearch, t, isGroupScope]);
 
+  const getItemLabel = useCallback(
+    (idx) => filteredProcesses[idx]?.display_text ?? "",
+    [filteredProcesses],
+  );
+
+  // Group scope has no search box — use type-ahead. Company scope seeds search on letter.
   const { highlightIdx, setHighlightIdx, listRef, handleListKeyDown, handleButtonKeyDown, highlightClass } = useListboxKeyboard({
     open: processDropdownOpen,
     itemCount: filteredProcesses.length,
     resetToken: processSearch,
+    getItemLabel: isGroupScope ? getItemLabel : null,
   });
 
   const selectedProcessLabel = useMemo(() => {
@@ -89,6 +97,19 @@ export default function DomainReportFilters({
                   className={`custom-select-button ${processDropdownOpen ? "open" : ""}`}
                   onClick={() => setProcessDropdownOpen(!processDropdownOpen)}
                   onKeyDown={(e) => {
+                    if (
+                      !processDropdownOpen &&
+                      !isGroupScope &&
+                      isTypeAheadKey(e.key) &&
+                      !e.ctrlKey &&
+                      !e.metaKey &&
+                      !e.altKey
+                    ) {
+                      e.preventDefault();
+                      setProcessSearch(e.key);
+                      setProcessDropdownOpen(true);
+                      return;
+                    }
                     handleButtonKeyDown(e, {
                       isOpen: processDropdownOpen,
                       onToggleOpen: () => setProcessDropdownOpen(true),
@@ -115,7 +136,8 @@ export default function DomainReportFilters({
                           placeholder={t("searchProcess")}
                           autoComplete="off"
                           value={processSearch}
-                          onChange={(e) => setProcessSearch(e.target.value.toUpperCase())}
+                          onChange={(e) => setProcessSearch(e.target.value)}
+                          style={{ textTransform: "uppercase" }}
                           autoFocus
                           onKeyDown={(e) => {
                             handleListKeyDown(e, {

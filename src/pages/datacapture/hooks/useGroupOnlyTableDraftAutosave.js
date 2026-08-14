@@ -4,39 +4,41 @@ import {
   normalizeGroupOnlyDraftCurrencyId,
   saveGroupOnlyTableDraft,
 } from "../lib/dataCaptureGroupOnlyTableDraft.js";
-import { isGroupPayrollDraftProcessId } from "../lib/dataCaptureGroupOnlyProcesses.js";
+import { resolvePayrollDraftProcessKey } from "../lib/dataCaptureGamesPayrollProcesses.js";
 import { captureTableSnapshot } from "../lib/dataCaptureTableSnapshot.js";
 import { getDataCaptureState } from "../lib/dataCaptureRuntime.js";
 import { useDataCaptureContext } from "../context/DataCaptureContext.jsx";
 
 /**
- * Debounced server sync when the group-only capture grid changes.
+ * Debounced server sync when the group-only / Games-payroll capture grid changes.
  * Only reacts to grid edits — not process/currency selection alone.
  */
 export function useGroupOnlyTableDraftAutosave({
   enabled,
+  groupPayrollUi = true,
   captureScope,
   draftBucket,
   payrollDraftServerSync = true,
-  selectedProcessId,
+  selectedProcess,
   currencyId,
   captureType,
 }) {
   const { gridVersion } = useDataCaptureContext();
-  const processIdRef = useRef(selectedProcessId);
+  const selectedProcessRef = useRef(selectedProcess);
   const currencyIdRef = useRef(currencyId);
   const skipAfterRestoreRef = useRef(false);
 
-  processIdRef.current = selectedProcessId;
+  selectedProcessRef.current = selectedProcess;
   currencyIdRef.current = currencyId;
 
   useLayoutEffect(() => {
     skipAfterRestoreRef.current = true;
-  }, [selectedProcessId, currencyId, draftBucket]);
+  }, [selectedProcess?.id, currencyId, draftBucket]);
 
   useEffect(() => {
-    if (!enabled || !draftBucket || !processIdRef.current) return;
-    if (!isGroupPayrollDraftProcessId(processIdRef.current)) return;
+    if (!enabled || !draftBucket) return;
+    const processKey = resolvePayrollDraftProcessKey(selectedProcessRef.current, groupPayrollUi);
+    if (!processKey) return;
     const cid = normalizeGroupOnlyDraftCurrencyId(currencyIdRef.current);
     if (!cid) return;
     if (getDataCaptureState().isRestoring) {
@@ -58,7 +60,7 @@ export function useGroupOnlyTableDraftAutosave({
     const tableData = captureTableSnapshot(activeCaptureType);
     saveGroupOnlyTableDraft(
       draftBucket,
-      processIdRef.current,
+      processKey,
       cid,
       {
         tableData,
@@ -66,5 +68,5 @@ export function useGroupOnlyTableDraftAutosave({
       },
       { captureScope, serverSync: payrollDraftServerSync },
     );
-  }, [enabled, captureScope, draftBucket, payrollDraftServerSync, captureType, gridVersion, currencyId]);
+  }, [enabled, groupPayrollUi, captureScope, draftBucket, payrollDraftServerSync, captureType, gridVersion, currencyId]);
 }

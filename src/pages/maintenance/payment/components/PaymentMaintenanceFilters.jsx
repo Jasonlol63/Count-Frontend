@@ -35,6 +35,7 @@ export default function PaymentMaintenanceFilters({
   selectedCurrency,
   setSelectedCurrency,
   onCurrencySelectAll,
+  onCurrencyDropOn,
   onDelete,
   confirmDelete,
   setConfirmDelete,
@@ -46,10 +47,9 @@ export default function PaymentMaintenanceFilters({
     () => [
       { value: "CONTRA", label: "CONTRA" },
       { value: "PAYMENT", label: "PAYMENT" },
+      { value: "RECEIVE", label: "RECEIVE" },
       { value: "CLAIM", label: "CLAIM" },
-      { value: "CLEAR", label: "CLEAR" },
       { value: "ADJUSTMENT", label: "ADJUSTMENT" },
-      { value: "PROFIT", label: "PROFIT" },
       { value: "RATE", label: "RATE" },
     ],
     [],
@@ -157,11 +157,14 @@ export default function PaymentMaintenanceFilters({
             selectedCurrencies={selectedCurrency ? [selectedCurrency] : []}
             toggleAllCurrencies={onCurrencySelectAll}
             toggleCurrency={(code) => setSelectedCurrency(code)}
+            currencyDraggable
+            onCurrencyDropOn={onCurrencyDropOn}
             t={(key) => {
               if (key === "groupId") return m.groupId;
               if (key === "company") return m.company;
               if (key === "currency") return m.currency;
               if (key === "currencyAll") return m.currencyAll;
+              if (key === "currencyDragHint") return m.currencyDragHint;
               if (key === "groupFilterAll") return m.all || "All";
               return m[key] || key;
             }}

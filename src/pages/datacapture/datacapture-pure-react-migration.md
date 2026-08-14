@@ -518,7 +518,7 @@ rg "window\\.__DC_" frontend/src/pages/datacapture
 - [ ] group-only 模式（`group_only=1`）
 - [ ] 无 gambling 权限跳转
 - [ ] 切换公司 / 分组后流程列表、币种、已提交列表刷新
-- [x] Category 权限 pills 已移除（见 `CATEGORY_REMOVED.md`；内部自动 Games/Bank）
+- [ ] Category 权限 pills（Games/Loan/Rate/Money）
 
 ### 表单
 

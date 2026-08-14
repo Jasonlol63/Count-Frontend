@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProcessModalPortal, { processModalBackdropStyle } from "../../../components/ProcessModalPortal.jsx";
 import RemoveWordChipInput from "../../../components/RemoveWordChipInput.jsx";
-import { toProcessFormUpperInput } from "../processListHelpers.js";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
 import ProcessFormPortalSelect from "./ProcessFormPortalSelect.jsx";
 import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
@@ -52,7 +51,7 @@ export default function ProcessFormModal({
   editMode,
   form,
   setForm,
-  scopeTenantId = null,
+  scopeCompanyId = null,
   currencies,
   days,
   readOnly = false,
@@ -171,7 +170,7 @@ export default function ProcessFormModal({
                           !e.altKey
                         ) {
                           e.preventDefault();
-                          setCopySearch(e.key.toUpperCase());
+                          setCopySearch(e.key);
                           setCopyOpen(true);
                           return;
                         }
@@ -206,7 +205,8 @@ export default function ProcessFormModal({
                               autoComplete="off"
                               value={copySearch}
                               disabled={ro}
-                              onChange={(e) => setCopySearch(e.target.value.toUpperCase())}
+                              onChange={(e) => setCopySearch(e.target.value)}
+                              style={{ textTransform: "uppercase" }}
                               onKeyDown={(e) => {
                                 copyKeyboard.handleListKeyDown(e, {
                                   len: copyListCount,
@@ -269,7 +269,7 @@ export default function ProcessFormModal({
                     <input
                       id={editMode ? "edit_process_name" : "add_process_id"}
                       value={form.process_name}
-                      onChange={(e) => setForm((prev) => ({ ...prev, process_name: toProcessFormUpperInput(e.target.value) }))}
+                      onChange={(e) => setForm((prev) => ({ ...prev, process_name: e.target.value }))}
                       style={
                         editMode || form.is_multi_process
                           ? { backgroundColor: "#f5f5f5", cursor: "not-allowed" }
@@ -518,6 +518,25 @@ export default function ProcessFormModal({
                 </div>
               </div>
 
+              <div className="form-row">
+                <div className="form-group">
+                  <div className="dc-save-draft-row">
+                    <label className="dc-save-draft-row__label">{t("enableSaveDraft")}</label>
+                    <label className="toggle-switch" title={t("enableSaveDraft")}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(form.enable_save_draft)}
+                        disabled={ro}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, enable_save_draft: e.target.checked }))
+                        }
+                      />
+                      <span className="toggle-slider" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               </div>
 
               {editMode && (
@@ -562,7 +581,7 @@ export default function ProcessFormModal({
                     value={form.remove_word}
                     onChange={(next) => setForm((prev) => ({ ...prev, remove_word: next }))}
                     processId={editMode && form.id ? form.id : null}
-                    scopeCompanyId={scopeTenantId}
+                    scopeCompanyId={scopeCompanyId}
                     placeholder={t("enterWordsToRemove")}
                     disabled={ro}
                   />
@@ -576,7 +595,7 @@ export default function ProcessFormModal({
                   <input
                     value={form.replace_word_from}
                     disabled={ro}
-                    onChange={(e) => setForm((prev) => ({ ...prev, replace_word_from: toProcessFormUpperInput(e.target.value) }))}
+                    onChange={(e) => setForm((prev) => ({ ...prev, replace_word_from: e.target.value }))}
                     placeholder={t("oldWord")}
                     style={{ textTransform: "uppercase" }}
                   />
@@ -587,7 +606,7 @@ export default function ProcessFormModal({
                   <input
                     value={form.replace_word_to}
                     disabled={ro}
-                    onChange={(e) => setForm((prev) => ({ ...prev, replace_word_to: toProcessFormUpperInput(e.target.value) }))}
+                    onChange={(e) => setForm((prev) => ({ ...prev, replace_word_to: e.target.value }))}
                     placeholder={t("newWord")}
                     style={{ textTransform: "uppercase" }}
                   />
@@ -665,7 +684,7 @@ export default function ProcessFormModal({
                     rows={5}
                     value={form.remark}
                     disabled={ro}
-                    onChange={(e) => setForm((prev) => ({ ...prev, remark: toProcessFormUpperInput(e.target.value) }))}
+                    onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))}
                     placeholder={t("enterRemarks")}
                     style={{ textTransform: "uppercase" }}
                   />

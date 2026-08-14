@@ -1,6 +1,7 @@
 /**
  * After `npm run build`: drop Vite hash asset churn, stage only changed frontend files.
- * Run from frontend/ via package.json postbuild (repo root = ../..).
+ * Run from frontend/ via package.json postbuild / build:sync-git (repo root = ../..).
+ * Intentionally NOT wired into build:deploy — deploy keeps new Vite hashed assets.
  */
 import { execSync } from "node:child_process";
 import { dirname, resolve } from "node:path";

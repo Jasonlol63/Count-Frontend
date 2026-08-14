@@ -6,7 +6,11 @@ import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
 import { parseTrailingSourceParenValue } from "../../../shared/formula/removeTrailingSourcePercent.js";
 import { evaluateExpression } from "./summaryFormulaEvaluate.js";
 import { parseIdProductColumnRef, removeThousandsSeparators } from "./summaryFormulaParseUtils.js";
-import { normalizeSummaryIdProductText } from "../lib/summaryIdProductUtils.js";
+import {
+  isSafeIdProductSuffixMatch,
+  normalizeSummaryIdProductText,
+  summaryIdProductsEqual,
+} from "../lib/summaryIdProductUtils.js";
 import {
   getCapturedProcessData,
   getTransformedTableData,
@@ -14,6 +18,22 @@ import {
 
 function normalizeIdProductText(text) {
   return normalizeSummaryIdProductText(text);
+}
+
+/** Prefer exact Id Product hits before any truncated suffix/prefix expansion. */
+function findExactIdProductInTable(parsedTableData, shortTrim, rowLabel = null) {
+  if (!parsedTableData?.rows?.length || !shortTrim) return null;
+  for (let i = 0; i < parsedTableData.rows.length; i += 1) {
+    const row = parsedTableData.rows[i];
+    if (!row || row.length <= 1 || row[1]?.type !== "data") continue;
+    if (rowLabel) {
+      const headerVal = row[0]?.value != null ? String(row[0].value).trim() : "";
+      if (headerVal !== rowLabel) continue;
+    }
+    const full = String(row[1].value || "").trim();
+    if (summaryIdProductsEqual(full, shortTrim)) return full;
+  }
+  return null;
 }
 
 function truncateProcessedAmountTo6Decimals(value) {
@@ -40,7 +60,6 @@ function findCaptureRowIndexByLabel(tableData, rowLabel, idProductResolved) {
         return { rowIndex: null, idMatches: false };
     }
     const idTrim = String(idProductResolved || '').trim();
-    const normalizedTarget = normalizeIdProductText(idProductResolved);
     for (let i = 0; i < tableData.rows.length; i += 1) {
         const row = tableData.rows[i];
         const label = row[0]?.type === 'header' ? String(row[0].value || '').trim() : '';
@@ -49,11 +68,7 @@ function findCaptureRowIndexByLabel(tableData, rowLabel, idProductResolved) {
             return { rowIndex: i, idMatches: false };
         }
         const rowId = String(row[1].value || '').trim();
-        const idMatches =
-            rowId === idTrim ||
-            (typeof isFullIdProduct === 'function' && isFullIdProduct(idProductResolved)
-                ? rowId === idTrim
-                : normalizeIdProductText(rowId) === normalizedTarget);
+        const idMatches = summaryIdProductsEqual(rowId, idTrim);
         return { rowIndex: i, idMatches: !!idMatches };
     }
     return { rowIndex: null, idMatches: false };
@@ -234,7 +249,18 @@ function resolveToFullIdProduct(shortId, rowLabel) {
         } catch (e) { return shortId; }
     }
     if (parsedTableData && parsedTableData.rows) {
+        // CRITICAL: exact Id Product wins over stale row labels / *REVERT* suffix rows.
+        const exactGlobal = findExactIdProductInTable(parsedTableData, shortTrim, null);
+        if (exactGlobal) {
+            console.log('resolveToFullIdProduct: exact match', shortTrim, '->', exactGlobal);
+            return exactGlobal;
+        }
         if (extractedRowLabel) {
+            const exactOnLabel = findExactIdProductInTable(parsedTableData, shortTrim, extractedRowLabel);
+            if (exactOnLabel) {
+                console.log('resolveToFullIdProduct: exact with rowLabel', extractedRowLabel, shortTrim, '->', exactOnLabel);
+                return exactOnLabel;
+            }
             const nSpLabel = (s) => (s || '').trim().replace(/\s+/g, '');
             const shortNormLabel = nSpLabel(shortTrim);
             for (let i = 0; i < parsedTableData.rows.length; i++) {
@@ -243,7 +269,7 @@ function resolveToFullIdProduct(shortId, rowLabel) {
                     const headerVal = (row[0] && (row[0].value != null)) ? String(row[0].value).trim() : '';
                     if (headerVal !== extractedRowLabel) continue;
                     const full = (row[1].value || '').trim();
-                    if (full === shortTrim || full.endsWith(shortTrim)) {
+                    if (isSafeIdProductSuffixMatch(full, shortTrim)) {
                         console.log('resolveToFullIdProduct: resolved', shortTrim, 'with rowLabel', extractedRowLabel, '->', full);
                         return full;
                     }
@@ -265,13 +291,14 @@ function resolveToFullIdProduct(shortId, rowLabel) {
                     }
                 }
             }
-            // 行标签未匹配时：将行标签转为行索引（A=0, B=1, ..., Z=25, AA=26, ..., AF=31）再取该行 id_product
+            // Stale row labels must not remap onto a different Id Product
+            // (e.g. template still says :A: while A is now "*REVERT* TT683951A").
             const rowIndexFromLabel = rowLabelToZeroBasedIndex(extractedRowLabel);
             if (rowIndexFromLabel >= 0 && rowIndexFromLabel < parsedTableData.rows.length) {
                 const row = parsedTableData.rows[rowIndexFromLabel];
                 if (row && row.length > 1 && row[1].type === 'data') {
                     const full = (row[1].value || '').trim();
-                    if (full && (full === shortTrim || full.endsWith(shortTrim) || full.indexOf(' - ') >= 0)) {
+                    if (full && summaryIdProductsEqual(full, shortTrim)) {
                         console.log('resolveToFullIdProduct: resolved by row index', extractedRowLabel, '->', full);
                         return full;
                     }
@@ -284,7 +311,7 @@ function resolveToFullIdProduct(shortId, rowLabel) {
             const row = parsedTableData.rows[i];
             if (row && row.length > 1 && row[1].type === 'data') {
                 const full = (row[1].value || '').trim();
-                if (full === shortTrim || full.endsWith(shortTrim)) {
+                if (isSafeIdProductSuffixMatch(full, shortTrim)) {
                     console.log('resolveToFullIdProduct: resolved', shortTrim, '->', full);
                     return full;
                 }
@@ -319,7 +346,7 @@ function resolveToFullIdProduct(shortId, rowLabel) {
                 const idCell = row.querySelector('td[data-column-index="1"]') || row.querySelector('td[data-col-index="1"]') || row.querySelectorAll('td')[1];
                 if (idCell) {
                     const full = (idCell.textContent || '').trim();
-                    if (full && (full === shortTrim || full.endsWith(shortTrim) || full.indexOf(' - ') >= 0)) {
+                    if (full && (summaryIdProductsEqual(full, shortTrim) || isSafeIdProductSuffixMatch(full, shortTrim))) {
                         console.log('resolveToFullIdProduct: resolved from DOM', shortTrim, 'with rowLabel', extractedRowLabel, '->', full);
                         return full;
                     }
@@ -672,8 +699,9 @@ export function parseReferenceFormula(formula, processValueOverride = null, clic
             rowIndexOverride
         );
 
-        // Get process value from form
-        const processInput = document.getElementById('process');
+        // Get process value from form (DOM optional — pure React / Node tests pass override)
+        const processInput =
+            typeof document !== "undefined" ? document.getElementById("process") : null;
         const processValue = processValueOverride != null && String(processValueOverride).trim() !== ''
             ? String(processValueOverride).trim()
             : (processInput ? processInput.value.trim() : null);
@@ -742,7 +770,8 @@ export function parseReferenceFormula(formula, processValueOverride = null, clic
         // This must be done after parsing [id_product,数字] to avoid conflicts
         // IMPORTANT: 优先从 data-clicked-cell-refs 读取引用，因为它包含了正确的 id_product
         // 重要：优先从 data-clicked-cell-refs 读取引用，因为它包含了正确的 id_product
-        const formulaInput = document.getElementById('formula');
+        const formulaInput =
+            typeof document !== "undefined" ? document.getElementById("formula") : null;
         // undefined：沿用 #formula（编辑弹窗/预览）；传入字符串（含 ''）则只用该值，避免 Summary 重算吃到弹窗里其他行的 refs
         let clickedCellRefs = '';
         if (clickedCellRefsOverride === undefined) {
@@ -754,6 +783,9 @@ export function parseReferenceFormula(formula, processValueOverride = null, clic
         if (processValue) {
             // Match $ followed by digits (e.g., $2, $10, $123)
             // Use negative lookahead to ensure we match complete numbers (e.g., $10 not $1 and $0)
+            // IMPORTANT: scan parsedFormula (after [id,col] expansion), not the original formula.
+            // Bracket replacements change string length; stale indices leave a stray "$"
+            // (e.g. "$14-[AW9966,3]/$3" → "(-15.60)-(-718.39)/$-227.95").
             const dollarPattern = /\$(\d+)(?!\d)/g;
             const dollarMatches = [];
             let match;
@@ -761,8 +793,8 @@ export function parseReferenceFormula(formula, processValueOverride = null, clic
             // Reset regex lastIndex
             dollarPattern.lastIndex = 0;
 
-            // Collect all matches
-            while ((match = dollarPattern.exec(formula)) !== null) {
+            // Collect all matches from the post-bracket string so indices stay valid
+            while ((match = dollarPattern.exec(parsedFormula)) !== null) {
                 const fullMatch = match[0]; // e.g., "$2"
                 const columnNumber = parseInt(match[1]); // e.g., 2
                 const matchIndex = match.index;

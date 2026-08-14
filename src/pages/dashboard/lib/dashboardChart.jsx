@@ -122,6 +122,15 @@ export function buildChartRows(
   if (shouldAggregateChartByMonth(startYmd, endYmd)) {
     return eachMonthInRange(startYmd, endYmd).map(({ year, month }) => {
       const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+      const label = formatChartMonthLabel(year, month, locale);
+      // Server chart_monthly returns YYYY-MM keys — prefer them over summing ~30 day keys.
+      const hasMonthBucket =
+        dailyData.profit?.[monthKey] != null ||
+        dailyData.expenses?.[monthKey] != null ||
+        dailyData.capital?.[monthKey] != null;
+      if (hasMonthBucket) {
+        return buildChartMetricRow(monthKey, label, dailyData, earningsMultiplier);
+      }
       const lastDay = new Date(year, month, 0).getDate();
       let profitSum = 0;
       let expensesSum = 0;
@@ -138,7 +147,7 @@ export function buildChartRows(
       const earnings = netProfit * earningsMultiplier;
       return {
         date: monthKey,
-        label: formatChartMonthLabel(year, month, locale),
+        label,
         profit: displayProfit,
         expenses: displayExpenses,
         netProfit,

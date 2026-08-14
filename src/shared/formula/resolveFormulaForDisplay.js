@@ -75,7 +75,7 @@ export function resolveTemplateFormulaBaseAndPercent(row) {
     raw = String(row?.formula_display ?? "").trim();
   }
 
-  let base = removeTrailingSourcePercentExpression(raw);
+  let base = removeTrailingSourcePercentExpression(raw, source);
 
   const displayMisplaced = parseTrailingSourceParenValue(row?.formula_display);
   if (
@@ -89,7 +89,7 @@ export function resolveTemplateFormulaBaseAndPercent(row) {
     base = mergeFormulaOperatorsWithResolvedTail(
       base,
       row?.last_source_value,
-      removeTrailingSourcePercentExpression(row?.formula_display ?? "")
+      removeTrailingSourcePercentExpression(row?.formula_display ?? "", source)
     );
   }
 

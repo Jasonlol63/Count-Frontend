@@ -16,8 +16,15 @@ import {
   detectFlattenedStatementMatrix,
   detectVerticalFieldDump,
 } from "./dataCaptureVerticalDumpDetect.js";
-import { sanitizePasteMatrix } from "./dataCapturePasteMatrixSanitize.js";
+import { tryReshapeC8WinLossPlainMatrix } from "./dataCaptureC8WinLossPasteHelper.js";
+import { tryReshapeAllGamesPlainMatrix } from "./dataCaptureAllGamesPasteHelper.js";
+import { tryReshapePdfTablePlainMatrix } from "./dataCapturePdfTablePasteHelper.js";
+import {
+  plainTextLooksLikeAlignedTsv,
+  sanitizePasteMatrix,
+} from "./dataCapturePasteMatrixSanitize.js";
 import { splitStackedSubtotalGrandTotalRows } from "./dataCaptureStackedTotalSplit.js";
+import { tryHandleAwcWinLossReportPaste } from "../vendors/dataCaptureAwcPaste.js";
 
 /**
  * Badge / summary chips like "Total win: 2,753.79" copy as one span —
@@ -95,7 +102,9 @@ export function parsePlainTextMatrix(pastedData) {
     .replace(/\r/g, "\n");
   if (!normalized.trim()) return [];
 
-  if (normalized.includes("\t")) {
+  // Only real spreadsheet TSV uses the tab-row path (keeps empty cells 1:1).
+  // Sparse tabs mixed into a one-field-per-line dump must fall through.
+  if (plainTextLooksLikeAlignedTsv(normalized)) {
     const tabRows = normalized
       .split("\n")
       .filter((line) => line.trim() !== "")
@@ -109,11 +118,25 @@ export function parsePlainTextMatrix(pastedData) {
     return finalizePlainMatrix(tabRows);
   }
 
+  // Scoped C8 Win Loss Detail helper — vertical / sparse-tab only.
+  // Null for all other report pastes (agent_period, OB, etc.).
+  const c8WinLoss = tryReshapeC8WinLossPlainMatrix(normalized);
+  if (c8WinLoss?.length) return finalizePlainMatrix(c8WinLoss);
+
+  // Scoped allGames (iview) helper — % tokens + Total(N) break shared vertical-dump.
+  const allGames = tryReshapeAllGamesPlainMatrix(normalized);
+  if (allGames?.length) return finalizePlainMatrix(allGames);
+
+  // Universal PDF table-row helper — multi-space / single-space collapsed invoice lines.
+  const pdfTable = tryReshapePdfTablePlainMatrix(normalized);
+  if (pdfTable?.length) return finalizePlainMatrix(pdfTable);
+
   const rawLines = normalized.split("\n");
   const nonEmptyLines = rawLines.filter((line) => line.trim() !== "");
 
   // Prefer vertical-dump reshape before blank-line block splitting so mat-row
   // dumps with blank separators / trailing paginator still become multi-col rows.
+  // detectVerticalFieldDump expands sparse tabs into tokens.
   const verticalDump = detectVerticalFieldDump(nonEmptyLines);
   if (verticalDump?.rows?.length) return finalizePlainMatrix(verticalDump.rows);
 
@@ -211,26 +234,100 @@ export function handleTextHtmlPaste(html, anchorCell) {
  */
 function plainLooksLikeReshapableVerticalDump(pastedData) {
   const text = String(pastedData ?? "");
-  if (!text.trim() || text.includes("\t")) return false;
+  if (!text.trim()) return false;
   const nonEmptyLines = text
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .split("\n")
     .filter((line) => line.trim() !== "");
-  return Boolean(detectVerticalFieldDump(nonEmptyLines)?.rows?.length);
+  if (!nonEmptyLines.length) return false;
+
+  // Sparse tabs (C8Play: "87\tAgent\t" amid one-field-per-line) still count as
+  // vertical dumps. Dense TSV (most lines have tabs) stays on the tab/HTML path.
+  const tabLines = nonEmptyLines.filter((line) => line.includes("\t")).length;
+  if (tabLines > 0 && tabLines >= Math.ceil(nonEmptyLines.length * 0.35)) return false;
+
+  const tokens = [];
+  nonEmptyLines.forEach((line) => {
+    if (line.includes("\t")) {
+      line.split("\t").forEach((part) => {
+        const t = part.replace(/\u00a0/g, " ").trim();
+        if (t) tokens.push(t);
+      });
+    } else {
+      tokens.push(line.trim());
+    }
+  });
+  return Boolean(detectVerticalFieldDump(tokens)?.rows?.length);
+}
+
+/** Wide multi-col <tr> count — used so Plan B cannot beat a fuller HTML table. */
+function countWideHtmlTableRows(html) {
+  if (!html || !/<table\b/i.test(html)) return 0;
+  try {
+    const root = document.createElement("div");
+    root.innerHTML = html;
+    const table = root.querySelector("table");
+    if (!table) return 0;
+    let wide = 0;
+    table.querySelectorAll("tr").forEach((tr) => {
+      const cells = tr.querySelectorAll("td, th");
+      if (cells.length >= 3) wide += 1;
+    });
+    return wide;
+  } catch {
+    return 0;
+  }
+}
+
+/** True when HTML table is field-per-row (col1 stack) — Plan B must still win. */
+function htmlTableLooksLikeVerticalNx1(html) {
+  if (!html || !/<table\b/i.test(html)) return false;
+  try {
+    const root = document.createElement("div");
+    root.innerHTML = html;
+    const table = root.querySelector("table");
+    if (!table) return false;
+    let maxCols = 0;
+    let rowCount = 0;
+    table.querySelectorAll("tr").forEach((tr) => {
+      const n = tr.querySelectorAll("td, th").length;
+      if (!n) return;
+      rowCount += 1;
+      maxCols = Math.max(maxCols, n);
+    });
+    return rowCount >= 3 && maxCols <= 1;
+  } catch {
+    return false;
+  }
 }
 
 export function handleTextModePaste(e, pastedData, anchorCell) {
-  // Plan B first: agent_period / mat-row copies often ship HTML that parses as
-  // N×1 while plain is the reliable vertical field dump.
-  if (plainLooksLikeReshapableVerticalDump(pastedData)) {
-    if (handleTextPlainPaste(e, pastedData, anchorCell)) return true;
-  }
-
   const html = getClipboardHtml(e);
   const htmlFromDetect = html ? "" : detectHtmlTableInClipboard(e);
   const rawHtmlCandidate = html || htmlFromDetect;
   const htmlCandidate = resolveTextPasteHtml(rawHtmlCandidate) || rawHtmlCandidate;
+  const wideHtmlRows = countWideHtmlTableRows(htmlCandidate || rawHtmlCandidate);
+  const htmlNx1 = htmlTableLooksLikeVerticalNx1(htmlCandidate || rawHtmlCandidate);
+
+  if (tryHandleAwcWinLossReportPaste(html, pastedData, { anchorCell })) return true;
+
+  // Match 2.FORMAT: prefer plain vertical-dump reshape whenever it yields a real
+  // multi-col matrix. HTML-first only when it has a strictly fuller wide table
+  // than plain (C8 Kendo 3-row footer vs plain that lost a row).
+  if (plainLooksLikeReshapableVerticalDump(pastedData)) {
+    const plainMatrix = parsePlainTextMatrix(pastedData);
+    const plainRows = Array.isArray(plainMatrix) ? plainMatrix.length : 0;
+    const plainCols = Math.max(
+      0,
+      ...(plainMatrix || []).map((row) => (Array.isArray(row) ? row.length : 0)),
+    );
+    const plainReshaped = plainRows >= 2 && plainCols >= 2;
+    const htmlClearlyFuller = wideHtmlRows >= 3 && wideHtmlRows > plainRows && !htmlNx1;
+    if (plainReshaped && !htmlClearlyFuller) {
+      if (handleTextPlainPaste(e, pastedData, anchorCell)) return true;
+    }
+  }
 
   if (htmlCandidate && (isFormatRichHtmlTable(htmlCandidate) || clipboardHtmlLooksLikeGrid(rawHtmlCandidate))) {
     const formatHtml = resolveTextPasteHtml(htmlCandidate) || htmlCandidate;

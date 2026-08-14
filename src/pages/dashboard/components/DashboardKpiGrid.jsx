@@ -1,6 +1,7 @@
+import { memo } from "react";
 import { DashboardKpiCard } from "./DashboardKpiCard.jsx";
 
-export function DashboardKpiGrid({ i18n, kpi, kpiCompareLabel, kpiFooter, loading }) {
+export const DashboardKpiGrid = memo(function DashboardKpiGrid({ i18n, kpi, kpiCompareLabel, kpiFooter, loading }) {
   return (
     <div
       className={`dashboard-kpi-grid${kpi.showEarnings ? " dashboard-kpi-grid--with-earnings" : ""}`}
@@ -46,4 +47,4 @@ export function DashboardKpiGrid({ i18n, kpi, kpiCompareLabel, kpiFooter, loadin
       )}
     </div>
   );
-}
+});

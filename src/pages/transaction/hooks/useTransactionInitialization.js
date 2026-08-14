@@ -12,30 +12,6 @@ function sameCurrencySelection(a, b) {
   return left.every((code, idx) => code === right[idx]);
 }
 
-/** In-session company switch only — refresh always falls back to MYR default (not localStorage). */
-function resolveSavedCurrencyPrefs(companyCacheKey, memoryStore) {
-  const mem = companyCacheKey != null ? memoryStore[companyCacheKey] : null;
-
-  const memCurrencies = Array.isArray(mem?.currencies)
-    ? mem.currencies
-    : Array.isArray(mem?.selectedCurrencies)
-      ? mem.selectedCurrencies
-      : [];
-
-  if (mem?.showAll || mem?.showAllCurrencies) {
-    return { showAll: true, currencies: [] };
-  }
-
-  if (memCurrencies.length > 0) {
-    return {
-      showAll: false,
-      currencies: memCurrencies.map((c) => String(c || "").trim()).filter(Boolean),
-    };
-  }
-
-  return null;
-}
-
 export function useTransactionInitialization({
   loading,
   forbidden,
@@ -47,8 +23,6 @@ export function useTransactionInitialization({
   form,
 }) {
   const currencyRestoredScopeKeyRef = useRef(null);
-  const currencyPrefsByCompanyRef = useRef({});
-  const prevCompanyCacheKeyRef = useRef(null);
   const prevScopeCacheKeyRef = useRef(null);
   const searchRef = useRef(search);
   const formRef = useRef(form);
@@ -70,15 +44,6 @@ export function useTransactionInitialization({
       currencyRestoredScopeKeyRef.current = null;
       prevScopeCacheKeyRef.current = scopeCacheKey;
     }
-
-    const prevCompanyKey = prevCompanyCacheKeyRef.current;
-    if (prevCompanyKey != null && prevCompanyKey !== companyCacheKey) {
-      currencyPrefsByCompanyRef.current[prevCompanyKey] = {
-        showAll: activeSearch.showAllCurrencies,
-        currencies: [...activeSearch.selectedCurrencies],
-      };
-    }
-    prevCompanyCacheKeyRef.current = companyCacheKey;
 
     const cid = companyCacheKey;
     const scopeKey = transactionScope
@@ -102,6 +67,7 @@ export function useTransactionInitialization({
     const rows = currencyScopeBundle.rows;
     const codes = rows.map((x) => String(x.code || x.currency || "").toUpperCase().trim()).filter(Boolean);
 
+    // Form defaults follow sort order (first position).
     const defaultCode = pickTransactionDefaultCurrency(codes);
     const pickDefault =
       (defaultCode ? rows.find((c) => String(c.code || "").toUpperCase() === defaultCode) : null) ||
@@ -109,6 +75,8 @@ export function useTransactionInitialization({
 
     const ensureCurrencySelection = () => {
       if (activeSearch.showAllCurrencies || rows.length === 0) return;
+      // Empty selection is intentional — do not force a default currency.
+      if (activeSearch.selectedCurrencies.length === 0) return;
       const valid = activeSearch.selectedCurrencies.filter((code) =>
         codes.includes(String(code || "").toUpperCase().trim()),
       );
@@ -118,12 +86,8 @@ export function useTransactionInitialization({
         }
         return;
       }
-      const code = pickTransactionDefaultCurrency(codes);
-      const pick =
-        (code ? rows.find((c) => String(c.code || "").toUpperCase() === code) : null) || rows[0];
-      if (pick?.code) {
-        activeSearch.setSelectedCurrencies([pick.code]);
-      }
+      // Prior codes are no longer in scope — clear rather than forcing a pick.
+      activeSearch.setSelectedCurrencies([]);
     };
 
     const resetSelection = currencyRestoredScopeKeyRef.current !== scopeKey;
@@ -138,25 +102,12 @@ export function useTransactionInitialization({
       return;
     }
 
-    const saved = resolveSavedCurrencyPrefs(cid, currencyPrefsByCompanyRef.current);
-    let nextShowAll = false;
-    let nextSel = [];
+    // Company/scope enter: always select THIS company's first ordered currency.
+    const nextShowAll = false;
+    const nextSel = defaultCode ? [defaultCode] : codes[0] ? [codes[0]] : [];
 
-    if (saved?.showAll && codes.length >= 2) {
-      nextShowAll = true;
-      nextSel = [];
-    } else if (saved?.currencies?.length) {
-      const valid = saved.currencies.filter((code) => rows.some((c) => String(c.code) === String(code)));
-      if (valid.length > 0) nextSel = valid;
-    }
-
-    if (!nextShowAll && nextSel.length === 0 && rows.length > 0) {
-      const code = pickTransactionDefaultCurrency(codes);
-      const pick =
-        (code ? rows.find((c) => String(c.code || "").toUpperCase() === code) : null) || rows[0];
-      if (pick?.code) nextSel = [pick.code];
-    }
-
+    // Block cross-page sync from re-applying the previous company currency.
+    activeSearch.beginScopeCurrencyDefault?.();
     activeSearch.setShowAllCurrencies((prev) => (prev === nextShowAll ? prev : nextShowAll));
     activeSearch.setSelectedCurrencies((prev) => (sameCurrencySelection(prev, nextSel) ? prev : nextSel));
     currencyRestoredScopeKeyRef.current = scopeKey;

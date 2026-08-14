@@ -52,10 +52,9 @@ export function buildSubmitRowsFromModel(rows, parsedProcessData, accounts = [],
     const isSourceOne = Math.abs(parseFloat(sourcePercent) - 1) < 0.0001;
     const formulaToSend =
       isSourceOne && formulaDisplay
-        ? removeTrailingSourcePercentExpression(formulaDisplay) || formulaDisplay
+        ? removeTrailingSourcePercentExpression(formulaDisplay, sourcePercent) || formulaDisplay
         : formulaDisplay;
 
-    // 6-dp ROUND_DOWN plain string (aligns with SummaryAmountFormat.computeProcessedAmount).
     const finalProcessedAmount = resolveSubmitProcessedAmount(row, globalRateInput);
 
     let rateValue = null;
@@ -65,13 +64,11 @@ export function buildSubmitRowsFromModel(rows, parsedProcessData, accounts = [],
       rateValue = resolveGlobalRateForSubmit(row, globalRateInput);
     }
 
-    const isSubRow = row.productType === "sub";
-
     summaryRows.push({
       idProductMain: idProductMain || null,
-      descriptionMain: isSubRow ? null : row.originalDescription || null,
+      descriptionMain: row.originalDescription || null,
       idProductSub: idProductSub || null,
-      descriptionSub: isSubRow ? row.originalDescription || null : null,
+      descriptionSub: null,
       productType,
       parentIdProduct: row.parentIdProduct || idProductMain || null,
       idProduct,
@@ -88,7 +85,7 @@ export function buildSubmitRowsFromModel(rows, parsedProcessData, accounts = [],
       enableSourcePercent: row.enableSourcePercent ? 1 : 0,
       formulaOperators,
       formula: formulaToSend,
-      processedAmount: finalProcessedAmount || "0",
+      processedAmount: Number.isFinite(finalProcessedAmount) ? finalProcessedAmount : 0,
       inputMethod: row.inputMethod || "",
       enableInputMethod: row.enableInputMethod ? 1 : 0,
       batchSelection: 0,

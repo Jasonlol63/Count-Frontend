@@ -1,4 +1,4 @@
-﻿import { notifyCompanySessionUpdated } from "./companySessionEvents.js";
+import { notifyCompanySessionUpdated } from "./companySessionEvents.js";
 import { peekCompanySessionFlags } from "./companySessionFlagsCache.js";
 import { normalizeCompanyCode } from "./loginScope.js";
 import { notifyDashboardGroupFilterChanged } from "./sharedCompanyFilter.js";
@@ -48,7 +48,7 @@ export function isGamesOnlyCategoryFlags(flags) {
 
 /**
  * Patch sidebar `me` immediately after company session sync (all pages).
- * Pass switch-tenant payload when available.
+ * Pass `update_company_session_api.php` payload when available.
  */
 export function applySidebarForCompanySwitch(viewGroup, companyRow, apiData) {
   const cid = Number(companyRow?.id);
@@ -103,7 +103,7 @@ export function resolveMaintenanceRedirectForSession(sessionData, currentPath) {
 
   if (isGamesOnlyCategoryFlags(flags)) {
     if (pageKey === "bankprocess-maintenance") return spaPath("capture-maintenance");
-    // Payment Maintenance ä¸Ž Process å…±ç”¨å…¬å¸ pillsï¼Œåˆ‡æ¢ Games å…¬å¸æ—¶ä¸è·³è½¬ã€‚
+    // Payment Maintenance 与 Process 共用公司 pills，切换 Games 公司时不跳转。
     return null;
   }
 

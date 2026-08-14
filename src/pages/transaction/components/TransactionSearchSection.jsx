@@ -352,7 +352,9 @@ export default function TransactionSearchSection({
         })}
       </div>
 
-      {fs && (fs.snapGroupIds?.length > 0 || fs.snapCompanies?.length > 0) && (
+      {/* Atomic GC paint: only mount Group/Company/Currency together once currency pills exist
+          (parent passes sticky rows so refresh doesn't flash Company without Currency). */}
+      {fs && currencyRowsOrdered.length > 0 && (
         <div className="transaction-bottom-filters">
           <GcInlineFilterPanel
             t={(key) => m[key] ?? key}
@@ -369,79 +371,77 @@ export default function TransactionSearchSection({
             onWarmCompany={onWarmCompany}
             allowCompanyDeselect={allowCompanyDeselect}
           >
-            {currencyRowsOrdered.length > 0 && (
-              <div id="currency-buttons-wrapper" className="user-gc-inline-row">
-                <span className="user-gc-inline-label">{m.currencyLabel}</span>
+            <div id="currency-buttons-wrapper" className="user-gc-inline-row">
+              <span className="user-gc-inline-label">{m.currencyLabel}</span>
+              <div
+                className="user-gc-inline-pills transaction-currency-pills"
+                ref={currencyButtonsRef}
+                role="group"
+                aria-label="Currency"
+              >
                 <div
-                  className="user-gc-inline-pills transaction-currency-pills"
-                  ref={currencyButtonsRef}
-                  role="group"
-                  aria-label="Currency"
+                  ref={currencyMeasureRef}
+                  className="transaction-currency-measure"
+                  aria-hidden="true"
                 >
+                  {currencyCells.map((cell) =>
+                    cell.type === "all" ? (
+                      <button key="tx-ccy-measure-all" type="button" tabIndex={-1} className="user-gc-segment">
+                        {m.all}
+                      </button>
+                    ) : (
+                      <button
+                        key={`tx-ccy-measure-${cell.code}`}
+                        type="button"
+                        tabIndex={-1}
+                        className="user-gc-segment"
+                      >
+                        {cell.code}
+                      </button>
+                    ),
+                  )}
+                </div>
+                {currencyFilterBands.map((band, segIdx) => (
                   <div
-                    ref={currencyMeasureRef}
-                    className="transaction-currency-measure"
-                    aria-hidden="true"
+                    key={`tx-ccy-band-${segIdx}`}
+                    id={segIdx === 0 ? "currency-buttons-container" : undefined}
+                    className="user-gc-segment-group transaction-currency-segments"
+                    style={{
+                      width: "fit-content",
+                      maxWidth: "100%",
+                    }}
                   >
-                    {currencyCells.map((cell) =>
+                    {band.map((cell) =>
                       cell.type === "all" ? (
-                        <button key="tx-ccy-measure-all" type="button" tabIndex={-1} className="user-gc-segment">
+                        <button
+                          key="tx-ccy-all"
+                          type="button"
+                          className={`user-gc-segment${showAllCurrencies ? " is-on" : ""}`}
+                          data-currency-code="ALL"
+                          onClick={toggleAllCurrenciesBtn}
+                        >
                           {m.all}
                         </button>
                       ) : (
                         <button
-                          key={`tx-ccy-measure-${cell.code}`}
+                          key={cell.code}
                           type="button"
-                          tabIndex={-1}
-                          className="user-gc-segment"
+                          className={`user-gc-segment user-gc-segment--draggable-pill${showAllCurrencies || selectedCurrencySet.has(cell.code) ? " is-on" : ""}`}
+                          data-currency-code={cell.code}
+                          draggable
+                          onDragStart={() => onCurrencyDragStart(cell.code)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => onCurrencyDropOn(cell.code)}
+                          onClick={() => toggleCurrencyBtn(cell.code)}
                         >
                           {cell.code}
                         </button>
                       ),
                     )}
                   </div>
-                  {currencyFilterBands.map((band, segIdx) => (
-                    <div
-                      key={`tx-ccy-band-${segIdx}`}
-                      id={segIdx === 0 ? "currency-buttons-container" : undefined}
-                      className="user-gc-segment-group transaction-currency-segments"
-                      style={{
-                        width: "fit-content",
-                        maxWidth: "100%",
-                      }}
-                    >
-                      {band.map((cell) =>
-                        cell.type === "all" ? (
-                          <button
-                            key="tx-ccy-all"
-                            type="button"
-                            className={`user-gc-segment${showAllCurrencies ? " is-on" : ""}`}
-                            data-currency-code="ALL"
-                            onClick={toggleAllCurrenciesBtn}
-                          >
-                            {m.all}
-                          </button>
-                        ) : (
-                          <button
-                            key={cell.code}
-                            type="button"
-                            className={`user-gc-segment user-gc-segment--draggable-pill${showAllCurrencies || selectedCurrencySet.has(cell.code) ? " is-on" : ""}`}
-                            data-currency-code={cell.code}
-                            draggable
-                            onDragStart={() => onCurrencyDragStart(cell.code)}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={() => onCurrencyDropOn(cell.code)}
-                            onClick={() => toggleCurrencyBtn(cell.code)}
-                          >
-                            {cell.code}
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  ))}
-                </div>
+                ))}
               </div>
-            )}
+            </div>
           </GcInlineFilterPanel>
         </div>
       )}

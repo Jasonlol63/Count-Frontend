@@ -23,7 +23,8 @@ export const ACCOUNT_I18N = {
     loadLinksFailed: "Load links failed",
     currencySettingsSaved: "Currency settings saved",
     pleaseSelectCompanyFirst: "Please select a company first",
-    pleaseSelectCurrencyFirst: "Please select a currency first (tap again to deselect)",
+    pleaseSelectCurrencyFirst: "Please select at least one currency first (tap again to deselect)",
+    pleaseSelectAccountFirst: "Please select at least one account",
     deselectCurrencyBeforeDelete: "Deselect this currency first, then tap × to delete it",
     failedOpenLinkModal: "Failed to open link account modal",
     accountLinksSavedSuccessfully: "Account links saved successfully",
@@ -33,6 +34,7 @@ export const ACCOUNT_I18N = {
     searchByAccountOrName: "Search by Account or Name",
     inactive: "Inactive",
     showInactive: "Show Inactive",
+    showActive: "Show Active",
     showAll: "Show All",
     currencySetting: "Currency Setting",
     deleteWithCount: "Delete ({count})",
@@ -96,11 +98,14 @@ export const ACCOUNT_I18N = {
     roleDebtor: "DEBTOR",
     statusActive: "ACTIVE",
     statusInactive: "INACTIVE",
+    clickToggleStatus: "Click to toggle status",
     alertOn: "ON",
     alertOff: "OFF",
+    password: "Password",
     passwordRequired: "Password *",
-    passwordOptional: "Password",
-    passwordLeaveBlankHint: "Leave empty to keep current password",
+    passwordEditHint: "Leave blank to keep the current password",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
     payment: "Payment",
     paymentAlert: "Payment Alert",
     yes: "Yes",
@@ -128,6 +133,8 @@ export const ACCOUNT_I18N = {
     searchBar: "Search Bar",
     filterRow: "Filter Row",
     selectAll: "Select All",
+    selectAllDeletableAria: "Select all inactive accounts on this page",
+    rowDeleteCheckboxAria: "Select account for delete",
     selectedCount: "{count} selected",
     bidirectional: "Bidirectional",
     unidirectional: "Unidirectional",
@@ -157,8 +164,7 @@ export const ACCOUNT_I18N = {
     apiPaymentAlertUpdateFailed: "Failed to update payment alert",
     apiFillRequiredFields: "Please fill in all required fields",
     apiAccountIdExists: "Account ID already exists",
-    apiAccountIdExistsInScope: "Account ID already exists in {scope}",
-    apiAccountIdExistsInCompany: "Account ID already exists in this company",
+    apiAccountIdExistsInTenant: "Account ID already exists in {tenant}",
     accountSavedCurrencySyncFailed: "Account saved, but currency sync failed: {detail}",
     apiMissingRequiredParams: "Missing required parameters",
     apiAccountNotInCompany: "Account does not belong to this company",
@@ -202,10 +208,6 @@ export const ACCOUNT_I18N = {
       "This currency was synced from subsidiary companies and cannot be deleted while subsidiaries still use it.",
     apiCurrencyBlockedByHistory:
       "Cannot delete currency — historical records still reference it ({detail}). Remove related Data Capture / Transaction records first.",
-    forceDeleteCurrency: "Force delete",
-    forceDeleteCurrencyConfirm:
-      "Currency {code} is still referenced by historical records ({detail}). Force delete will remove the currency and reassign Process / Data Capture rows to another currency in this company. Continue?",
-    currencyInUseTitle: "Cannot delete currency",
     currencyInUseMessage: "Currency {code} is still used by the following account(s):",
     ok: "OK",
   },
@@ -231,7 +233,8 @@ export const ACCOUNT_I18N = {
     loadLinksFailed: "加载关联失败",
     currencySettingsSaved: "货币设置已保存",
     pleaseSelectCompanyFirst: "请先选择公司",
-    pleaseSelectCurrencyFirst: "请先选择货币（再次点击可取消选中）",
+    pleaseSelectCurrencyFirst: "请先至少选择一种货币（再次点击可取消选中）",
+    pleaseSelectAccountFirst: "请先至少选择一个账户",
     deselectCurrencyBeforeDelete: "请先点击取消选中该货币，再点 × 删除",
     failedOpenLinkModal: "打开关联账号弹窗失败",
     accountLinksSavedSuccessfully: "账号关联保存成功",
@@ -241,6 +244,7 @@ export const ACCOUNT_I18N = {
     searchByAccountOrName: "按账号或姓名搜索",
     inactive: "停用",
     showInactive: "显示停用",
+    showActive: "显示启用",
     showAll: "显示全部",
     currencySetting: "货币设置",
     deleteWithCount: "删除（{count}）",
@@ -306,9 +310,11 @@ export const ACCOUNT_I18N = {
     statusInactive: "停用",
     alertOn: "是",
     alertOff: "否",
+    password: "密码",
     passwordRequired: "密码 *",
-    passwordOptional: "密码",
-    passwordLeaveBlankHint: "留空则保留原密码",
+    passwordEditHint: "留空则保留当前密码",
+    showPassword: "显示密码",
+    hidePassword: "隐藏密码",
     payment: "支付",
     paymentAlert: "支付提醒",
     yes: "是",
@@ -336,6 +342,8 @@ export const ACCOUNT_I18N = {
     searchBar: "搜索栏",
     filterRow: "筛选角色",
     selectAll: "全选",
+    selectAllDeletableAria: "全选本页可删除的停用账号",
+    rowDeleteCheckboxAria: "勾选账号以删除",
     selectedCount: "已选 {count} 个",
     bidirectional: "双向",
     unidirectional: "单向",
@@ -365,8 +373,7 @@ export const ACCOUNT_I18N = {
     apiPaymentAlertUpdateFailed: "Payment alert 更新失败",
     apiFillRequiredFields: "请填写所有必填字段",
     apiAccountIdExists: "账户 ID 已存在",
-    apiAccountIdExistsInScope: "账户 ID 已存在于 {scope}",
-    apiAccountIdExistsInCompany: "该公司下账户 ID 已存在",
+    apiAccountIdExistsInTenant: "账户 ID 已存在于 {tenant}",
     accountSavedCurrencySyncFailed: "账号已保存，但货币同步失败：{detail}",
     apiMissingRequiredParams: "缺少必要参数",
     apiAccountNotInCompany: "账户不属于该公司",
@@ -409,10 +416,6 @@ export const ACCOUNT_I18N = {
     apiCurrencySyncedFromSubsidiary: "该货币由旗下子公司同步，子公司仍在使用时无法删除。",
     apiCurrencyBlockedByHistory:
       "无法删除货币，仍有历史业务数据引用（{detail}）。请先在 Data Capture / Transaction 中清理相关记录。",
-    forceDeleteCurrency: "强制删除",
-    forceDeleteCurrencyConfirm:
-      "货币 {code} 仍被历史业务数据引用（{detail}）。强制删除会移除该货币，并将 Process / Data Capture 等记录改绑到本公司其他货币。是否继续？",
-    currencyInUseTitle: "无法删除货币",
     currencyInUseMessage: "货币 {code} 仍被以下账号使用：",
     ok: "确定",
   },
@@ -469,10 +472,7 @@ const ACCOUNT_API_MESSAGE_KEYS = {
   [normAccountApiMessage("请填写所有必填字段")]: "apiFillRequiredFields",
   [normAccountApiMessage("Account ID already exists")]: "apiAccountIdExists",
   [normAccountApiMessage("账户ID已存在")]: "apiAccountIdExists",
-  [normAccountApiMessage("Account ID already exists in this company")]: "apiAccountIdExistsInCompany",
-  [normAccountApiMessage("该公司下账户 ID 已存在")]: "apiAccountIdExistsInCompany",
   [normAccountApiMessage("缺少必要参数")]: "apiMissingRequiredParams",
-  [normAccountApiMessage("Account ID is required")]: "apiAccountIdRequired",
   [normAccountApiMessage("账户不属于该公司")]: "apiAccountNotInCompany",
   [normAccountApiMessage("只读账号无法修改账户关联")]: "apiReadOnlyCannotModifyLinks",
   [normAccountApiMessage("不能关联同一个账户")]: "apiCannotLinkSameAccount",
@@ -572,20 +572,6 @@ export function parseCurrencyUsageDetailFromMessage(message) {
   return m ? m[1].trim() : "";
 }
 
-/** True when delete failed only due to historical records, not linked accounts. */
-export function isHistoricalOnlyCurrencyDeleteBlock(message, accountsInUse = []) {
-  if (Array.isArray(accountsInUse) && accountsInUse.length > 0) return false;
-  const detail = parseCurrencyUsageDetailFromMessage(message);
-  if (!detail) return false;
-  return !/\baccount\(s\)/i.test(detail);
-}
-
-export function formatCurrencyUsageDetail(lang, message) {
-  const detail = parseCurrencyUsageDetailFromMessage(message);
-  if (!detail) return "";
-  return translateCurrencyUsageDetail(toLocale(lang), detail);
-}
-
 function translateCurrencyUsageDetail(lang, detail) {
   const locale = toLocale(lang);
   if (locale !== "zh") return detail;
@@ -608,13 +594,7 @@ function translateAccountDynamicApiMessage(lang, message, data = null) {
     raw.match(/^账户ID已存在于\s+(.+)$/u) ||
     raw.match(/^账户\s*ID\s*已存在于\s+(.+)$/iu) ||
     raw.match(/^Account ID already exists in\s+(.+)$/i);
-  if (m) {
-    const scope = m[1].trim();
-    if (/^this company$/i.test(scope) || /^该公司$/u.test(scope)) {
-      return getAccountText(lang, "apiAccountIdExistsInCompany");
-    }
-    return getAccountText(lang, "apiAccountIdExistsInScope", { scope });
-  }
+  if (m) return getAccountText(lang, "apiAccountIdExistsInTenant", { tenant: m[1].trim() });
 
   m = raw.match(/^数据库错误:\s*(.+)$/u) || raw.match(/^数据库更新错误:\s*(.+)$/u);
   if (m) return getAccountText(lang, "apiDatabaseError") + ": " + m[1].trim();
@@ -686,6 +666,7 @@ const ACCOUNT_ROLE_I18N_KEYS = {
   partner: "rolePartner",
   staff: "roleStaff",
   supplier: "supplier",
+  upline: "supplier",
   agent: "roleAgent",
   member: "roleMember",
   debtor: "roleDebtor",

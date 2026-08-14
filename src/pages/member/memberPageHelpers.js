@@ -191,7 +191,7 @@ export function formatPaymentHistoryMoney(value) {
     const intWithSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     return `${neg}${intWithSep}.${exact2[3]}`;
   }
-  const formatted = MoneyDecimal.formatUiMoney(cleaned);
+  const formatted = MoneyDecimal.formatThousands(cleaned, 2);
   if (formatted === "0.00" || formatted === "-0.00") return "-";
   return formatted;
 }

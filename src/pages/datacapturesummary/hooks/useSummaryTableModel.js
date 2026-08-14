@@ -139,11 +139,12 @@ export function useSummaryTableModel({
           captureId,
           serverState,
           freshFromCapture: isFirstFreshPopulate,
-          loadTemplates: () =>
+          loadTemplates: ({ processId: resolvedProcessId, processCode: resolvedProcessCode } = {}) =>
             consumePrefetchedTemplates({
               captureScope,
               companyId,
-              processId,
+              processId: resolvedProcessId ?? processId,
+              processCode: resolvedProcessCode ?? processCode,
               tableData,
               captureId,
             }),

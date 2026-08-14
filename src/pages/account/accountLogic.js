@@ -3,17 +3,14 @@
 import { formatDmyDash } from "../../utils/date/dateUtils.js";
 import {
   companiesForCompanyPicker,
-  companiesGroupEntityList,
   DASHBOARD_GROUP_FILTER_OPT_OUT_KEY,
   dedupeOwnerCompaniesByCode,
   excludeGroupLabelsFromCompanyPicker,
   filterCompaniesWithDisplayId,
-  getCachedOwnerCompanies,
   independentCompaniesForPicker,
   isDashboardGroupOnlyMode,
   normalizeCompanyGroupId,
 } from "../../utils/company/sharedCompanyFilter.js";
-import { fetchMergedAccountLists } from "./accountListApi.js";
 
 export const PAGE_SIZE = 25;
 
@@ -76,10 +73,10 @@ export function normalizeAlertAmount(value) {
 export function roleSortOrder(role, knownRoles) {
   const base = [...ROLE_PRIORITY];
   (knownRoles || []).forEach((r) => {
-    const key = toUpper(r);
+    const key = toUpper(r) === "UPLINE" ? "SUPPLIER" : toUpper(r);
     if (!base.includes(key)) base.push(key);
   });
-  return base.indexOf(toUpper(role));
+  return base.indexOf(toUpper(role) === "UPLINE" ? "SUPPLIER" : toUpper(role));
 }
 
 export function getOrderedRoles(roles) {
@@ -93,20 +90,27 @@ export function getOrderedRoles(roles) {
     if (map.has(p)) {
       out.push(map.get(p));
       map.delete(p);
+    } else if (p === "SUPPLIER" && map.has("UPLINE")) {
+      out.push(map.get("UPLINE"));
+      map.delete("UPLINE");
     }
   });
   return [...out, ...Array.from(map.values()).sort((a, b) => a.localeCompare(b))];
 }
 
-/** Spring {@code UserServiceImpl.ALLOWED_ACCOUNT_LEDGER_ROLES} — full Add/Edit modal options. */
-export const ACCOUNT_LEDGER_ROLES = [...ROLE_PRIORITY];
+/** Add/Edit Account modal：DB 未建 role 时仍展示的核心角色 */
+const ACCOUNT_MODAL_FALLBACK_ROLES = ["PARTNER", "DEBTOR"];
 
-/** Add/Edit Account modal：始终展示后端允许的完整 role 列表（不只从现有账号推导）。 */
 export function getAccountModalOrderedRoles(roles) {
   const merged = [...(roles || [])];
-  ACCOUNT_LEDGER_ROLES.forEach((role) => {
-    if (!merged.some((r) => toUpper(r) === role)) merged.push(role);
-  });
+  if (merged.length === 0) {
+    // Empty group / roles API miss — still offer full account role list for the modal.
+    ROLE_PRIORITY.forEach((role) => merged.push(role));
+  } else {
+    ACCOUNT_MODAL_FALLBACK_ROLES.forEach((role) => {
+      if (!merged.some((r) => toUpper(r) === role)) merged.push(role);
+    });
+  }
   return getOrderedRoles(merged);
 }
 
@@ -125,59 +129,8 @@ export function isVirtualGroupLinkCompanyRow(c) {
   return ls != null && String(ls).trim() !== "";
 }
 
-export function buildAccountsFetchKey(companyId, searchTerm, showInactive, showAll) {
-  return `${companyId || ""}|${String(searchTerm || "").trim()}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
-}
-
-/** Group code (e.g. AP) → tenant.id for Spring list. */
-export function resolveGroupCodeToTenantId(groupCode, companies = null) {
-  const code = String(groupCode || "").trim().toUpperCase();
-  if (!code) return null;
-  const rows = companies || getCachedOwnerCompanies() || [];
-  const entities = companiesGroupEntityList(rows, code);
-  const id = Number(entities[0]?.id);
-  return Number.isFinite(id) && id > 0 ? id : null;
-}
-
-/** Unique roles from loaded account rows (Spring list has no roles meta endpoint). */
-export function deriveAccountRolesFromRows(rows) {
-  const map = new Map();
-  (rows || []).forEach((row) => {
-    const role = String(row?.role || "").trim();
-    if (role) map.set(toUpper(role), role);
-  });
-  return getOrderedRoles([...map.values()]);
-}
-
-/** Fetch and merge accounts across multiple tenant ids (All modes). */
-export async function fetchMergedAccounts({
-  companyIds = [],
-  groupIds = [],
-  companies = null,
-  searchTerm = "",
-  showInactive = false,
-  showAll = false,
-  signal = undefined,
-}) {
-  const tenantIds = [
-    ...(Array.isArray(companyIds) ? companyIds : [])
-      .map((raw) => Number(raw))
-      .filter((id) => Number.isFinite(id) && id > 0),
-  ];
-  for (const gid of Array.isArray(groupIds) ? groupIds : []) {
-    const tid = resolveGroupCodeToTenantId(gid, companies);
-    if (tid) tenantIds.push(tid);
-  }
-  if (!tenantIds.length) return { success: false, accounts: [] };
-  try {
-    const accounts = await fetchMergedAccountLists(
-      { tenantIds, searchTerm, showInactive, showAll },
-      signal,
-    );
-    return { success: true, accounts };
-  } catch (e) {
-    return { success: false, message: e?.message, accounts: [] };
-  }
+export function buildAccountsFetchKey(companyId, searchTerm, showInactive, showAll, showActive = false) {
+  return `${companyId || ""}|${String(searchTerm || "").trim()}|${showActive ? "1" : "0"}|${showInactive ? "1" : "0"}|${showAll ? "1" : "0"}`;
 }
 
 /** Add Account：列表中有 MYR 时默认勾选，否则默认第一个 currency */

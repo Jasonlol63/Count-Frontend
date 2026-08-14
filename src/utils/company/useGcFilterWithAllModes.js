@@ -2,10 +2,11 @@ import { useCallback, useMemo, useState } from "react";
 
 import {
   companiesForCompanyPicker,
-  companiesNativeInGroupList,
+  DASHBOARD_GROUP_FILTER_OPT_OUT_KEY,
   dedupeOwnerCompaniesByCode,
   excludeGroupLabelsFromCompanyPicker,
   filterCompaniesWithDisplayId,
+  independentCompaniesForPicker,
   isVirtualGroupLinkCompanyRow,
   notifyDashboardGroupFilterChanged,
   persistDashboardFilterState,
@@ -45,9 +46,8 @@ export function useGcFilterWithAllModes({
   forceAllowGroupOnly = false,
   broadcastFilterToLayout = true,
   clearCompanyOnActiveGroupReselect = undefined,
-  allowActiveGroupDeselect = false,
-  requireCompanyWithGroup = false,
-  resolveCompanyOnGroupClose = null,
+  /** Re-click active Group closes it and picks a company (Data Capture / Transaction). */
+  closeActiveGroupOnReselect = false,
   allowClearCompany: allowClearCompanyOverride = undefined,
 }) {
   const [groupsAllMode, setGroupsAllMode] = useState(false);
@@ -72,20 +72,24 @@ export function useGcFilterWithAllModes({
     broadcastFilterToLayout,
     clearCompanyOnActiveGroupReselect:
       clearCompanyOnActiveGroupReselect ?? !forceAllowGroupOnly,
-    allowActiveGroupDeselect,
-    requireCompanyWithGroup,
-    resolveCompanyOnGroupClose,
+    closeActiveGroupOnReselect,
     allowClearCompany: allowClearCompanyOverride,
   });
 
   const groupIds = base.groupIds;
 
+  const groupFilterOptOut =
+    typeof sessionStorage !== "undefined" &&
+    sessionStorage.getItem(DASHBOARD_GROUP_FILTER_OPT_OUT_KEY) === "1";
+
   const effectiveGroupForCompanies = useMemo(() => {
     if (groupsAllMode) return null;
+    // Explicit close of Group pill: do not fall back to login GroupID (show independents).
+    if (groupFilterOptOut) return null;
     if (selectedGroup) return String(selectedGroup).trim().toUpperCase();
     if (isGroupLogin(me)) return getLoginIdentifier(me);
     return null;
-  }, [groupsAllMode, selectedGroup, me]);
+  }, [groupsAllMode, groupFilterOptOut, selectedGroup, me]);
 
   const companiesForPicker = useMemo(() => {
     const preferredId = preferredCompanyId ?? companyId ?? null;
@@ -95,6 +99,13 @@ export function useGcFilterWithAllModes({
         groupIds
       );
     }
+    // Align with Dashboard / Transaction / Report: opt-out → independent companies only.
+    if (groupFilterOptOut) {
+      const independents = independentCompaniesForPicker(companies, groupIds);
+      if (independents.length) {
+        return dedupeOwnerCompaniesByCode(independents, preferredId);
+      }
+    }
     return dedupeOwnerCompaniesByCode(
       companiesForCompanyPicker(companies, effectiveGroupForCompanies, groupIds),
       preferredId
@@ -102,6 +113,7 @@ export function useGcFilterWithAllModes({
   }, [
     companies,
     effectiveGroupForCompanies,
+    groupFilterOptOut,
     groupsAllMode,
     groupIds,
     preferredCompanyId,
@@ -113,10 +125,10 @@ export function useGcFilterWithAllModes({
       return filterCompaniesWithDisplayId(companies).filter((c) => !isVirtualGroupLinkCompanyRow(c));
     }
     if (effectiveGroupForCompanies) {
-      return companiesNativeInGroupList(companies, effectiveGroupForCompanies);
+      return companiesForCompanyPicker(companies, effectiveGroupForCompanies, groupIds);
     }
     return filterCompaniesWithDisplayId(companies).filter((c) => !isVirtualGroupLinkCompanyRow(c));
-  }, [companies, effectiveGroupForCompanies, groupsAllMode]);
+  }, [companies, effectiveGroupForCompanies, groupsAllMode, groupIds]);
 
   const mergeCompanyIds = useMemo(() => {
     return resolveMergeCompanyList()

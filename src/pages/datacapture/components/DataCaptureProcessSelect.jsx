@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { isTypeAheadKey } from "../../../components/typeAheadMatch.js";
 import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
 
 const CONTAINER_EDGE_PAD = 8;
@@ -104,16 +105,24 @@ export default function DataCaptureProcessSelect({
     };
   }, [processOpen, positionMenu]);
 
+  const openMenu = useCallback(
+    (seed = null) => {
+      onBeforeToggle?.();
+      if (seed != null) setProcessFilter(seed);
+      positionMenu();
+      setProcessOpen(true);
+    },
+    [onBeforeToggle, positionMenu, setProcessFilter],
+  );
+
   const handleToggle = (e) => {
     e.stopPropagation();
-    onBeforeToggle?.();
-    const willOpen = !processOpen;
-    if (willOpen) {
-      positionMenu();
-    } else {
+    if (processOpen) {
       setMenuStyle(null);
+      setProcessOpen(false);
+      return;
     }
-    setProcessOpen(willOpen);
+    openMenu(null);
   };
 
   const dropdownNode =
@@ -131,7 +140,8 @@ export default function DataCaptureProcessSelect({
             placeholder={t("searchProcess")}
             autoComplete="off"
             value={processFilter}
-            onChange={(e) => setProcessFilter(e.target.value.toUpperCase())}
+            onChange={(e) => setProcessFilter(e.target.value)}
+            style={{ textTransform: "uppercase" }}
             onKeyDown={(e) => {
               handleListKeyDown(e, {
                 len: visibleProcesses.length,
@@ -193,21 +203,22 @@ export default function DataCaptureProcessSelect({
         {...(selectedProcess?.id
           ? {
               "data-value": selectedProcess.id,
-              "data-process-code": selectedProcess.processId ?? selectedProcess.process_id ?? "",
-              ...(selectedProcess.descriptionName ?? selectedProcess.description_name
-                ? { "data-description-name": selectedProcess.descriptionName ?? selectedProcess.description_name }
+              "data-process-code": selectedProcess.process_id || "",
+              ...(selectedProcess.description_name
+                ? { "data-description-name": selectedProcess.description_name }
                 : {}),
             }
           : {})}
         onClick={handleToggle}
         onKeyDown={(e) => {
+          if (!processOpen && isTypeAheadKey(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            openMenu(e.key);
+            return;
+          }
           handleButtonKeyDown(e, {
             isOpen: processOpen,
-            onToggleOpen: () => {
-              onBeforeToggle?.();
-              positionMenu();
-              setProcessOpen(true);
-            },
+            onToggleOpen: () => openMenu(null),
             onClose: () => setProcessOpen(false),
             len: visibleProcesses.length,
             onSelectIndex: (idx) => {

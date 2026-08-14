@@ -40,8 +40,14 @@ export function portalToDocumentBody(node) {
 /** Resolve portal dropdown z-index from the nearest open process/bank modal. */
 export function getProcessModalDropdownZIndex(fromEl) {
   if (!fromEl?.closest) return processModalDropdownZIndex;
-  if (fromEl.closest("#userModal, #account-addModal, #account-editModal, #addAccountModal, .account-modal")) {
-    return accountModalDropdownZIndex;
+  const accountModal = fromEl.closest(
+    "#userModal, #account-addModal, #account-editModal, #addAccountModal, .account-modal",
+  );
+  if (accountModal) {
+    const modalZIndex = Number.parseInt(window.getComputedStyle(accountModal).zIndex, 10);
+    return Number.isFinite(modalZIndex)
+      ? Math.max(accountModalDropdownZIndex, modalZIndex + 1)
+      : accountModalDropdownZIndex;
   }
   if (fromEl.closest("#profitSharingModal")) return profitSharingModalDropdownZIndex;
   return processModalDropdownZIndex;

@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { loadActiveCaptureSession, markCaptureRestorePending } from "../../datacapture/lib/dataCaptureStorage.js";
 import { saveGroupOnlyProcessPrefsFromProcessData } from "../../datacapture/lib/dataCaptureGroupOnlyProcessPersistence.js";
+import { dataCaptureQueryKeys } from "../../datacapture/lib/dataCaptureApi.js";
 import { isGroupLedgerCapture } from "../../../utils/company/c168CaptureChannel.js";
+import { notifyTransactionListInvalidated } from "../../transaction/lib/transactionPaymentLogic.js";
 import { clearSummaryCaptureRoundStorage } from "../lib/summaryStorage.js";
 import { saveSummaryRefreshStatePure } from "../lib/summaryRefreshStatePure.js";
 import { mergeRowsWithSummaryDomDraft } from "../lib/summaryRefreshDomSync.js";
+import { deleteSummaryTemplate } from "../lib/summaryApi.js";
 import { useSummaryContext } from "../context/SummaryContext.jsx";
 import { useSummarySubmitPure } from "./useSummarySubmitPure.js";
 import { pushSummaryNotification } from "../lib/summaryNotify.js";
 import { computeSummaryTotal } from "../table/summaryRowData.js";
 import { rowsHaveCompleteFormulaCurrency } from "../table/summaryRowAmount.js";
-import { deleteFormulasSpring } from "../formula/summarySaveTemplatePure.js";
+import { syncSubOrderTemplates } from "../table/summarySubOrderResequence.js";
+import { saveSummaryTemplatePure } from "../formula/summarySaveTemplatePure.js";
 import {
   SUMMARY_SUBMIT_TOTAL_MAX,
   SUMMARY_SUBMIT_TOTAL_MIN,
@@ -94,6 +99,7 @@ export function useSummaryPageActionsPure({
 }) {
 
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const {
 
@@ -156,6 +162,9 @@ export function useSummaryPageActionsPure({
     t,
 
     onSuccess: () => {
+      // Same-tab sync before navigate: TX Payment + DC Submitted list must not wait on SSE.
+      notifyTransactionListInvalidated("summary_submit");
+      void queryClient.invalidateQueries({ queryKey: dataCaptureQueryKeys.root() });
 
       const session = loadActiveCaptureSession();
 
@@ -309,39 +318,50 @@ export function useSummaryPageActionsPure({
 
   const handleDeleteSelected = useCallback(() => {
 
-    const selected = rows.filter((r) => r.deleteChecked);
-    const count = selected.length;
+    const count = rows.filter((r) => r.deleteChecked).length;
 
     if (count <= 0) return;
 
     const message = t("confirmDeleteRows", { count }) || `Delete ${count} row(s)?`;
 
     const onConfirm = async () => {
-      const notify = showNotification || pushSummaryNotification;
 
-      // Spring first: only rows with formula id / business key hit the API.
-      try {
-        const del = await deleteFormulasSpring(selected, {
-          captureScope,
-          companyId,
-          processId,
-          processCode,
-        });
-        if (!del.success) {
-          notify("Error", del.message || "Formula delete failed", "error");
-          return;
+      const result = deleteSelectedRows();
+
+      if (result.templatesToDelete?.length) {
+        for (const tpl of result.templatesToDelete) {
+          try {
+            await deleteSummaryTemplate({
+              captureScope,
+              companyId,
+              processId,
+              templateKey: tpl.templateKey,
+              productType: tpl.productType || "main",
+              templateId: tpl.templateId,
+              formulaVariant: tpl.formulaVariant,
+            });
+          } catch (e) {
+            console.warn("Template delete failed:", tpl, e);
+          }
         }
-      } catch (e) {
-        console.warn("Formula delete failed:", e);
-        notify("Error", String(e?.message || e) || "Formula delete failed", "error");
-        return;
       }
 
-      // UI: MAIN clear-in-place; SUB remove row. No subOrder resequence (Spring contract).
-      // Pass `selected` so we don't rely on deleteChecked after the async confirm.
-      const result = deleteSelectedRows(selected);
       const nextRows = result.nextRows || rows;
+      const parentsToSync = new Set(
+        (result.templatesToDelete || [])
+          .filter((t) => t.productType === "sub")
+          .map((t) => String(t.templateKey || "").split("_")[0])
+          .filter(Boolean)
+      );
+      for (const parent of parentsToSync) {
+        await syncSubOrderTemplates(nextRows, parent, (row) =>
+          saveSummaryTemplatePure(row, { captureScope, companyId, processId, processCode })
+        );
+      }
+
       saveSummaryRefreshStatePure(nextRows, { processId, processCode }, captureScope);
+
+      const notify = showNotification || pushSummaryNotification;
 
       notify(
         t("success") || "Success",
@@ -349,6 +369,7 @@ export function useSummaryPageActionsPure({
           `${result.removed + result.cleared} row(s) deleted successfully!`,
         "success"
       );
+
     };
 
     if (typeof showConfirmDelete === "function") {

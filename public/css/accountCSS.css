@@ -84,7 +84,7 @@ body.account-page:not(.account-page--show-all) .action-buttons-container .user-g
 }
 
 body.account-page .action-buttons-container {
-    margin-top: var(--layout-page-first-block-mt);
+    margin-top: clamp(12px, 1.04vw, 20px);
     background-color: #ffffff;
     border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -162,6 +162,7 @@ body.ec-auth-shell.account-page .action-buttons .btn {
 
 body.ec-auth-shell.account-page .user-gc-segment {
     padding: 4px 18px !important;
+    font-size: 1.4rem !important;
 }
 
 body.ec-auth-shell.account-page .user-filter-chip {
@@ -229,6 +230,17 @@ body.account-page:not(.account-page--show-all) .account-table-header.account-lis
         minmax(131px, 1fr)
         minmax(60px, 1.2fr)
         minmax(64px, 0.25fr);
+    --account-list-grid-cols-bulk:
+        38px
+        minmax(120px, 1.5fr)
+        minmax(120px, 1.5fr)
+        minmax(84px, 0.7fr)
+        minmax(52px, 0.42fr)
+        minmax(72px, 0.55fr)
+        minmax(131px, 1fr)
+        minmax(60px, 1.2fr)
+        minmax(60px, 0.23fr)
+        48px;
 }
 
 .account-list-table-inner {
@@ -246,6 +258,11 @@ body.account-page:not(.account-page--show-all) .account-table-header.account-lis
     grid-template-columns: var(--account-list-grid-cols);
     width: 100%;
     box-sizing: border-box;
+}
+
+.account-list-table.account-table-wrapper--bulk-delete-col .account-list-table-header,
+.account-list-table.account-table-wrapper--bulk-delete-col .account-list-row {
+    grid-template-columns: var(--account-list-grid-cols-bulk);
 }
 
 .account-list-table .account-list-table-header {
@@ -299,6 +316,33 @@ body.account-page:not(.account-page--show-all) .account-table-header.account-lis
     padding-left: 0 !important;
     padding-right: 0 !important;
     overflow: visible;
+}
+
+/* 删除勾选单独列：与表头全选同一 48px 轨道（对齐 Admin） */
+body.ec-auth-shell.account-page .account-list-table-header .account-header-item--select,
+body.ec-auth-shell.account-page .account-list-row .account-card-item--select {
+    display: flex;
+    justify-content: start;
+    align-items: center;
+    min-width: 0;
+    padding: 0 !important;
+    box-sizing: border-box;
+}
+
+.account-list-table-header .account-header-item--select input[type="checkbox"],
+.account-list-row .account-card-item--select input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+.account-row-select-placeholder {
+    display: block;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
 }
 
 .account-list-table .account-list-row .account-card-item--action .account-action-tools {
@@ -418,19 +462,27 @@ body.account-page:not(.account-page--show-all) .account-card {
     box-sizing: border-box;
 }
 
-/* 分页模式：行内文字与 User List 对齐，避免两页表格行高视觉不一致 */
-body.account-page:not(.account-page--show-all) .account-list-row .account-card-item,
-body.ec-auth-shell.account-page:not(.account-page--show-all) .account-list-row .account-card-item {
+/* 行内文字密度：含 Show All，与 Admin 对齐 */
+body.account-page .account-list-row .account-card-item,
+body.ec-auth-shell.account-page .account-list-row .account-card-item {
     font-size: 1.4rem !important;
     font-weight: bold !important;
     line-height: 1.3 !important;
     letter-spacing: 0 !important;
 }
 
-/* 分页列表：Role / Alert / Status 药丸（固定字号，小屏/125% 不缩小） */
-body.account-page:not(.account-page--show-all) .account-list-row .account-role-badge,
-body.ec-auth-shell.account-page:not(.account-page--show-all) .account-list-row .account-role-badge,
-body.ec-auth-shell.account-page:not(.account-page--show-all) .account-list-row span.account-role-badge {
+body.account-page.account-page--show-all .account-list-table .account-list-row.account-card,
+body.ec-auth-shell.account-page.account-page--show-all .account-card {
+    padding: 0 22px !important;
+    min-height: var(--account-list-row-min-height, 30px) !important;
+    flex: 0 0 auto !important;
+    height: auto !important;
+}
+
+/* Role / Alert / Status 药丸（固定字号；含 Show All） */
+body.account-page .account-list-row .account-role-badge,
+body.ec-auth-shell.account-page .account-list-row .account-role-badge,
+body.ec-auth-shell.account-page .account-list-row span.account-role-badge {
     box-sizing: border-box;
     height: var(--account-list-pill-height, 20px);
     padding: 0 8px;
@@ -878,9 +930,13 @@ body.ec-auth-shell.account-page .account-cards.account-cards--show-all > .accoun
     grid-template-columns: var(--account-list-grid-cols);
 }
 
+.account-list-table.account-table-wrapper--bulk-delete-col .account-list-row.account-card {
+    grid-template-columns: var(--account-list-grid-cols-bulk);
+}
+
 .account-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transform: translateY(-1px);
+    box-shadow: none;
+    transform: none;
 }
 
 .account-card-item {
@@ -2880,18 +2936,18 @@ body.account-page #forceDeleteCurrencyModal .confirm-delete {
 
 .account-status-clickable {
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: none;
     user-select: none;
 }
 
 .account-status-clickable:hover {
     opacity: 0.8;
-    transform: scale(1.05);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transform: none;
+    box-shadow: none;
 }
 
 .account-status-clickable:active {
-    transform: scale(0.95);
+    transform: none;
 }
 
 /* Role Badges - merged with above definition */
@@ -2944,6 +3000,7 @@ body.account-page #forceDeleteCurrencyModal .confirm-delete {
     border: 1px solid #ffc58c;
 }
 
+.account-role-upline,
 .account-role-supplier {
     background-color: #d6f9ff;
     color: #0a6b78;
@@ -3735,9 +3792,13 @@ body:not(.maintenance-page) .quick-select-dropdown-toggle .dropdown-item:hover {
 body > .account-modal,
 body > #linkAccountModal,
 body > #confirmDeleteModal,
-body > #currencySettingModal,
 body > #userModal.modal {
     z-index: 20050;
+}
+
+/* Currency Setting 全屏层须低于侧栏，避免裁切 current-page 伸出条 */
+body > #currencySettingModal.currency-fullscreen-modal {
+    z-index: 990;
 }
 
 body > #confirmModal.modal,

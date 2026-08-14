@@ -409,11 +409,16 @@
 .currency-fullscreen-modal {
     display: none;
     position: fixed;
-    /* 高于 .informationmenu (1000)，避免侧栏阴影叠在左缘造成「凹凸不平」 */
-    z-index: 10200;
-    left: var(--layout-main-offset, clamp(160px, 12.98vw, 235px));
+    /*
+     * 必须低于 .informationmenu (1000)：
+     * Account 当前页高亮条会伸出侧栏右缘（margin-right 负值 + ›），
+     * 若本层 z-index 更高会把蓝条/箭头裁掉（sidebar 遮挡）。
+     */
+    z-index: 990;
+    /* 贴合侧栏右缘，不跟页面主内容的 --layout-main-gap */
+    left: var(--layout-sidebar-width, clamp(160px, 12.98vw, 218px));
     top: 0;
-    width: calc(100vw - var(--layout-main-offset, clamp(160px, 12.98vw, 235px)));
+    width: calc(100vw - var(--layout-sidebar-width, clamp(160px, 12.98vw, 218px)));
     height: 100%;
     height: 100dvh;
     background: #ffffff;

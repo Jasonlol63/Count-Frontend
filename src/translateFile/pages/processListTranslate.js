@@ -7,6 +7,7 @@ export const PROCESS_LIST_I18N = {
     saving: "Saving...",
     search: "Search",
     showAll: "Show All",
+    showActive: "Show Active",
     showInactive: "Show Inactive",
     delete: "Delete",
     deleteWithCount: "Delete ({count})",
@@ -52,8 +53,9 @@ export const PROCESS_LIST_I18N = {
     noColumn: "No",
     description: "Description",
     status: "Status",
-    statusActive: "Active",
-    statusInactive: "Inactive",
+    statusActive: "ACTIVE",
+    statusInactive: "INACTIVE",
+    statusWaiting: "WAITING",
     currencyColumn: "Currency",
     dayUse: "Day Use",
     action: "Action",
@@ -102,7 +104,7 @@ export const PROCESS_LIST_I18N = {
     dtsCreated: "DTS Created:",
     removeWords: "Remove Word",
     enterWordsToRemove: "",
-    removeWordsHelp: "Separate words with commas (example: FREE,BONUS). Select all to copy. Saved for this process.",
+    removeWordsHelp: "For multiple words, use commas (,). To match only one exact word, put = before it.",
     removeWordChipRemove: "Remove",
     allDay: "ALL DAY",
     replaceFrom: "Replace From",
@@ -119,6 +121,7 @@ export const PROCESS_LIST_I18N = {
     processFormSectionRecord: "Record",
     processFormSectionTextReplace: "Text & replacement",
     processFormSectionScheduleNotes: "Schedule",
+    enableSaveDraft: "Save Data Capture Table",
     dayMonday: "MON",
     dayTuesday: "TUE",
     dayWednesday: "WED",
@@ -133,6 +136,7 @@ export const PROCESS_LIST_I18N = {
     saving: "保存中...",
     search: "搜索",
     showAll: "显示全部",
+    showActive: "显示启用",
     showInactive: "显示停用",
     delete: "删除",
     deleteWithCount: "删除（{count}）",
@@ -180,6 +184,7 @@ export const PROCESS_LIST_I18N = {
     status: "状态",
     statusActive: "启用",
     statusInactive: "停用",
+    statusWaiting: "等待",
     currencyColumn: "货币",
     dayUse: "使用日期",
     action: "操作",
@@ -228,7 +233,7 @@ export const PROCESS_LIST_I18N = {
     dtsCreated: "创建时间：",
     removeWords: "移除词",
     enterWordsToRemove: "",
-    removeWordsHelp: "多个词用逗号隔开（例如：FREE,BONUS），可全选复制；会保存在当前 Process。",
+    removeWordsHelp: "多个词请用逗号（,）分隔；若要精确匹配单个词，请在词前加上 =。",
     removeWordChipRemove: "移除",
     allDay: "全天",
     replaceFrom: "替换来源",
@@ -245,6 +250,7 @@ export const PROCESS_LIST_I18N = {
     processFormSectionRecord: "记录信息",
     processFormSectionTextReplace: "文本与替换",
     processFormSectionScheduleNotes: "周期与备注",
+    enableSaveDraft: "启用草稿保存",
     dayMonday: "周一",
     dayTuesday: "周二",
     dayWednesday: "周三",
@@ -272,12 +278,13 @@ const PROCESS_DAY_NAME_KEYS = {
   SUNDAY: "daySunday",
 };
 
-/** Process list table: localized status badge (backend enum ACTIVE | INACTIVE only). */
+/** Process list table: localized status badge */
 export function formatProcessStatusDisplay(t, status) {
-  const s = String(status || "").trim().toUpperCase();
-  if (s === "ACTIVE") return t("statusActive");
-  if (s === "INACTIVE") return t("statusInactive");
-  return String(status || "").trim();
+  const s = String(status || "").trim().toLowerCase();
+  if (s === "active") return t("statusActive");
+  if (s === "inactive") return t("statusInactive");
+  if (s === "waiting") return t("statusWaiting");
+  return String(status || "").toUpperCase();
 }
 
 /** Process list table: localized day-use column (MON,TUE → 周一,周二) */

@@ -46,8 +46,10 @@ import { clearSummaryFormulaContext, bindSummaryFormulaContext } from "./lib/sum
 import { useSummaryOverlays } from "./hooks/useSummaryOverlays.js";
 
 import { fetchSummaryAccountList } from "./lib/summaryApi.js";
-import { saveUpdateFormulaSpring } from "./formula/summarySaveTemplatePure.js";
+import { saveSummaryTemplatePure } from "./formula/summarySaveTemplatePure.js";
 import { recalculateRowAmounts } from "./table/summaryRowAmount.js";
+import { useRealtimeDomain } from "../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS } from "../../lib/realtime/realtimeEvents.js";
 import { pushSummaryNotification } from "./lib/summaryNotify.js";
 
 import { spaPath } from "../../utils/routing/pageRoutes.js";
@@ -232,11 +234,26 @@ function DataCaptureSummaryPureInner() {
 
     if (!captureScope) return;
 
-    const accounts = await fetchSummaryAccountList(captureScope, effectiveCompanyId);
+    const accounts = await fetchSummaryAccountList(captureScope);
 
     setAccounts(accounts);
 
-  }, [captureScope, effectiveCompanyId, setAccounts]);
+  }, [captureScope, setAccounts]);
+
+
+
+  useRealtimeDomain(
+    [REALTIME_DOMAINS.DATACAPTURE, REALTIME_DOMAINS.MAINTENANCE],
+    (detail) => {
+      void refreshAccountList();
+      const src = String(detail?.source || "");
+      // Formula / capture maintenance writes — refresh grid, not only accounts.
+      if (/^(formula_|capture_|summary_|restore)/.test(src)) {
+        void pageActions.handleRefresh();
+      }
+    },
+    { enabled: sessionReady && Boolean(captureScope) },
+  );
 
 
 
@@ -507,41 +524,25 @@ function DataCaptureSummaryPureInner() {
       updateRow(row.key, patch);
       const merged = recalculateRowAmounts({ ...row, ...patch }, globalRateInput);
       if (!merged.accountId || !merged.account?.trim()) return;
-
       try {
-        const tpl = await saveUpdateFormulaSpring(merged, {
+        const tpl = await saveSummaryTemplatePure(merged, {
           captureScope,
           companyId: effectiveCompanyId,
           processId: capture.processId,
-          processCode: capture.processCode,
         });
         if (!tpl.success) {
-          pushSummaryNotification("Error", tpl.message || "Formula update failed.", "error");
-          return;
-        }
-        if (tpl.templateId != null) {
-          updateRow(row.key, {
-            templateId: tpl.templateId,
-            templateKey: tpl.templateKey ?? merged.templateKey,
-          });
+          pushSummaryNotification("Error", tpl.message || "Template save failed.", "error");
         }
       } catch (e) {
-        console.warn("Inline edit formula update failed:", e);
+        console.warn("Inline edit template save failed:", e);
         pushSummaryNotification(
           "Error",
-          String(e?.message || e) || "Formula update failed.",
+          String(e?.message || e) || "Template save failed.",
           "error"
         );
       }
     },
-    [
-      updateRow,
-      globalRateInput,
-      captureScope,
-      effectiveCompanyId,
-      capture.processId,
-      capture.processCode,
-    ]
+    [updateRow, globalRateInput, captureScope, effectiveCompanyId, capture.processId]
   );
 
 

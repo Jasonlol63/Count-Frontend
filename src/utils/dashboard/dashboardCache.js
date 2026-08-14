@@ -268,3 +268,21 @@ export function clearDashboardPayloadCache() {
 export function clearDashboardCache() {
   store.clear();
 }
+
+/** Bumped when ledger caches are dropped — prefetch must not write after a newer generation. */
+let ledgerCacheGeneration = 0;
+
+export function getLedgerCacheGeneration() {
+  return ledgerCacheGeneration;
+}
+
+/**
+ * Ledger / transaction writes: drop session KPI + payload dedupe so the next
+ * Dashboard visit (or mounted realtime reload) cannot early-return on stale data.
+ * Does not reset bootstrap/warm session flags — only numeric caches.
+ */
+export function invalidateDashboardCachesForLedgerChange() {
+  ledgerCacheGeneration += 1;
+  store.clear();
+  payloadStore.clear();
+}

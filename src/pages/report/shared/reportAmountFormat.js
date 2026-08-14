@@ -5,7 +5,7 @@
 import MoneyDecimal from "../../../utils/money/moneyDecimal.js";
 
 export function formatReportAmount(value) {
-  const thousandsZero = () => MoneyDecimal.formatUiMoney("0");
+  const thousandsZero = () => MoneyDecimal.formatThousands(MoneyDecimal.formatFixedHalfUp("0", 2), 2);
   if (value === null || value === undefined) return thousandsZero();
   const raw = String(value).trim();
   if (raw === "" || raw === "-") return thousandsZero();
@@ -14,7 +14,8 @@ export function formatReportAmount(value) {
   try {
     const absSmall = MoneyDecimal.cmp(MoneyDecimal.abs(cleaned), "0.005") < 0;
     const core = absSmall ? "0" : cleaned;
-    return MoneyDecimal.formatUiMoney(core);
+    const rounded = MoneyDecimal.formatFixedHalfUp(core, 2);
+    return MoneyDecimal.formatThousands(rounded, 2);
   } catch {
     return thousandsZero();
   }

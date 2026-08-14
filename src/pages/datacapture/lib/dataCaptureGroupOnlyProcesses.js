@@ -8,6 +8,36 @@ export const GROUP_PAYROLL_DRAFT_PROCESS_CODES = ["SALARY", "COMMISSION", "BONUS
 /** @deprecated alias — use GROUP_PAYROLL_PROCESS_CODES */
 export const GROUP_ONLY_PROCESS_CODES = GROUP_PAYROLL_PROCESS_CODES;
 
+function normalizeGroupPayrollProcessCode(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s*\(.*$/, "");
+}
+
+/**
+ * Maintenance Group scope uses all four payroll processes.
+ * Prefer the API's numeric id; retain the code as a fallback so the fixed option never disappears.
+ */
+export function mapGroupPayrollProcesses(apiList) {
+  const rows = Array.isArray(apiList) ? apiList : [];
+  return GROUP_PAYROLL_PROCESS_CODES.map((code) => {
+    const row = rows.find((process) => {
+      const fromProcess = normalizeGroupPayrollProcessCode(
+        process.process ?? process.process_id ?? process.process_name,
+      );
+      const fromDisplay = normalizeGroupPayrollProcessCode(process.display_text);
+      return fromProcess === code || fromDisplay === code;
+    });
+    const numericId = row?.id != null ? Number(row.id) : Number.NaN;
+    return {
+      id: Number.isFinite(numericId) && numericId > 0 ? numericId : code,
+      process: code,
+      display_text: code,
+    };
+  });
+}
+
 const toIdSet = (codes) => new Set(codes.map((code) => code.toLowerCase()));
 
 export const GROUP_PAYROLL_PROCESS_IDS = toIdSet(GROUP_PAYROLL_PROCESS_CODES);
@@ -33,7 +63,7 @@ export function isGroupPayrollDraftProcessId(id) {
 export function getGroupOnlyProcessOptions() {
   return GROUP_PAYROLL_PROCESS_CODES.map((code) => ({
     id: code.toLowerCase(),
-    processId: code,
+    process_id: code,
     displayText: code,
   }));
 }
@@ -49,13 +79,13 @@ export function selectedProcessFromGroupOnlySession(processData) {
     .trim()
     .toUpperCase();
   if (pcode) {
-    const byCode = options.find((o) => (o.processId ?? o.process_id) === pcode);
+    const byCode = options.find((o) => o.process_id === pcode);
     if (byCode) {
       return {
         id: byCode.id,
         displayText: byCode.displayText,
-        processId: byCode.processId ?? byCode.process_id,
-        descriptionName: null,
+        process_id: byCode.process_id,
+        description_name: null,
       };
     }
   }
@@ -66,8 +96,8 @@ export function selectedProcessFromGroupOnlySession(processData) {
       return {
         id: byId.id,
         displayText: byId.displayText,
-        processId: byId.processId ?? byId.process_id,
-        descriptionName: null,
+        process_id: byId.process_id,
+        description_name: null,
       };
     }
   }
@@ -75,15 +105,13 @@ export function selectedProcessFromGroupOnlySession(processData) {
     .trim()
     .toUpperCase();
   if (pname) {
-    const byName = options.find(
-      (o) => (o.processId ?? o.process_id) === pname || o.displayText === pname,
-    );
+    const byName = options.find((o) => o.process_id === pname || o.displayText === pname);
     if (byName) {
       return {
         id: byName.id,
         displayText: byName.displayText,
-        processId: byName.processId ?? byName.process_id,
-        descriptionName: null,
+        process_id: byName.process_id,
+        description_name: null,
       };
     }
   }

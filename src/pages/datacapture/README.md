@@ -12,7 +12,7 @@ Pure React SPA — no runtime load of `js/datacapture.js` or other legacy script
 |------|----------|
 | Page shell, company filter, page-ready chrome | `DataCapturePage.jsx` |
 | Form fields, capture type, submit/reset | `hooks/useDataCaptureFormEngine.js`, `hooks/useDataCaptureCaptureType.js`, `hooks/useDataCaptureSubmitReset.js` |
-| Capture category (auto Games/Bank, no UI pills) | `hooks/useDataCaptureCategoryPermissions.js`, `lib/dataCaptureSpringApi.js` — see [CATEGORY_REMOVED.md](./CATEGORY_REMOVED.md) |
+| Category / permission gates | `hooks/useDataCaptureCategoryPermissions.js` |
 | Submitted process list (right panel) | `hooks/useDataCaptureSubmittedList.js` |
 | Page lifecycle (first load, URL params) | `hooks/useDataCapturePageLifecycle.js` |
 | Runtime registry (replaces legacy globals) | `lib/dataCaptureRuntime.js`, `lib/dataCaptureBridge.js` |
@@ -77,5 +77,3 @@ datacapture/
 - Cells use contentEditable for input UX; `onInput` / `onBlur` commit to the model via `updateCell`.
 - Paste, undo, submit snapshot, and row/column CRUD all read/write the model — not live DOM scraping.
 - `gridDomAdapter.applyCellModelToElement` only pushes model → DOM for display (paste html/styles, version bumps).
-- `grid/gridModel.js#snapshotToGrid(snapshot, fallbackRows, fallbackCols)`: `fallbackRows`/`fallbackCols` are the caller-resolved **required floor** (e.g. `dataCaptureGridMeta.resolveRestoreGridDimensions` pins group-only/Bank grids to 11 cols). The function must only **grow** past that floor to fit a bigger snapshot, never shrink below it from the snapshot's own `rowCount`/`colCount`.
-  - **Fixed (2026-08-07)**: restoring a Bank draft with fewer populated columns than the fixed 11 (e.g. only 2 data columns saved) collapsed the whole grid to that smaller column count instead of keeping the fixed 11-col layout, because `snapshotToGrid` let `snapshot.colCount`/`rowCount` override the floor. Now uses `Math.max(fallback, snapshotSize)`.

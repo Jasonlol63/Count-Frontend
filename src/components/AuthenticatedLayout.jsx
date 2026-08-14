@@ -1,8 +1,15 @@
-﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { isPaymentHistoryChromelessPath } from "../pages/transaction/lib/transactionPaymentHistoryUrl.js";
 import { assetUrl, buildApiUrl, buildSpaPath } from "../utils/core/apiUrl.js";
 import { fetchCurrentUser, logoutSession } from "../utils/auth/authApi.js";
+import {
+  getSessionTenantId,
+  getSessionTenantCode,
+  sessionHasTenantGame,
+  sessionHasTenantBank,
+  isCurrentTenantC168,
+} from "../utils/auth/sessionTenant.js";
 import { bindMediaQueryChange } from "../utils/dom/bindMediaQueryChange.js";
 import { safeLocal, safeSession } from "../utils/storage/safeStorage.js";
 import { clearDataCaptureRoundLocalStorage } from "../utils/capture/dataCaptureRoundStorage.js";
@@ -11,6 +18,7 @@ import AvatarPickerModal from "./AvatarPickerModal.jsx";
 import ConfirmLogoutModal from "./ConfirmLogoutModal.jsx";
 import ExpirationReminderModal from "./ExpirationReminderModal.jsx";
 import { AuthSessionProvider } from "../context/AuthSessionContext.jsx";
+import AppRealtimeBridge from "../lib/realtime/AppRealtimeBridge.jsx";
 import SidebarLangSwitch from "./SidebarLangSwitch.jsx";
 import SidebarFlyoutSubmenu from "./SidebarFlyoutSubmenu.jsx";
 import { dismissAllPortalTooltips } from "./PortalTooltip.jsx";
@@ -30,6 +38,7 @@ import {
   canAccessFullMaintenance,
   canAccessLimitedMaintenance,
   canAccessPermission,
+  canShowReportInSidebar,
   resolveDefaultLandingPath,
   showMaintenanceInSidebar,
 } from "../utils/auth/sidebarPermissions.js";
@@ -59,6 +68,7 @@ import {
   stashDashboardFilterForNewTab,
 } from "../utils/company/sharedCompanyFilter.js";
 import { rememberCompanySessionFlags } from "../utils/company/companySessionFlagsCache.js";
+import { resolveCompanyCategoryFlags } from "../utils/company/companyCategoryFlags.js";
 import { categoryFlagsFromSession } from "../utils/company/sidebarCompanySwitch.js";
 import SidebarExpirationCountdown from "./SidebarExpirationCountdown.jsx";
 import SidebarMenuTooltip from "./SidebarMenuTooltip.jsx";
@@ -79,9 +89,14 @@ import {
   patchMeFromCompanyContext,
 } from "../utils/company/loginScope.js";
 import { pathnameIs, pathnameToPageKey, spaPath } from "../utils/routing/pageRoutes.js";
+import { markSidebarPageSoftRefresh } from "../utils/routing/sidebarPageSoftRefresh.js";
 import { stripPrivateQueryFromBrowserUrl } from "../utils/routing/privateBrowserUrl.js";
 import { resetDashboardSessionCaches } from "../utils/dashboard/dashboardCache.js";
-import { resetMaintenanceCalendarPopupOnNavigation } from "../utils/date/dateRangePicker.js";
+import {
+  commitMaintenanceDateRangeToDmy,
+  resetMaintenanceCalendarPopupOnNavigation,
+} from "../utils/date/dateRangePicker.js";
+import { formatDmy } from "../utils/date/dateUtils.js";
 import AnnouncementUpdateCard from "./announcements/AnnouncementUpdateCard.jsx";
 import {
   publishMaintenanceModeEvent,
@@ -101,9 +116,26 @@ function readCookie(name) {
   return m ? decodeURIComponent(m[1]) : "";
 }
 
+/**
+ * Spring `SessionUser` (from `/auth/current-user`) uses `tenant_*` field names;
+ * the sidebar/dashboard shell still reads the legacy PHP `company_*` names in many
+ * places. Alias them here once so those call sites keep working unchanged.
+ */
+function withLegacyCompanyAliases(u) {
+  if (!u) return u;
+  return {
+    ...u,
+    company_id: u.company_id ?? getSessionTenantId(u),
+    company_code: u.company_code ?? getSessionTenantCode(u),
+    company_has_gambling: u.company_has_gambling ?? sessionHasTenantGame(u),
+    company_has_bank: u.company_has_bank ?? sessionHasTenantBank(u),
+    is_current_company_c168: u.is_current_company_c168 ?? isCurrentTenantC168(u),
+  };
+}
+
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "ec_sidebar_collapsed";
-/** iPad Air 11" (M2) landscape Safari â‰ˆ 1180px; use 1200px to include that viewport. */
-/** Galaxy Tab S7 æ¨ªå±çº¦ 1280pxï¼Œéœ€çº³å…¥å¹³æ¿ä¾§æ é€»è¾‘ */
+/** iPad Air 11" (M2) landscape Safari ≈ 1180px; use 1200px to include that viewport. */
+/** Galaxy Tab S7 横屏约 1280px，需纳入平板侧栏逻辑 */
 const TABLET_MEDIA_QUERY = "(max-width: 1280px)";
 
 /** Icon-only sidebar: portal tooltip to the right of each nav item. */
@@ -128,7 +160,7 @@ function sidebarOpensNewTab(event) {
   );
 }
 
-/** Plain left-click â†’ SPA navigate; middle / modified click â†’ new tab at the route href. */
+/** Plain left-click → SPA navigate; middle / modified click → new tab at the route href. */
 function handleSidebarSpaLinkClick(event, path, onNavigate) {
   if (event.defaultPrevented) return;
   if (sidebarOpensNewTab(event)) {
@@ -205,19 +237,40 @@ const AVATAR_MAP = {
 
 export default function AuthenticatedLayout() {
   const navigate = useNavigate();
-  const goTo = useCallback(
-    (path) => {
-      resetMaintenanceCalendarPopupOnNavigation();
-      startTransition(() => {
-        navigate(buildSpaPath(path));
-      });
-    },
-    [navigate],
-  );
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const path = location.pathname;
   const pageKey = pathnameToPageKey(path);
+  /** Bumped on same-page sidebar re-click so AnimatedOutlet remounts the current page. */
+  const [pageRefreshKey, setPageRefreshKey] = useState(0);
+  const goTo = useCallback(
+    (nextPath) => {
+      resetMaintenanceCalendarPopupOnNavigation();
+      const targetPath = buildSpaPath(nextPath);
+      const targetKey = pathnameToPageKey(targetPath);
+      const currentKey = pathnameToPageKey(location.pathname);
+
+      // Already on this sidebar page → soft-reset page state (not a full browser reload).
+      if (targetKey && targetKey === currentKey) {
+        const cleanPath = spaPath(targetKey);
+        const currentFull = `${location.pathname}${location.search}${location.hash}`;
+        if (currentFull !== cleanPath) {
+          navigate(cleanPath, { replace: true });
+        }
+        // Capture Date lives in a module singleton — pin to today before remount.
+        const today = formatDmy(new Date());
+        if (today) commitMaintenanceDateRangeToDmy(today, today, { triggerOnChange: false });
+        markSidebarPageSoftRefresh(targetKey);
+        setPageRefreshKey((key) => key + 1);
+        return;
+      }
+
+      startTransition(() => {
+        navigate(targetPath);
+      });
+    },
+    [navigate, location.pathname, location.search, location.hash],
+  );
   const isDataCaptureSidebarActive =
     pageKey === "datacapture" || pageKey === "datacapturesummary";
   const chromelessPaymentHistory = isPaymentHistoryChromelessPath(path, searchParams);
@@ -320,20 +373,44 @@ export default function AuthenticatedLayout() {
     if (onAccountLike || onUserLike || onAutoRenew || onAnnouncement) {
       document.body.classList.remove("bg");
     }
+
+    return () => {
+      document.body.classList.remove("account-page", "user-page", "auto-renew-page-body", "announcement-page");
+    };
   }, [location.pathname, searchParams]);
 
-  /* Process è·¯ç”±ï¼šçˆ¶çº§ layout é˜¶æ®µå³æŒ‚ä¸Š body classï¼Œé¿å… SPA åˆ‡å…¥æ—¶ Global Unlock å…ˆæ’‘å‡ºåŒ scrollbar */
+  /* Process 路由：父级 layout 阶段即挂上 body class，避免 SPA 切入时 Global Unlock 先撑出双 scrollbar */
   useLayoutEffect(() => {
     if (pathnameIs("bank-process-list", location.pathname)) {
       document.body.classList.remove("dashboard-page");
       document.body.classList.add("process-page", "process-page--bank");
-    } else if (pathnameIs("process-list", location.pathname)) {
+    } else if (
+      pathnameIs("process-list", location.pathname) ||
+      pathnameIs("games-process-list", location.pathname)
+    ) {
       document.body.classList.remove("dashboard-page", "process-page--bank", "process-page--bank-show-all");
       document.body.classList.add("process-page");
+    } else {
+      document.body.classList.remove(
+        "process-page",
+        "process-page--bank",
+        "process-page--bank-show-all",
+        "process-page--show-all",
+      );
+      document.body.classList.add("dashboard-page");
     }
+
+    return () => {
+      document.body.classList.remove(
+        "process-page",
+        "process-page--bank",
+        "process-page--bank-show-all",
+        "process-page--show-all",
+      );
+    };
   }, [location.pathname]);
 
-  /* Transaction Payment / Dashboardï¼šlayout é˜¶æ®µæŒ‚ transaction-pageï¼Œé¿å… lazy chunk åŠ è½½å‰æ ·å¼é”™ä½ */
+  /* Transaction Payment / Dashboard：layout 阶段挂 transaction-page，避免 lazy chunk 加载前样式错位 */
   useLayoutEffect(() => {
     const onDashboard = pathnameIs("dashboard", location.pathname);
     const onTransactionPayment =
@@ -341,6 +418,10 @@ export default function AuthenticatedLayout() {
     document.body.classList.toggle("transaction-page", onTransactionPayment || onDashboard);
     document.body.classList.toggle("dashboard-home-page", onDashboard);
     resetMaintenanceCalendarPopupOnNavigation();
+
+    return () => {
+      document.body.classList.remove("transaction-page", "dashboard-home-page");
+    };
   }, [location.pathname, chromelessPaymentHistory]);
 
   useLayoutEffect(() => {
@@ -442,7 +523,7 @@ export default function AuthenticatedLayout() {
           navigate(spaPath("login"), { replace: true });
           return;
         }
-        const u = json.data;
+        const u = withLegacyCompanyAliases(json.data);
         if (u.user_type === "member") {
           window.location.assign(new URL(spaPath("member"), window.location.origin).href);
           return;
@@ -457,13 +538,10 @@ export default function AuthenticatedLayout() {
         }
         applyLoginScopeToSessionStorageIfNeeded(u);
         rememberCompanySessionFlags({
-          tenant_id: u.tenant_id,
-          company_id: u.tenant_id,
-          tenant_code: u.tenant_code,
-          company_code: u.tenant_code,
-          has_game: u.tenant_has_game,
-          has_gambling: u.tenant_has_game,
-          has_bank: u.tenant_has_bank,
+          company_id: u.company_id,
+          company_code: u.company_code,
+          has_gambling: u.company_has_gambling,
+          has_bank: u.company_has_bank,
         });
         setMe(u);
         clearChunkReloadFlag();
@@ -488,10 +566,17 @@ export default function AuthenticatedLayout() {
     if (loading || !me) return undefined;
 
     let stopped = false;
+    let inFlight = false;
+    /** Maintenance probe — keep light; cross-tab bus already broadcasts enable events. */
+    const POLL_MS = 30000;
+
     const tick = async () => {
+      if (stopped || inFlight) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      inFlight = true;
       try {
-        const { ok, json } = await fetchCurrentUser({ cache: "no-store" });
-        if (!ok && !stopped && (json?.maintenance_mode === true || json?.data?.maintenance_mode === true)) {
+        const { ok: tickOk, json } = await fetchCurrentUser();
+        if (!tickOk && !stopped && (json?.maintenance_mode === true || json?.data?.maintenance_mode === true)) {
           if (typeof json?.message === "string" && json.message.trim() !== "") {
             safeSession.setItem("ec_maintenance_notice", json.message.trim());
           }
@@ -507,14 +592,22 @@ export default function AuthenticatedLayout() {
         }
       } catch {
         // silent: next tick retries
+      } finally {
+        inFlight = false;
       }
     };
 
-    tick();
-    const timer = window.setInterval(tick, 2000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+
+    // Session was just loaded — do not fire an immediate duplicate request.
+    const timer = window.setInterval(tick, POLL_MS);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       stopped = true;
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [loading, me]);
 
@@ -541,59 +634,96 @@ export default function AuthenticatedLayout() {
   const refreshSession = useCallback(async () => {
     const filterAtStart = readPersistedDashboardGcFilter();
     try {
-      const res = await fetchCurrentUser();
-      const json = res.json;
-      if (res.ok && json.success && json.data) {
+      const { ok, json } = await fetchCurrentUser();
+      if (ok && json.success && json.data) {
+        const data = withLegacyCompanyAliases(json.data);
         const filterNow = readPersistedDashboardGcFilter();
         if (!dashboardGcFiltersEqual(filterAtStart, filterNow)) return null;
-        if (!shouldRefreshExpiryFromSession(json.data, filterNow)) return null;
-        applyLoginScopeToSessionStorageIfNeeded(json.data);
-        rememberCompanySessionFlags({
-          tenant_id: json.data.tenant_id,
-          company_id: json.data.tenant_id,
-          tenant_code: json.data.tenant_code,
-          company_code: json.data.tenant_code,
-          has_game: json.data.tenant_has_game,
-          has_gambling: json.data.tenant_has_game,
-          has_bank: json.data.tenant_has_bank,
-        });
+        if (!shouldRefreshExpiryFromSession(data, filterNow)) return null;
+        applyLoginScopeToSessionStorageIfNeeded(data);
+
+        // Pure Group: always Games identity for sidebar (ignore stale PHP subsidiary session).
+        if (filterNow.groupOnly && filterNow.selectedGroup) {
+          const groupGambling = resolveGroupOnlySidebarGambling(filterNow.selectedGroup);
+          const groupExp = resolveSidebarExpirationForFilter({
+            selectedGroup: filterNow.selectedGroup,
+            companyId: null,
+          });
+          setMe((prev) => {
+            if (!prev) return prev;
+            return patchMeFromCompanyContext(prev, {
+              companyId: null,
+              companyCode: filterNow.selectedGroup,
+              hasBank: false,
+              forceGroupGamesCategory: true,
+              hasGambling: groupGambling != null ? groupGambling : true,
+              expirationDate: groupExp !== undefined ? groupExp : null,
+            });
+          });
+          setSidebarGcTick((n) => n + 1);
+          return data;
+        }
+
+        // Subsidiary selected: prefer owner-company row / session-switch cache over payload
+        // (Group login historically returned fixed Games and re-showed Report on Bank companies).
+        const filterCompanyId =
+          filterNow.companyId != null && filterNow.companyId !== ""
+            ? Number(filterNow.companyId)
+            : null;
+        const categoryCompanyId =
+          Number.isFinite(filterCompanyId) && filterCompanyId > 0 ? filterCompanyId : null;
+        let categoryOverride = null;
+        if (categoryCompanyId != null) {
+          const row = findOwnerCompanyById(categoryCompanyId);
+          categoryOverride =
+            resolveCompanyCategoryFlags(row) ?? categoryFlagsFromSession(null, categoryCompanyId);
+        }
+        const hasGambling =
+          categoryOverride != null
+            ? Boolean(categoryOverride.hasGambling)
+            : Boolean(data.company_has_gambling);
+        const hasBank =
+          categoryOverride != null
+            ? Boolean(categoryOverride.hasBank)
+            : Boolean(data.company_has_bank);
+
+        if (categoryCompanyId != null) {
+          rememberCompanySessionFlags({
+            company_id: categoryCompanyId,
+            company_code: data.company_code,
+            has_gambling: hasGambling,
+            has_bank: hasBank,
+          });
+        }
+        const sessionMe =
+          categoryOverride != null
+            ? {
+                ...data,
+                company_has_gambling: hasGambling,
+                company_has_bank: hasBank,
+              }
+            : data;
+
         let appliedSessionToSidebar = false;
         setMe((prev) => {
-          if (!prev) return json.data;
-          if (shouldApplySessionToSidebar(json.data, filterNow)) {
+          if (!prev) return sessionMe;
+          if (shouldApplySessionToSidebar(data, filterNow)) {
             appliedSessionToSidebar = true;
-            if (filterNow.groupOnly && filterNow.selectedGroup) {
-              const groupGambling = resolveGroupOnlySidebarGambling(filterNow.selectedGroup);
-              return patchMeFromCompanyContext(prev, {
-                companyId: null,
-                companyCode: filterNow.selectedGroup,
-                hasBank: false,
-                ...(groupGambling != null
-                  ? { hasGambling: groupGambling }
-                  : prev.tenant_has_game != null
-                    ? { hasGambling: Boolean(prev.tenant_has_game) }
-                    : {}),
-                expirationDate: resolveSidebarExpirationForFilter({
-                  selectedGroup: filterNow.selectedGroup,
-                  companyId: null,
-                }),
-              });
-            }
-            return json.data;
+            return sessionMe;
           }
           return {
             ...prev,
-            expiration_hint: json.data.expiration_hint,
-            expiration_status: json.data.expiration_status,
-            expiration_date: json.data.expiration_date,
-            days_until_expiration: json.data.days_until_expiration,
-            pending_auto_renew_count: Number(json.data.pending_auto_renew_count) || 0,
+            expiration_hint: data.expiration_hint,
+            expiration_status: data.expiration_status,
+            expiration_date: data.expiration_date,
+            days_until_expiration: data.days_until_expiration,
+            pending_auto_renew_count: Number(data.pending_auto_renew_count) || 0,
           };
         });
         if (appliedSessionToSidebar) {
           setSidebarGcTick((n) => n + 1);
         }
-        return json.data;
+        return sessionMe;
       }
     } catch {
       /* ignore */
@@ -676,15 +806,10 @@ export default function AuthenticatedLayout() {
           ? resolveGroupCategoryFlagsForSidebar(resolved.selectedGroup, { includeBank })
           : null;
         if (resolved.groupOnly) {
+          // Group tenant contract: always Games identity; never Bank category.
           patch.hasBank = false;
-          if (resolved.hasGambling != null) {
-            patch.hasGambling = Boolean(resolved.hasGambling);
-          } else if (groupFlags) {
-            patch.hasGambling = groupFlags.hasGambling;
-          } else if (resolved.selectedGroup) {
-            const groupGambling = resolveGroupOnlySidebarGambling(resolved.selectedGroup);
-            if (groupGambling != null) patch.hasGambling = groupGambling;
-          }
+          patch.hasGambling = true;
+          patch.forceGroupGamesCategory = true;
         } else {
           if (resolved.hasGambling != null) patch.hasGambling = Boolean(resolved.hasGambling);
           else if (groupFlags) patch.hasGambling = groupFlags.hasGambling;
@@ -708,7 +833,7 @@ export default function AuthenticatedLayout() {
               hasGambling: Boolean(resolved.hasGambling),
               hasBank: Boolean(resolved.hasBank),
             }
-          : categoryFlagsFromSession(null, cid);
+          : categoryFlagsFromSession(null, cid) ?? resolveCompanyCategoryFlags(row);
       const expirationDate = resolveSidebarExpirationForFilter(resolved);
       applySidebarPatch({
         companyId: cid,
@@ -937,12 +1062,21 @@ export default function AuthenticatedLayout() {
     }
 
     prefetchRouteModule(path);
-    if (pageKey !== "dashboard" && canAccessPermission(me, "home")) {
-      prefetchRouteModule(spaPath("dashboard"));
+    /* Warm persisted dashboard scope on every authenticated idle — including Home landing —
+     * so sibling company/currency page warm can reuse the same session cache sooner. */
+    if (canAccessPermission(me, "home")) {
+      if (pageKey !== "dashboard") {
+        prefetchRouteModule(spaPath("dashboard"));
+      }
       void import("../pages/dashboard/dashboardRoutePrefetch.js").then(({ warmDashboardRouteCache }) => {
         warmDashboardRouteCache({ me });
       });
     }
+
+    const processListSpaPath =
+      me?.company_has_bank && !me?.company_has_gambling
+        ? spaPath("bank-process-list")
+        : spaPath("process-list");
 
     const runCompanies = () => {
       void fetchOwnerCompaniesAll({ me });
@@ -961,15 +1095,21 @@ export default function AuthenticatedLayout() {
     };
 
     const runProcessListWarm = () => {
-      if (!me?.tenant_id) return;
+      if (!me?.company_id) return;
       void import("../pages/processlist/processRoutePrefetch.js").then((mod) => {
-        if (me.tenant_has_bank && !me.tenant_has_game) {
-          mod.warmBankProcessListRouteCache(me.tenant_id);
+        if (me.company_has_bank && !me.company_has_gambling) {
+          mod.warmBankProcessListRouteCache(me.company_id);
         } else {
-          mod.warmProcessListRouteCache(me.tenant_id);
+          mod.warmProcessListRouteCache(me.company_id);
         }
       });
     };
+
+    // Eager Acc→Process: prefetch Process chunk + warm list as soon as Acc is open (not only idle).
+    if (pathnameIs("account-list", path) || pathnameIs("add-account", path)) {
+      prefetchRouteModule(processListSpaPath);
+      runProcessListWarm();
+    }
 
     const runTransactionWarm = () => {
       void import("../pages/transaction/transactionRoutePrefetch.js").then(({ warmTransactionRouteCache }) => {
@@ -981,7 +1121,10 @@ export default function AuthenticatedLayout() {
       if (pageKey === "dashboard") return;
       runCompanies();
       runProcessListWarm();
-      if (pathnameIs("dashboard", path) || pathnameIs("account-list", path)) {
+      if (pathnameIs("account-list", path) || pathnameIs("add-account", path)) {
+        prefetchRouteModule(processListSpaPath);
+        runAccountListWarm();
+      } else if (pathnameIs("dashboard", path)) {
         runAccountListWarm();
       }
       if (pathnameIs("transaction", path)) {
@@ -1014,15 +1157,15 @@ export default function AuthenticatedLayout() {
         if (routePageKey === "ownership") prefetchOwnershipCompanies();
         if (
           (routePageKey === "process-list" || routePageKey === "games-process-list") &&
-          me?.tenant_id
+          me?.company_id
         ) {
           void import("../pages/processlist/processRoutePrefetch.js").then(({ warmProcessListRouteCache }) => {
-            warmProcessListRouteCache(me.tenant_id);
+            warmProcessListRouteCache(me.company_id);
           });
         }
-        if (routePageKey === "bank-process-list" && me?.tenant_id) {
+        if (routePageKey === "bank-process-list" && me?.company_id) {
           void import("../pages/processlist/processRoutePrefetch.js").then(({ warmBankProcessListRouteCache }) => {
-            warmBankProcessListRouteCache(me.tenant_id);
+            warmBankProcessListRouteCache(me.company_id);
           });
         }
         if (routePageKey === "account-list") {
@@ -1104,6 +1247,10 @@ export default function AuthenticatedLayout() {
   const showFullMaintenanceMenu = canAccessFullMaintenance(me);
   const showLimitedMaintenanceMenu = canAccessLimitedMaintenance(me);
   const showMaintenanceMenu = showMaintenanceInSidebar(me);
+  const showCaptureMaintenance = useMemo(() => {
+    void sidebarGcTick;
+    return canAccessCaptureMaintenance(me);
+  }, [me, sidebarGcTick]);
   const showBankprocessMaintenance = useMemo(() => {
     void sidebarGcTick;
     return shouldShowBankprocessMaintenanceInSidebar(me);
@@ -1116,7 +1263,7 @@ export default function AuthenticatedLayout() {
     return formatUserRoleDisplay(t, me.role);
   }, [lang, me?.role]);
   const processSpaPath =
-    me?.tenant_has_bank && !me?.tenant_has_game ? spaPath("bank-process-list") : spaPath("process-list");
+    me?.company_has_bank && !me?.company_has_gambling ? spaPath("bank-process-list") : spaPath("process-list");
   const performLogout = async () => {
     if (logoutLoading) return;
     setLogoutLoading(true);
@@ -1177,7 +1324,7 @@ export default function AuthenticatedLayout() {
     [me, loading, refreshSession, lang]
   );
 
-  if (loading) return <AppBootLoading label={lang === "zh" ? "æ­£åœ¨åŠ è½½â€¦" : "Loadingâ€¦"} />;
+  if (loading) return <AppBootLoading label={lang === "zh" ? "正在加载…" : "Loading…"} />;
   if (!me) return <Navigate to={spaPath("login")} replace />;
 
   if (pageKey === "dashboard" && !canAccessDashboard(me)) {
@@ -1188,6 +1335,7 @@ export default function AuthenticatedLayout() {
   return (
     <AuthSessionProvider value={sessionContextValue}>
     <>
+      <AppRealtimeBridge />
       {!chromelessPaymentHistory ? (
       <>
       <div
@@ -1235,8 +1383,12 @@ export default function AuthenticatedLayout() {
             </div>
             
             <div className="user-info">
-              <div className="user-name">{me?.name || me?.login_id || "-"}</div>
-              <div className="user-role">{roleLabel || i18n.user}</div>
+              <div className="user-name" title={me?.name || me?.login_id || undefined}>
+                {me?.name || me?.login_id || "-"}
+              </div>
+              <div className="user-role" title={roleLabel || i18n.user || undefined}>
+                {roleLabel || i18n.user}
+              </div>
             </div>
           </div>
           <SidebarLangSwitch lang={lang} onLanguageChange={applyLanguage} ariaLabel={i18n.switchLanguage} />
@@ -1382,7 +1534,7 @@ export default function AuthenticatedLayout() {
               </SidebarNavTip>
             </div>
           )}
-          {canAccess("datacapture") && (me?.tenant_has_game || me?.tenant_has_bank) && (
+          {canAccess("datacapture") && (me?.company_has_gambling || me?.company_has_bank) && (
             <div className="informationmenu-section">
               <SidebarNavTip label={i18n.sidebarDataCapture} enabled={sidebarIconOnly}>
                 <SidebarSectionLink
@@ -1419,7 +1571,7 @@ export default function AuthenticatedLayout() {
               </SidebarNavTip>
             </div>
           )}
-          {canAccess("report") && me?.tenant_has_game && (
+          {canShowReportInSidebar(me) && (
             <div className="informationmenu-section">
               <div className="menu-item-wrapper" onMouseLeave={scheduleCloseHoverSubmenu}>
                 <SidebarNavTip label={i18n.sidebarReport} enabled={sidebarIconOnly} placement="top">
@@ -1439,7 +1591,7 @@ export default function AuthenticatedLayout() {
                       <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 2 2h8c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
                     </svg>
                     <span className="sidebar-menu-label">{i18n.sidebarReport}</span>
-                    <span className="section-arrow">â–¶</span>
+                    <span className="section-arrow">▶</span>
                   </div>
                 </SidebarNavTip>
                 <SidebarFlyoutSubmenu
@@ -1490,7 +1642,7 @@ export default function AuthenticatedLayout() {
                       <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" />
                     </svg>
                     <span className="sidebar-menu-label">{i18n.sidebarMaintenance}</span>
-                    <span className="section-arrow">â–¶</span>
+                    <span className="section-arrow">▶</span>
                   </div>
                 </SidebarNavTip>
                 <SidebarFlyoutSubmenu
@@ -1503,8 +1655,7 @@ export default function AuthenticatedLayout() {
                   }}
                   onMouseLeave={scheduleCloseHoverSubmenu}
                 >
-                    {(showFullMaintenanceMenu || (showLimitedMaintenanceMenu && me?.tenant_has_bank)) &&
-                      (me?.tenant_has_game || me?.tenant_has_bank) && (
+                    {showCaptureMaintenance && (
                       <a
                         {...sidebarSubmenuLinkProps("/capture-maintenance", goTo)}
                         className={`submenu-item ${pageKey === "capture-maintenance" ? "current-page" : ""}`}
@@ -1513,7 +1664,7 @@ export default function AuthenticatedLayout() {
                         <span>{i18n.sidebarDataCapture}</span>
                       </a>
                     )}
-                    {(me?.tenant_has_game || me?.tenant_has_bank) &&
+                    {(me?.company_has_gambling || me?.company_has_bank) &&
                       (showFullMaintenanceMenu || showLimitedMaintenanceMenu) && (
                       <a
                         {...sidebarSubmenuLinkProps("/transaction-maintenance", goTo)}
@@ -1523,7 +1674,7 @@ export default function AuthenticatedLayout() {
                         <span>{i18n.sidebarTransaction}</span>
                       </a>
                     )}
-                    {showFullMaintenanceMenu && (me?.tenant_has_game || me?.tenant_has_bank) && (
+                    {showFullMaintenanceMenu && (me?.company_has_gambling || me?.company_has_bank) && (
                       <a
                         {...sidebarSubmenuLinkProps("/payment-maintenance", goTo)}
                         className={`submenu-item ${pageKey === "payment-maintenance" ? "current-page" : ""}`}
@@ -1532,7 +1683,7 @@ export default function AuthenticatedLayout() {
                         <span>{i18n.sidebarPayment}</span>
                       </a>
                     )}
-                    {(me?.tenant_has_game || me?.tenant_has_bank) && (showFullMaintenanceMenu || showLimitedMaintenanceMenu) && (
+                    {(me?.company_has_gambling || me?.company_has_bank) && (showFullMaintenanceMenu || showLimitedMaintenanceMenu) && (
                       <a
                         {...sidebarSubmenuLinkProps("/formula-maintenance", goTo)}
                         className={`submenu-item ${pageKey === "formula-maintenance" ? "current-page" : ""}`}
@@ -1671,7 +1822,7 @@ export default function AuthenticatedLayout() {
         i18n={i18n}
       />
 
-      <AnimatedOutlet />
+      <AnimatedOutlet pageRefreshKey={pageRefreshKey} />
     </>
     </AuthSessionProvider>
   );

@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import SimpleSelect from "../../components/SimpleSelect.jsx";
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { useLoginLang } from "../../utils/i18n/useLoginLang.js";
+import { useRealtimeDomain } from "../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS } from "../../lib/realtime/realtimeEvents.js";
 import "../../../public/css/accountCSS.css";
 import "../../../public/css/deleted-log.css";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
@@ -151,6 +153,14 @@ export default function DeletedLogPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Deletes / restores elsewhere append to the log — refresh when maintenance or ledger changes.
+  useRealtimeDomain(
+    [REALTIME_DOMAINS.MAINTENANCE, REALTIME_DOMAINS.LEDGER, REALTIME_DOMAINS.DATACAPTURE],
+    () => {
+      void load();
+    },
+  );
 
   const onApply = (e) => {
     e.preventDefault();

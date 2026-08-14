@@ -15,8 +15,16 @@ const SPRING_SUBMIT_TYPES = new Set([
 ]);
 const SPRING_TRANSFER_TYPES = new Set(["PAYMENT", "CLAIM", "CLEAR", "CONTRA", "PROFIT"]);
 
+/**
+ * `useTransactionForm.js` submits PROFIT as legacy `transaction_type: "WIN"|"LOSE"`
+ * (sign encodes direction, amount is abs). Spring only understands literal "PROFIT"
+ * with unsigned amount + explicit to/from — see the WIN/LOSE branch below for the
+ * account-swap translation. Treat WIN/LOSE as Spring-routable here so callers don't
+ * need to know about this legacy quirk.
+ */
 export function isSpringSubmitType(transactionType) {
-  return SPRING_SUBMIT_TYPES.has(String(transactionType || "").toUpperCase().trim());
+  const t = String(transactionType || "").toUpperCase().trim();
+  return SPRING_SUBMIT_TYPES.has(t) || t === "WIN" || t === "LOSE";
 }
 
 function parseSignedAmount(raw) {
@@ -46,6 +54,7 @@ export function buildSpringSubmitRequest({ companyId, payload } = {}) {
 
   const p = payload && typeof payload === "object" ? payload : {};
   const type = String(p.transaction_type || "").toUpperCase().trim();
+  const isProfitWinLose = type === "WIN" || type === "LOSE";
   if (!isSpringSubmitType(type)) {
     throw new Error("unsupportedSpringSubmitType");
   }
@@ -168,13 +177,35 @@ export function buildSpringSubmitRequest({ companyId, payload } = {}) {
     };
   }
 
-  if (!SPRING_TRANSFER_TYPES.has(type)) {
-    throw new Error("unsupportedSpringSubmitType");
-  }
-
   const fromAccountId = Number(p.from_account_id);
   if (!Number.isFinite(fromAccountId) || fromAccountId <= 0) {
     throw new Error("fromAccountRequired");
+  }
+
+  if (isProfitWinLose) {
+    // Legacy: WIN → To −/From + (normal direction); LOSE → To +/From − (reversed).
+    // Spring PROFIT is always From +/To − with a positive amount, so LOSE needs the
+    // accounts swapped to reproduce the same balance effect. `payload.amount` is
+    // already abs()'d by useTransactionForm.js for this branch.
+    const amount = parseSignedAmount(p.amount);
+    if (amount <= 0) {
+      throw new Error("invalidAmount");
+    }
+    const swap = type === "LOSE";
+    return {
+      tenantId,
+      transactionType: "PROFIT",
+      transactionDate,
+      toAccountId: swap ? fromAccountId : toAccountId,
+      fromAccountId: swap ? toAccountId : fromAccountId,
+      currencyCode,
+      amount,
+      remark: remark || undefined,
+    };
+  }
+
+  if (!SPRING_TRANSFER_TYPES.has(type)) {
+    throw new Error("unsupportedSpringSubmitType");
   }
 
   const amount = parseSignedAmount(p.amount);

@@ -7,10 +7,10 @@ import {
 } from "./summaryFormulaReference.js";
 import {
   formatProcessedAmountDisplay,
-  truncateProcessedAmountTo6Decimals,
+  roundProcessedAmountTo2Decimals,
 } from "../table/summaryRowAmount.js";
 import { formatNegativeNumbersInFormula, parseIdProductColumnRef } from "./summaryFormulaParseUtils.js";
-import { normalizeSummaryIdProductText } from "../lib/summaryIdProductUtils.js";
+import { normalizeSummaryIdProductText, summaryIdProductsEqual } from "../lib/summaryIdProductUtils.js";
 import { getProcessValueFromSummaryRow } from "../lib/summaryIdProductDisplay.js";
 
 function normalizeSpaces(text) {
@@ -83,11 +83,7 @@ function capturedRowMatchesIdProduct(rowData, targetIdProduct) {
   const rowValue = String(rowData[1].value || "").trim();
   const target = String(targetIdProduct || "").trim();
   if (!rowValue || !target) return false;
-  return (
-    rowValue === target ||
-    normalizeSpaces(rowValue) === normalizeSpaces(target) ||
-    normalizeSummaryIdProductText(rowValue) === normalizeSummaryIdProductText(target)
-  );
+  return summaryIdProductsEqual(rowValue, target);
 }
 
 function resolveCapturedRowForFormulaGrid(tableData, anchorRow) {
@@ -453,6 +449,32 @@ export function applyCalculatorToForm(form, { action, value }, rowContext = {}) 
   return computeFormulaDisplayPreview({ ...form, formula: `${formula}${insert}` }, rowContext);
 }
 
+/**
+ * True when the captured cell belongs to the row currently being edited
+ * (same id_product + same capture rowIndex when both are known).
+ * Other products / other capture rows must use [id_product,N], not $N.
+ */
+function isCurrentRowCapturedCell(form, cellMeta, rowContext = {}) {
+  const currentId = resolveReferenceProcessValue(form, rowContext);
+  const clickedId = String(cellMeta?.idProduct || "").trim();
+  if (!currentId || !clickedId) return false;
+
+  const idMatches =
+    clickedId === currentId ||
+    normalizeSpaces(clickedId) === normalizeSpaces(currentId) ||
+    normalizeSummaryIdProductText(clickedId) === normalizeSummaryIdProductText(currentId);
+  if (!idMatches) return false;
+
+  const anchorRowIndex =
+    rowContext?.rowIndex != null && !Number.isNaN(Number(rowContext.rowIndex))
+      ? Number(rowContext.rowIndex)
+      : null;
+  if (cellMeta.rowIndex != null && cellMeta.rowIndex >= 0 && anchorRowIndex != null) {
+    return Number(cellMeta.rowIndex) === anchorRowIndex;
+  }
+  return true;
+}
+
 export function insertCapturedCellIntoForm(form, cellMeta, rowContext = {}) {
   const extractedValue = String(cellMeta.value || "")
     .trim()
@@ -463,7 +485,7 @@ export function insertCapturedCellIntoForm(form, cellMeta, rowContext = {}) {
     return { ok: false, form, reason: "no_numbers" };
   }
 
-  const idProduct = cellMeta.idProduct;
+  const idProduct = String(cellMeta.idProduct || "").trim();
   const dataColumnIndex = cellMeta.dataColumnIndex;
   const displayColumnIndex = cellMeta.displayColumnIndex;
   if (dataColumnIndex == null || displayColumnIndex == null) {
@@ -484,8 +506,13 @@ export function insertCapturedCellIntoForm(form, cellMeta, rowContext = {}) {
   const refsArray = form.clickedColumns ? form.clickedColumns.split(/\s+/).filter(Boolean) : [];
   if (cellReference) refsArray.push(cellReference);
 
-  const dollarNum = displayColumnIndex;
-  const nextFormula = `${form.formula || ""}$${dollarNum}`;
+  // Current editing row → $N; other product/row → [id_product,N] (legacy parity).
+  const insertToken = isCurrentRowCapturedCell(form, cellMeta, rowContext)
+    ? `$${displayColumnIndex}`
+    : idProduct
+      ? `[${idProduct},${displayColumnIndex}]`
+      : `$${displayColumnIndex}`;
+  const nextFormula = `${form.formula || ""}${insertToken}`;
   const next = computeFormulaDisplayPreview(
     { ...form, formula: nextFormula, clickedColumns: refsArray.join(" ") },
     rowContext
@@ -535,23 +562,23 @@ export function addSelectedDescriptionToForm(form, tableData, rowContext = {}) {
 export function buildFormulaSavePatchFromForm(form, row) {
   const currencyId = String(form.currencyId || "").trim();
   if (!currencyId) {
-    return { ok: false, message: "Currency Id is required" };
+    return { ok: false, message: "请先选择 Currency 后再保存。Please select a currency." };
   }
 
   const accountId = String(form.accountId || "").trim();
   const accountText = String(form.accountText || "").trim();
   if (!accountId) {
-    return { ok: false, message: "Account Id is required" };
+    return { ok: false, message: "Please select an account" };
   }
 
   const formulaValue = String(form.formula || "").trim();
   if (!formulaValue) {
-    return { ok: false, message: "Formula is required" };
+    return { ok: false, message: "Please enter a formula" };
   }
 
   const sourcePercentValue = String(form.sourcePercent || "1").trim() || "1";
   const inputMethodValue = String(form.inputMethod || "").trim();
-  const descriptionValue = String(form.description || "").trim();
+  const descriptionValue = String(form.description || "").trim().toUpperCase();
   const enableInputMethod = Boolean(inputMethodValue);
   const enableSourcePercent = resolveEnableSourcePercent(sourcePercentValue);
   const clickedRefs = form.clickedColumns || "";
@@ -576,18 +603,18 @@ export function buildFormulaSavePatchFromForm(form, row) {
     enableSourcePercent
   );
 
-  const baseProcessedAmount = calculateFormulaResultFromExpression(
-    normalizedFormula,
-    sourcePercentValue,
-    inputMethodValue,
-    enableInputMethod,
-    enableSourcePercent,
-    processValue,
-    clickedRefs,
-    row?.rowIndex ?? null
+  const processedAmount = roundProcessedAmountTo2Decimals(
+    calculateFormulaResultFromExpression(
+      normalizedFormula,
+      sourcePercentValue,
+      inputMethodValue,
+      enableInputMethod,
+      enableSourcePercent,
+      processValue,
+      clickedRefs,
+      row?.rowIndex ?? null
+    )
   );
-  // Storage = 6-dp ROUND_DOWN; display = HALF_UP 2 only (never write round-2 into amount fields).
-  const processedAmount = truncateProcessedAmountTo6Decimals(baseProcessedAmount);
 
   const sourceColumns = hasDollarSign
     ? buildSourceColumnsFromFormula(normalizedFormula, clickedRefs)
@@ -614,9 +641,7 @@ export function buildFormulaSavePatchFromForm(form, row) {
       inputMethod: inputMethodValue,
       enableInputMethod,
       originalDescription: descriptionValue,
-      baseProcessedAmount,
-      processedAmount,
-      processedAmountDisplay: formatProcessedAmountDisplay(baseProcessedAmount),
+      processedAmountDisplay: formatProcessedAmountDisplay(processedAmount),
       templateApplied: true,
     },
   };

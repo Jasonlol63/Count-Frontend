@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
+import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { notifySessionRefreshRequested } from "../../../utils/company/companySessionEvents.js";
 import { showDomainAlert } from "./DomainNotification.jsx";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
@@ -16,20 +17,18 @@ import {
   calculateExpirationDate,
   formatDate,
   defaultFeeShareAllocations,
+  normalizeFeeShareFromServer,
   ensureCompanyFeeShare,
   isFeeShareAllocationsEmpty,
   applyDefaultProfitAllocation,
   pruneEmptyShareRows,
+  sumFeeShareRolePercentages,
   computeShareTotals,
   formatShareRowAmount2,
   resolveDomainFeePriceForPeriod,
   forceUppercaseValue,
+  normalizeDomainStartDateYmd,
 } from "../domainHelpers.js";
-import {
-  fetchShareAccountsForTenant,
-  updateTenantSetting,
-  validateTenantCodeGlobally,
-} from "../domainApi.js";
 import AddAccountModal from "./AddAccountModal.jsx";
 import { getDomainText } from "../../../translateFile/pages/domainTranslate.js";
 import DomainModalPortal from "./DomainModalPortal.jsx";
@@ -57,8 +56,8 @@ const WEEKDAYS_ZH = ["日", "一", "二", "三", "四", "五", "六"];
  * Props:
  *   company          — the tempCompanies entry being edited (snapshot for cancel)
  *   domainPeriodPrices — { 7days, 1month, … } for share amount by selected period
- *   shareLedgerTenantId — C168 ledger tenant.id for Share % account pickers / Add Account
- *   shareLedgerTenantCode — C168 ledger tenant code (picker label, e.g. C168)
+ *   sessionCompanyId — fallback if company.company_id is missing
+ *   sessionCompanyCode — used for adding accounts
  *   excludeOwnerId — edit domain: exclude current owner from global code check
  *   siblingGroupCodes — other group IDs in the form (for local rename validation)
  *   siblingCompanyCodes — other company IDs in the form (for local rename validation)
@@ -72,11 +71,9 @@ export default function CompanySettingsModal({
   lang = "en",
   tenantType = "company",
   company: initCompany,
-  ownerId = null,
-  allDomains = [],
   domainPeriodPrices,
-  shareLedgerTenantId,
-  shareLedgerTenantCode,
+  sessionCompanyId,
+  sessionCompanyCode,
   excludeOwnerId = null,
   siblingGroupCodes = [],
   siblingCompanyCodes = [],
@@ -105,7 +102,7 @@ export default function CompanySettingsModal({
   });
   const [expDisplay, setExpDisplay] = useState(initCompany.expiration_date ? formatDate(initCompany.expiration_date) : t("notSet"));
   const [permissions, setPermissions] = useState(
-    isGroup ? [] : (Array.isArray(initCompany.permissions) ? initCompany.permissions : [])
+    isGroup ? ["Games"] : (Array.isArray(initCompany.permissions) ? initCompany.permissions : [])
   );
   const [chargeOnSave, setChargeOnSave] = useState(!!initCompany.apply_commission_payments_on_domain_save);
   const startDateHandlerRef = useRef(null);
@@ -159,39 +156,61 @@ export default function CompanySettingsModal({
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [addAccountRole, setAddAccountRole] = useState("");
 
-
-  const tenantDbId = initCompany?.id ?? null;
+  const sharePickerCompanyCode = "C168";
 
   const loadAccounts = useCallback(() => {
-    const ledgerTenantId = shareLedgerTenantId ? Number(shareLedgerTenantId) : 0;
-    if (!ledgerTenantId) {
-      setShareAccounts([]);
-      setShareAccountsProfit([]);
-      return;
-    }
-    fetchShareAccountsForTenant(ledgerTenantId)
+    fetch(buildApiUrl("api/domain/domain_api.php"), {
+      cache: "no-cache",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "get_company_share_settings",
+        // 账户下拉始终来自 C168；Group 不传 group_code，避免误用集团账本账户列表
+        company_id: isGroup ? sharePickerCompanyCode : company.company_id,
+      }),
+    })
+      .then((r) => r.json())
       .then((res) => {
-        const accounts = Array.isArray(res.accounts) ? res.accounts : [];
-        const profitAccounts = Array.isArray(res.accounts_profit) ? res.accounts_profit : [];
+        const accounts = res.success && Array.isArray(res.data?.accounts) ? res.data.accounts : [];
+        const profitAccounts =
+          res.success && Array.isArray(res.data?.accounts_profit) ? res.data.accounts_profit : [];
         setShareAccounts(accounts);
         setShareAccountsProfit(profitAccounts);
         setFsa((prev) => {
           let next = prev;
-          if (isFeeShareAllocationsEmpty(prev)) {
-            next = applyDefaultProfitAllocation(prev, profitAccounts);
+          if (res.success && res.data?.company_exists && isFeeShareAllocationsEmpty(prev)) {
+            next = normalizeFeeShareFromServer(res.data.allocations);
           }
-          return next;
+          return applyDefaultProfitAllocation(next, profitAccounts);
         });
       })
-      .catch(() => {
-        setShareAccounts([]);
-        setShareAccountsProfit([]);
-      });
-  }, [shareLedgerTenantId]);
+      .catch(() => { setShareAccounts([]); setShareAccountsProfit([]); });
+  }, [company.company_id, isGroup]);
 
+  // Load share accounts from API
   useEffect(() => {
     loadAccounts();
-  }, [loadAccounts]);
+
+    if (isGroup) {
+      return;
+    }
+
+    if (!Array.isArray(initCompany.permissions) || initCompany.permissions.length === 0) {
+      fetch(buildApiUrl("api/domain/domain_api.php"), {
+        cache: "no-cache",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get_company_permissions", company_id: company.company_id }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          const perms = data.success && Array.isArray(data.data?.permissions) ? data.data.permissions : [];
+          setPermissions(perms);
+        })
+        .catch(() => setPermissions([]));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Recalculate expiration display whenever period/startDate changes
   useEffect(() => {
@@ -261,37 +280,31 @@ export default function CompanySettingsModal({
       }
     }
 
-    const globalCheck = validateTenantCodeGlobally(newCode, {
-      excludeOwnerId,
-      domains: allDomains,
-    });
-    if (!globalCheck.ok) {
-      showDomainAlert(
-        globalCheck.message === "cannotRenameToC168"
-          ? t("cannotRenameToC168")
-          : t("validateDomainCodeUnavailable"),
-        "danger"
-      );
+    try {
+      const payload = {
+        action: "validate_domain_code",
+        code: newCode,
+      };
+      if (excludeOwnerId !== undefined && excludeOwnerId !== null && excludeOwnerId !== "") {
+        payload.exclude_owner_id = Number(excludeOwnerId);
+      }
+      const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        showDomainAlert(json.message || t("operationFailed"), "danger");
+        return null;
+      }
+    } catch {
+      showDomainAlert(t("validateDomainCodeUnavailable"), "danger");
       return null;
     }
 
     return newCode;
-  }
-
-  async function persistToSpring({ tenantId, code, expirationDate, perms, shareRows }) {
-    if (!tenantId || !ownerId) return false;
-    const { json } = await updateTenantSetting({
-      id: tenantId,
-      code,
-      ownerId,
-      expirationDate: expirationDate || null,
-      permissions: isGroup ? [] : perms,
-      feeShareAllocations: shareRows,
-    });
-    if (!json?.success) {
-      throw new Error(json?.message || t("shareSaveFailed"));
-    }
-    return true;
   }
 
   function buildRenameFields(newCode) {
@@ -333,30 +346,63 @@ export default function CompanySettingsModal({
 
   async function handleSave() {
     const cleanFsa = pruneEmptyShareRows(fsa);
+    const apiEntityCode = originalEntityCode;
 
     if (commissionOnly) {
-      const updated = {
-        ...company,
-        fee_share_allocations: cleanFsa,
-      };
       try {
-        if (tenantDbId && ownerId) {
-          await persistToSpring({
-            tenantId: tenantDbId,
-            code: originalEntityCode,
-            expirationDate: company.expiration_date,
-            perms: permissions,
-            shareRows: cleanFsa,
-          });
+        const action = isGroup ? "save_group_share_settings" : "save_company_share_settings";
+        const payload = isGroup
+          ? { action, group_code: apiEntityCode, fee_share_allocations: cleanFsa }
+          : { action, company_id: apiEntityCode, fee_share_allocations: cleanFsa };
+        const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
+          cache: "no-cache",
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        if (!json.success) {
+          showDomainAlert(json.message || t("shareSaveFailed"), "danger");
+          return;
         }
         showDomainAlert(t("commissionSettingsSaved"));
-        onSave(updated);
-      } catch (err) {
-        showDomainAlert(err?.message || t("shareSaveFailed"), "danger");
+        onSave({
+          ...company,
+          fee_share_allocations: cleanFsa,
+        });
+      } catch {
+        showDomainAlert(t("shareSaveFailed"), "danger");
       }
       return;
     }
 
+    if (chargeOnSave && !normalizeDomainStartDateYmd(startDate)) {
+      showDomainAlert(
+        t("chargeRequiresStartDate", {
+          id: apiEntityCode || company.company_id || company.group_code || "",
+        }),
+        "danger"
+      );
+      return;
+    }
+
+    let expDate = company.expiration_date || null;
+    if (period) {
+      const base = startDate || new Date().toISOString().split("T")[0];
+      expDate = calculateExpirationDate(period, base);
+    }
+    if (!renameLocked && (!expDate || String(expDate).trim() === "")) {
+      showDomainAlert(
+        t("expirationRequiredBeforeConfirm", {
+          id: apiEntityCode || company.company_id || company.group_code || "",
+        }),
+        "danger"
+      );
+      return;
+    }
+
+    // Validate permissions (company only — groups do not use Process List / Data Capture categories)
     if (!isGroup && SINGLE_CATEGORY_MODE) {
       if (permissions.length === 0) { showDomainAlert(t("pleaseSelectOneCategory"), "danger"); return; }
       if (permissions.length > 1)  { showDomainAlert(t("onlyOneCategoryAtTime"), "danger"); return; }
@@ -366,28 +412,109 @@ export default function CompanySettingsModal({
     if (!newEntityCode) return;
     const renameFields = buildRenameFields(newEntityCode);
 
-    let expDate = company.expiration_date || null;
-    if (period) {
-      const base = startDate || new Date().toISOString().split("T")[0];
-      expDate = calculateExpirationDate(period, base);
+    if (isGroup) {
+      const updated = {
+        ...company,
+        group_code: newEntityCode,
+        company_id: newEntityCode,
+        ...renameFields,
+        expiration_date: expDate,
+        selectedPeriod: period || company.selectedPeriod,
+        startDate,
+        isExtending: company.isExtending,
+        originalExpirationDate: company.originalExpirationDate,
+        permissions: ["Games"],
+        fee_share_allocations: cleanFsa,
+        apply_commission_payments_on_domain_save: chargeOnSave,
+      };
+
+      if (persistImmediately) {
+        try {
+          const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
+            cache: "no-cache",
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "save_group_tenant_settings",
+              group_code: apiEntityCode,
+              expiration_date: expDate || null,
+              selectedPeriod: period || company.selectedPeriod || null,
+              startDate: normalizeDomainStartDateYmd(startDate) || null,
+              fee_share_allocations: cleanFsa,
+              apply_commission_payments: chargeOnSave,
+            }),
+          });
+          const json = await res.json();
+          if (!json.success) {
+            const msg = json.message || "";
+            if (msg.includes("not found") || msg.includes("save the domain first")) {
+              showDomainAlert(t("groupUpdatedShareAfterSave"));
+            } else {
+              showDomainAlert(msg || t("shareSaveFailed"), "danger");
+              return;
+            }
+          } else {
+            const hint = chargeOnSave ? t("feePostsHint") : "";
+            showDomainAlert(t("groupUpdatedSuccess") + hint);
+          }
+          onSave(updated);
+          notifySessionRefreshRequested();
+        } catch {
+          showDomainAlert(t("shareSaveFailed"), "danger");
+        }
+        return;
+      }
+
+      showDomainAlert(t("groupUpdatedShareAfterSave"));
+      onSave(updated);
+      notifySessionRefreshRequested();
+      return;
     }
 
-    const updated = isGroup
-      ? {
-          ...company,
-          group_code: newEntityCode,
-          company_id: newEntityCode,
-          ...renameFields,
-          expiration_date: expDate,
-          selectedPeriod: period || company.selectedPeriod,
-          startDate,
-          isExtending: company.isExtending,
-          originalExpirationDate: company.originalExpirationDate,
-          permissions: [],
-          fee_share_allocations: cleanFsa,
-          apply_commission_payments_on_domain_save: chargeOnSave,
+    const permReq = fetch(buildApiUrl("api/domain/domain_api.php"), {
+      cache: "no-cache",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update_company_permissions",
+        company_id: apiEntityCode,
+        permissions,
+        expiration_date: expDate || null,
+      }),
+    }).then((r) => r.json());
+
+    const shareReq = fetch(buildApiUrl("api/domain/domain_api.php"), {
+      cache: "no-cache",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "save_company_share_settings",
+        company_id: apiEntityCode,
+        fee_share_allocations: cleanFsa,
+        apply_commission_payments: chargeOnSave,
+      }),
+    }).then((r) => r.json());
+
+    Promise.all([permReq, shareReq])
+      .then(([permData, shareData]) => {
+        if (!permData.success) {
+          showDomainAlert(permData.message || t("permissionsSaveFailed"), "danger");
+          return;
         }
-      : {
+        if (!shareData.success) {
+          const msg = shareData.message || "";
+          if (msg.includes("not found") || msg.includes("Save the domain first")) {
+            showDomainAlert(t("companyUpdatedShareAfterSave"));
+          } else {
+            showDomainAlert(msg || t("shareSaveFailed"), "danger");
+            return;
+          }
+        } else {
+          const hint = chargeOnSave ? t("feePostsHint") : "";
+          showDomainAlert(t("companyUpdatedSuccess") + hint);
+        }
+        onSave({
           ...company,
           company_id: newEntityCode,
           ...renameFields,
@@ -399,38 +526,32 @@ export default function CompanySettingsModal({
           permissions: [...permissions],
           fee_share_allocations: cleanFsa,
           apply_commission_payments_on_domain_save: chargeOnSave,
-        };
-
-    const shouldPersistNow =
-      (persistImmediately || (tenantDbId && ownerId)) && tenantDbId && ownerId;
-
-    if (!shouldPersistNow) {
-      showDomainAlert(isGroup ? t("groupUpdatedShareAfterSave") : t("companyUpdatedShareAfterSave"));
-      onSave(updated);
-      notifySessionRefreshRequested();
-      return;
-    }
-
-    try {
-      await persistToSpring({
-        tenantId: tenantDbId,
-        code: newEntityCode,
-        expirationDate: expDate,
-        perms: permissions,
-        shareRows: cleanFsa,
+        });
+        notifySessionRefreshRequested();
+      })
+      .catch(() => {
+        showDomainAlert(t("serverUnreachableChangesKept"), "danger");
+        onSave({
+          ...company,
+          company_id: newEntityCode,
+          ...renameFields,
+          permissions: [...permissions],
+          fee_share_allocations: pruneEmptyShareRows(fsa),
+          apply_commission_payments_on_domain_save: chargeOnSave,
+        });
       });
-      const hint = chargeOnSave ? t("feePostsHint") : "";
-      showDomainAlert(
-        (isGroup ? t("groupUpdatedSuccess") : t("companyUpdatedSuccess")) + hint
-      );
-      onSave(updated);
-      notifySessionRefreshRequested();
-    } catch (err) {
-      showDomainAlert(err?.message || t("shareSaveFailed"), "danger");
-    }
   }
 
   // ─── Share % helpers（周期变更时按 Price 中对应金额重算，含 C168 行） ─────
+  const effectiveExpiration =
+    (period
+      ? calculateExpirationDate(period, startDate || new Date().toISOString().split("T")[0])
+      : null) ||
+    company.expiration_date ||
+    null;
+  const saveBlockedByExpiration =
+    !commissionOnly && !renameLocked && (!effectiveExpiration || String(effectiveExpiration).trim() === "");
+
   const shareAmountPeriod = commissionOnly ? (sharePricePeriod || period) : period;
   const effectiveFeePrice = resolveDomainFeePriceForPeriod(
     domainPeriodPrices,
@@ -806,7 +927,19 @@ export default function CompanySettingsModal({
 
           {/* Footer actions — 与量测图：Save 蓝 / Reset 红 / Cancel 灰 */}
           <div className="form-actions company-settings-form-actions">
-            <button type="button" className="btn btn-save" disabled={submitting} onClick={() => runGuarded(handleSave)}>
+            <button
+              type="button"
+              className="btn btn-save"
+              disabled={submitting || saveBlockedByExpiration}
+              title={
+                saveBlockedByExpiration
+                  ? t("expirationRequiredBeforeConfirm", {
+                      id: originalEntityCode || company.company_id || company.group_code || "",
+                    })
+                  : undefined
+              }
+              onClick={() => runGuarded(handleSave)}
+            >
               {submitting ? t("saving") : t("save")}
             </button>
             {!commissionOnly ? (
@@ -822,8 +955,8 @@ export default function CompanySettingsModal({
         {showAddAccount && (
           <AddAccountModal
             lang={lang}
-            tenantId={shareLedgerTenantId}
-            tenantCode={shareLedgerTenantCode}
+            companyId={sessionCompanyId}
+            companyCode={sharePickerCompanyCode}
             preferredRole={addAccountRole}
             onClose={() => setShowAddAccount(false)}
             onSuccess={() => {

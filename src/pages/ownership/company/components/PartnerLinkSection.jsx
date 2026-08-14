@@ -18,14 +18,15 @@ export default function PartnerLinkSection({ inputId, onLink, disabled = false, 
               autoCapitalize="characters"
               value={val}
               disabled={disabled}
-              onChange={(e) => setVal(e.target.value.toUpperCase())}
+              onChange={(e) => setVal(e.target.value)}
+              style={{ textTransform: "uppercase" }}
             />
             <button
               type="button"
               className="own-partner-link-btn"
               disabled={busy || disabled}
               onClick={async () => {
-                const login = val.trim();
+                const login = val.trim().toUpperCase();
                 if (!login) return;
                 setBusy(true);
                 const ok = await onLink(login);

@@ -252,7 +252,7 @@
   --list-table-min-width: 980px;
 
   /* Account 表头蓝条 padding（accountCSS .account-table-header） */
-  --table-header-height: 6px 22px;
+  --table-header-height: 4px 22px;
 
   /*
    * Customer / Domain Report 列表行高（Maintenance 虚拟表与之对齐）
@@ -383,9 +383,10 @@
   --color-danger-soft-fg: #fca5a5;
   --color-focus-ring: #6366f1;
   --color-focus-ring-soft: #a5b4fc;
-  --color-focus-ring-checkbox: #818cf8;
-  --color-control-accent: #7e3aec;
-  --color-control-accent-border: #5b21b6;
+  --color-focus-ring-checkbox: #93c5fd;
+  /* 控件勾选强调色：与 Domain 页 company-assign / 主题蓝 checkbox 一致 */
+  --color-control-accent: var(--color-primary);
+  --color-control-accent-border: var(--color-primary-strong);
   --color-text-inverse: #ffffff;
   --color-text-inverse-soft: rgba(255, 255, 255, 0.85);
   --shadow-btn-primary: 0 2px 8px rgba(13, 96, 255, 0.28);

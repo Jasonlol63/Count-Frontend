@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { getProcessModalDropdownZIndex } from "../../../components/ProcessModalPortal.jsx";
 import SimpleSelect from "../../../components/SimpleSelect.jsx";
 import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
-import FormDateField from "../../../components/FormDateField.jsx";
+import { formatDmy, formatYmd, parseYmd } from "../../../utils/date/dateUtils.js";
 import { filterBankPickAccounts, formatBankAccountDisplay } from "../lib/bankProcessHelpers.js";
 
 const PORTAL_MIN_WIDTH = 180;
@@ -45,20 +45,270 @@ export function BankSimpleSelect({ className = "", ...props }) {
   return <SimpleSelect {...props} wrapperClassName={`bank-simple-select${className ? ` ${className}` : ""}`} />;
 }
 
-/** Bank Process modal wrapper — same calendar as FormDateField, bank-specific CSS classes. */
-export function BankFormDateField(props) {
-  const { wrapClassName = "", disabled = false, ...rest } = props;
+function toDisplayDate(value) {
+  const date = parseYmd(String(value || "").trim());
+  return date ? formatDmy(date) : "";
+}
+
+function firstOfMonth(value) {
+  const date = parseYmd(String(value || "").trim()) || new Date();
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function buildCalendarCells(viewMonth) {
+  const year = viewMonth.getFullYear();
+  const month = viewMonth.getMonth();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const firstCell = new Date(year, month, 1 - firstWeekday);
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(firstCell);
+    date.setDate(firstCell.getDate() + index);
+    date.setHours(0, 0, 0, 0);
+    return {
+      date,
+      ymd: formatYmd(date),
+      otherMonth: date.getMonth() !== month,
+    };
+  });
+}
+
+/**
+ * Bank-style single-date field with its own calendar popup (no Period presets).
+ * Used by Add/Edit and Resend so both share one design. It intentionally does
+ * not use the shared MaintenanceDateRangePicker so the list Period picker
+ * keeps its existing bindings and behavior.
+ */
+export function BankFormCalendarDateField({
+  id,
+  label,
+  value,
+  onValueChange,
+  disabled = false,
+  minYmd = "",
+  placeholder,
+  clearLabel,
+  labelExtra = null,
+  monthLabels,
+  weekdaysShort,
+  className = "",
+  wrapClassName = "",
+}) {
+  const wrapRef = useRef(null);
+  const popupRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [viewMonth, setViewMonth] = useState(() => firstOfMonth(value));
+  const [popupStyle, setPopupStyle] = useState(null);
+
+  useLayoutEffect(() => {
+    if (!open || !wrapRef.current) return;
+    const anchorRect = wrapRef.current.getBoundingClientRect();
+    const popupWidth = Math.min(292, Math.max(1, window.innerWidth - 24));
+    const popupHeight = popupRef.current?.offsetHeight || 320;
+    const left = Math.max(12, Math.min(anchorRect.left, window.innerWidth - popupWidth - 12));
+    const fitsBelow = window.innerHeight - anchorRect.bottom >= popupHeight + 8;
+    const top = fitsBelow
+      ? anchorRect.bottom + 4
+      : Math.max(12, anchorRect.top - popupHeight - 4);
+    setPopupStyle({
+      left: `${Math.round(left)}px`,
+      top: `${Math.round(top)}px`,
+      width: `${Math.round(popupWidth)}px`,
+      zIndex: getProcessModalDropdownZIndex(wrapRef.current),
+    });
+  }, [open, viewMonth]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnOutside = (event) => {
+      const target = event.target;
+      if (wrapRef.current?.contains(target) || popupRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const closeOnViewportMove = () => setOpen(false);
+    document.addEventListener("pointerdown", closeOnOutside, true);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", closeOnViewportMove);
+    window.addEventListener("scroll", closeOnViewportMove, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutside, true);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", closeOnViewportMove);
+      window.removeEventListener("scroll", closeOnViewportMove, true);
+    };
+  }, [open]);
+
+  const openCalendar = () => {
+    if (disabled) return;
+    setViewMonth(firstOfMonth(value || minYmd));
+    setOpen(true);
+  };
+
+  const selectDay = (ymd) => {
+    if (minYmd && ymd < minYmd) return;
+    onValueChange?.(ymd);
+    setOpen(false);
+  };
+
+  const clearValue = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onValueChange?.("");
+    setOpen(false);
+  };
+
+  const cells = useMemo(() => buildCalendarCells(viewMonth), [viewMonth]);
+  const todayYmd = formatYmd(new Date());
+  const selectedYmd = String(value || "").trim();
+  const selectedYear = parseYmd(selectedYmd)?.getFullYear();
+  const extraYears = Number.isFinite(selectedYear) ? [selectedYear] : [];
+  const currentYear = new Date().getFullYear();
+  const minYear = Math.min(2022, ...extraYears);
+  const maxYear = Math.max(currentYear + 1, ...extraYears);
+  const yearOptions = Array.from({ length: maxYear - minYear + 1 }, (_, index) => minYear + index);
+  const labels = Array.isArray(monthLabels) && monthLabels.length === 12
+    ? monthLabels
+    : Array.from({ length: 12 }, (_, index) => String(index + 1));
+  const weekdays = Array.isArray(weekdaysShort) && weekdaysShort.length === 7
+    ? weekdaysShort
+    : Array(7).fill("");
+
+  const popup = open && typeof document !== "undefined"
+    ? createPortal(
+        <div
+          ref={popupRef}
+          className="calendar-popup calendar-popup--transaction-range calendar-popup--no-presets bank-form-range-calendar"
+          style={{ ...popupStyle, display: "grid", visibility: popupStyle ? "visible" : "hidden" }}
+          role="dialog"
+          aria-label={label}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="transaction-calendar-panel">
+            <div className="calendar-header">
+              <button
+                type="button"
+                className="calendar-nav-btn"
+                aria-label={labels[(viewMonth.getMonth() + 11) % 12]}
+                onClick={() => setViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+              >
+                <i className="fas fa-chevron-left" aria-hidden="true" />
+              </button>
+              <div className="calendar-month-year">
+                <select
+                  value={viewMonth.getMonth()}
+                  aria-label={label}
+                  onChange={(event) =>
+                    setViewMonth((prev) => new Date(prev.getFullYear(), Number(event.target.value), 1))
+                  }
+                >
+                  {labels.map((monthLabel, index) => (
+                    <option key={monthLabel} value={index}>{monthLabel}</option>
+                  ))}
+                </select>
+                <select
+                  value={viewMonth.getFullYear()}
+                  aria-label={label}
+                  onChange={(event) =>
+                    setViewMonth((prev) => new Date(Number(event.target.value), prev.getMonth(), 1))
+                  }
+                >
+                  {yearOptions.map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                className="calendar-nav-btn"
+                aria-label={labels[(viewMonth.getMonth() + 1) % 12]}
+                onClick={() => setViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+              >
+                <i className="fas fa-chevron-right" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="calendar-weekdays">
+              {weekdays.map((weekday, index) => (
+                <div key={`${weekday}-${index}`} className="calendar-weekday">{weekday}</div>
+              ))}
+            </div>
+            <div className="calendar-days">
+              {cells.map(({ ymd, date, otherMonth }) => {
+                const dayDisabled = !!minYmd && ymd < minYmd;
+                const classNames = [
+                  "calendar-day",
+                  otherMonth ? "other-month" : "",
+                  ymd === todayYmd ? "today" : "",
+                  ymd === selectedYmd ? "selected start-date end-date" : "",
+                  dayDisabled ? "disabled" : "",
+                ].filter(Boolean).join(" ");
+                return (
+                  <button
+                    key={ymd}
+                    type="button"
+                    className={classNames}
+                    aria-label={formatDmy(date)}
+                    disabled={dayDisabled}
+                    onClick={() => selectDay(ymd)}
+                  >
+                    {date.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
+
   return (
-    <FormDateField
-      {...rest}
-      disabled={disabled}
-      wrapClassName={`bank-form-datepicker-wrap${disabled ? " bank-form-datepicker-wrap--disabled" : ""} ${wrapClassName}`.trim()}
-      inputClassName="bank-input bank-form-datepicker-input"
-      hitboxClassName="bank-form-datepicker-hitbox"
-      clearClassName="bank-form-datepicker-clear"
-      srSpanClassName="bank-form-datepicker-sr-span"
-      showCalendarIcon={false}
-    />
+    <div className={`form-group ${className}`.trim()}>
+      {labelExtra ? (
+        <div className="form-date-label-row bank-day-end-label-row">
+          <label htmlFor={id}>{label}</label>
+          {labelExtra}
+        </div>
+      ) : label ? (
+        <label htmlFor={id}>{label}</label>
+      ) : null}
+      <div
+        ref={wrapRef}
+        className={`bank-form-datepicker-wrap ${wrapClassName}${disabled ? " bank-form-datepicker-wrap--disabled" : ""}`.trim()}
+      >
+        <input
+          id={id}
+          type="text"
+          className="bank-input bank-form-datepicker-input"
+          readOnly
+          placeholder={placeholder}
+          value={toDisplayDate(value)}
+          disabled={disabled}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={openCalendar}
+          onKeyDown={(event) => {
+            if (!disabled && (event.key === "Enter" || event.key === " ")) {
+              event.preventDefault();
+              openCalendar();
+            }
+          }}
+        />
+        {selectedYmd && !disabled ? (
+          <button
+            type="button"
+            className="bank-form-datepicker-clear"
+            aria-label={clearLabel}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={clearValue}
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
+      {popup}
+    </div>
   );
 }
 

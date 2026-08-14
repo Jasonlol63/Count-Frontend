@@ -1,21 +1,21 @@
-import { normalizeSummaryIdProductText } from "../lib/summaryIdProductUtils.js";
-
-function normalizeSpacesId(s) {
-  return String(s || "")
-    .trim()
-    .replace(/\s+/g, "");
-}
+import {
+  normalizeSummaryIdProductSpaces,
+  normalizeSummaryIdProductText,
+  summaryIdProductsEqual,
+} from "../lib/summaryIdProductUtils.js";
 
 function rowIdMatches(row, templateIdProduct) {
-  const targetNorm = normalizeSummaryIdProductText(templateIdProduct);
+  const target = String(templateIdProduct || "").trim();
   const mainRaw = String(row.idProduct || "").trim();
-  const mainNorm = normalizeSummaryIdProductText(mainRaw);
-  if (!targetNorm || !mainNorm) return false;
-  if (mainNorm === targetNorm) return true;
-  if (mainRaw.startsWith(`${templateIdProduct} `) || mainRaw.startsWith(`${templateIdProduct}(`)) {
+  if (!target || !mainRaw) return false;
+  // Exact / space-normalized only. Do NOT treat "*REVERT* TT683951A" as TT683951A
+  // via suffix/contains matching — those are distinct capture rows.
+  if (summaryIdProductsEqual(mainRaw, target)) return true;
+  // Allow description suffix already stored on the row: "TT683951A (COMM)".
+  if (mainRaw.startsWith(`${target} `) || mainRaw.startsWith(`${target}(`)) {
     return true;
   }
-  return normalizeSpacesId(mainRaw) === normalizeSpacesId(templateIdProduct);
+  return normalizeSummaryIdProductSpaces(mainRaw) === normalizeSummaryIdProductSpaces(target);
 }
 
 /**
@@ -76,6 +76,7 @@ export function findMainRowForTemplate(rows, idProduct, mainTemplate, appliedKey
     }
   }
 
+  // row_index is disambiguation among same-id candidates only — never override id match.
   if (templateRowIndex != null) {
     const byIdx = pick((c) => c.rowIndex === templateRowIndex);
     if (byIdx) return byIdx;
@@ -83,6 +84,10 @@ export function findMainRowForTemplate(rows, idProduct, mainTemplate, appliedKey
 
   const empty = pick((c) => !c.accountId && !c.accountDisplay);
   if (empty) return empty;
+
+  // Prefer the candidate whose id equals the template id_product exactly.
+  const exactId = pick((c) => summaryIdProductsEqual(c.row.idProduct, idProduct));
+  if (exactId) return exactId;
 
   return candidates[0]?.row ?? null;
 }

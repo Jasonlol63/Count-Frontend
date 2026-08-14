@@ -11,8 +11,6 @@ import {
 } from "../../utils/company/sharedCompanyFilter.js";
 import { formatDmyDash } from "../../utils/date/dateUtils.js";
 
-export const PAGE_SIZE = 25;
-
 export const ROLE_HIERARCHY = {
   owner: 0,
   partnership: 1,
@@ -111,7 +109,18 @@ export function isOwnerEditingOwnerShadow(row, currentUserRole) {
  */
 export function getUserEditFieldLocks(row, currentUserId, currentUserRole) {
   if (isOwnerEditingOwnerShadow(row, currentUserRole)) {
-    return { name: false, email: false, role: true, password: false, sidebar: true, company: true, accountProcess: true };
+    return {
+      name: false,
+      email: false,
+      role: true,
+      password: false,
+      sidebar: true,
+      company: true,
+      account: true,
+      process: true,
+      /** @deprecated use account + process */
+      accountProcess: true,
+    };
   }
   const caps = computeRowCapabilities(row, currentUserId, currentUserRole);
   const curLevel = ROLE_HIERARCHY[normRole(currentUserRole)] ?? 999;
@@ -120,16 +129,215 @@ export function getUserEditFieldLocks(row, currentUserId, currentUserRole) {
   const isSame = !isSelf && curLevel === editLevel;
   const isLower = !isSelf && curLevel > editLevel;
   const canPickCompany = currentUserRole === "admin" || currentUserRole === "owner";
+  // Acc / Process：自己可关不想看的；同级/上级锁定
+  const accountLocked = isSame || isLower;
+  const processLocked = isSame || isLower;
   return {
     name: isSame || isLower,
     email: isSame || isLower,
     role: isSame || isLower,
-    password: false,
+    // 密码：自己或严格下级可改；同级/上级不可越级改
+    password: isSame || isLower,
     sidebar: isSelf || isSame || isLower,
     company: isSelf || isSame || isLower || !canPickCompany,
-    // 自己编辑自己时锁定账户/流程，避免把自己的账户全部清空后造成自我锁定（账户页无数据）
-    accountProcess: isSelf,
+    account: accountLocked,
+    process: processLocked,
+    /** @deprecated use account + process */
+    accountProcess: accountLocked && processLocked,
   };
+}
+
+/** @param {unknown} row */
+export function isAccountPermSelfHidden(row) {
+  if (!row || typeof row !== "object") return false;
+  const v = row.self_hidden;
+  return v === true || v === 1 || v === "1";
+}
+
+/**
+ * Ensure Accs still granted but self_hidden appear in the modal so the user can re-check them.
+ * @param {Array<{id?: number, account_id?: string, name?: string}>} accList
+ * @param {Array<{id?: number, account_id?: string, name?: string}|number>} grantedRows
+ */
+export function mergeModalAccountsWithGranted(accList, grantedRows) {
+  const byId = new Map((Array.isArray(accList) ? accList : []).map((a) => [Number(a.id), a]));
+  for (const row of Array.isArray(grantedRows) ? grantedRows : []) {
+    const id = Number(row?.id ?? row);
+    if (!(id > 0)) continue;
+    const grantCode = typeof row === "object" && row ? String(row.account_id || "") : "";
+    const grantName = typeof row === "object" && row ? String(row.name || "").trim() : "";
+    const existing = byId.get(id);
+    if (existing) {
+      if (!String(existing.account_id || "") && grantCode) existing.account_id = grantCode;
+      if (!String(existing.name || "").trim() && grantName) existing.name = grantName;
+      continue;
+    }
+    byId.set(id, {
+      id,
+      account_id: grantCode,
+      name: grantName,
+    });
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Ensure still-granted but self_hidden processes appear in the modal for re-check.
+ * @param {Array<{id?: number, process_id?: string, description?: string}>} procList
+ * @param {Array<{id?: number, process_id?: string, description?: string}|number>} grantedRows
+ */
+export function mergeModalProcessesWithGranted(procList, grantedRows) {
+  const byId = new Map((Array.isArray(procList) ? procList : []).map((p) => [Number(p.id), p]));
+  for (const row of Array.isArray(grantedRows) ? grantedRows : []) {
+    const id = Number(row?.id ?? row);
+    if (!(id > 0)) continue;
+    const grantCode = typeof row === "object" && row ? String(row.process_id || "") : "";
+    const grantDesc = typeof row === "object" && row ? String(row.description || "").trim() : "";
+    const existing = byId.get(id);
+    if (existing) {
+      if (!String(existing.process_id || "") && grantCode) existing.process_id = grantCode;
+      if (!String(existing.description || "").trim() && grantDesc) existing.description = grantDesc;
+      continue;
+    }
+    byId.set(id, {
+      id,
+      process_id: grantCode,
+      description: grantDesc,
+    });
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Self-edit held baseline (= still granted, including self_hidden).
+ * Superior-revoked Accs are absent from existingPerms and cannot be re-checked.
+ * Unset (null) → currently visible modal ids at open.
+ * @param {Array<{id?: number}|number>|null|undefined} existingPerms
+ * @param {boolean} existingUnset
+ * @param {Iterable<number|string>} visibleAccountIds
+ * @returns {Set<number>}
+ */
+export function buildSelfAccHeldIds(existingPerms, existingUnset, visibleAccountIds) {
+  const toId = (x) => Number(x?.id ?? x);
+  if (!existingUnset && existingPerms != null) {
+    return new Set(
+      (Array.isArray(existingPerms) ? existingPerms : []).map(toId).filter((id) => id > 0),
+    );
+  }
+  return new Set([...visibleAccountIds].map(Number).filter((id) => id > 0));
+}
+
+/**
+ * Self-edit payload: only checked (visible) ids among held grants.
+ * API marks unchecked held ids as self_hidden (still granted for later self re-open).
+ * @param {Array<{id?: number}|number>|null|undefined} heldPerms
+ * @param {Array<{id?: number}|number>} submittedPerms
+ * @returns {Array<{id: number}>}
+ */
+export function shrinkAccountPermissionsForSelf(heldPerms, submittedPerms) {
+  const toId = (x) => Number(x?.id ?? x);
+  const submittedIds = [...new Set((Array.isArray(submittedPerms) ? submittedPerms : []).map(toId).filter((id) => id > 0))];
+  const heldIds = new Set(
+    (Array.isArray(heldPerms) ? heldPerms : []).map(toId).filter((id) => id > 0),
+  );
+  return submittedIds.filter((id) => heldIds.has(id)).map((id) => ({ id }));
+}
+
+/**
+ * Self Acc bulk select/clear: Select All may only re-check held ids (cannot restore
+ * superior-closed Accs that still appear in a stale modal list).
+ * @param {Iterable<number|string>} prevSelected
+ * @param {Iterable<number|string>} visibleIds
+ * @param {Iterable<number|string>} heldIds
+ * @param {"select"|"clear"} mode
+ * @returns {Set<number>}
+ */
+export function nextSelfAccountSelection(prevSelected, visibleIds, heldIds, mode) {
+  const next = new Set([...prevSelected].map(Number).filter((id) => id > 0));
+  const visible = [...visibleIds].map(Number).filter((id) => id > 0);
+  const held = new Set([...heldIds].map(Number).filter((id) => id > 0));
+  if (mode === "select") {
+    visible.forEach((id) => {
+      if (held.has(id)) next.add(id);
+    });
+    return next;
+  }
+  visible.forEach((id) => next.delete(id));
+  return next;
+}
+
+/**
+ * Owner (sees-all) Select All on the modal → send null (DB unset = see-all).
+ * Avoids materializing huge grant JSON and matches product intent.
+ * Self / restricted editors always send compact id rows.
+ * @param {{ isSelf: boolean, editorSeesAll: boolean, selectedIds: Set<number>|Iterable<number>, modalRows: Array<{id?: number}> }} args
+ * @param {Array<{id: number, self_hidden?: boolean}>} compactRows
+ * @returns {Array<{id: number, self_hidden?: boolean}>|null}
+ */
+export function resolveSeeAllOrCompactPermissions({ isSelf, editorSeesAll, selectedIds, modalRows }, compactRows) {
+  if (isSelf || !editorSeesAll) return compactRows;
+  const selected = selectedIds instanceof Set ? selectedIds : new Set([...selectedIds].map(Number));
+  const selectedCount = [...selected].filter((id) => Number(id) > 0).length;
+  // Clear All / nothing checked → always persist [] (never SQL NULL see-all).
+  if (selectedCount === 0) {
+    return Array.isArray(compactRows) ? compactRows : [];
+  }
+  const modalIds = (Array.isArray(modalRows) ? modalRows : [])
+    .map((r) => Number(r?.id ?? r))
+    .filter((id) => id > 0);
+  if (modalIds.length > 0 && modalIds.every((id) => selected.has(id))) {
+    return null;
+  }
+  return compactRows;
+}
+
+/**
+ * Bulk select/clear in User Modal Acc column: only touch editor-visible ids,
+ * keep selected ids outside that set (accounts the editor cannot see/grant).
+ * @param {Iterable<number|string>} prevSelected
+ * @param {Iterable<number|string>} visibleIds
+ * @param {"select"|"clear"} mode
+ * @returns {Set<number>}
+ */
+export function nextAccountSelectionPreservingOutside(prevSelected, visibleIds, mode) {
+  const next = new Set([...prevSelected].map(Number).filter((id) => id > 0));
+  const visible = [...visibleIds].map(Number).filter((id) => id > 0);
+  if (mode === "select") {
+    visible.forEach((id) => next.add(id));
+    return next;
+  }
+  visible.forEach((id) => next.delete(id));
+  return next;
+}
+
+/**
+ * Merge target account permissions: editor may only change ids in grantableIds.
+ * Ids outside grantable stay as on the target (avoids Clear-All wiping hidden accs).
+ * @param {Array<{id?: number}|number>|null|undefined} existingPerms
+ * @param {Array<{id?: number}|number>} submittedPerms
+ * @param {Iterable<number|string>|null|undefined} grantableIds null/undefined = editor may set any submitted id
+ * @returns {Array<{id: number}>}
+ */
+export function mergeAccountPermissionsForEditor(existingPerms, submittedPerms, grantableIds) {
+  const toId = (x) => Number(x?.id ?? x);
+  const submittedIds = new Set(
+    (Array.isArray(submittedPerms) ? submittedPerms : []).map(toId).filter((id) => id > 0),
+  );
+  const existingIds = new Set(
+    (Array.isArray(existingPerms) ? existingPerms : []).map(toId).filter((id) => id > 0),
+  );
+  if (grantableIds == null) {
+    return [...submittedIds].map((id) => ({ id }));
+  }
+  const grantable = new Set([...grantableIds].map(Number).filter((id) => id > 0));
+  const merged = new Set();
+  existingIds.forEach((id) => {
+    if (!grantable.has(id)) merged.add(id);
+  });
+  submittedIds.forEach((id) => {
+    if (grantable.has(id)) merged.add(id);
+  });
+  return [...merged].map((id) => ({ id }));
 }
 
 export function getCurrentUserRolePermissions(currentUserRole) {
@@ -284,32 +492,8 @@ export function formatUserLastLoginTimeTitle(raw) {
   return `${h}:${min}:${sec}`;
 }
 
-export function formatLastLogin(raw) {
-  if (!raw) return "-";
-  const s = String(raw).trim();
-  if (!s) return "-";
-  const d = new Date(s.replace(" ", "T"));
-  if (Number.isNaN(d.getTime())) return s;
-  const h = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  return `${formatDmyDash(d)} ${h}:${min}`;
-}
 
-/**
- * Status visibility after toggle — aligned with processlist / account list:
- * - default: active (paginated)
- * - showInactive: inactive (paginated)
- * - showAll: active + inactive (no pagination)
- * - showAll + showInactive: active + inactive
- */
-export function userRowVisibleAfterStatusChange(newStatus, { showInactive, showAll }) {
-  if (showAll) return true;
-  const status = normRole(newStatus);
-  if (showInactive) return status === "inactive";
-  return status === "active";
-}
-
-export function applyUserFilters(users, { search, showInactive, showAll, viewerRole, viewerUserId = null }) {
+export function applyUserFilters(users, { search, showActive = false, showInactive = false, showAll: _showAll, viewerRole, viewerUserId = null }) {
   const vr = normRole(viewerRole);
   let rows = users.map((u) => ({ ...u }));
   if (vr !== "owner") {
@@ -324,7 +508,7 @@ export function applyUserFilters(users, { search, showInactive, showAll, viewerR
   if (q) {
     rows = rows.filter((u) => `${u.login_id || ""} ${u.name || ""} ${u.email || ""}`.toLowerCase().includes(q));
   }
-  if (showAll) {
+  if (showActive && showInactive) {
     return rows;
   }
   if (showInactive) {
@@ -499,9 +683,12 @@ export function shouldLoadUserListData({
   return false;
 }
 
-/** Whether Add / list mutations have a resolvable company or group ledger scope. */
-export function userListHasMutationScope(scopeCompanyId) {
-  return scopeCompanyId != null && Number(scopeCompanyId) > 0;
+/** Whether Add / list mutations have a resolvable company or pure group ledger scope. */
+export function userListHasMutationScope(scopeCompanyId, { groupOnly = false, selectedGroup = null } = {}) {
+  if (scopeCompanyId != null && Number(scopeCompanyId) > 0) return true;
+  // Phase 4: empty group (no company anchor) still allows Add User when group-only.
+  if (groupOnly && String(selectedGroup || "").trim() !== "") return true;
+  return false;
 }
 
 /**
@@ -528,6 +715,10 @@ export function resolveUserListMutationScopeCompanyId({
   if (groupOnlyUserList && anchorCompanyId != null) {
     const id = Number(anchorCompanyId);
     return Number.isFinite(id) && id > 0 ? id : null;
+  }
+  // Phase 4: group-only without anchor — signal mutation via null company + groupOnly flag at call site.
+  if (groupOnlyUserList && selectedGroup) {
+    return null;
   }
   const cid = companyId != null ? Number(companyId) : Number.NaN;
   if (Number.isFinite(cid) && cid > 0) {

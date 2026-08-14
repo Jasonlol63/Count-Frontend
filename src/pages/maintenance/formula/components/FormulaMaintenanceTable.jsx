@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { toUpperDisplay, syncEditFormSourcePercent, createFormulaEditFormFromRow } from "../formulaMaintenanceLogic.js";
+import {
+  createFormulaEditFormFromRow,
+  syncEditFormDescriptionInput,
+  syncEditFormFormulaInput,
+  syncEditFormSourcePercent,
+  toUpperDisplay,
+} from "../formulaMaintenanceLogic.js";
 import { assetUrl } from "../../../../utils/core/apiUrl.js";
 import FormulaVirtualRows, { FormulaVirtualTableHead } from "./FormulaVirtualRows.jsx";
 import { MAINTENANCE_FORMULA_EDIT_ROW_HEIGHT, MAINTENANCE_REPORT_ROW_HEIGHT } from "../../shared/maintenanceReportRowMetrics.js";
@@ -202,7 +208,7 @@ export default function FormulaMaintenanceTable({
               ref={isEditing ? formulaTextareaRef : null}
               className="formula-input formula-input-textarea"
               value={editForm.formula}
-              onChange={(e) => setEditForm({ ...editForm, formula: e.target.value })}
+              onChange={(e) => setEditForm((prev) => syncEditFormFormulaInput(prev, e.target.value))}
               style={{ display: "block", width: "100%" }}
               rows={2}
             />
@@ -210,7 +216,6 @@ export default function FormulaMaintenanceTable({
             <MaintenanceEllipsisText
               value={toUpperDisplay(row.formula)}
               className="formula-display formula-display--full"
-              alwaysTooltip
             />
           )}
         </td>
@@ -220,7 +225,7 @@ export default function FormulaMaintenanceTable({
               type="text"
               className="description-input"
               value={editForm.description}
-              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+              onChange={(e) => setEditForm((prev) => syncEditFormDescriptionInput(prev, e.target.value))}
               style={{ display: "block", width: "100%" }}
             />
           ) : (

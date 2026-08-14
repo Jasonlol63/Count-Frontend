@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import ConfirmDeleteModal, { CONFIRM_DELETE_Z_INDEX } from "../../../components/ConfirmDeleteModal.jsx";
 import { formatTransactionGridMoneyHalfUp, toUpperDisplay } from "../lib/transactionFormat.js";
 
 function formatContraDate(raw) {
@@ -29,6 +30,8 @@ export default function TransactionHeader({
   const refreshRef = useRef(refreshContraInbox);
   const wasOpenRef = useRef(false);
   const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0, width: 860, caretLeft: 28 });
+  const [rejectPending, setRejectPending] = useState(null);
+  const [rejectBusy, setRejectBusy] = useState(false);
 
   const itemCount = contraInbox.items.length;
   const isOpen = contraInbox.open;
@@ -241,12 +244,11 @@ export default function TransactionHeader({
                             type="button"
                             className="contra-inbox-btn contra-inbox-reject"
                             disabled={mutationsBlocked}
-                            onClick={async () => {
+                            onClick={() => {
                               if (mutationsBlocked) return;
-                              if (!confirm(m.confirmRejectContra)) return;
                               const tid = it.transaction_id || it.id;
                               if (!tid) return;
-                              await rejectContra({ transactionId: tid, scopeApi });
+                              setRejectPending({ transactionId: tid });
                             }}
                           >
                             {m.reject}
@@ -301,6 +303,30 @@ export default function TransactionHeader({
         )}
       </div>
       {popover}
+      <ConfirmDeleteModal
+        open={Boolean(rejectPending)}
+        modalId="contraRejectConfirmModal"
+        zIndex={CONFIRM_DELETE_Z_INDEX}
+        title={m.confirmRejectContraTitle || m.reject}
+        message={m.confirmRejectContra}
+        cancelLabel={m.cancel || m.close}
+        confirmLabel={m.reject}
+        confirmDisabled={rejectBusy}
+        onClose={() => {
+          if (rejectBusy) return;
+          setRejectPending(null);
+        }}
+        onConfirm={async () => {
+          if (!rejectPending?.transactionId || rejectBusy) return;
+          setRejectBusy(true);
+          try {
+            await rejectContra({ transactionId: rejectPending.transactionId, scopeApi });
+            setRejectPending(null);
+          } finally {
+            setRejectBusy(false);
+          }
+        }}
+      />
     </div>
   );
 }

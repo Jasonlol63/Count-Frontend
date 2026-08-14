@@ -172,6 +172,63 @@ body.ec-payment-history-chromeless .transaction-payment-history-loading__spinner
   animation: transaction-payment-history-spin 0.8s linear infinite;
 }
 
+body.transaction-payment-history-page .transaction-payment-history-table-wrap,
+body.ec-payment-history-chromeless .transaction-payment-history-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+body.transaction-payment-history-page .transaction-payment-history-table-wrap--ready,
+body.ec-payment-history-chromeless .transaction-payment-history-table-wrap--ready {
+  animation: transaction-payment-history-enter 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes transaction-payment-history-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.transaction-payment-history-page .transaction-payment-history-table-wrap--ready,
+  body.ec-payment-history-chromeless .transaction-payment-history-table-wrap--ready {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+body.transaction-payment-history-page .transaction-payment-history-load-more,
+body.ec-payment-history-chromeless .transaction-payment-history-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-top: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: clamp(1.2rem, 0.15vw + 1.0rem, 1.3rem);
+  font-weight: 500;
+  background: #f8fafc;
+}
+
+body.transaction-payment-history-page .transaction-payment-history-load-more .transaction-payment-history-loading__spinner,
+body.ec-payment-history-chromeless .transaction-payment-history-load-more .transaction-payment-history-loading__spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
 @keyframes transaction-payment-history-spin {
   to {
     transform: rotate(360deg);
@@ -490,12 +547,12 @@ body.ec-payment-history-chromeless .transaction-payment-history-page-root .trans
 
 body.transaction-payment-history-page .transaction-payment-history-page-root .transaction-history-report-table tbody tr:nth-child(even) td,
 body.ec-payment-history-chromeless .transaction-payment-history-page-root .transaction-history-report-table tbody tr:nth-child(even) td {
-  background-color: #f8fafc;
+  background-color: rgb(228, 235, 255);
 }
 
 body.transaction-payment-history-page .transaction-payment-history-page-root .transaction-history-report-table tbody tr:nth-child(odd) td,
 body.ec-payment-history-chromeless .transaction-payment-history-page-root .transaction-history-report-table tbody tr:nth-child(odd) td {
-  background-color: #ffffff;
+  background-color: #f9fbff;
 }
 
 body.transaction-payment-history-page .transaction-payment-history-page-root .transaction-history-report-table tbody .transaction-history-bf-row td,

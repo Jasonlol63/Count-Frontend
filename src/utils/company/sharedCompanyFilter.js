@@ -4,8 +4,8 @@
  *
  * Login scope rules: see `loginScope.js` and `includes/group_company_access.php`.
  */
-import { sessionHasTenantBank } from "../auth/sessionTenant.js";
 import { buildApiUrl } from "../core/apiUrl.js";
+import { fetchAccessibleTenants, tenantAccessibleRowToUiTenant } from "./tenantAccessibleApi.js";
 import { stripPrivateQueryFromBrowserUrl } from "../routing/privateBrowserUrl.js";
 import { pathnameIs } from "../routing/pageRoutes.js";
 import { safeLocal as localStorage, safeSession as sessionStorage } from "../storage/safeStorage.js";
@@ -30,10 +30,6 @@ import {
   isGroupLogin,
   resolveAccessibleGroupIds,
 } from "./loginScope.js";
-import {
-  fetchAccessibleTenants,
-  tenantAccessibleRowToUiTenant,
-} from "./tenantAccessibleApi.js";
 
 export {
   canUseGroupOnlyMode,
@@ -61,6 +57,8 @@ export const DASHBOARD_GROUPS_ALL_MODE_KEY = "dashboard_groups_all_mode";
 export const DASHBOARD_GROUPS_ALL_SIDEBAR_GROUP_KEY = "dashboard_groups_all_sidebar_group";
 /** Last explicitly selected company id (SPA navigation; overrides stale PHP session when set). */
 export const DASHBOARD_SELECTED_COMPANY_KEY = "dashboard_selected_company_id";
+/** Company ids seen at the last boot in this tab — detects newly created companies so sticky Group/Company memory doesn't hide them. */
+export const DASHBOARD_KNOWN_COMPANY_IDS_KEY = "dashboard_known_company_ids";
 /** Cross-page currency pill / dropdown selection (scoped by company or group). */
 export const DASHBOARD_SELECTED_CURRENCY_KEY = "dashboard_selected_currency_code";
 export const DASHBOARD_SELECTED_CURRENCY_SCOPE_KEY = "dashboard_selected_currency_scope";
@@ -70,6 +68,11 @@ export const DASHBOARD_SELECTED_CURRENCY_BY_SCOPE_KEY = "dashboard_selected_curr
 export const DASHBOARD_LOGIN_FILTER_APPLIED_KEY = "dashboard_login_filter_applied";
 /** Linked group ids (AP+IG) from get_owner_companies_api for company login filter pills. */
 export const DASHBOARD_ACCESSIBLE_GROUP_IDS_KEY = "dashboard_accessible_group_ids";
+/**
+ * Dashboard filter-panel paint package (anti-flicker sticky board).
+ * Must be login-scoped and cleared on logout — never reuse across accounts.
+ */
+export const DASHBOARD_FILTER_PAINT_PACKAGE_KEY = "dashboard.filterPaintPackage.v1";
 export const DASHBOARD_GROUP_FILTER_EVENT = "eazycount:dashboard-group-filter-changed";
 export const DASHBOARD_CURRENCY_FILTER_EVENT = "eazycount:dashboard-currency-filter-changed";
 /** Dashboard Group/Company bootstrap finished — layout replays sidebar sync (login may miss events). */
@@ -85,11 +88,13 @@ const DASHBOARD_TAB_BOOTSTRAP_KEYS = [
   DASHBOARD_GROUPS_ALL_MODE_KEY,
   DASHBOARD_GROUPS_ALL_SIDEBAR_GROUP_KEY,
   DASHBOARD_SELECTED_COMPANY_KEY,
+  DASHBOARD_KNOWN_COMPANY_IDS_KEY,
   DASHBOARD_SELECTED_CURRENCY_KEY,
   DASHBOARD_SELECTED_CURRENCY_SCOPE_KEY,
   DASHBOARD_SELECTED_CURRENCY_BY_SCOPE_KEY,
   DASHBOARD_LOGIN_FILTER_APPLIED_KEY,
   DASHBOARD_ACCESSIBLE_GROUP_IDS_KEY,
+  DASHBOARD_FILTER_PAINT_PACKAGE_KEY,
 ];
 
 export function clearDashboardFilterSession() {
@@ -101,11 +106,13 @@ export function clearDashboardFilterSession() {
   sessionStorage.removeItem(DASHBOARD_GROUPS_ALL_MODE_KEY);
   sessionStorage.removeItem(DASHBOARD_GROUPS_ALL_SIDEBAR_GROUP_KEY);
   sessionStorage.removeItem(DASHBOARD_SELECTED_COMPANY_KEY);
+  sessionStorage.removeItem(DASHBOARD_KNOWN_COMPANY_IDS_KEY);
   sessionStorage.removeItem(DASHBOARD_SELECTED_CURRENCY_KEY);
   sessionStorage.removeItem(DASHBOARD_SELECTED_CURRENCY_SCOPE_KEY);
   sessionStorage.removeItem(DASHBOARD_SELECTED_CURRENCY_BY_SCOPE_KEY);
   sessionStorage.removeItem(DASHBOARD_LOGIN_FILTER_APPLIED_KEY);
   sessionStorage.removeItem(DASHBOARD_ACCESSIBLE_GROUP_IDS_KEY);
+  sessionStorage.removeItem(DASHBOARD_FILTER_PAINT_PACKAGE_KEY);
 }
 
 /** Snapshot dashboard filter sessionStorage for a new browser tab (middle-click / modified click). */
@@ -321,15 +328,9 @@ export function resolveCrossPageCurrencyPreference({
   );
 }
 
-/** Store linked group ids from companies / tenant-accessible API. */
+/** Store linked group ids from companies API (company login: AP+IG). */
 export function persistAccessibleGroupIdsFromApi(json) {
-  const ids = Array.isArray(json?.accessible_parent_tenant_codes)
-    ? json.accessible_parent_tenant_codes
-    : Array.isArray(json?.accessibleParentTenantCodes)
-      ? json.accessibleParentTenantCodes
-      : Array.isArray(json?.accessible_group_ids)
-        ? json.accessible_group_ids
-        : [];
+  const ids = Array.isArray(json?.accessible_group_ids) ? json.accessible_group_ids : [];
   if (!ids.length) return;
   sessionStorage.setItem(
     DASHBOARD_ACCESSIBLE_GROUP_IDS_KEY,
@@ -368,16 +369,11 @@ export function seedDashboardFilterFromLogin({
   loginScope,
   loginIdentifier,
   companies = [],
-  sessionTenantId = null,
-  sessionTenantCode = null,
-  // legacy aliases
   sessionCompanyId = null,
   sessionCompanyCode = null,
 }) {
   const ident = String(loginIdentifier || "").trim().toUpperCase();
   const list = filterCompaniesWithDisplayId(companies);
-  const tenantId = sessionTenantId ?? sessionCompanyId;
-  const tenantCode = sessionTenantCode ?? sessionCompanyCode;
 
   if (loginScope === "group" && ident) {
     persistDashboardGroupFilter(ident);
@@ -392,34 +388,22 @@ export function seedDashboardFilterFromLogin({
     persistDashboardGroupOnlyMode(false);
   }
 
-  let row = list.find(
-    (c) =>
-      String(c.tenant_code || c.company_id || "")
-        .trim()
-        .toUpperCase() === ident,
-  );
-  if (!row && tenantId != null) {
-    row = list.find((c) => Number(c.tenant_id ?? c.id) === Number(tenantId));
+  let row = list.find((c) => String(c.company_id || "").trim().toUpperCase() === ident);
+  if (!row && sessionCompanyId != null) {
+    row = list.find((c) => Number(c.id) === Number(sessionCompanyId));
   }
   if (
     !row &&
-    tenantCode &&
-    String(tenantCode).trim().toUpperCase() === ident &&
-    tenantId != null
+    sessionCompanyCode &&
+    String(sessionCompanyCode).trim().toUpperCase() === ident &&
+    sessionCompanyId != null
   ) {
-    row = {
-      tenant_id: tenantId,
-      id: tenantId,
-      tenant_code: tenantCode,
-      company_id: tenantCode,
-      parent_tenant_code: null,
-      group_id: null,
-    };
+    row = { id: sessionCompanyId, company_id: sessionCompanyCode, group_id: null };
   }
 
-  const cidRaw = row?.tenant_id ?? row?.id ?? tenantId;
-  const cid = Number.isFinite(Number(cidRaw)) && Number(cidRaw) > 0 ? Number(cidRaw) : null;
-  const group = row?.parent_tenant_code || row?.group_id ? normalizeCompanyGroupId(row) : null;
+  const cidRaw = row?.id != null ? Number(row.id) : Number(sessionCompanyId);
+  const cid = Number.isFinite(cidRaw) && cidRaw > 0 ? cidRaw : null;
+  const group = row?.group_id ? normalizeCompanyGroupId(row) : null;
 
   persistDashboardGroupOnlyMode(false);
   if (group) persistDashboardGroupFilter(group);
@@ -454,8 +438,8 @@ export function applyLoginScopeToSessionStorageIfNeeded(me, companies = []) {
     loginScope: me.login_scope,
     loginIdentifier: me.login_identifier,
     companies,
-    sessionTenantId: me.tenant_id,
-    sessionTenantCode: me.tenant_code,
+    sessionCompanyId: me.company_id,
+    sessionCompanyCode: me.company_code,
   });
   sessionStorage.setItem(DASHBOARD_LOGIN_FILTER_APPLIED_KEY, key);
   return true;
@@ -536,6 +520,40 @@ export function readDashboardSelectedCompanyId() {
   if (saved == null || saved === "") return null;
   const id = Number(saved);
   return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+/** Snapshot the current company id set so the next boot in this tab can detect newly added companies. */
+export function persistDashboardKnownCompanyIds(companies) {
+  const ids = [];
+  for (const c of companies || []) {
+    const id = Number(c?.id);
+    if (Number.isFinite(id) && id > 0) ids.push(id);
+  }
+  sessionStorage.setItem(DASHBOARD_KNOWN_COMPANY_IDS_KEY, ids.sort((a, b) => a - b).join(","));
+}
+
+/**
+ * A company in the fresh list absent from the last-known snapshot (e.g. just created) —
+ * used so the sticky Group/Company memory doesn't silently keep hiding it. Returns the
+ * newest such row (highest id), or null when nothing is new or no prior snapshot exists
+ * yet (first boot in this tab: no stale memory to correct, let the normal default apply).
+ */
+export function findCompanyAddedSinceLastBoot(companies) {
+  const raw = sessionStorage.getItem(DASHBOARD_KNOWN_COMPANY_IDS_KEY);
+  if (raw == null) return null;
+  const known = new Set(
+    raw
+      .split(",")
+      .map((s) => Number(s))
+      .filter((n) => Number.isFinite(n) && n > 0)
+  );
+  let newest = null;
+  for (const c of companies || []) {
+    const id = Number(c?.id);
+    if (!Number.isFinite(id) || id <= 0 || known.has(id)) continue;
+    if (!newest || id > Number(newest.id)) newest = c;
+  }
+  return newest;
 }
 
 /** Cross-page Group / Company filter snapshot from sessionStorage. */
@@ -955,70 +973,20 @@ function seedCompanySessionFlagsFromOwnerRows(rows) {
 
 /**
  * Sidebar Games/Bank flags for a group tab.
- * Aggregates gambling from group row / subsidiaries so Data Capture stays visible on IG.
- * Bank (bankprocess maintenance) is company-scoped — omit unless `includeBank` (Company "All").
+ * Phase 2 contract (docs/group-tenant-contract.md): Group category is fixed Games, never Bank.
+ * Does not union subsidiary company.permissions.
  *
  * @param {{ includeBank?: boolean }} [options]
  */
-export function resolveGroupCategoryFlagsForSidebar(groupCode, options = {}) {
-  const includeBank = options.includeBank === true;
+export function resolveGroupCategoryFlagsForSidebar(groupCode, _options = {}) {
   const g = String(groupCode ?? "")
     .trim()
     .toUpperCase();
   if (!g) return null;
-
-  if (ownerGroupsCache instanceof Map) {
-    const groupRow = ownerGroupsCache.get(g);
-    if (groupRow && Array.isArray(groupRow.permissions) && groupRow.permissions.length) {
-      const hasGambling = permissionsIncludeGames(groupRow.permissions);
-      const hasBank = includeBank && permissionsIncludeBank(groupRow.permissions);
-      if (hasGambling || hasBank) {
-        return { hasGambling, hasBank };
-      }
-    }
-  }
-
-  const companies = getCachedOwnerCompanies();
-  if (!companies?.length) return null;
-
-  let hasGambling = false;
-  let hasBank = false;
-
-  const anchor = pickGroupAnchorCompany(companies, g);
-  if (anchor?.id) {
-    const anchorFlags = peekCompanySessionFlags(Number(anchor.id));
-    if (anchorFlags) {
-      hasGambling = hasGambling || Boolean(anchorFlags.has_gambling);
-      if (includeBank) {
-        hasBank = hasBank || Boolean(anchorFlags.has_bank);
-      }
-    }
-  }
-
-  for (const row of companiesNativeInGroupList(companies, g)) {
-    const cid = Number(row.id);
-    if (!Number.isFinite(cid) || cid <= 0) continue;
-    const cached = peekCompanySessionFlags(cid);
-    if (cached) {
-      hasGambling = hasGambling || Boolean(cached.has_gambling);
-      if (includeBank) {
-        hasBank = hasBank || Boolean(cached.has_bank);
-      }
-      continue;
-    }
-    const fromRow = resolveCompanyCategoryFlagsFromRow(row);
-    if (fromRow) {
-      hasGambling = hasGambling || fromRow.hasGambling;
-      if (includeBank) {
-        hasBank = hasBank || fromRow.hasBank;
-      }
-    }
-  }
-
-  return { hasGambling, hasBank: includeBank ? hasBank : false };
+  return { hasGambling: true, hasBank: false };
 }
 
-/** Group-only sidebar: aggregate gambling from group row / subsidiaries; bank stays off. */
+/** Group-only sidebar: fixed Games; bank stays off. */
 export function resolveGroupOnlySidebarGambling(groupCode) {
   const flags = resolveGroupCategoryFlagsForSidebar(groupCode, { includeBank: false });
   if (!flags) return null;
@@ -1303,6 +1271,8 @@ export function shouldHideSidebarProcess(pathname, me = null) {
 /**
  * Bankprocess maintenance is company-scoped — hidden in group-only dashboard filter (e.g. IG, no company).
  * Under group "Company All", show when any company in the group has bank permission.
+ * When a subsidiary is selected, prefer that company's Bank category flags over stale session `me`
+ * (Group login often keeps Games identity until session sync finishes).
  */
 export function shouldShowBankprocessMaintenanceInSidebar(me) {
   const filter = readPersistedDashboardGcFilter();
@@ -1312,7 +1282,14 @@ export function shouldShowBankprocessMaintenanceInSidebar(me) {
     const flags = resolveGroupCategoryFlagsForSidebar(sidebarGroup, { includeBank: true });
     return Boolean(flags?.hasBank);
   }
-  return sessionHasTenantBank(me);
+  const cid =
+    filter.companyId != null && filter.companyId !== "" ? Number(filter.companyId) : Number.NaN;
+  if (Number.isFinite(cid) && cid > 0) {
+    const row = findOwnerCompanyById(cid);
+    const flags = resolveCompanyCategoryFlags(row);
+    if (flags) return Boolean(flags.hasBank);
+  }
+  return Boolean(me?.company_has_bank);
 }
 
 /** In-memory cache so report/maintenance remounts do not re-block on companies API. */
@@ -1373,59 +1350,36 @@ export async function loadOwnerCompaniesCached(fetcher) {
   return ownerCompaniesInflight;
 }
 
-/** Shared GET accessible tenants — one HTTP request per session (Layout prefetch + page boot). */
+/** Shared GET owner companies — one HTTP request per session (Layout prefetch + page boot). */
 export async function fetchOwnerCompaniesAll(options = {}) {
   const { signal, throwOnError = false, me = null } = options;
   const rows = await loadOwnerCompaniesCached(async () => {
-    const { tenants, accessibleParentTenantCodes, raw } = await fetchAccessibleTenants({
+    const { tenants, accessibleParentTenantCodes } = await fetchAccessibleTenants({
       signal,
       all: true,
       throwOnError,
     });
-    persistAccessibleGroupIdsFromApi({
-      ...raw,
-      accessible_parent_tenant_codes: accessibleParentTenantCodes,
-    });
-    return tenants
-      .map((t) => normalizeOwnerCompanyRow(tenantAccessibleRowToUiTenant(t)))
-      .filter(Boolean);
+    persistAccessibleGroupIdsFromApi({ accessible_group_ids: accessibleParentTenantCodes });
+    return tenants.map((t) => normalizeOwnerCompanyRow(tenantAccessibleRowToUiTenant(t))).filter(Boolean);
   });
   return me ? filterCompaniesForUserScope(rows, me) : rows;
 }
 
 /**
- * Normalize tenant / company picker rows so `id` / `company_id` / `group_id` work for Group+Company pills.
- * Spring tenant-accessible → id = tenant_id, company_id = tenant_code, group_id = parent_tenant_code.
+ * Normalize keys from `get_owner_companies_api` (and any proxy) so `company_id` / `group_id`
+ * match Account List and Maintenance pages — otherwise Transaction filters stay empty.
  */
 export function normalizeOwnerCompanyRow(row) {
   if (!row || typeof row !== "object") return row;
-  const idRaw = row.id ?? row.tenant_id ?? row.tenantId;
-  const id = Number(idRaw);
-  const company_id =
-    row.company_id ?? row.companyId ?? row.tenant_code ?? row.tenantCode ?? row.code ?? "";
-  const group_id =
-    row.group_id ??
-    row.groupId ??
-    row.parent_tenant_code ??
-    row.parentTenantCode ??
-    row.group ??
-    null;
+  const company_id = row.company_id ?? row.companyId ?? row.code ?? "";
+  const group_id = row.group_id ?? row.groupId ?? row.group ?? null;
   const native_group_id =
-    row.native_group_id ??
-    row.nativeGroupId ??
-    row.native_parent_tenant_code ??
-    row.nativeParentTenantCode ??
-    group_id ??
-    null;
+    row.native_group_id ?? row.nativeGroupId ?? group_id ?? null;
   return {
     ...row,
-    id: Number.isFinite(id) && id > 0 ? id : row.id,
-    tenant_id: Number.isFinite(id) && id > 0 ? id : row.tenant_id ?? null,
     company_id,
     group_id,
     native_group_id,
-    tenant_code: row.tenant_code ?? row.tenantCode ?? company_id,
-    parent_tenant_code: row.parent_tenant_code ?? row.parentTenantCode ?? group_id,
   };
 }
 
@@ -1504,7 +1458,7 @@ export function dedupeOwnerCompaniesByCode(companies, preferredCompanyId) {
 }
 
 export function normalizeCompanyGroupId(comp) {
-  return String(comp?.parent_tenant_code ?? comp?.group_id ?? "").trim().toUpperCase();
+  return String(comp?.group_id ?? "").trim().toUpperCase();
 }
 
 /** Database/native group_id (not ownership-coalesced dashboard group_id). */
@@ -1647,6 +1601,12 @@ export function resolveInitialSelectedGroupFromSession(companies, currentCompany
   ) {
     selGroup = savedGroup;
   } else if (savedGroup && !groups.includes(savedGroup)) {
+    // Empty / pure group tenants have no company.group_id rows — keep filter when
+    // login scope or accessible_group_ids still authorize this group code.
+    const accessible = loginMe ? resolveAccessibleGroupIds(loginMe, companies) : [];
+    if (accessible.includes(savedGroup)) {
+      return savedGroup;
+    }
     sessionStorage.removeItem(DASHBOARD_GROUP_FILTER_KEY);
     sessionStorage.removeItem(DASHBOARD_GROUP_ONLY_KEY);
     sessionStorage.removeItem(DASHBOARD_SELECTED_COMPANY_KEY);
@@ -1672,13 +1632,17 @@ export function pickDefaultCompanyForGroup(companies, groupId, options = {}) {
     preferredCompanyId = null,
     preferredCompanyCode = null,
     nativeOnly = false,
+    /** Native subsidiaries + external partner remaps (company pills); excludes virtual link rows. */
+    forPicker = false,
     groupEntityOnly = false,
   } = options;
   const list = groupEntityOnly
     ? companiesGroupEntityList(companies, groupId)
-    : nativeOnly
-      ? companiesNativeInGroupList(companies, groupId)
-      : companiesInGroupList(companies, groupId);
+    : forPicker
+      ? companiesPickerInGroupList(companies, groupId)
+      : nativeOnly
+        ? companiesNativeInGroupList(companies, groupId)
+        : companiesInGroupList(companies, groupId);
   if (!list.length) return null;
 
   const loginCode =
@@ -1763,6 +1727,52 @@ export function companiesNativeInGroupList(companies, gid) {
   });
 }
 
+/** Owner portfolio row linked via company_ownership (is_external=1), not a group_ownership virtual duplicate. */
+export function companyRowIsExternalPartnerMapped(companyRow) {
+  if (!companyRow || isVirtualGroupLinkCompanyRow(companyRow)) return false;
+  const v = companyRow.is_external ?? companyRow.isExternal;
+  return v === true || v === 1 || v === "1";
+}
+
+/**
+ * External partner companies remapped onto display group T
+ * (`COALESCE(partner_group_id, native)` → group_id=T, native_group_id may still be S).
+ * Virtual group-link rows stay excluded (those use link_source_group).
+ */
+export function companiesExternalRemappedInGroupList(companies, gid) {
+  const g = String(gid || "").trim().toUpperCase();
+  if (!g) return [];
+  return filterCompaniesWithDisplayId(companies).filter((c) => {
+    if (!companyRowIsExternalPartnerMapped(c)) return false;
+    if (normalizeCompanyGroupId(c) !== g) return false;
+    // Already counted as native under this group — avoid duplicate work for callers that merge.
+    return normalizeNativeCompanyGroupId(c) !== g;
+  });
+}
+
+/**
+ * Company-pill / Group-All merge list for a group tab: native subsidiaries + external partner remaps.
+ * Still excludes virtual group_ownership link duplicates.
+ */
+export function companiesPickerInGroupList(companies, gid) {
+  if (!gid) {
+    return companiesNativeInGroupList(companies, null);
+  }
+  const g = String(gid).trim().toUpperCase();
+  const seen = new Set();
+  const merged = [];
+  for (const row of [
+    ...companiesNativeInGroupList(companies, g),
+    ...companiesExternalRemappedInGroupList(companies, g),
+  ]) {
+    const id = Number(row?.id);
+    if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue;
+    seen.add(id);
+    merged.push(row);
+  }
+  return merged;
+}
+
 /**
  * Group entity only (e.g. AP itself) — not subsidiaries such as C168 under group_id AP.
  * Matches company_id === group code, or GROUPONLY placeholder (empty company_id, group_id set).
@@ -1819,8 +1829,8 @@ export function excludeGroupLabelsFromCompanyPicker(companies, groupIds = null) 
 /** Companies shown in the Company row when a GroupID is selected (Dashboard-aligned). */
 export function companiesForCompanyPicker(companies, selectedGroup, groupIds = null) {
   const list = selectedGroup
-    ? companiesNativeInGroupList(companies, selectedGroup)
-    : companiesNativeInGroupList(companies, null);
+    ? companiesPickerInGroupList(companies, selectedGroup)
+    : companiesPickerInGroupList(companies, null);
   return excludeGroupLabelsFromCompanyPicker(list, groupIds);
 }
 
@@ -1840,9 +1850,9 @@ export function pickDefaultSubsidiaryForGroup(companies, groupId, options = {}) 
   const g = String(groupId || "").trim().toUpperCase();
   if (!g) return null;
   const gids = sortedUniqueGroupIds(companies);
-  const pick = pickDefaultCompanyForGroup(companies, g, { ...options, nativeOnly: true });
+  const pick = pickDefaultCompanyForGroup(companies, g, { ...options, forPicker: true });
   if (pick && isSubsidiaryCompanyRow(pick, gids)) return pick;
-  const list = excludeGroupLabelsFromCompanyPicker(companiesNativeInGroupList(companies, g), gids);
+  const list = companiesForCompanyPicker(companies, g, gids);
   return list[0] ?? null;
 }
 
@@ -1963,7 +1973,7 @@ export function allGroupedCompaniesForPicker(companies, groupIds = null) {
   const seen = new Set();
   const merged = [];
   for (const gid of gids) {
-    for (const row of companiesNativeInGroupList(companies, gid)) {
+    for (const row of companiesPickerInGroupList(companies, gid)) {
       const id = Number(row?.id);
       if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue;
       seen.add(id);
@@ -2005,6 +2015,16 @@ export function resolveGroupsAllMergeCompanyList(companies, groupIds = null) {
 }
 
 /**
+ * Companies to merge when Company "All" is active with no Group tab
+ * (independent / ungrouped picker — e.g. DEMO1 + DEMO2 owner login).
+ */
+export function resolveIndependentAllMergeCompanyList(companies, groupIds = null) {
+  return independentCompaniesForPicker(companies, groupIds).filter(
+    (c) => !isVirtualGroupLinkCompanyRow(c),
+  );
+}
+
+/**
  * Resolve a grouped company row for GroupID "All" contexts that still pick a subsidiary
  * (e.g. other pages). Dashboard Group All aggregate leaves company unset instead.
  */
@@ -2021,21 +2041,19 @@ export function resolveCompanyWhenPickingAllGroups(companies, currentCompanyId, 
 }
 
 /**
- * When closing an active GroupID pill: keep the current company if it is independent,
- * otherwise activate the first independent company in picker order.
+ * When closing an active GroupID pill:
+ * 1) keep the currently selected company when possible (incl. subsidiary under that group);
+ * 2) else first independent company in picker order.
  */
 export function resolveCompanyWhenClosingGroup(companies, currentCompanyId, groupIds = null) {
   const gids = groupIds?.length ? groupIds : sortedUniqueGroupIds(companies);
-  const independents = independentCompaniesForPicker(companies, gids);
-  if (!independents.length) return null;
+  const list = Array.isArray(companies) ? companies : [];
   const cid = currentCompanyId != null ? Number(currentCompanyId) : Number.NaN;
   if (Number.isFinite(cid) && cid > 0) {
-    const currentRow = (companies || []).find((c) => Number(c.id) === cid);
-    if (currentRow && companyRowIsIndependent(currentRow, gids)) {
-      const inPicker = independents.find((c) => Number(c.id) === cid);
-      if (inPicker) return inPicker;
-    }
+    const currentRow = list.find((c) => Number(c.id) === cid);
+    if (currentRow) return currentRow;
   }
+  const independents = independentCompaniesForPicker(list, gids);
   return independents[0] ?? null;
 }
 

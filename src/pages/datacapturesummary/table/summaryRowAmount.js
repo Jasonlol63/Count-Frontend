@@ -32,7 +32,6 @@ export function normalizeProcessedAmountForTotalStorage(finalAmount) {
   return truncateProcessedAmountTo6Decimals(normalized);
 }
 
-/** ROUND_DOWN to 6 dp — final processed amount (aligns with SummaryAmountFormat.finalizeProcessedAmount). */
 export function truncateProcessedAmountTo6Decimals(value) {
   try {
     return MoneyDecimal.formatFixed(value, 6);
@@ -41,7 +40,6 @@ export function truncateProcessedAmountTo6Decimals(value) {
   }
 }
 
-/** ROUND_DOWN to 8 dp — rate-path intermediate (aligns with SummaryAmountFormat.applyRateExpression). */
 export function truncateRateAmountTo8Decimals(value) {
   try {
     return MoneyDecimal.formatFixed(value, 8);
@@ -50,11 +48,6 @@ export function truncateRateAmountTo8Decimals(value) {
   }
 }
 
-/**
- * Apply Summary rate expression to base (aligns with backend
- * {@code SummaryAmountFormat.applyRateExpression}): *N /N / N → 8-dp ROUND_DOWN.
- * Returns null when blank / invalid / zero (caller keeps base).
- */
 function applyRateValueToAmount(processedAmount, rateValueStr) {
   const value = String(rateValueStr || "").trim();
   if (!value) return null;
@@ -69,7 +62,6 @@ function applyRateValueToAmount(processedAmount, rateValueStr) {
     } else if (value.startsWith("/")) {
       const rateValue = MoneyDecimal.toDecimal(value.substring(1), 0);
       if (!rateValue.isZero()) {
-        // Match Java divide(..., 8, RoundingMode.DOWN) then truncateRateAmount.
         return truncateRateAmountTo8Decimals(
           MoneyDecimal.div(processedAmount, rateValue).toString()
         );
@@ -239,45 +231,49 @@ export function roundSummaryTotalForValidation(total) {
 }
 
 /**
- * Submit / payload processed amount — same pipeline as backend
- * {@code SummaryAmountFormat.computeProcessedAmount}:
- * base → rate (8-dp ROUND_DOWN) → final 6-dp ROUND_DOWN.
- * Never uses HALF_UP-2 display text. Returns a plain 6-dp string (not Number).
+ * Legacy prepareSummarySubmitCollection processed amount resolution.
+ * Priority: formula recalc → cell display → base attribute.
  */
 export function resolveSubmitProcessedAmount(row, globalRateInput = "") {
-  const formulaText = resolveFormulaTextForCalculation(row);
-  if (formulaText && formulaText !== "Formula") {
+  const effectiveGlobal =
+    String(row.rateValue || "").trim() ? "" : row.rateChecked ? globalRateInput : "";
+
+  const formulaDisplay = String(row.formulaDisplay || row.formula || "").trim();
+  if (formulaDisplay && formulaDisplay !== "Formula") {
     try {
       const base = calculateBaseProcessedAmount(row);
-      return truncateProcessedAmountTo6Decimals(
-        applyRateToRowAmount(row, base, globalRateInput)
-      );
+      const finalRaw = applyRateToRowAmount(row, base, effectiveGlobal);
+      const num = Number(MoneyDecimal.toDecimal(finalRaw, 0).toString());
+      if (Number.isFinite(num)) return num;
     } catch {
-      /* fall through */
+      /* try fallbacks */
     }
   }
 
-  const baseRaw = String(row.baseProcessedAmount || "")
-    .replace(/,/g, "")
-    .trim();
+  const displayRaw = String(row.processedAmountDisplay || "").replace(/,/g, "").trim();
+  const displayNum = parseFloat(displayRaw);
+  if (displayRaw !== "" && !Number.isNaN(displayNum) && Number.isFinite(displayNum)) {
+    return displayNum;
+  }
+
+  const baseRaw = String(row.baseProcessedAmount || "").replace(/,/g, "").trim();
   if (baseRaw) {
     try {
-      return truncateProcessedAmountTo6Decimals(
-        applyRateToRowAmount(row, baseRaw, globalRateInput)
-      );
+      const finalRaw = applyRateToRowAmount(row, baseRaw, effectiveGlobal);
+      const num = Number(MoneyDecimal.toDecimal(finalRaw, 0).toString());
+      if (Number.isFinite(num)) return num;
     } catch {
-      /* fall through */
+      /* ignore */
     }
   }
 
-  const storedRaw = String(row.processedAmount || "")
-    .replace(/,/g, "")
-    .trim();
-  if (storedRaw) {
-    return truncateProcessedAmountTo6Decimals(storedRaw);
+  const storedRaw = String(row.processedAmount || "").replace(/,/g, "").trim();
+  const storedNum = parseFloat(storedRaw);
+  if (storedRaw !== "" && !Number.isNaN(storedNum) && Number.isFinite(storedNum)) {
+    return storedNum;
   }
 
-  return truncateProcessedAmountTo6Decimals("0");
+  return 0;
 }
 
 export function mapRowsWithAmountRecalc(rows, globalRateInput = "") {

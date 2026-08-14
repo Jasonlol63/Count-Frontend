@@ -94,8 +94,10 @@ export function createEmptyRowFields() {
 export function createMainRowFromEntry(entry, index) {
   const idProduct = String(entry.idProduct || "").trim();
   const norm = normalizeSummaryIdProductText(idProduct);
+  // Empty-Id money footers need a stable unique key (norm is "").
+  const keySuffix = norm || `empty-${entry.rowIndex}`;
   return {
-    key: entry.key || `main-${entry.rowIndex}-${index}-${norm}`,
+    key: entry.key || `main-${entry.rowIndex}-${index}-${keySuffix}`,
     idProduct,
     rowIndex: entry.rowIndex,
     productType: "main",
@@ -232,44 +234,17 @@ export function applyMainTemplateToRowModel(row, mainTemplate, templateKey) {
 }
 
 /** @param {SummaryRowData} row */
-export function isSummarySubRow(row) {
-  return String(row?.productType || "").trim().toLowerCase() === "sub";
-}
-
-/**
- * MAIN (or orphan "sub" with no parent main in the table) → clear data, keep skeleton.
- * Real SUB under a parent main → remove the row.
- */
-export function shouldClearSummaryRowOnDelete(row, allRows = []) {
-  if (!isSummarySubRow(row)) return true;
-  const parentId = normalizeSummaryIdProductText(row.parentIdProduct || row.idProduct || "");
-  if (!parentId) return true;
-  const hasParentMain = (Array.isArray(allRows) ? allRows : []).some(
-    (r) =>
-      r &&
-      r.key !== row.key &&
-      !isSummarySubRow(r) &&
-      normalizeSummaryIdProductText(r.idProduct) === parentId,
-  );
-  return !hasParentMain;
-}
-
-/** @param {SummaryRowData} row @param {{ asMainSkeleton?: boolean }} [options] */
-export function clearRowEditableFields(row, options = {}) {
-  const asMainSkeleton = options.asMainSkeleton === true;
-  const idProduct = asMainSkeleton
-    ? String(row.parentIdProduct || row.idProduct || "").trim() || row.idProduct
-    : row.idProduct;
+export function clearRowEditableFields(row) {
   return {
     ...row,
     ...createEmptyRowFields(),
     key: row.key,
-    idProduct,
+    idProduct: row.idProduct,
     rowIndex: row.rowIndex,
-    productType: asMainSkeleton ? "main" : row.productType,
-    parentIdProduct: asMainSkeleton ? null : row.parentIdProduct,
-    parentRowIndex: asMainSkeleton ? null : row.parentRowIndex,
-    subIdProduct: asMainSkeleton ? "" : row.subIdProduct || "",
+    productType: row.productType,
+    parentIdProduct: row.parentIdProduct,
+    parentRowIndex: row.parentRowIndex,
+    subIdProduct: row.subIdProduct,
   };
 }
 

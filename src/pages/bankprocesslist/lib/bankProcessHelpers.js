@@ -1,4 +1,6 @@
 import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
+import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+import { resolveCompanyCategoryFlags } from "../../../utils/company/companyCategoryFlags.js";
 import { formatDmyDash, parseDdMmYyyyToYmd, parseYmd } from "../../../utils/date/dateUtils.js";
 import { notifyTransactionListInvalidated } from "../../transaction/lib/transactionPaymentLogic.js";
 
@@ -9,7 +11,7 @@ export const PAGE_SIZE_MAX = 80;
 /** Bank Process 金额：固定两位小数（如 300.00）. */
 export function isValidBankMoneyInput(value) {
   try {
-    MoneyDecimal.requireNormalAmount(value, "Amount");
+    MoneyDecimal.toDecimal(value);
     return true;
   } catch {
     return false;
@@ -24,7 +26,7 @@ export function formatBankMoneyFixed2(value, { emptyAsZero = true } = {}) {
   const raw = String(value ?? "").trim();
   if (!raw) return emptyAsZero ? "0.00" : "";
   if (!isValidBankMoneyInput(raw)) return emptyAsZero ? "0.00" : "";
-  return MoneyDecimal.formatUiFixed(raw);
+  return MoneyDecimal.formatFixedHalfUp(raw, 2);
 }
 
 /** Profit = max(0, sell - buy - sum(profit sharing))，展示两位小数；全无输入时为空 */
@@ -74,12 +76,12 @@ export function formatProfitSharingStringFixed2(s) {
  * Bank Process 账户下拉（Supplier / Customer / Company / Profit sharing）允许的 role。
  * 与 js/bank_process_list.js BANK_ALLOWED_ACCOUNT_ROLES 一致。
  *
- * 会出现在 option 中：PARTNER, SUPPLIER, STAFF, AGENT, MEMBER, PROFIT
+ * 会出现在 option 中：PARTNER, SUPPLIER, UPLINE（供应商）, STAFF, AGENT, MEMBER, PROFIT
  * 不会出现在 option 中（被 role 筛掉）：CAPITAL, BANK, CASH, EXPENSES, COMPANY, DEBTOR 等未列出的 role
  *
  * 另需 status === active；inactive 账户不会出现在 option 中。
  */
-export const BANK_PICK_ACCOUNT_ROLES = ["PARTNER", "SUPPLIER", "STAFF", "AGENT", "MEMBER", "PROFIT"];
+export const BANK_PICK_ACCOUNT_ROLES = ["PARTNER", "SUPPLIER", "UPLINE", "STAFF", "AGENT", "MEMBER", "PROFIT"];
 
 export function normalizeBankPickAccountRole(role) {
   return String(role || "").trim().toUpperCase();
@@ -131,227 +133,19 @@ export function formatBankWithTypeDisplay(bank, type) {
 
 export const BANK_GRID_TEMPLATE_COLUMNS_WITH_SELECT = `${BANK_GRID_TEMPLATE_COLUMNS} minmax(0,0.36fr)`;
 
-/** company.id / picker id === Spring tenant.id */
-export function resolveBankProcessListTenantId(companyIdOrTenantId) {
-  const tid = companyIdOrTenantId != null ? Number(companyIdOrTenantId) : Number.NaN;
-  return Number.isFinite(tid) && tid > 0 ? tid : null;
-}
-
-function formatBankAccountLabel(code, name) {
-  const c = String(code || "").trim();
-  const n = String(name || "").trim();
-  if (c && n) return `${c} [${n}]`;
-  return c || n || "";
-}
-
-function readNestedBankProcess(item) {
-  if (!item || typeof item !== "object") return {};
-  return item.bankProcess && typeof item.bankProcess === "object"
-    ? item.bankProcess
-    : item.bank_process && typeof item.bank_process === "object"
-      ? item.bank_process
-      : {};
-}
-
-/** Map Spring unified status → UI status + issue_flag. */
-export function splitSpringBankProcessStatus(raw) {
-  const s = String(raw || "").trim().toUpperCase().replace(/-/g, "_");
-  if (s === "OFFICIAL") return { status: "active", issue_flag: "official" };
-  if (s === "E_INVOICE" || s === "EINVOICE") return { status: "active", issue_flag: "e_invoice" };
-  if (s === "BLOCK") return { status: "active", issue_flag: "block" };
-  if (s === "INACTIVE") return { status: "inactive", issue_flag: "" };
-  if (s === "WAITING") return { status: "waiting", issue_flag: "" };
-  if (s === "ACTIVE") return { status: "active", issue_flag: "" };
-  const fallback = String(raw || "").trim().toLowerCase();
-  if (fallback.includes("inactive")) return { status: "inactive", issue_flag: "" };
-  if (fallback.includes("waiting")) return { status: "waiting", issue_flag: "" };
-  return { status: "active", issue_flag: "" };
-}
-
-function ymdFromSpringDate(value) {
-  if (value == null || value === "") return "";
-  if (typeof value === "string") return value.slice(0, 10);
-  if (Array.isArray(value) && value.length >= 3) {
-    const [y, m, d] = value;
-    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-  }
-  return String(value).slice(0, 10);
-}
-
-/**
- * Spring BankProcessDTO → UI row (table / filters keep legacy field names).
- * Frontend adapts to backend — do not change Spring DTO for the SPA.
- */
-export function normalizeBankProcessListItemFromSpring(item) {
-  if (!item || typeof item !== "object") return null;
-  const bp = readNestedBankProcess(item);
-  const id = Number(item.id ?? bp.id ?? bp.bp_id);
-  if (!Number.isFinite(id) || id <= 0) return null;
-
-  const statusRaw =
-    item.status ??
-    item.Status ??
-    bp.status ??
-    bp.Status ??
-    (item.bankProcess && item.bankProcess.status) ??
-    (item.bank_process && item.bank_process.status);
-  const { status, issue_flag } = splitSpringBankProcessStatus(statusRaw);
-  const dayStart = ymdFromSpringDate(bp.dayStart ?? bp.day_start);
-  const dayEnd = ymdFromSpringDate(bp.dayEnd ?? bp.day_end);
-  const supplierCode = item.supplierAccountCode ?? item.supplier_account_code;
-  const supplierName = item.supplierAccountName ?? item.supplier_account_name;
-  const customerCode = item.customerAccountCode ?? item.customer_account_code;
-  const customerName = item.customerAccountName ?? item.customer_account_name;
-
-  const sharesRaw = Array.isArray(item.shares) ? item.shares : [];
-  const shares = sharesRaw
-    .map((s) => {
-      if (!s || typeof s !== "object") return null;
-      const accountId = Number(s.accountId ?? s.account_id);
-      if (!Number.isFinite(accountId) || accountId <= 0) return null;
-      const amount = s.amount ?? null;
-      const sortOrder = Number(s.sortOrder ?? s.sort_order);
-      return {
-        accountId,
-        amount,
-        sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-
-  const createdBy = bp.createdBy ?? bp.created_by ?? "";
-  const updatedBy = bp.updatedBy ?? bp.updated_by ?? "";
-  const createdAt = formatSpringDateTimeDisplay(bp.createdAt ?? bp.created_at);
-  const updatedAt = formatSpringDateTimeDisplay(bp.updatedAt ?? bp.updated_at);
-
-  return {
-    id,
-    tenant_id: bp.tenantId ?? bp.tenant_id ?? null,
-    country: item.countryCode ?? item.country_code ?? "",
-    bank: item.bankName ?? item.bank_name ?? "",
-    type: bp.cardOwnerType ?? bp.card_owner_type ?? "",
-    card_owner: bp.cardOwner ?? bp.card_owner ?? "",
-    card_owner_type: bp.cardOwnerType ?? bp.card_owner_type ?? "",
-    // Legacy table columns: "Supplier" shows card_lower; "Card Owner" shows supplier.
-    card_lower: formatBankAccountLabel(supplierCode, supplierName),
-    supplier: bp.cardOwner ?? bp.card_owner ?? "",
-    customer: formatBankAccountLabel(customerCode, customerName),
-    cost: bp.supplierPrice ?? bp.supplier_price ?? "",
-    price: bp.customerPrice ?? bp.customer_price ?? "",
-    profit: bp.companyPrice ?? bp.company_price ?? "",
-    insurance: bp.insurancePrice ?? bp.insurance_price ?? "",
-    contract: bp.contract ?? "",
-    sop: bp.sop ?? "",
-    remark: bp.remark ?? "",
-    day_start: dayStart,
-    day_end: dayEnd,
-    day_end_monthly_cap_enabled: !!(bp.dayEndMonthlyCapEnabled ?? bp.day_end_monthly_cap_enabled),
-    date: dayStart,
-    frequency: bp.frequency ?? "",
-    status,
-    issue_flag,
-    supplier_account_id: bp.supplierAccountId ?? bp.supplier_account_id ?? null,
-    customer_account_id: bp.customerAccountId ?? bp.customer_account_id ?? null,
-    company_account_id: bp.companyAccountId ?? bp.company_account_id ?? null,
-    country_id: bp.countryId ?? bp.country_id ?? null,
-    bank_option_id: bp.bankOptionId ?? bp.bank_option_id ?? null,
-    shares,
-    resend_schedule_day_start: ymdFromSpringDate(
-      bp.resendScheduleDayStart ?? bp.resend_schedule_day_start
-    ),
-    resend_schedule_day_end: ymdFromSpringDate(
-      bp.resendScheduleDayEnd ?? bp.resend_schedule_day_end
-    ),
-    resend_schedule_frequency: bp.resendScheduleFrequency ?? bp.resend_schedule_frequency ?? "",
-    created_by: createdBy,
-    modified_by: updatedBy,
-    dts_created: createdAt,
-    dts_modified: updatedAt,
-  };
-}
-
-/** Spring LocalDateTime / string → display string for form audit fields. */
-function formatSpringDateTimeDisplay(value) {
-  if (value == null || value === "") return "";
-  if (typeof value === "string") return value.replace("T", " ").slice(0, 19);
-  if (Array.isArray(value) && value.length >= 3) {
-    const [y, m, d, hh = 0, mm = 0, ss = 0] = value;
-    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")} ${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-  }
-  return String(value);
-}
-
-/**
- * Build Edit modal form from a normalized list row (no get_process API).
- * @param {object} row normalized list row
- * @param {object[]} [accounts]
- */
-export function bankProcessListRowToEditForm(row, accounts = []) {
-  if (!row || row.id == null) return null;
-  const frequency = bankProcessFrequencyNormalized(row.frequency || row.day_start_frequency);
-  const dayEnd = row.day_end ? String(row.day_end).slice(0, 10) : "";
-  const shareRows = Array.isArray(row.shares)
-    ? row.shares.map((s) => {
-        const acc = (accounts || []).find((a) => Number(a.id) === Number(s.accountId));
-        return {
-          accountId: s.accountId != null ? String(s.accountId) : "",
-          accountLabel: acc?.account_id || acc?.name || (s.accountId != null ? String(s.accountId) : ""),
-          amount: s.amount != null && s.amount !== "" ? formatBankMoneyFixed2(s.amount) : "",
-        };
-      })
-    : parseProfitSharingToRows(row.profit_sharing, accounts);
-
-  return {
-    id: String(row.id || ""),
-    country: row.country || "",
-    bank: row.bank || "",
-    type: row.type || row.card_owner_type || "",
-    name: row.card_owner || row.name || row.supplier || "",
-    card_merchant_id: row.supplier_account_id != null ? String(row.supplier_account_id) : "",
-    customer_id: row.customer_account_id != null ? String(row.customer_account_id) : "",
-    profit_account_id: row.company_account_id != null ? String(row.company_account_id) : "",
-    contract: row.contract || "",
-    insurance: row.insurance != null && row.insurance !== "" ? formatBankMoneyFixed2(row.insurance) : "",
-    cost: row.cost != null && row.cost !== "" ? formatBankMoneyFixed2(row.cost) : "",
-    price: row.price != null && row.price !== "" ? formatBankMoneyFixed2(row.price) : "",
-    profit: row.profit != null && row.profit !== "" ? formatBankMoneyFixed2(row.profit) : "",
-    profit_sharing: serializeProfitSharingRows(shareRows, accounts),
-    day_start: row.day_start ? String(row.day_start).slice(0, 10) : "",
-    day_end: dayEnd,
-    day_end_monthly_cap_enabled:
-      frequency === "1st_of_every_month" && !!row.day_end_monthly_cap_enabled,
-    day_start_frequency: frequency,
-    status: row.status || "active",
-    issue_flag: row.issue_flag || "",
-    remark: row.remark || "",
-    sop: row.sop || "",
-    ...buildBankDtsFormFields(row),
-  };
-}
-
-function isSpringBankProcessListItem(row) {
-  return !!(row && (row.bankProcess || row.bank_process || row.countryCode || row.country_code));
-}
-
 export function normalizeRows(data) {
   if (!Array.isArray(data)) return [];
-  return data
-    .map((row) => {
-      if (isSpringBankProcessListItem(row)) {
-        return normalizeBankProcessListItemFromSpring(row);
-      }
-      const normalizedType = String(row?.type || row?.types || "").trim();
-      const normalizedStatus = normalizeBankProcessStatus(row?.status);
-      const normalizedIssueFlag = normalizeBankIssueFlag(row?.issue_flag);
-      return {
-        ...row,
-        type: normalizedType,
-        status: normalizedStatus,
-        issue_flag: normalizedIssueFlag,
-      };
-    })
-    .filter(Boolean);
+  return data.map((row) => {
+    const normalizedType = String(row?.type || row?.types || "").trim();
+    const normalizedStatus = normalizeBankProcessStatus(row?.status);
+    const normalizedIssueFlag = normalizeBankIssueFlag(row?.issue_flag);
+    return {
+      ...row,
+      type: normalizedType,
+      status: normalizedStatus,
+      issue_flag: normalizedIssueFlag,
+    };
+  });
 }
 
 export function normalizeBankIssueFlag(v) {
@@ -564,9 +358,6 @@ export function isBankResendDayStartBackendErrorMessage(text) {
     s.includes("same calendar date as the current contract Day start") ||
     s.includes("already has a transaction posted") ||
     s.includes("already has an open Resend bill") ||
-    s.includes("open Resend bill for this Day start") ||
-    s.includes("day_start and day_end are required") ||
-    s.includes("day_end cannot be before day_start") ||
     s.includes("Duplicate resends are not allowed")
   );
 }
@@ -609,20 +400,8 @@ export function isResendDayStartDuplicateInAccountingDue(rows, processId, daySta
   const pid = Number(processId);
   if (!Number.isFinite(pid) || pid <= 0) return false;
   return (Array.isArray(rows) ? rows : []).some((r) => {
-    if (Number(r?.bankProcessId ?? r?.id) !== pid || r?.already_posted_today) return false;
-
-    // Spring make-up bill: periodType=RESEND_CONSOLIDATED, postedDate/billingStart = day_start
-    const periodType = String(r?.periodType || accountingDuePeriodType(r) || "")
-      .trim()
-      .toUpperCase();
-    if (periodType === "RESEND_CONSOLIDATED") {
-      const anchor = normalizeBankResendDayStartYmd(
-        r?.postedDate || r?.billingStart || r?.dayStart || r?.billing_period_start
-      );
-      if (anchor === ymd) return true;
-    }
-
-    const billStart = normalizeBankResendDayStartYmd(r?.billing_period_start || r?.billingStart);
+    if (Number(r?.id) !== pid || r?.already_posted_today) return false;
+    const billStart = normalizeBankResendDayStartYmd(r?.billing_period_start);
     if (billStart === ymd) return true;
     if (r?.is_resend_monthly_reopen) {
       const bm = normalizeBankResendDayStartYmd(r?.monthly_billing_month);
@@ -636,29 +415,29 @@ export function isResendDayStartDuplicateInAccountingDue(rows, processId, daySta
   });
 }
 
-/** Open make-up on list row: same process already has resend_schedule_day_start = this dayStart. */
-export function isResendDayStartOpenOnProcess(row, dayStartRaw) {
-  if (!row) return false;
-  const ymd = normalizeBankResendDayStartYmd(dayStartRaw);
-  if (!ymd) return false;
-  const open = normalizeBankResendDayStartYmd(
-    row.resend_schedule_day_start || row.resendScheduleDayStart
-  );
-  return !!open && open === ymd;
-}
-
-/**
- * Phase 1: no Spring same-day Post lock API yet.
- * Open-duplicate is resolved client-side from inbox rows / process schedule.
- */
-export async function checkBankResendLockFromBackend(processId, dayStartRaw, accountingRows = []) {
+export async function checkBankResendLockFromBackend(processId, dayStartRaw) {
   const dayStartYmd = normalizeBankResendDayStartYmd(dayStartRaw);
   if (!processId || !dayStartYmd) {
     return { locked: false, duplicateOpenAnchor: false };
   }
+  const res = await fetch(buildApiUrl("api/bankprocess_maintenance/resend_accounting_due_api.php"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      bank_process_id: processId,
+      mode: "check_daystart_lock",
+      day_start: dayStartYmd,
+    }),
+  });
+  const json = await res.json();
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || "Check failed");
+  }
+  const data = json.data || {};
   return {
-    locked: false,
-    duplicateOpenAnchor: isResendDayStartDuplicateInAccountingDue(accountingRows, processId, dayStartRaw),
+    locked: !!data.locked,
+    duplicateOpenAnchor: !!data.duplicate_open_anchor,
   };
 }
 
@@ -666,96 +445,56 @@ export function notifyTransactionDataChanged(sourceTag) {
   notifyTransactionListInvalidated(sourceTag || "bank-process-list-react");
 }
 
-const bankCategoryTenantCache = new Map();
+const bankCategoryCompanyCache = new Map();
 
-/** When session tenant matches, skip network for bank-only vs games routing. */
-export function resolveBankOnlyCategoryHint(sessionMe, tenantNumericId) {
-  if (!sessionMe || tenantNumericId == null) return null;
-  const sessionTid = Number(sessionMe.tenant_id ?? sessionMe.company_id);
-  if (!Number.isFinite(sessionTid) || sessionTid !== Number(tenantNumericId)) return null;
-  const hasBank = Boolean(sessionMe.tenant_has_bank ?? sessionMe.company_has_bank);
-  const hasGame = Boolean(sessionMe.tenant_has_game ?? sessionMe.company_has_gambling);
-  if (hasBank && !hasGame) return true;
-  if (hasGame) return false;
-  return null;
-}
-
-function resolveBankOnlyFromCacheOrRow(tenantNumericId, companyRow = null) {
-  if (companyRow && typeof companyRow === "object") {
-    const perms = Array.isArray(companyRow.permissions) ? companyRow.permissions : null;
-    if (perms && perms.length) {
-      const normalized = perms.map((p) => String(p || "").toLowerCase());
-      const hasBank = normalized.some((p) => p === "bank");
-      const hasGame = normalized.some((p) => p === "games" || p === "gambling");
-      return hasBank && !hasGame;
-    }
-  }
-  const cached = bankCategoryTenantCache.get(Number(tenantNumericId));
-  if (cached != null) return cached;
+/** When session company matches, skip domain API for bank-only vs games routing. */
+export function resolveBankOnlyCategoryHint(sessionMe, companyNumericId) {
+  if (!sessionMe || companyNumericId == null) return null;
+  if (Number(sessionMe.company_id) !== Number(companyNumericId)) return null;
+  if (sessionMe.company_has_bank && !sessionMe.company_has_gambling) return true;
+  if (sessionMe.company_has_gambling) return false;
   return null;
 }
 
 /**
- * Resolve bank-only for a tenant id using session hint, in-memory cache, or POST /auth/switch-tenant.
- * Frontend reads Spring has_bank / has_game — do not call PHP domain_api.
- * @returns {Promise<{ bankOnly: boolean, syncJson: object|null, syncFailed: boolean }>}
+ * Sync bank-only decision for Process route swaps.
+ * Prefer owner-companies row / session-flag cache; then session hint for current company.
+ * @returns {boolean|null} null when unknown (caller may fall back to domain API)
  */
-export async function resolveTenantIsBankOnly(tenantId, sessionMe = null, companyRow = null) {
-  const id = Number(tenantId);
-  if (!Number.isFinite(id) || id <= 0) {
-    return { bankOnly: false, syncJson: null, syncFailed: true };
-  }
-
-  const hint = resolveBankOnlyCategoryHint(sessionMe, id);
-  if (hint != null) {
-    bankCategoryTenantCache.set(id, hint);
-    return { bankOnly: hint, syncJson: null, syncFailed: false };
-  }
-
-  const fromCache = resolveBankOnlyFromCacheOrRow(id, companyRow);
-  if (fromCache != null) {
-    return { bankOnly: fromCache, syncJson: null, syncFailed: false };
-  }
-
-  try {
-    const { peekCompanySessionFlags } = await import("../../../utils/company/companySessionFlagsCache.js");
-    const flags = peekCompanySessionFlags(id);
-    if (flags) {
-      const bankOnly = Boolean(flags.has_bank) && !Boolean(flags.has_gambling);
-      bankCategoryTenantCache.set(id, bankOnly);
-      return { bankOnly, syncJson: null, syncFailed: false };
-    }
-  } catch {
-    /* optional cache */
-  }
-
-  try {
-    const { switchSessionTenant } = await import("../../../utils/auth/authApi.js");
-    const { rememberCompanySessionFlags } = await import(
-      "../../../utils/company/companySessionFlagsCache.js"
-    );
-    const { ok, json } = await switchSessionTenant(id);
-    if (!ok || !json?.success) {
-      return { bankOnly: false, syncJson: json, syncFailed: true };
-    }
-    const data = json.data || {};
-    rememberCompanySessionFlags(data);
-    const hasBank = Boolean(data.has_bank);
-    const hasGame = Boolean(data.has_game ?? data.has_gambling);
-    const bankOnly = hasBank && !hasGame;
-    bankCategoryTenantCache.set(id, bankOnly);
-    return { bankOnly, syncJson: json, syncFailed: false };
-  } catch {
-    return { bankOnly: false, syncJson: null, syncFailed: true };
-  }
+export function resolveIsBankOnlyCompany(companyRow, sessionMe = null) {
+  const flags = resolveCompanyCategoryFlags(companyRow);
+  if (flags) return Boolean(flags.hasBank && !flags.hasGambling);
+  return resolveBankOnlyCategoryHint(sessionMe, companyRow?.id);
 }
 
-/**
- * @deprecated Prefer resolveTenantIsBankOnly(tenantId, sessionMe, companyRow).
- * Code-only lookup cannot resolve Spring modules without tenant id — returns false.
- */
-export async function isBankCategoryCompany(companyCode) {
-  return Boolean(String(companyCode || "").trim()) && false;
+/** Local flags first; domain API only when category is still unknown. */
+export async function resolveIsBankOnlyCompanyAsync(companyRow, sessionMe, buildApiUrl) {
+  const local = resolveIsBankOnlyCompany(companyRow, sessionMe);
+  if (local !== null) return local;
+  if (!companyRow?.company_id) return false;
+  return isBankCategoryCompany(companyRow.company_id, buildApiUrl);
+}
+
+export async function isBankCategoryCompany(companyCode, buildApiUrl) {
+  const cacheKey = String(companyCode || "").trim().toUpperCase();
+  if (!cacheKey) return false;
+  if (bankCategoryCompanyCache.has(cacheKey)) return bankCategoryCompanyCache.get(cacheKey);
+  try {
+    const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "get_company_permissions", company_id: companyCode }),
+    });
+    const json = await res.json();
+    const permissions = Array.isArray(json?.data?.permissions) ? json.data.permissions : [];
+    const normalized = permissions.map((p) => String(p || "").toLowerCase());
+    const isBankOnly = normalized.includes("bank") && !normalized.includes("games") && !normalized.includes("gambling");
+    bankCategoryCompanyCache.set(cacheKey, isBankOnly);
+    return isBankOnly;
+  } catch {
+    return false;
+  }
 }
 
 export function profitSharingTotalFromString(s) {
@@ -784,10 +523,7 @@ export function parseProfitSharingToRows(s, accounts) {
     const amount = parseFloat(t.slice(dash + 3).trim());
     if (!label || Number.isNaN(amount)) continue;
     const acc = (accounts || []).find(
-      (a) =>
-        String(a.account_id || "").toLowerCase() === label.toLowerCase() ||
-        String(a.name || "").toLowerCase() === label.toLowerCase() ||
-        String(a.id) === label
+      (a) => String(a.account_id || "").toLowerCase() === label.toLowerCase() || String(a.name || "").toLowerCase() === label.toLowerCase()
     );
     out.push({
       accountId: acc ? String(acc.id) : "",
@@ -832,11 +568,11 @@ export function bankProcessStatusTargetPatch(row, target) {
     case "INACTIVE":
       return { status: "inactive", issue_flag: "" };
     case "OFFICIAL":
-      return { status: "active", issue_flag: "official" };
+      return { issue_flag: "official" };
     case "E_INVOICE":
-      return { status: "active", issue_flag: "e_invoice" };
+      return { issue_flag: "e_invoice" };
     case "BLOCK":
-      return { status: "active", issue_flag: "block" };
+      return { issue_flag: "block" };
     default:
       return {};
   }
@@ -895,13 +631,10 @@ export function buildBankDtsFormFields(d) {
 
 /** @returns {'monthly'|'week'|'day'|'once'|'1st_of_every_month'} */
 export function bankProcessFrequencyNormalized(v) {
-  const s = String(v || "").trim().toLowerCase();
-  // Spring BankProcess.Frequency enum names
-  if (s === "monthly") return "monthly";
-  if (s === "week") return "week";
-  if (s === "day") return "day";
-  if (s === "once") return "once";
-  if (s === "first_of_every_month" || s === "1st_of_every_month") return "1st_of_every_month";
+  if (v === "monthly") return "monthly";
+  if (v === "week") return "week";
+  if (v === "day") return "day";
+  if (v === "once") return "once";
   return "1st_of_every_month";
 }
 
@@ -1060,62 +793,31 @@ export const contractBillingEndYmdForBankForm = (startYmd, termMonths, frequency
   return subtractOneDayFromYmd(exclusiveCal) || null;
 };
 
-/**
- * Accounting Due row period type.
- * Spring `AccountingDueDTO.periodType` (e.g. FIRST_MONTH / PARTIAL_FIRST_MONTH /
- * FULL_MONTH / DAY_END_TAIL / MONTHLY / ONCE_ONE_OFF) is authoritative; legacy PHP
- * boolean flags are kept as a fallback only for any row shape not yet migrated off PHP.
- */
+/** Matches legacy processlist.js / bank_process_list.js Accounting Due row period_types. */
 export function accountingDuePeriodType(r) {
-  const spring = String(r?.periodType || "").trim().toLowerCase();
-  if (spring) return spring;
   if (r.is_once_one_off) return "once_one_off";
   if (r.is_weekly) return "weekly";
   if (r.is_daily && r.is_daily_consolidated) return "daily_consolidated";
   if (r.is_daily) return "daily";
-  if (r.is_manual_inactive || r.is_compensation) return "compensation";
+  if (r.is_manual_inactive) return "manual_inactive";
   if (r.is_resend_consolidated_range) return "resend_consolidated_range";
   if (r.is_resend_monthly_reopen) return "resend_monthly_reopen";
   if (r.is_partial_first_month) return "partial_first_month";
   if (r.is_day_end_tail) return "day_end_tail";
-  return "full_month";
+  return "monthly";
 }
 
-/**
- * Accounting Due 锚点日期：Spring `postedDate`
- * （1st-of-month 首月 = dayStart / 其他月 = 1 号；Monthly = 当期锚点；Once = dayStart）。
- */
+/** Accounting Due 入账/删除时传给后端的 billing_months[] 锚点。 */
 export function accountingDueBillingMonth(r) {
-  const posted = String(r?.postedDate || "").trim();
-  if (posted) return posted;
   if (r.is_daily || r.is_daily_consolidated) {
     return String(r.monthly_billing_month || r.daily_billing_start || "").trim();
   }
   return String(r.weekly_billing_start || r.monthly_billing_month || "").trim();
 }
 
-/** Map an Accounting Due inbox row → Spring skip request item. */
-export function buildAccountingDueSkipItem(row) {
-  const bankProcessId = Number(row?.bankProcessId ?? row?.id);
-  if (!Number.isFinite(bankProcessId) || bankProcessId <= 0) return null;
-
-  const postedDate = String(row?.postedDate ?? accountingDueBillingMonth(row) ?? "").trim();
-  if (!postedDate) return null;
-
-  const periodType = String(row?.periodType || accountingDuePeriodType(row) || "")
-    .trim()
-    .toUpperCase();
-  if (!periodType) return null;
-
-  const billingStart = String(row?.billingStart ?? row?.billing_period_start ?? "").trim() || null;
-  const billingEnd = String(row?.billingEnd ?? row?.billing_period_end ?? "").trim() || null;
-
-  return { bankProcessId, postedDate, periodType, billingStart, billingEnd };
-}
-
 /** Accounting Due 表格行唯一键（同 process 多账期可并列展示）。 */
 export function accountingDueRowKey(r) {
-  const id = Number(r?.bankProcessId ?? r?.id);
+  const id = Number(r?.id);
   if (!Number.isFinite(id) || id <= 0) return "";
   return `${id}|${accountingDuePeriodType(r)}|${accountingDueBillingMonth(r)}`;
 }
@@ -1142,34 +844,13 @@ export function formatAccountingDueDisplayDate(raw) {
 
 /** Accounting Due：Start Date 固定为流程 day_start（DD-MM-YYYY）。 */
 export function formatAccountingDueProcessDayStart(row) {
-  return formatAccountingDueDisplayDate(row?.dayStart ?? row?.day_start) || "-";
+  return formatAccountingDueDisplayDate(row?.day_start) || "-";
 }
 
-/**
- * Accounting Due：Billing Date。
- * Once（ONCE_ONE_OFF）/ Day（DAILY）/ Compensation（COMPENSATION）只展示单日；
- * Week（WEEKLY）展示整段区间 start – end；
- * Resend（RESEND_CONSOLIDATED）：有起止且不同则同 Week 一样展示 from – to（如 Week/Monthly/1st 补单），
- * 起止相同则同 Once/Day 展示单日。
- * 其他频率展示服务区间开始日。
- */
+/** Accounting Due：Billing Date 展示应付日（Monthly 先付）或服务区间开始日（其他频率）。 */
 export function formatAccountingDueBillingPeriod(row) {
-  const start = String(row?.billingStart ?? row?.billing_period_start ?? "").trim();
-  const end = String(row?.billingEnd ?? row?.billing_period_end ?? "").trim();
-  const posted = String(row?.postedDate || "").trim();
-  const period = accountingDuePeriodType(row);
-  if (period === "once_one_off" || period === "daily" || period === "compensation") {
-    const display = formatAccountingDueDisplayDate(start || posted || end);
-    return display || "-";
-  }
-  if (period === "weekly" || period === "resend_consolidated") {
-    const startDisplay = formatAccountingDueDisplayDate(start || posted);
-    const endDisplay = formatAccountingDueDisplayDate(end);
-    if (startDisplay && endDisplay && startDisplay !== endDisplay) {
-      return `${startDisplay} – ${endDisplay}`;
-    }
-    return startDisplay || endDisplay || "-";
-  }
+  const start = String(row?.billing_period_start || "").trim();
+  const end = String(row?.billing_period_end || "").trim();
   const display = formatAccountingDueDisplayDate(start || end);
   return display || "-";
 }
@@ -1182,12 +863,8 @@ const ACCOUNTING_DUE_FREQUENCY_LABEL_KEYS = {
   "1st_of_every_month": "firstOfEveryMonth",
 };
 
-/** Accounting Due：本行账单计费频率（Resend 行用弹窗频率；Compensation 行单独标注；正常行用 process 原始频率）。 */
+/** Accounting Due：本行账单计费频率（Resend 行用弹窗频率，正常行用 process 原始频率）。 */
 export function formatAccountingDueFrequency(row, t) {
-  const period = accountingDuePeriodType(row);
-  if (period === "compensation" || period === "manual_inactive") {
-    return typeof t === "function" ? t("compensationFrequency") : "Compensation";
-  }
   const fq = bankProcessFrequencyNormalized(row?.display_frequency || row?.frequency || "");
   const key = ACCOUNTING_DUE_FREQUENCY_LABEL_KEYS[fq] || "firstOfEveryMonth";
   return typeof t === "function" ? t(key) : key;

@@ -7,6 +7,7 @@ export const MAINTENANCE_I18N = {
     company: "Company:",
     currency: "Currency:",
     currencyAll: "All",
+    currencyDragHint: "Drag to reorder · Click to filter",
     process: "Process",
     dateRange: "Date Range",
     quickSelect: "Quick Select",
@@ -49,8 +50,6 @@ export const MAINTENANCE_I18N = {
       "Are you sure you want to delete the selected {count} record(s)? This action cannot be undone.",
     deleteConfirmBankProcess:
       "Are you sure you want to delete the selected {count} bank process transaction(s)? This action cannot be undone.",
-    deleteConfirmCaptureRecords:
-      "Deleting the selected {count} record(s) will also delete every other product from the same submission. This action cannot be undone.",
     operationCompletedSuccess: "Operation completed successfully!",
     operationFailedRetry: "Operation failed. Please try again.",
     noDataFound: "No data found",
@@ -133,6 +132,7 @@ export const MAINTENANCE_I18N = {
     company: "公司：",
     currency: "货币：",
     currencyAll: "All",
+    currencyDragHint: "拖动调整顺序 · 点击筛选",
     process: "流程",
     dateRange: "日期范围",
     quickSelect: "快捷选择",
@@ -172,7 +172,6 @@ export const MAINTENANCE_I18N = {
     pleaseConfirmDeletionCheckbox: "请先勾选确认删除",
     deleteConfirmRecords: "确定要删除已选中的 {count} 条记录吗？此操作不可撤销。",
     deleteConfirmBankProcess: "确定要删除已选中的 {count} 笔银行流程交易吗？此操作不可撤销。",
-    deleteConfirmCaptureRecords: "删除已选中的 {count} 条记录，会连带删除同一次提交下的其它所有 Product。此操作不可撤销。",
     operationCompletedSuccess: "操作成功完成！",
     operationFailedRetry: "操作失败，请重试。",
     noDataFound: "暂无数据",

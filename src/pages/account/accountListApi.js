@@ -29,6 +29,7 @@ export function normalizeAccountListItem(item) {
     last_login: item.lastLogin ?? item.last_login ?? null,
     tenant_access_id: item.tenantAccessId ?? item.tenant_access_id ?? null,
     scope_tenant_id: item.scopeTenantId ?? item.scope_tenant_id ?? null,
+    tenant_ids: normalizeAccountTenantIds(item.tenantIds ?? item.tenant_ids),
   };
 }
 
@@ -94,7 +95,21 @@ function normalizeAccountCurrencyIds(currencyIds) {
   return out;
 }
 
-export function buildAccountCreateRequest(form, scopeTenantId, currencyIds = []) {
+/** Dedupe + drop non-positive ids. Same shape as {@link normalizeAccountCurrencyIds}. */
+function normalizeAccountTenantIds(tenantIds) {
+  if (!Array.isArray(tenantIds)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of tenantIds) {
+    const id = Number(raw);
+    if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+export function buildAccountCreateRequest(form, scopeTenantId, currencyIds = [], tenantIds = []) {
   return {
     accountId: String(form.account_id || "").trim(),
     name: String(form.name || "").trim(),
@@ -108,11 +123,12 @@ export function buildAccountCreateRequest(form, scopeTenantId, currencyIds = [])
       form.alert_amount !== "" && form.alert_amount != null ? form.alert_amount : null,
     scopeTenantId: Number(scopeTenantId),
     currencyIds: normalizeAccountCurrencyIds(currencyIds),
+    tenantIds: normalizeAccountTenantIds(tenantIds),
   };
 }
 
-export function buildAccountUpdateRequest(form, scopeTenantId, currencyIds = []) {
-  const body = buildAccountCreateRequest(form, scopeTenantId, currencyIds);
+export function buildAccountUpdateRequest(form, scopeTenantId, currencyIds = [], tenantIds = []) {
+  const body = buildAccountCreateRequest(form, scopeTenantId, currencyIds, tenantIds);
   body.id = Number(form.id);
   if (!String(form.password ?? "").trim()) delete body.password;
   return body;
@@ -136,27 +152,9 @@ export function accountRowToEditForm(row) {
   };
 }
 
-/**
- * Active tenant for Spring `/api/account/*`.
- * Picker `company.id` === `tenant.id` (account_tenant_access.tenant_id).
- */
-export function resolveActiveScopeTenantId({
-  companyId = null,
-  scopeTenantId = null,
-  form = null,
-} = {}) {
-  const fromExplicit = resolveAccountListTenantId(scopeTenantId);
-  if (fromExplicit) return fromExplicit;
-  const fromForm =
-    form?.scope_tenant_id != null ? resolveAccountListTenantId(form.scope_tenant_id) : null;
-  if (fromForm) return fromForm;
-  return resolveAccountListTenantId(companyId);
-}
-
-/** Modal company summary — tenant id(s) as picker row ids (UI labels unchanged). */
-export function tenantIdToPickerCompanyIds(tenantId) {
-  const tid = resolveAccountListTenantId(tenantId);
-  return tid ? [String(tid)] : [];
+/** Modal company summary — an account's full tenant set as picker row ids (UI labels unchanged). */
+export function tenantIdsToPickerCompanyIds(tenantIds) {
+  return normalizeAccountTenantIds(tenantIds).map(String);
 }
 
 /** POST /api/account/add */
@@ -426,6 +424,110 @@ export async function toggleAccountUserPaymentAlert(row, scopeTenantId, currency
   const form = accountRowToEditForm(row);
   if (!form) throw new Error("invalidRequest");
   form.payment_alert = Number(row.payment_alert) === 1 ? "0" : "1";
-  const request = buildAccountUpdateRequest(form, scopeTenantId, currencyIds);
+  // Preserve the account's full existing company set — this is a quick single-field
+  // toggle, not a company reassignment.
+  const tenantIds = normalizeAccountTenantIds(row.tenant_ids).length
+    ? row.tenant_ids
+    : [scopeTenantId];
+  const request = buildAccountUpdateRequest(form, scopeTenantId, currencyIds, tenantIds);
   return updateAccountUser(request, signal);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Currency — Spring `/api/currency/*` (per-tenant, no group_id concept). */
+/* ---------------------------------------------------------------------- */
+
+/** POST /api/currency/available?tenant_id=&account_id= — currencies with is_linked/deletable for this account. */
+export async function fetchAvailableCurrencies(tenantId, accountId, signal) {
+  const tid = resolveAccountListTenantId(tenantId);
+  if (!tid) throw new Error("tenantIdRequired");
+  const params = new URLSearchParams({ tenant_id: String(tid) });
+  const aid = Number(accountId);
+  if (Number.isFinite(aid) && aid > 0) params.set("account_id", String(aid));
+  const res = await fetch(buildApiUrl(`api/currency/available?${params.toString()}`), {
+    method: "POST",
+    credentials: "include",
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) throw new Error(json?.message || "loadLinksFailed");
+  return Array.isArray(json.data) ? json.data : [];
+}
+
+/** POST /api/currency/add */
+export async function createTenantCurrency({ code, tenantId }, signal) {
+  const tid = resolveAccountListTenantId(tenantId);
+  if (!tid) throw new Error("tenantIdRequired");
+  const res = await fetch(buildApiUrl("api/currency/add"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ tenantId: String(tid), code: String(code || "").trim() }),
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) throw new Error(json?.message || "createFailed");
+  return json.data;
+}
+
+/** POST /api/currency/delete?id=&tenantId= — no force override on the Spring endpoint. */
+export async function deleteTenantCurrency({ id, tenantId }, signal) {
+  const tid = resolveAccountListTenantId(tenantId);
+  const cid = Number(id);
+  if (!tid || !Number.isFinite(cid) || cid <= 0) throw new Error("invalidRequest");
+  const params = new URLSearchParams({ id: String(cid), tenantId: String(tid) });
+  const res = await fetch(buildApiUrl(`api/currency/delete?${params.toString()}`), {
+    method: "POST",
+    credentials: "include",
+    signal,
+  });
+  const json = await res.json();
+  return { success: Boolean(json.success), json, message: String(json.message || "") };
+}
+
+/** POST /api/currency/account/linked-accounts?currency_id=&tenant_id= */
+export async function fetchAccountsLinkedToCurrency(currencyId, tenantId, signal) {
+  const tid = resolveAccountListTenantId(tenantId);
+  const cid = Number(currencyId);
+  if (!tid || !Number.isFinite(cid) || cid <= 0) throw new Error("invalidRequest");
+  const params = new URLSearchParams({ currency_id: String(cid), tenant_id: String(tid) });
+  const res = await fetch(buildApiUrl(`api/currency/account/linked-accounts?${params.toString()}`), {
+    method: "POST",
+    credentials: "include",
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) return { linkedAccountIds: [], linkedAccounts: [] };
+  const data = json.data || {};
+  const linkedAccountIds = (data.linked_account_ids || []).map(Number).filter((id) => id > 0);
+  const linkedAccounts = (Array.isArray(data.linked_accounts) ? data.linked_accounts : []).map((a) => ({
+    id: Number(a.id),
+    name: String(a.name ?? ""),
+    account_id: String(a.account_id ?? ""),
+  }));
+  return { linkedAccountIds, linkedAccounts };
+}
+
+/** POST /api/currency/account/linked-accounts-update — one currency's link/unlink diff per call. */
+export async function updateAccountsLinkedToCurrency(
+  { tenantId, currencyId, linkedAccountIds = [], unlinkedAccountIds = [] },
+  signal,
+) {
+  const tid = resolveAccountListTenantId(tenantId);
+  const cid = Number(currencyId);
+  if (!tid || !Number.isFinite(cid) || cid <= 0) throw new Error("invalidRequest");
+  const res = await fetch(buildApiUrl("api/currency/account/linked-accounts-update"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      tenantId: tid,
+      currencyId: cid,
+      linked_account_ids: linkedAccountIds.map(Number).filter((id) => id > 0),
+      unlinked_account_ids: unlinkedAccountIds.map(Number).filter((id) => id > 0),
+    }),
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !json.success) throw new Error(json?.message || "saveFailed");
 }

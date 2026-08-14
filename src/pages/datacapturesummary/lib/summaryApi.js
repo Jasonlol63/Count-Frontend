@@ -1,11 +1,5 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import {
-  fetchAccountListByTenantId,
-  filterAccountListRows,
-} from "../../account/accountListApi.js";
 import { appendDataCaptureScopeParams } from "../../datacapture/lib/dataCaptureApi.js";
-import { resolveDataCaptureEffectiveTenantId } from "../../datacapture/lib/dataCaptureTenant.js";
-import { fetchCaptureCurrenciesByTenantId } from "../../datacapture/lib/dataCaptureSpringApi.js";
 
 /** Canonical Summary submit endpoint. Legacy: summary_api.php?action=submit */
 const SUMMARY_SUBMIT_API = "api/datacapture_summary/summary_submit_api.php";
@@ -40,56 +34,18 @@ async function parseJsonResponse(response) {
   return json;
 }
 
-/**
- * Currencies + accounts for Edit / Add Formula.
- * Accounts prefer Spring {@code POST /api/account/list}; PHP catalog is fallback only.
- */
-export async function fetchSummaryFormCatalog(captureScope, companyId = null) {
-  const tenantId = resolveDataCaptureEffectiveTenantId(captureScope, companyId);
-
-  let accounts = [];
-  if (tenantId) {
-    try {
-      const rows = await fetchAccountListByTenantId(tenantId);
-      accounts = filterAccountListRows(rows);
-    } catch (e) {
-      console.warn("Spring account list for formula catalog failed:", e);
-    }
+/** Default load: currencies + accounts for Edit Formula / Add Account */
+export async function fetchSummaryFormCatalog(captureScope) {
+  const url = withCaptureScope(buildApiUrl(SUMMARY_CATALOG_API), captureScope);
+  const response = await fetch(url, { credentials: "include" });
+  const json = await parseJsonResponse(response);
+  if (!json.success) {
+    throw new Error(json.message || "Failed to load summary form data");
   }
-
-  let currencies = [];
-  if (tenantId) {
-    try {
-      currencies = await fetchCaptureCurrenciesByTenantId(tenantId);
-    } catch (e) {
-      console.warn("Spring currency list for formula catalog failed:", e);
-    }
-  }
-
-  // Fallback: legacy PHP catalog when Spring returned nothing (e.g. proxy still on old stack).
-  if (!accounts.length || !currencies.length) {
-    try {
-      const url = withCaptureScope(buildApiUrl(SUMMARY_CATALOG_API), captureScope);
-      const response = await fetch(url, { credentials: "include" });
-      const json = await parseJsonResponse(response);
-      if (json?.success) {
-        if (!accounts.length && Array.isArray(json.accounts)) {
-          accounts = json.accounts;
-        }
-        if (!currencies.length && Array.isArray(json.currencies)) {
-          currencies = json.currencies;
-        }
-      }
-    } catch (e) {
-      console.warn("PHP summary catalog fallback failed:", e);
-    }
-  }
-
-  if (!tenantId && !accounts.length && !currencies.length) {
-    throw new Error("tenantId is required to load formula form data");
-  }
-
-  return { currencies, accounts };
+  return {
+    currencies: Array.isArray(json.currencies) ? json.currencies : [],
+    accounts: Array.isArray(json.accounts) ? json.accounts : [],
+  };
 }
 
 /** GET ?action=get_summary_state */
@@ -157,29 +113,9 @@ export async function submitSummaryPayload(captureScope, payload) {
   return json;
 }
 
-/**
- * POST /api/datacapture-summary/submit — Spring final Submit (single request, one DB
- * transaction; no batching — see docs/datacapture-spring-api.md §2.2 "Games Submit → Summary").
- * Body: {@code DataCaptureSummarySubmitDTO} (header fields + `lines`).
- * @returns {{success:boolean, message:string, data:{captureId:number}|null}}
- */
-export async function submitSummaryToSpring(payload) {
-  const response = await fetch(buildApiUrl("api/datacapture-summary/submit"), {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const json = await response.json();
-  if (!response.ok) {
-    throw new Error(json?.message || `HTTP ${response.status}`);
-  }
-  return json;
-}
-
 /** GET accounts list (same as legacy fetchSummaryAccountList). */
-export async function fetchSummaryAccountList(captureScope, companyId = null) {
-  const json = await fetchSummaryFormCatalog(captureScope, companyId);
+export async function fetchSummaryAccountList(captureScope) {
+  const json = await fetchSummaryFormCatalog(captureScope);
   return Array.isArray(json.accounts) ? json.accounts : [];
 }
 
@@ -189,6 +125,7 @@ export async function fetchSummaryTemplates({
   companyId,
   idProducts,
   processId,
+  processCode = "",
   captureId = null,
 }) {
   const params = new URLSearchParams({ action: "templates" });
@@ -198,10 +135,17 @@ export async function fetchSummaryTemplates({
   );
   const url = base.includes("?") ? `${base}&${params}` : `${base}?${params}`;
 
+  const code = String(processCode || "").trim().toUpperCase();
   const body = {
     idProducts: [...new Set((idProducts || []).map((v) => String(v || "").trim()).filter(Boolean))],
-    processId,
   };
+  if (processId != null && processId !== "" && Number(processId) > 0) {
+    body.processId = Number(processId);
+  } else if (processId != null && processId !== "" && !Number.isFinite(Number(processId))) {
+    // Pure Group may pass process code as processId ("SALARY").
+    body.processCode = String(processId).trim().toUpperCase();
+  }
+  if (code) body.processCode = code;
   if (companyId != null && Number(companyId) > 0) {
     body.company_id = Number(companyId);
   }
@@ -227,7 +171,7 @@ export async function fetchSummaryTemplates({
   };
 }
 
-/** POST ?action=delete_template — legacy PHP. Summary delete uses deleteFormulasSpring. */
+/** POST ?action=delete_template — remove saved formula template (legacy deleteSelectedRows). */
 export async function deleteSummaryTemplate({
   captureScope,
   companyId,

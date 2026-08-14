@@ -4,6 +4,8 @@
  * while preserving inline styles and class-driven colors from clipboard CSS.
  */
 
+import { tryMergeAllGamesIvuTables } from "./dataCaptureAllGamesPasteHelper.js";
+
 const GRID_HINT_RE =
   /mat-row|mat-cell|mat-header-row|mat-header-cell|mat-footer-cell|cdk-row|cdk-cell|role\s*=\s*["'](?:row|gridcell|columnheader|rowheader)["']/i;
 
@@ -163,18 +165,67 @@ function collectGridRows(root) {
     .querySelectorAll(".mat-row, .mat-header-row, .mat-footer-row, .cdk-row, .cdk-header-row, .cdk-footer-row")
     .forEach(pushUnique);
 
-  // 3) ARIA rows that contain cell-like children or newline-flattened column text
+  // 3) Kendo Grid group/footer rows — Win Loss Detail Subtotal copies as
+  //    <tr class="k-group-footer"> with NO role="row", so ARIA collection misses them.
+  root
+    .querySelectorAll(
+      "tr.k-group-footer, tr.k-group-header, tr.k-footer-template, tr.k-grouping-row, .k-grid-footer tr, .k-group-footer",
+    )
+    .forEach(pushUnique);
+
+  // 4) ARIA rows that contain cell-like children or newline-flattened column text
   Array.from(root.querySelectorAll('[role="row"]')).forEach((row) => {
     if (rowHasCellHints(row) || rowLooksLikeFlattenedColumns(row)) pushUnique(row);
   });
 
   // Drop outer shells that only wrap other rows (keep leaf data rows).
+  // Re-sort into document order — Kendo footers are queried before role=row agents.
   return rows
     .filter((row) => !rows.some((other) => other !== row && row.contains(other)))
-    .filter((row) => !gridRowLooksLikePaginator(row));
+    .filter((row) => !gridRowLooksLikePaginator(row))
+    .sort((a, b) => {
+      if (a === b) return 0;
+      const pos = a.compareDocumentPosition(b);
+      if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      return 0;
+    });
+}
+
+function isKendoGroupIndentCell(el) {
+  return /(?:^|\s)k-group-cell(?:\s|$)/i.test(String(el?.className || ""));
+}
+
+/**
+ * Native <tr> cells — include empty TDs (Kendo footers pad Account/Count/Level).
+ * Drop only tree-indent `td.k-group-cell` so agent Turn Over stays aligned with footer money.
+ */
+function collectNativeTrCells(row) {
+  if (!row || String(row.tagName || "").toLowerCase() !== "tr") return [];
+  const direct = Array.from(row.children || []).filter((child) => {
+    const tag = String(child.tagName || "").toUpperCase();
+    return tag === "TD" || tag === "TH";
+  });
+  if (direct.length < 2) return [];
+  return direct.filter((cell) => !isKendoGroupIndentCell(cell));
+}
+
+function stripKendoGroupIndentCells(table) {
+  if (!table) return;
+  table.querySelectorAll("tr").forEach((tr) => {
+    Array.from(tr.children || []).forEach((cell) => {
+      if (isKendoGroupIndentCell(cell)) cell.remove();
+    });
+  });
 }
 
 function collectRowCells(row) {
+  // Kendo / real <table> rows: prefer direct td/th (keep empties). role=gridcell alone
+  // drops leading k-group-cell on agents and ALL cells on k-group-footer (no roles),
+  // which shoved Subtotal money into column 1.
+  const nativeTrCells = collectNativeTrCells(row);
+  if (nativeTrCells.length) return nativeTrCells;
+
   const directMatCells = Array.from(
     row.querySelectorAll(
       ":scope > mat-cell, :scope > mat-header-cell, :scope > mat-footer-cell",
@@ -225,11 +276,17 @@ function collectRowCells(row) {
   if (nested.length) return nested;
 
   // Flex/grid clipboard leftovers: multiple non-row direct children with text ≈ columns.
-  const directKids = Array.from(row.children || []).filter((child) => {
-    if (isRowShell(child)) return false;
-    return String(child.textContent || "").trim() !== "";
-  });
-  if (directKids.length >= 2) return directKids;
+  // Keep empty children when ≥2 siblings look like padded columns (footer alignment).
+  const allDirectKids = Array.from(row.children || []).filter((child) => !isRowShell(child));
+  if (allDirectKids.length >= 2) {
+    const nonEmpty = allDirectKids.filter(
+      (child) => String(child.textContent || "").replace(/\u00a0/g, " ").trim() !== "",
+    );
+    if (nonEmpty.length >= 1 && allDirectKids.length > nonEmpty.length) {
+      return allDirectKids;
+    }
+    if (nonEmpty.length >= 2) return nonEmpty;
+  }
 
   return [];
 }
@@ -626,6 +683,30 @@ export function normalizeClipboardHtmlToTable(html) {
       }
     }
 
+    // allGames / iView: body + ivu-table-summary are sibling tables — merge before
+    // the first-table early return drops Total(N).
+    const mergedAllGames = tryMergeAllGamesIvuTables(root);
+    if (mergedAllGames) {
+      expandCollapsedTableRows(mergedAllGames);
+      if (tableColumnCount(mergedAllGames) >= 2) {
+        return `${styleHtml}\n${mergedAllGames.outerHTML}`;
+      }
+    }
+
+    // Prefer a wide native <table> when it has at least as many <tr> as ARIA/mat shells.
+    // C8Play/Kendo Win Loss: agent rows have role="row", Subtotal is k-group-footer
+    // without role — when counts are equal, rebuild via role=gridcell still drops
+    // footer empties (footer cells have no role) and misaligns money to col 1.
+    if (existingTable) {
+      const nativeTrCount = existingTable.querySelectorAll("tr").length;
+      const nativeCols = tableColumnCount(existingTable);
+      if (nativeCols >= 2 && nativeTrCount > 0 && nativeTrCount >= gridRows.length) {
+        expandCollapsedTableRows(existingTable);
+        stripKendoGroupIndentCells(existingTable);
+        return `${styleHtml}\n${existingTable.outerHTML}`;
+      }
+    }
+
     // Clipboard already has a <table>, but rows may be 1-TD wrappers around mat-cells.
     if (existingTable && !gridRows.length) {
       expandCollapsedTableRows(existingTable);
@@ -691,6 +772,7 @@ export function normalizeClipboardHtmlToTable(html) {
     if (!tbody.children.length) return raw;
     table.appendChild(tbody);
     expandCollapsedTableRows(table);
+    stripKendoGroupIndentCells(table);
 
     return `${styleHtml}\n${table.outerHTML}`;
   } catch {

@@ -4,15 +4,24 @@ import { dataCaptureQueryKeys, fetchSubmissionsByCaptureDate } from "../lib/data
 import { dataCaptureScopeCacheKey, dataCaptureScopeIsReady } from "../lib/dataCaptureScope.js";
 import { registerDataCaptureRuntime, unregisterDataCaptureRuntime } from "../lib/dataCaptureRuntime.js";
 
-export function useDataCaptureSubmittedList(captureScope, captureDate) {
+export function useDataCaptureSubmittedList(captureScope, captureDate, permissionCategory) {
   const queryClient = useQueryClient();
   const scopeKey = dataCaptureScopeCacheKey(captureScope);
   const enabled = dataCaptureScopeIsReady(captureScope);
+  const submissionsKey = dataCaptureQueryKeys.submissions(
+    scopeKey,
+    captureDate,
+    permissionCategory,
+  );
 
   const query = useQuery({
-    queryKey: dataCaptureQueryKeys.submissions(scopeKey, captureDate),
+    queryKey: submissionsKey,
     queryFn: async () => {
-      const res = await fetchSubmissionsByCaptureDate(captureDate, captureScope);
+      const res = await fetchSubmissionsByCaptureDate(
+        captureDate,
+        captureScope,
+        permissionCategory,
+      );
       if (res.success) return Array.isArray(res.data) ? res.data : [];
       throw new Error(res.error || res.message || "Failed to load submitted processes");
     },
@@ -24,9 +33,9 @@ export function useDataCaptureSubmittedList(captureScope, captureDate) {
   const refreshSubmitted = useCallback(async () => {
     if (!enabled) return;
     await queryClient.invalidateQueries({
-      queryKey: dataCaptureQueryKeys.submissions(scopeKey, captureDate),
+      queryKey: submissionsKey,
     });
-  }, [queryClient, scopeKey, captureDate, enabled]);
+  }, [queryClient, submissionsKey, enabled]);
 
   const refreshRef = useRef(refreshSubmitted);
   refreshRef.current = refreshSubmitted;

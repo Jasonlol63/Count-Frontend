@@ -4,6 +4,12 @@ import { replaceBrowserPathOnly } from "../../../utils/routing/privateBrowserUrl
 
 const PAYMENT_HISTORY_SCOPE_KEY = "ec_payment_history_scope";
 
+/** search_api Domain 虚拟行使用负数 account_db_id（如 -4000000 - txn_id），不能作为 history account_id。 */
+export function isRealPaymentHistoryAccountDbId(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0;
+}
+
 export function paymentHistoryTitle({ accountCode, accountName, accountMeta }) {
   const code = String(accountMeta?.account_id ?? accountCode ?? "").trim();
   const name = resolveHistoryAccountName({ accountName, accountMeta, accountCode }) || code;
@@ -71,8 +77,9 @@ function buildPaymentHistoryScopePayload({ row, dateFrom, dateTo, scopeApi, opts
     params.set("subsidiary_accounts_only", "1");
   }
 
-  const accountDbId = row?.account_db_id ? String(row.account_db_id) : "";
   const accountCode = String(row?.account_id || "").trim();
+  const hasRealDbId = isRealPaymentHistoryAccountDbId(row?.account_db_id);
+  const accountDbId = hasRealDbId ? String(Number(row.account_db_id)) : "";
   if (accountDbId) params.set("account_db_id", accountDbId);
   if (accountCode) params.set("account_code", accountCode);
 
@@ -92,7 +99,7 @@ function buildPaymentHistoryScopePayload({ row, dateFrom, dateTo, scopeApi, opts
   }
   if (currency) params.set("currency", currency);
 
-  if (!accountDbId && accountCode) params.set("virtual_company_code", accountCode.toUpperCase());
+  if (!hasRealDbId && accountCode) params.set("virtual_company_code", accountCode.toUpperCase());
 
   const pureType = String(opts.pureTypeSearch || "").toUpperCase().trim();
 
@@ -116,7 +123,10 @@ export function resolvePaymentHistoryScope(searchParams, scopeApi = null) {
       stored?.subsidiaryAccountsOnly ||
       scopeApi?.subsidiaryAccountsOnly ||
       false,
-    accountDbId: parsed.accountDbId ?? stored?.accountDbId,
+    accountDbId: (() => {
+      const raw = parsed.accountDbId ?? stored?.accountDbId;
+      return isRealPaymentHistoryAccountDbId(raw) ? String(Number(raw)) : undefined;
+    })(),
     accountCode: parsed.accountCode ?? stored?.accountCode,
     accountName: parsed.accountName ?? stored?.accountName,
     dateFrom: parsed.dateFrom ?? stored?.dateFrom,
@@ -128,6 +138,14 @@ export function resolvePaymentHistoryScope(searchParams, scopeApi = null) {
         ? parsed.pureTypeSearch || null
         : stored?.pureTypeSearch ?? null,
   };
+
+  if (
+    !isRealPaymentHistoryAccountDbId(merged.accountDbId) &&
+    merged.accountCode &&
+    !merged.virtualCompanyCode
+  ) {
+    merged.virtualCompanyCode = String(merged.accountCode).trim().toUpperCase();
+  }
 
   if ((!merged.companyId || merged.companyId <= 0) && (merged.subsidiaryAccountsOnly || merged.accountDbId)) {
     const filterCid = readFilterCompanyId();
@@ -193,7 +211,9 @@ export function stripPaymentHistoryUrlQuery() {
 
 export function paymentHistoryParamsReady(params) {
   if (!params?.dateFrom || !params?.dateTo) return false;
-  if (!params.accountDbId && !params.virtualCompanyCode) return false;
+  const hasAccount =
+    isRealPaymentHistoryAccountDbId(params?.accountDbId) || Boolean(params?.virtualCompanyCode);
+  if (!hasAccount) return false;
   if (params.companyId) return true;
   if (params.viewGroup || params.groupId || params.groupAggregate) return true;
   return false;

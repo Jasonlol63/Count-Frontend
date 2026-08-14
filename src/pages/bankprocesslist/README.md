@@ -2,6 +2,10 @@
 
 Route: `/bank-process-list` (see `App.jsx`). Entry: `BankProcessListPage.jsx`.
 
+## Money precision (Post → Transaction)
+
+Bank Process 入账金额：**DB 存 6 位**，前端 Half Up **仅展示 2 位**。详见 [`docs/bankprocess-transaction-amount-precision.md`](../../../../docs/bankprocess-transaction-amount-precision.md)。
+
 ## Where to change what
 
 | Task | Location |
@@ -9,14 +13,12 @@ Route: `/bank-process-list` (see `App.jsx`). Entry: `BankProcessListPage.jsx`.
 | Page shell, modals, table layout (JSX) | `BankProcessListPage.jsx` |
 | State, API calls, filters, form/accounting logic | `hooks/useBankProcessListPage.js` |
 | Main grid | `components/BankProcessTable.jsx` |
-| Status / Official / E-Invoice / Block | `components/BankProcessStatusControl.jsx` → `POST /api/bank-process/update-status` |
+| Status / Official / E-Invoice / Block | `components/BankProcessStatusControl.jsx` |
 | Add / edit process form shell | `components/BankProcessFormModal.jsx` |
 | Form fields, account pickers, dates | `components/bankProcessFormFields.jsx` |
 | Country / bank / profit / accounting / resend modals | `components/*Modal.jsx`, `bankProcessTextModals.jsx` |
 | Money, contract, sort, filters (legacy-aligned) | `lib/bankProcessHelpers.js` |
-| Spring list / add / update / status / delete / remark | `bankProcessListApi.js`（Edit 打开用 list 行回填，无 get API；Delete 多选循环单条；行内 remark → `update-remark`） |
 
-Migration notes: `Count/docs/frontend-springboot-migration.md` §10.
 ## Bank process maintenance
 
 Route: `/bankprocess-maintenance` — `pages/maintenance/bankprocess/` (separate folder).

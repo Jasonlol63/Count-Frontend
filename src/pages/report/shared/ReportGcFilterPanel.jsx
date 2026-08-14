@@ -36,6 +36,9 @@ export default function ReportGcFilterPanel({
   selectedCurrencies,
   toggleAllCurrencies,
   toggleCurrency,
+  /** Opt-in: lets the caller reorder currencyList via HTML5 drag (Payment Maintenance only). */
+  currencyDraggable = false,
+  onCurrencyDropOn,
   t,
 }) {
   const rawActiveCompanyId = highlightCompanyId != null ? highlightCompanyId : companyId;
@@ -113,7 +116,20 @@ export default function ReportGcFilterPanel({
                     <button
                       key={code}
                       type="button"
-                      className={`user-gc-segment${on ? " is-on" : ""}`}
+                      draggable={currencyDraggable}
+                      title={currencyDraggable ? t("currencyDragHint") : undefined}
+                      className={`user-gc-segment${currencyDraggable ? " user-gc-segment--draggable-pill" : ""}${on ? " is-on" : ""}`}
+                      data-currency-code={code}
+                      onDragStart={
+                        currencyDraggable
+                          ? (e) => {
+                              e.dataTransfer.setData("text/plain", code);
+                              e.dataTransfer.effectAllowed = "move";
+                            }
+                          : undefined
+                      }
+                      onDragOver={currencyDraggable ? (e) => e.preventDefault() : undefined}
+                      onDrop={currencyDraggable ? (e) => void onCurrencyDropOn?.(e, code) : undefined}
                       onClick={() => toggleCurrency(code)}
                     >
                       {code}

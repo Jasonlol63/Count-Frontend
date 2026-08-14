@@ -56,7 +56,7 @@ export function createFormulaDisplayFromExpression(formula, sourcePercentValue, 
 
   const formatted = formatSourceForFormulaSuffix(pct);
   // Formula-body multipliers (e.g. *0.10) are independent of Source; always append bracketed Source.
-  const base = removeTrailingSourcePercentExpression(trimmedFormula);
+  const base = removeTrailingSourcePercentExpression(trimmedFormula, pct);
   return `${base}*(${formatted})`;
 }
 

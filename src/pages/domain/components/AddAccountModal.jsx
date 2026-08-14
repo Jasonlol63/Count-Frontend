@@ -1,56 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AccountModal from "../../../components/AccountModal.jsx";
+import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { showDomainAlert } from "./DomainNotification.jsx";
 import { getAccountText } from "../../../translateFile/pages/accountTranslate.js";
-import {
-  DEFAULT_FORM,
-  toUpper,
-  normalizeAlertAmount,
-  getAccountModalOrderedRoles,
-  deriveAccountRolesFromRows,
-  pickDefaultAddCurrencyIds,
-} from "../../account/accountLogic.js";
-import {
-  buildAccountCreateRequest,
-  createAccountUser,
-  fetchAccountListByTenantId,
-  resolveAccountListTenantId,
-  tenantIdToPickerCompanyIds,
-} from "../../account/accountListApi.js";
-import {
-  createCurrency as createTenantCurrency,
-  deleteCurrency,
-  fetchAvailableCurrencies,
-} from "../../../utils/api/currencyApi.js";
+import { DEFAULT_FORM, toUpper, normalizeAlertAmount, getAccountModalOrderedRoles } from "../../account/accountLogic.js";
 import DomainModalPortal from "./DomainModalPortal.jsx";
-
-/** Domain Share % card role → Spring account.role. */
-function shareRoleToAccountRole(shareRole) {
-  const key = String(shareRole || "").trim().toLowerCase();
-  if (key === "profit") return "PROFIT";
-  if (key === "sales" || key === "cs" || key === "it") return "STAFF";
-  const upper = String(shareRole || "").trim().toUpperCase();
-  return upper || "";
-}
 
 /**
  * Add Account from Domain → Company Settings (Share %).
- * Scope is always the C168 ledger tenant (`tenantId` = `tenant.id`).
+ * Uses the shared AccountModal so layout matches Account List / Bank Process.
  */
-export default function AddAccountModal({
-  tenantId,
-  tenantCode,
-  preferredRole,
-  onClose,
-  onSuccess,
-  lang = "en",
-}) {
+export default function AddAccountModal({ companyId, companyCode, preferredRole, onClose, onSuccess, lang = "en" }) {
   const t = useCallback((key, params) => getAccountText(lang, key, params), [lang]);
-  const scopeTenantId = resolveAccountListTenantId(tenantId);
+  const numericCompanyId = companyId ? Number(companyId) : 0;
 
   const [form, setForm] = useState({ ...DEFAULT_FORM, payment_alert: "0" });
   const [roles, setRoles] = useState([]);
   const [currencies, setCurrencies] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [selectedCurrencyIds, setSelectedCurrencyIds] = useState([]);
   const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
   const [currencyInput, setCurrencyInput] = useState("");
@@ -63,50 +30,70 @@ export default function AddAccountModal({
     return currencies.filter((c) => !hidden.has(Number(c.id)));
   }, [currencies, hiddenCurrencyIds]);
 
-  /** AccountModal company pills: id = tenant.id, label = tenant code. */
   const companiesForModal = useMemo(() => {
-    if (!scopeTenantId) return [];
-    return [
-      {
-        id: scopeTenantId,
-        company_id: tenantCode || String(scopeTenantId),
-      },
-    ];
-  }, [scopeTenantId, tenantCode]);
+    const rows = companies
+      .map((c) => ({
+        ...c,
+        company_id: c.company_id ?? c.company_code ?? c.companyId ?? c.code ?? "",
+      }))
+      .filter((c) => String(c.company_id || "").trim() !== "");
+    if (rows.length) return rows;
+    if (numericCompanyId && companyCode) {
+      return [{ id: numericCompanyId, company_id: companyCode }];
+    }
+    return [];
+  }, [companies, numericCompanyId, companyCode]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadMeta() {
-      if (!scopeTenantId) {
-        if (!cancelled) showDomainAlert(t("pleaseSelectCompanyFirst"), "danger");
-        return;
-      }
-
       try {
-        const [rows, currencyRows] = await Promise.all([
-          fetchAccountListByTenantId(scopeTenantId),
-          fetchAvailableCurrencies({ tenantId: scopeTenantId }),
+        const [rolesRes, curRes, compRes] = await Promise.all([
+          fetch(buildApiUrl("api/editdata/editdata_api.php"), { cache: "no-cache", credentials: "include" }),
+          fetch(
+            buildApiUrl(
+              `api/accounts/account_currency_api.php?action=get_available_currencies${
+                numericCompanyId ? `&company_id=${numericCompanyId}` : ""
+              }`
+            ),
+            { cache: "no-cache", credentials: "include" }
+          ),
+          fetch(buildApiUrl("api/accounts/account_company_api.php?action=get_available_companies"), {
+            cache: "no-cache",
+            credentials: "include",
+          }),
         ]);
 
         if (cancelled) return;
 
-        const accountRole = shareRoleToAccountRole(preferredRole);
-        const derivedRoles = deriveAccountRolesFromRows(rows);
-        setRoles(
-          getAccountModalOrderedRoles(accountRole ? [...derivedRoles, accountRole] : derivedRoles),
-        );
+        const rolesJson = await rolesRes.json();
+        if (rolesJson.success && rolesJson.data) {
+          const list = Array.isArray(rolesJson.data.roles) ? rolesJson.data.roles : [];
+          setRoles(list);
+          if (preferredRole) {
+            const wanted =
+              preferredRole.toUpperCase() === "SUPPLIER" ? "UPLINE" : preferredRole.toUpperCase();
+            setForm((f) => ({ ...f, role: wanted }));
+          }
+        }
 
-        setForm((f) => ({
-          ...f,
-          scope_tenant_id: scopeTenantId,
-          ...(accountRole ? { role: accountRole } : {}),
-        }));
+        const curJson = await curRes.json();
+        if (curJson.success && Array.isArray(curJson.data)) {
+          setCurrencies(curJson.data.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked })));
+        }
 
-        setCurrencies(currencyRows);
-        setSelectedCurrencyIds(pickDefaultAddCurrencyIds(currencyRows));
-        const pickerIds = tenantIdToPickerCompanyIds(scopeTenantId);
-        setSelectedCompanyIds(pickerIds.length ? pickerIds : [String(scopeTenantId)]);
+        const compJson = await compRes.json();
+        if (compJson.success && Array.isArray(compJson.data)) {
+          setCompanies(
+            compJson.data.map((c) => ({
+              id: c.id,
+              company_id: c.company_id ?? c.company_code ?? c.companyId ?? c.code ?? "",
+            }))
+          );
+        }
+
+        setSelectedCompanyIds(numericCompanyId ? [numericCompanyId] : []);
       } catch {
         if (!cancelled) showDomainAlert(t("errorLoadingAccount"), "danger");
       }
@@ -116,16 +103,11 @@ export default function AddAccountModal({
     return () => {
       cancelled = true;
     };
-  }, [scopeTenantId, preferredRole, t]);
+  }, [numericCompanyId, preferredRole, t]);
 
   const createCurrency = async () => {
     const code = toUpper(currencyInput).trim();
     if (!code) return;
-    if (!scopeTenantId) {
-      showDomainAlert(t("pleaseSelectCompanyFirst"), "danger");
-      return;
-    }
-
     const existing = currencies.find((c) => toUpper(c.code).trim() === code);
     if (existing) {
       const existingId = Number(existing.id);
@@ -134,30 +116,58 @@ export default function AddAccountModal({
       setCurrencyInput("");
       return;
     }
-
     try {
-      const created = await createTenantCurrency({ code, tenantId: scopeTenantId });
-      const newId = Number(created.id);
-      setCurrencies((prev) => [...prev, { id: newId, code: created.code, is_linked: false, deletable: true }]);
-      setSelectedCurrencyIds((prev) => (prev.map(Number).includes(newId) ? prev : [...prev, newId]));
-      setCurrencyInput("");
-    } catch (err) {
-      showDomainAlert(err?.message || t("createFailed"), "danger");
+      const res = await fetch(buildApiUrl("api/accounts/create_currency_api.php"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, company_id: numericCompanyId || undefined }),
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (json.success) {
+        const newId = Number(json.data?.id);
+        if (!Number.isFinite(newId) || newId <= 0) {
+          // Avoid selecting currency_id=0 when API returns a stale lastInsertId.
+          const metaRes = await fetch(
+            buildApiUrl(
+              `api/accounts/account_currency_api.php?action=get_available_currencies${
+                numericCompanyId ? `&company_id=${numericCompanyId}` : ""
+              }`,
+            ),
+            { credentials: "include" },
+          );
+          const metaJson = await metaRes.json();
+          if (metaJson?.success && Array.isArray(metaJson.data)) {
+            const rows = metaJson.data.map((c) => ({
+              id: c.id,
+              code: c.code,
+              is_linked: !!c.is_linked,
+            }));
+            setCurrencies(rows);
+            const matched = rows.find((c) => toUpper(c.code).trim() === code);
+            const matchedId = matched ? Number(matched.id) : 0;
+            if (matchedId > 0) {
+              setSelectedCurrencyIds((prev) =>
+                prev.map(Number).includes(matchedId) ? prev : [...prev, matchedId],
+              );
+            }
+          }
+          setCurrencyInput("");
+          return;
+        }
+        setCurrencies((prev) => [...prev, { id: newId, code: json.data.code, is_linked: false }]);
+        setSelectedCurrencyIds((prev) => (prev.map(Number).includes(newId) ? prev : [...prev, newId]));
+        setCurrencyInput("");
+      } else {
+        showDomainAlert(json.message || json.error || t("createFailed"), "danger");
+      }
+    } catch {
+      showDomainAlert(t("createFailed"), "danger");
     }
   };
 
   const removeModalCurrency = async (currencyId) => {
     const id = Number(currencyId);
-    const currencyRow = currencies.find((c) => Number(c.id) === id);
-    if (currencyRow?.deletable === false) {
-      showDomainAlert(t("apiCurrencySyncedFromSubsidiary"), "danger");
-      return;
-    }
-    if (selectedCurrencyIds.map(Number).includes(id)) {
-      showDomainAlert(t("deselectCurrencyBeforeDelete"), "danger");
-      return;
-    }
-
     const hideFromModal = () => {
       setSelectedCurrencyIds((prev) => prev.filter((x) => Number(x) !== id));
       setHiddenCurrencyIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
@@ -167,18 +177,24 @@ export default function AddAccountModal({
       setCurrencies((prev) => prev.filter((c) => Number(c.id) !== id));
     };
 
-    if (!scopeTenantId) {
-      showDomainAlert(t("pleaseSelectCompanyFirst"), "danger");
-      return;
-    }
-
     try {
-      const result = await deleteCurrency({ id, tenantId: scopeTenantId });
-      if (result.success) {
+      const res = await fetch(buildApiUrl("api/accounts/delete_currency_api.php"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (json.success) {
         dropCurrency();
         return;
       }
-      showDomainAlert(String(result.message || t("failedDeleteCurrency")), "danger");
+      const msg = String(json.message || json.error || "");
+      if (/being used|正在使用|Cannot delete/i.test(msg)) {
+        showDomainAlert(msg || t("failedDeleteCurrency"), "danger");
+        return;
+      }
+      showDomainAlert(msg || t("failedDeleteCurrency"), "danger");
     } catch {
       showDomainAlert(t("failedDeleteCurrency"), "danger");
     }
@@ -186,29 +202,64 @@ export default function AddAccountModal({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!scopeTenantId) {
-      showDomainAlert(t("pleaseSelectCompanyFirst"), "danger");
-      return;
-    }
     if (form.payment_alert === "1" && (!form.alert_type || !form.alert_start_date)) {
       showDomainAlert(t("paymentAlertRequiredFields"), "danger");
       return;
     }
-
     const amount = normalizeAlertAmount(form.alert_amount);
-    const formPayload = { ...form, alert_amount: amount, scope_tenant_id: scopeTenantId };
-    const currencyIds = selectedCurrencyIds.map(Number).filter((cid) => Number.isFinite(cid) && cid > 0);
+    const fd = new FormData();
+    Object.entries(form).forEach(([k, v]) => {
+      if (k === "alert_amount") {
+        fd.append(k, amount);
+        return;
+      }
+      const raw = v ?? "";
+      // Align with AccountListPage / Summary: CSS text-transform is visual-only.
+      const out =
+        k === "account_id" || k === "name" || k === "remark" ? toUpper(raw) : raw;
+      fd.append(k, out);
+    });
+    if (selectedCompanyIds.length) fd.set("company_ids", JSON.stringify(selectedCompanyIds));
+    if (numericCompanyId) fd.set("company_id", String(numericCompanyId));
+    if (selectedCurrencyIds.length) fd.set("currency_ids", JSON.stringify(selectedCurrencyIds));
 
     try {
-      const created = await createAccountUser(
-        buildAccountCreateRequest(formPayload, scopeTenantId, currencyIds),
-      );
-      const newId = created?.id ? Number(created.id) : 0;
+      const res = await fetch(buildApiUrl("api/accounts/addaccountapi.php"), {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (!json.success) {
+        showDomainAlert(json.error || json.message || t("saveFailed"), "danger");
+        return;
+      }
+      const newId = json.data?.id ? parseInt(json.data.id, 10) : 0;
+      if (newId && selectedCurrencyIds.length) {
+        await Promise.all(
+          selectedCurrencyIds.map((cid) =>
+            fetch(buildApiUrl("api/accounts/account_currency_api.php?action=add_currency"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ account_id: newId, currency_id: cid }),
+              credentials: "include",
+            }).catch(() => null)
+          )
+        );
+      }
+      if (newId && numericCompanyId) {
+        await fetch(buildApiUrl("api/accounts/account_company_api.php?action=add_company"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account_id: newId, company_id: numericCompanyId }),
+          credentials: "include",
+        }).catch(() => null);
+      }
       showDomainAlert(t("accountSavedSuccessfully"));
       onSuccess?.(newId);
       onClose();
-    } catch (err) {
-      showDomainAlert(err?.message || t("saveFailed"), "danger");
+    } catch {
+      showDomainAlert(t("saveFailed"), "danger");
     }
   };
 

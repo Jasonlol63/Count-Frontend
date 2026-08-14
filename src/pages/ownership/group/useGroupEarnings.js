@@ -12,6 +12,7 @@ import {
   mapOwnerApiRows,
   accountsFromOwnerRows,
   mergeEditorAccounts,
+  mergeServerRowsPreservingDrafts,
   rowsToSavePayload,
   allocationRowsForSave,
 } from "../shared/ownershipRowHelpers.js";
@@ -107,7 +108,7 @@ export function useGroupEarnings(shell) {
   }, [activeTab, selectedMonth, isHistoricalView, geGroups, lang, setHistoryBanner, showToast]);
 
   const loadGroupState = useCallback(
-    async (gid, { force = false } = {}) => {
+    async (gid, { force = false, preserveDrafts = false } = {}) => {
       if (!force) {
         let cached = null;
         setGeStates((prev) => {
@@ -115,6 +116,14 @@ export function useGroupEarnings(shell) {
           return prev;
         });
         if (cached) return cached;
+      }
+
+      let draftRows = null;
+      if (preserveDrafts) {
+        setGeStates((prev) => {
+          draftRows = prev[gid]?.rows || null;
+          return prev;
+        });
       }
 
       setGeLoadingGid(gid);
@@ -140,7 +149,10 @@ export function useGroupEarnings(shell) {
         } else {
           setHistoryBanner(null);
         }
-        const rows = mapOwnerApiRows(oRes.status === "success" ? oRes.data : []);
+        let rows = mapOwnerApiRows(oRes.status === "success" ? oRes.data : []);
+        if (preserveDrafts && draftRows) {
+          rows = mergeServerRowsPreservingDrafts(draftRows, rows);
+        }
         const pickerAccounts = aRes.status === "success" ? aRes.data : [];
         const stateAccounts = mergeEditorAccounts(pickerAccounts, rows);
         const nextState = { accounts: stateAccounts, rows };
@@ -298,7 +310,7 @@ export function useGroupEarnings(shell) {
         const json = await res.json();
         if (isApiSuccess(json)) {
           showToast(getApiMessage(json, "Partner linked successfully"), "success");
-          await loadGroupState(groupId, { force: true });
+          await loadGroupState(groupId, { force: true, preserveDrafts: true });
           return true;
         }
         if (isApiConflict(json)) {

@@ -87,7 +87,8 @@ export function buildSourceInlineEditPatch(row, newSourceValue, originalValue) {
   let baseFormula = String(row?.formulaOperators || "").trim();
   if (!baseFormula) {
     const fromDisplay = removeTrailingSourcePercentExpression(
-      String(row?.formulaDisplay || row?.formula || "").trim()
+      String(row?.formulaDisplay || row?.formula || "").trim(),
+      original
     );
     baseFormula = fromDisplay;
   }

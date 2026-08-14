@@ -158,6 +158,23 @@ export function parseAndFillHtmlTableForText(htmlString, anchorCell) {
   }
 }
 
+/** Reject HTML matrices that stack a whole report into col1 (agent_period fig). */
+function textFormatMatrixLooksCol1Stacked(dataMatrix) {
+  if (!Array.isArray(dataMatrix) || !dataMatrix.length) return false;
+  const nonEmptyCols = (row) =>
+    (row || []).filter((cell) => String(cell?.value ?? cell ?? "").trim()).length;
+  const maxFilled = Math.max(...dataMatrix.map(nonEmptyCols), 0);
+  const stackedRows = dataMatrix.filter((row) => {
+    const text = String(row?.[0]?.value ?? row?.[0] ?? "")
+      .replace(/\u00a0/g, " ")
+      .trim();
+    const lineHits = text.split(/\r?\n/).filter((line) => line.trim()).length;
+    const moneyHits = (text.match(/\$[\d,]+(?:\.\d+)?/g) || []).length;
+    return lineHits >= 3 || moneyHits >= 3;
+  }).length;
+  return stackedRows >= 1 && maxFilled <= 2;
+}
+
 /**
  * 1.Text format-merge mode: preserve text + style and expand rowspan occupancy.
  */
@@ -176,6 +193,13 @@ export function parseAndFillHtmlTableForTextWithFormat(htmlString, anchorCell) {
     const dataMatrix = splitStackedSubtotalGrandTotalRows(
       buildRowPatchesWithSpanOccupancy(allRows, maxCols),
     );
+
+    // Same symptom as 2.FORMAT collapsed bodies: toast may say 3×9 while col1
+    // shows a vertical field dump — reject so Plan B / plain can win.
+    if (textFormatMatrixLooksCol1Stacked(dataMatrix)) {
+      console.log("1.Text format-merge: rejecting col1-stacked matrix (will try plain reshape)");
+      return false;
+    }
 
     const { successCount, maxRows, maxCols: cols } = applyDataMatrixToGrid(dataMatrix, anchorCell, {
       trimValues: false,

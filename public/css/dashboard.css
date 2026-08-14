@@ -871,6 +871,240 @@ body.dashboard-page.transaction-page .dashboard-filter-panel .user-gc-inline-pan
     gap: var(--dashboard-section-gap);
 }
 
+/* Scope switch pending: keep Filter bright; FB-style skeleton over KPI/chart/pie. */
+.dashboard-data-surface {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--dashboard-section-gap);
+    flex: 1;
+    min-height: 0;
+}
+
+.dashboard-data-surface__live {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dashboard-section-gap);
+    flex: 1;
+    min-height: 0;
+    /* No opacity fade — crossfade made old KPI bleed under the skeleton (95→All flicker). */
+}
+
+.dashboard-data-surface.is-scope-pending .dashboard-data-surface__live {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.dashboard-data-surface.is-scope-pending {
+    pointer-events: none;
+}
+
+.dashboard-scope-skeleton {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: var(--dashboard-section-gap);
+    min-height: 0;
+    pointer-events: none;
+    /* Opaque fill so card gaps never reveal the previous scope underneath. */
+    background: #eef4fc;
+    border-radius: 16px;
+}
+
+.dashboard-scope-skeleton__kpi-card,
+.dashboard-scope-skeleton__panel {
+    background: #ffffff;
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    min-width: 0;
+}
+
+.dashboard-scope-skeleton__kpi-card {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(10px, 0.9vw, 14px);
+    padding: clamp(16px, 1.25vw, 22px) clamp(18px, 1.4vw, 24px);
+}
+
+.dashboard-scope-skeleton__kpi-head {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 0.65vw, 10px);
+}
+
+.dashboard-scope-skeleton__panels {
+    flex: 1;
+    min-height: 0;
+}
+
+.dashboard-scope-skeleton__panel {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(12px, 1vw, 16px);
+    padding: clamp(16px, 1.25vw, 22px);
+    min-height: 0;
+    overflow: hidden;
+}
+
+.dashboard-scope-skeleton__panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.dashboard-scope-skeleton__chart-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+
+.dashboard-scope-skeleton__summary-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.dashboard-scope-skeleton__rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: auto;
+}
+
+.dashboard-skel-bar {
+    display: block;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 45%, #e2e8f0 90%);
+    background-size: 200% 100%;
+    animation: dashboard-skel-shimmer 1.15s ease-in-out infinite;
+}
+
+.dashboard-skel-bar--icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.dashboard-skel-bar--label {
+    width: 42%;
+    max-width: 110px;
+    height: 12px;
+}
+
+.dashboard-skel-bar--value {
+    width: 58%;
+    max-width: 160px;
+    height: clamp(22px, 2vw, 28px);
+    border-radius: 8px;
+}
+
+.dashboard-skel-bar--foot {
+    width: 48%;
+    max-width: 140px;
+    height: 10px;
+}
+
+.dashboard-skel-bar--title {
+    width: 36%;
+    max-width: 140px;
+    height: 14px;
+}
+
+.dashboard-skel-bar--pill {
+    width: 150px;
+    max-width: 42%;
+    height: 28px;
+    border-radius: 999px;
+}
+
+.dashboard-skel-bar--chart {
+    flex: 1;
+    width: 100%;
+    min-height: 120px;
+    border-radius: 12px;
+}
+
+.dashboard-skel-bar--hero-label {
+    width: 72px;
+    height: 10px;
+}
+
+.dashboard-skel-bar--hero-value {
+    width: 120px;
+    height: 28px;
+    border-radius: 8px;
+}
+
+.dashboard-skel-bar--donut {
+    width: min(148px, 46%);
+    aspect-ratio: 1;
+    height: auto;
+    margin: 4px auto;
+    border-radius: 50%;
+    flex-shrink: 0;
+    /* Ring look: hollow center like a pie placeholder */
+    -webkit-mask: radial-gradient(circle at center, transparent 52%, #000 54%);
+    mask: radial-gradient(circle at center, transparent 52%, #000 54%);
+}
+
+.dashboard-skel-bar--row {
+    width: 100%;
+    height: 12px;
+}
+
+@keyframes dashboard-skel-shimmer {
+    0% {
+        background-position: 100% 0;
+    }
+
+    100% {
+        background-position: -100% 0;
+    }
+}
+
+/* FX-wait shimmer for currency amounts — holds the amount cell instead of painting
+   native figures that jump to converted when rates land (dashboard-currency-lag look). */
+.dashboard-amount-shimmer {
+    display: inline-block;
+    width: 84px;
+    height: 16px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 45%, #e2e8f0 90%);
+    background-size: 200% 100%;
+    animation: dashboard-skel-shimmer 1.15s ease-in-out infinite;
+}
+
+.dashboard-summary-hero-value .dashboard-amount-shimmer {
+    width: 120px;
+    height: 28px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-skel-bar {
+        animation: none;
+        background: #e2e8f0;
+    }
+
+    .dashboard-amount-shimmer {
+        animation: none;
+        background: #e2e8f0;
+    }
+
+    .dashboard-data-surface__live {
+        transition: none;
+    }
+}
+
 .dashboard-card {
     background-color: var(--scd-card);
     border: 1px solid var(--scd-border);
@@ -992,12 +1226,13 @@ body.dashboard-page.transaction-page .dashboard-filter-panel .user-gc-inline-pan
     font-variant-numeric: tabular-nums;
 }
 
-.dashboard-animated-value.is-rising {
-    animation: dashboard-value-rise 0.9s var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1)) both;
-}
-
-.dashboard-animated-value.is-falling {
-    animation: dashboard-value-fall 0.9s var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1)) both;
+.dashboard-animated-value.is-rising,
+.dashboard-animated-value.is-falling,
+.dashboard-summary-pie-chart-shell.is-enter,
+.dashboard-summary-pie-chart-shell.is-enter::after,
+.dashboard-summary-pie-center.is-enter,
+.dashboard-summary-pie-wrap.is-flow-idle .dashboard-summary-pie-chart-shell {
+    animation: none !important;
 }
 
 @keyframes dashboard-value-rise {
@@ -1217,6 +1452,77 @@ body.dashboard-page.transaction-page .dashboard-filter-panel .user-gc-inline-pan
     width: 100%;
     height: 100%;
     min-height: inherit;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 6px 0 4px;
+}
+
+/* Trend chart reveal — same quiet-then-bloom language as the Currency card:
+   the real chart only ever mounts once its data is complete, so a one-shot
+   entrance animation (not a class-toggled transition) is enough here. */
+.dashboard-panel-chart-real {
+    width: 100%;
+    height: 100%;
+    animation: dashboard-chart-reveal-bloom 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes dashboard-chart-reveal-bloom {
+    from {
+        opacity: 0;
+        transform: scale(0.97);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-panel-chart-real {
+        animation: none;
+    }
+}
+
+.dashboard-panel-chart-placeholder-line {
+    display: block;
+    width: 100%;
+    height: 1px;
+    background: #e5e7eb;
+}
+
+/* Loading placeholder gently breathes while the chart's heavier fetch resolves —
+   reads as "data is coming" instead of a dead blank surface. */
+.dashboard-panel-chart-placeholder-line {
+    animation: dashboard-placeholder-breathe 1.6s ease-in-out infinite;
+}
+
+.dashboard-panel-chart-placeholder-line:nth-child(2) {
+    animation-delay: 0.25s;
+}
+
+.dashboard-panel-chart-placeholder-line:nth-child(3) {
+    animation-delay: 0.5s;
+}
+
+.dashboard-panel-chart-placeholder-line:nth-child(4) {
+    animation-delay: 0.75s;
+}
+
+@keyframes dashboard-placeholder-breathe {
+    0%,
+    100% {
+        opacity: 0.35;
+    }
+
+    50% {
+        opacity: 0.9;
+    }
+}
+
+.dashboard-panel-chart-placeholder-line--base {
+    background: #cbd5e1;
 }
 
 .dashboard-panel-chart-body.is-scope-morph {
@@ -1602,6 +1908,114 @@ body.dashboard-page.transaction-page .dashboard-filter-panel .user-gc-inline-pan
     color: var(--summary-text-muted);
     font-family: var(--summary-font);
     line-height: 1.3;
+}
+
+/* Currency card reveal — content stays fully hidden (not "loading", just quiet)
+   until data is complete, then blooms in from the center with a scale + fade.
+   Transition lives only on .is-revealed so hiding (scope switch, going back to
+   not-ready) snaps instantly — only the reveal itself animates, never a retract. */
+.dashboard-summary-reveal {
+    opacity: 0;
+    transform: scale(0.85);
+    transform-origin: center;
+}
+
+/* KPI cards paint instantly — no scale/fade reveal, no waiting behind the heavier
+   per-company × currency fan-out. Their value shows 0.00 while a scope loads and
+   snaps to real figures when data lands (user feedback: KPI must not animate). */
+.dashboard-kpi-card .dashboard-summary-reveal {
+    opacity: 1;
+    transform: none;
+}
+
+.dashboard-kpi-card .dashboard-summary-reveal.is-revealed {
+    transition: none;
+}
+
+.dashboard-summary-reveal.is-revealed {
+    opacity: 1;
+    transform: scale(1);
+    transition:
+        opacity 1.1s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Layered reveal: the hero + pie (top row) resolves with its own fetch and should
+   surface fast; the currency list below follows, with each row stepping in as the
+   progressive per-currency data lands — reads as data streaming in, not one big
+   delayed pop. (User feedback: pick per-block pacing to match API arrival.) */
+.dashboard-summary-top-row.dashboard-summary-reveal.is-revealed {
+    transition:
+        opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dashboard-summary-currency-list.dashboard-summary-reveal.is-revealed {
+    transition:
+        opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dashboard-summary-currency-list.is-revealed .dashboard-summary-currency-row {
+    opacity: 0;
+    transform: translateY(4px);
+}
+
+.dashboard-summary-currency-list.is-revealed .dashboard-summary-currency-row {
+    animation: dashboard-row-step-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.dashboard-summary-currency-list.is-revealed .dashboard-summary-currency-row:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.dashboard-summary-currency-list.is-revealed .dashboard-summary-currency-row:nth-child(2) {
+    animation-delay: 0.06s;
+}
+
+.dashboard-summary-currency-list.is-revealed .dashboard-summary-currency-row:nth-child(3) {
+    animation-delay: 0.12s;
+}
+
+.dashboard-summary-currency-list.is-revealed .dashboard-summary-currency-row:nth-child(4) {
+    animation-delay: 0.18s;
+}
+
+.dashboard-summary-currency-list.is-revealed .dashboard-summary-currency-row:nth-child(5) {
+    animation-delay: 0.24s;
+}
+
+.dashboard-summary-currency-list.is-revealed .dashboard-summary-currency-row:nth-child(n + 6) {
+    animation-delay: 0.3s;
+}
+
+@keyframes dashboard-row-step-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-summary-reveal.is-revealed {
+        transition: none;
+    }
+
+    .dashboard-summary-currency-list.is-revealed .dashboard-summary-currency-row {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+
+    .dashboard-panel-chart-placeholder-line {
+        animation: none;
+        opacity: 0.6;
+    }
 }
 
 .dashboard-summary-compare {
@@ -3100,14 +3514,22 @@ body.dashboard-page.transaction-page .dashboard-filter-panel .user-gc-inline-pan
 
 /* KPI 單行：覆蓋舊版 grid 2 欄媒體查詢（2026-06） */
 body.dashboard-page .dashboard-content > .dashboard-kpi-grid,
-body.ec-auth-shell .dashboard-content > .dashboard-kpi-grid {
+body.dashboard-page .dashboard-content > .dashboard-data-surface > .dashboard-kpi-grid,
+body.dashboard-page .dashboard-content > .dashboard-data-surface > .dashboard-data-surface__live > .dashboard-kpi-grid,
+body.ec-auth-shell .dashboard-content > .dashboard-kpi-grid,
+body.ec-auth-shell .dashboard-content > .dashboard-data-surface > .dashboard-kpi-grid,
+body.ec-auth-shell .dashboard-content > .dashboard-data-surface > .dashboard-data-surface__live > .dashboard-kpi-grid {
     display: flex !important;
     flex-wrap: nowrap !important;
     align-items: stretch;
 }
 
 body.dashboard-page .dashboard-content > .dashboard-kpi-grid .dashboard-kpi-card,
-body.ec-auth-shell .dashboard-content > .dashboard-kpi-grid .dashboard-kpi-card {
+body.dashboard-page .dashboard-content > .dashboard-data-surface > .dashboard-kpi-grid .dashboard-kpi-card,
+body.dashboard-page .dashboard-content > .dashboard-data-surface > .dashboard-data-surface__live > .dashboard-kpi-grid .dashboard-kpi-card,
+body.ec-auth-shell .dashboard-content > .dashboard-kpi-grid .dashboard-kpi-card,
+body.ec-auth-shell .dashboard-content > .dashboard-data-surface > .dashboard-kpi-grid .dashboard-kpi-card,
+body.ec-auth-shell .dashboard-content > .dashboard-data-surface > .dashboard-data-surface__live > .dashboard-kpi-grid .dashboard-kpi-card {
     flex: 1 1 0 !important;
     min-width: 0 !important;
 }

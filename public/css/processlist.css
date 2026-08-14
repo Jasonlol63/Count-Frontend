@@ -561,12 +561,15 @@
     display: inline !important;
 }
 
-/* Bank Selection Modal — dual column + footer (matches Country Selection layout) */
+/* Bank Selection Modal — dual column + footer (size/look matches Country Selection) */
+body.process-page #bankSelectionModal .modal-content.bank-selection-modal,
+.process-page #bankSelectionModal .modal-content.bank-selection-modal,
+#bankSelectionModal .modal-content.bank-selection-modal,
 .process-page .modal-content.bank-selection-modal,
 .modal-content.bank-selection-modal {
-    width: min(56.25rem, 94vw);
-    max-width: 56.25rem;
-    max-height: min(90vh, 640px);
+    width: min(85rem, 96vw) !important;
+    max-width: 85rem !important;
+    max-height: min(92vh, 720px) !important;
     display: flex;
     flex-direction: column;
     overflow: hidden !important;
@@ -576,7 +579,7 @@
 .bank-selection-modal-header.modal-header {
     flex: 0 0 auto;
     position: relative;
-    padding: 14px 40px 12px 18px;
+    padding: 18px 48px 16px 24px;
     border-bottom: 1px solid #e5e7eb;
     background: #fff;
 }
@@ -602,19 +605,19 @@
     align-items: stretch !important;
     flex: 1 1 auto;
     min-height: 0;
-    padding: 14px 18px 16px;
+    padding: 20px 28px 24px;
     overflow: hidden;
 }
 
 .bank-selection-container {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 1.25rem;
+    column-gap: 2rem;
     align-items: stretch;
     flex: 1 1 auto;
     min-height: 0;
-    height: min(52vh, 420px);
-    max-height: min(52vh, 420px);
+    height: min(58vh, 480px);
+    max-height: min(58vh, 480px);
 }
 
 #bankSelectionModal .available-banks-section {
@@ -727,11 +730,14 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
-/* Grid 第 4 行：填满剩余高度并在内部滚动（勿用 height:auto，否则会被外层裁切且无滚动条） */
+/* Grid 第 4 行：填满剩余高度并在内部滚动（与 Country Selection 列表样式一致） */
 #bankSelectionModal #existingBanks.bank-list,
 #bankSelectionModal .bank-list {
     grid-row: 4;
     align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     min-height: 0 !important;
     height: 100% !important;
     max-height: 100% !important;
@@ -744,8 +750,8 @@
     scrollbar-gutter: stable;
     border: 1px solid #dbe3ee;
     border-radius: 8px;
-    padding: 6px 4px;
-    background: #fff;
+    padding: 10px;
+    background: #f1f5f9;
 }
 
 #bankSelectionModal .selected-banks-list {
@@ -761,10 +767,10 @@
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
     scrollbar-gutter: stable;
-    border: 1px solid #dbe3ee;
+    border: 1px solid #bfdbfe;
     border-radius: 8px;
     padding: 10px;
-    background: #fff;
+    background: #f0f9ff;
 }
 
 /* Bank modal scrollbars: app-wide — dashboard-scrollbar.css */
@@ -793,25 +799,33 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 10px;
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    padding: 6px 8px;
-    margin: 0 0 4px;
+    padding: 10px 12px;
+    margin: 0;
     border-radius: 8px;
     cursor: pointer;
-    border: 1px solid transparent;
-    transition: background 0.15s, border-color 0.15s;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .modal-content.bank-selection-modal .bank-list .country-item-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     flex: 1;
     min-width: 0;
 }
 
 .modal-content.bank-selection-modal .bank-list .country-item-code {
     display: block;
+    font-size: var(--text-small, 13px);
+    font-family: var(--font-ui);
+    font-weight: 600;
+    color: #334155;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -820,16 +834,38 @@
 .modal-content.bank-selection-modal .bank-list .country-list-delete,
 .modal-content.bank-selection-modal .bank-list .remove-country-modal {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.modal-content.bank-selection-modal .bank-list .country-list-delete:hover,
+.modal-content.bank-selection-modal .bank-list .remove-country-modal:hover {
+    color: #dc2626;
+    background: transparent;
+}
+
+.modal-content.bank-selection-modal .bank-list .country-list-delete-icon {
+    display: block;
 }
 
 .modal-content.bank-selection-modal .selected-banks-list .selected-country-modal-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    margin: 0 0 6px;
-    background: #e8f4fd;
-    border: 1px solid #64b5f6;
+    gap: 10px;
+    padding: 10px 12px;
+    margin: 0 0 8px;
+    background: #dbeafe;
+    border: 1px solid #3b82f6;
     border-radius: 8px;
     box-sizing: border-box;
     width: 100%;
@@ -845,14 +881,23 @@
     min-width: 0;
     font-size: var(--text-small, 13px);
     font-weight: 600;
-    color: #1565c0;
+    color: #1d4ed8;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.modal-content.bank-selection-modal .selected-banks-list .remove-country-modal {
+    color: #1d4ed8;
+}
+
+.modal-content.bank-selection-modal .selected-banks-list .remove-country-modal:hover {
+    background-color: #1d4ed8;
+    color: #fff;
+}
+
 .modal-content.bank-selection-modal .selected-banks-list .no-countries {
-    padding: 1.5rem 12px;
+    padding: 2rem 12px;
 }
 
 .modal-content.bank-selection-modal .bank-list .country-item:last-child {
@@ -860,12 +905,14 @@
 }
 
 .modal-content.bank-selection-modal .bank-list .country-item:hover {
-    background: #f1f5f9;
+    background: #f8fafc;
+    border-color: #94a3b8;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .modal-content.bank-selection-modal .bank-list .country-item.is-picked {
-    background: #e8f4fd;
-    border-color: #90caf9;
+    background: #e2e8f0;
+    border-color: #64748b;
 }
 
 .bank-selection-modal-footer.modal-footer {
@@ -874,8 +921,8 @@
     flex-direction: row;
     justify-content: flex-end;
     align-items: center;
-    gap: 10px;
-    padding: 12px 18px 14px;
+    gap: 12px;
+    padding: 16px 28px 18px;
     border-top: 1px solid #e5e7eb;
     background: #fff;
 }
@@ -912,19 +959,26 @@
 @media (max-width: 720px) {
     .bank-selection-container {
         grid-template-columns: 1fr;
+        height: auto;
         max-height: none;
         row-gap: 1rem;
     }
 
-    .available-banks-section {
+    #bankSelectionModal .available-banks-section {
         border-right: none;
         padding-right: 0;
         border-bottom: 1px solid #e8ecf1;
         padding-bottom: 12px;
     }
 
-    .selected-banks-section {
+    #bankSelectionModal .selected-banks-section {
         padding-left: 0;
+    }
+
+    #bankSelectionModal #existingBanks.bank-list,
+    #bankSelectionModal .selected-banks-list {
+        min-height: 200px !important;
+        height: 200px !important;
     }
 }
 
@@ -1981,6 +2035,9 @@ body.ec-auth-shell .process-page #addBankModal .bank-remark-actions .bank-note-o
     background: linear-gradient(90deg, #94a3b8, #64748b);
 }
 
+/*
+ * Record (DTS)：灰底保留只读语义；字号/字重靠近可填字段，避免「过小过灰」造成不统一观感。
+ */
 #addBankModal .bank-form-dts-readonly {
     display: flex;
     justify-content: space-between;
@@ -1989,25 +2046,28 @@ body.ec-auth-shell .process-page #addBankModal .bank-remark-actions .bank-note-o
     width: 100%;
     box-sizing: border-box;
     margin-top: 2px;
-    padding: 8px 10px;
-    min-height: clamp(2.5rem, 2.25vw, 3rem);
+    padding: 0.625rem 0.875rem;
+    min-height: 4rem;
     background-color: #f8fafc;
     border: 1px solid #dbe3ee;
-    border-radius: 0.42rem;
-    color: #1f2937;
-    font-size: var(--text-small);
-    font-family: var(--font-ui);
-    line-height: 1.35;
+    border-radius: 0.52rem;
+    color: var(--bank-form-field-text, #0f172a);
+    font-size: var(--text-small) !important;
+    font-family: var(--font-ui) !important;
+    font-weight: 700 !important;
+    line-height: 1.4;
 }
 
 #addBankModal .bank-form-dts-readonly span {
     min-width: 0;
+    font-weight: 700 !important;
 }
 
 #addBankModal .bank-form-dts-readonly-user {
-    font-weight: 600;
+    font-weight: 700 !important;
     flex-shrink: 0;
     text-align: right;
+    color: var(--bank-form-field-text, #0f172a);
 }
 
 @media (max-width: 900px) {
@@ -2174,17 +2234,31 @@ body.ec-auth-shell .process-page #addBankModal .bank-remark-actions .bank-note-o
 #addBankModal .bank-form .custom-select-button,
 #addBankModal .bank-form .account-select-with-buttons .custom-select-button {
     color: var(--bank-form-field-text) !important;
+    /*font-weight: 700 !important;*/
+}
+
+/* 可填控件：压过 global-13inch 的 11px，与下拉同字号/高度，观感统一 */
+#addBankModal .bank-form .bank-input,
+#addBankModal .bank-form .bank-form-datepicker-input {
+    font-size: var(--text-small) !important;
+    font-family: var(--font-ui) !important;
+    min-height: 4rem !important;
+    padding: 0.625rem 0.875rem !important;
+    line-height: 1.4;
+    box-sizing: border-box;
 }
 
 #addBankModal .bank-form .bank-input::placeholder,
 #addBankModal .bank-form .bank-form-datepicker-input::placeholder {
     color: var(--bank-form-placeholder-text) !important;
+    font-weight: 400 !important;
     opacity: 1;
 }
 
 #addBankModal .bank-form .custom-select-button.simple-select-button--placeholder,
 #addBankModal .bank-form .account-select-with-buttons .custom-select-button.simple-select-button--placeholder {
     color: var(--bank-form-placeholder-text) !important;
+    font-weight: 400 !important;
 }
 
 #addBankModal .bank-form .custom-select-button::after {
@@ -2469,11 +2543,25 @@ body.ec-auth-shell .process-page #addBankModal .bank-remark-actions .bank-note-o
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    transition: none;
+    animation: none;
+    outline: none;
+    box-shadow: none;
 }
 
 #addBankModal .bank-form-datepicker-clear:hover,
-#confirmBankResendModal .bank-form-datepicker-clear:hover {
+#confirmBankResendModal .bank-form-datepicker-clear:hover,
+#addBankModal .bank-form-datepicker-clear:active,
+#confirmBankResendModal .bank-form-datepicker-clear:active,
+#addBankModal .bank-form-datepicker-clear:focus,
+#confirmBankResendModal .bank-form-datepicker-clear:focus,
+#addBankModal .bank-form-datepicker-clear:focus-visible,
+#confirmBankResendModal .bank-form-datepicker-clear:focus-visible {
     color: #475569;
+    transform: translateY(-50%);
+    outline: none;
+    box-shadow: none;
+    animation: none;
 }
 
 body.process-page .calendar-popup-clear-wrap {
@@ -2550,6 +2638,72 @@ body.process-page .calendar-popup.calendar-popup--transaction-range.calendar-pop
     grid-template-columns: 1fr;
     width: min(292px, calc(100vw - 24px));
     max-width: calc(100vw - 24px);
+}
+
+/* Add/Edit Bank Process: isolated range calendar with no Period column. */
+body.process-page.process-page--bank .bank-form-range-calendar {
+    position: fixed;
+    min-width: 0;
+    max-width: calc(100vw - 24px);
+    max-height: none;
+    padding: 0;
+    overflow: hidden;
+    z-index: 10150;
+}
+
+body.process-page.process-page--bank .bank-form-range-calendar .transaction-calendar-panel,
+body.process-page.process-page--bank .bank-form-range-calendar .calendar-header,
+body.process-page.process-page--bank .bank-form-range-calendar .calendar-weekdays,
+body.process-page.process-page--bank .bank-form-range-calendar .calendar-days {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+}
+
+body.process-page.process-page--bank .bank-form-range-calendar .calendar-day {
+    appearance: none;
+    min-width: 0;
+    border: 1px solid transparent;
+    font-family: var(--font-heading-page);
+}
+
+/* Same today outline as the toolbar Period picker (#calendar-popup). */
+body.process-page.process-page--bank .bank-form-range-calendar .calendar-day.today:not(.start-date):not(.end-date):not(.selected) {
+    border-color: rgba(37, 99, 235, 0.55);
+    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.18);
+}
+
+body.process-page.process-page--bank .bank-form-range-calendar .calendar-month-year {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    gap: 6px;
+    overflow: visible;
+}
+
+body.process-page.process-page--bank .bank-form-range-calendar .calendar-month-year select {
+    appearance: none;
+    -webkit-appearance: none;
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    min-height: 32px;
+    padding: 5px 26px 5px 10px;
+    border: 1px solid rgba(203, 213, 225, 0.86);
+    border-radius: 8px;
+    /* Custom chevron: native select arrow overlapped the bold text at narrow widths. */
+    background: #ffffff url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 9px center;
+    color: #334155;
+    font-family: var(--font-heading-page);
+    font-size: var(--text-small);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+body.process-page.process-page--bank .bank-form-range-calendar .calendar-month-year select:hover,
+body.process-page.process-page--bank .bank-form-range-calendar .calendar-month-year select:focus {
+    outline: none;
+    border-color: #3b82f6;
 }
 
 body.process-page.process-page--bank .calendar-popup.calendar-popup--transaction-range:not(.calendar-popup--no-presets) {
@@ -3358,8 +3512,8 @@ body.process-page .custom-select-dropdown.custom-select-dropdown-portal .custom-
 
 /* modal-content 覆盖全局 88% 宽度：固定宽度填满弹窗，随行数增加高度自然增长 */
 #profitSharingModal .modal-content {
-    width: min(640px, 92vw) !important;
-    max-width: min(640px, 92vw) !important;
+    width: min(520px, 85vw) !important;
+    max-width: min(520px, 85vw) !important;
     max-height: none !important;
     height: auto !important;
     overflow: visible !important;
@@ -3490,9 +3644,9 @@ body.process-page .custom-select-dropdown.custom-select-dropdown-portal .custom-
 /* Profit Sharing 弹窗：Account 列略宽；Amount+删除铺满右侧 */
 #profitSharingModal #profitSharingRowsContainer .profit-sharing-row {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) 15px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 0.8fr) 8px minmax(0, 0.6fr);
     grid-template-rows: auto auto;
-    column-gap: 8px;
+    column-gap: 0px;
     row-gap: 6px;
     align-items: center;
     margin-bottom: 15px;
@@ -3643,21 +3797,132 @@ body.process-page .custom-select-dropdown.custom-select-dropdown-portal .custom-
     box-sizing: border-box;
 }
 
+#profitSharingModal .profit-sharing-amount-mode-btn {
+    width: 3.3rem;
+    height: 3.3rem;
+    min-width: 3.3rem;
+    padding: 0;
+    border-radius: 0.52rem;
+    border: 1px solid #cbd5e1;
+    background: linear-gradient(180deg, #ffffff 0%, #e9edf3 100%);
+    color: #64748b;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: var(--text-small);
+    font-family: var(--font-ui);
+    font-weight: var(--font-weight-semibold);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+#profitSharingModal .profit-sharing-amount-mode-btn:hover {
+    background: linear-gradient(180deg, #eaf2ff 0%, #cfe3ff 100%);
+    border-color: #0d60ff;
+    color: #0b52db;
+    transform: translateY(-1px) scale(1.06);
+    box-shadow: 0 4px 10px rgba(13, 96, 255, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+#profitSharingModal .profit-sharing-amount-mode-btn:active {
+    transform: translateY(0) scale(0.97);
+    box-shadow: 0 1px 2px rgba(13, 96, 255, 0.2);
+}
+
+#profitSharingModal .profit-sharing-amount-mode-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.3);
+}
+
+#profitSharingModal .profit-sharing-amount-mode-btn.is-active {
+    border-color: rgba(13, 96, 255, 0.45);
+    background: rgba(13, 96, 255, 0.12);
+    color: #0d60ff;
+    box-shadow: 0 1px 2px rgba(13, 96, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+#profitSharingModal .profit-sharing-amount-mode-btn.is-active:hover {
+    background: rgba(13, 96, 255, 0.18);
+    border-color: rgba(13, 96, 255, 0.55);
+    color: #0b52db;
+}
+
+#profitSharingModal .profit-sharing-amount-mode-btn.is-active:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(13, 96, 255, 0.25);
+}
+
+#profitSharingModal .profit-sharing-amount[readonly] {
+    background: #f1f5f9;
+    color: #64748b;
+    cursor: not-allowed;
+}
+
+#profitSharingModal .profit-sharing-percent-input-wrap {
+    display: flex;
+    align-items: stretch;
+    width: 9.6rem;
+    height: 3.3rem;
+    flex-shrink: 0;
+    border: 1px solid rgba(13, 96, 255, 0.45);
+    border-radius: 0.52rem;
+    overflow: hidden;
+    background: rgba(13, 96, 255, 0.07);
+    box-shadow: 0 1px 2px rgba(13, 96, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+#profitSharingModal .profit-sharing-percent-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: none;
+    outline: none;
+    padding: 0 0.9rem;
+    font-size: var(--text-medium);
+    font-family: var(--font-ui);
+    font-weight: var(--font-weight-semibold);
+    color: #0d60ff;
+    background: transparent;
+    box-sizing: border-box;
+}
+
+#profitSharingModal .profit-sharing-percent-suffix-btn {
+    flex-shrink: 0;
+    width: 3.3rem;
+    padding: 0;
+    border: none;
+    border-left: 1px solid rgba(13, 96, 255, 0.28);
+    background: rgba(13, 96, 255, 0.12);
+    color: #0d60ff;
+    font-size: var(--text-medium);
+    font-family: var(--font-ui);
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease;
+}
+
+#profitSharingModal .profit-sharing-percent-suffix-btn:hover {
+    background: rgba(13, 96, 255, 0.2);
+    color: #0b52db;
+}
+
 #profitSharingModal .profit-sharing-delete-row-btn {
     width: 3.3rem;
     height: 3.3rem;
     min-width: 3.3rem;
     padding: 0;
     border-radius: 0.52rem;
-    border: 1px solid #e2e8f0;
-    background: #f8fafc;
-    color: #94a3b8;
+    border: 1px solid #cbd5e1;
+    background: linear-gradient(180deg, #ffffff 0%, #e9edf3 100%);
+    color: #64748b;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 #profitSharingModal .profit-sharing-delete-row-spacer {
@@ -3673,64 +3938,88 @@ body.process-page .custom-select-dropdown.custom-select-dropdown-portal .custom-
 }
 
 #profitSharingModal .profit-sharing-delete-row-btn:hover {
-    background: #fef2f2;
+    background: linear-gradient(180deg, #fef2f2 0%, #fecaca 100%);
     color: #dc2626;
-    border-color: #fecaca;
-    box-shadow: 0 1px 2px rgba(220, 38, 38, 0.08);
+    border-color: #dc2626;
+    transform: translateY(-1px) scale(1.06);
+    box-shadow: 0 4px 10px rgba(220, 38, 38, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+#profitSharingModal .profit-sharing-delete-row-btn:active {
+    transform: translateY(0) scale(0.97);
+    box-shadow: 0 1px 2px rgba(220, 38, 38, 0.2);
 }
 
 #profitSharingModal .profit-sharing-delete-row-btn:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25);
 }
 
-/* SOP Modal：固定弹窗尺寸与底部按钮 */
+/* SOP / Remark Modal：紧凑弹窗，高度随内容自适应 */
 .sop-modal .sop-modal-content {
-    width: 1000px;
-    height: 735px;
+    width: min(720px, 92vw);
+    height: auto;
     max-width: none;
     display: flex;
     flex-direction: column;
 }
 
+.sop-modal .modal-header {
+    border-bottom: 1px solid var(--color-border-muted, #e2e8f0);
+}
+
 .sop-modal .sop-modal-body {
     display: flex;
     flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
+    flex: none;
+    padding: 18px 22px 16px;
+    overflow: visible;
 }
 
 .sop-modal .sop-modal-textarea {
-    flex: 1;
-    min-height: 0;
+    flex: none;
     width: 100%;
-    resize: none;
+    min-height: 220px;
+    max-height: 56vh;
+    resize: vertical;
     box-sizing: border-box;
     font-size: var(--text-small);
+    line-height: 1.6;
     font-family: var(--font-ui);
+    color: #1f2937;
     border: 1px solid #dbe3ee;
-    border-radius: 0.52rem;
-    padding: 0.625rem 0.875rem;
+    border-radius: 0.8rem;
+    padding: 12px 14px;
+    background: #fbfdff;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.sop-modal .sop-modal-textarea::placeholder {
+    color: #94a3b8;
 }
 
 .sop-modal .sop-modal-textarea:focus {
     outline: none;
     border-color: #0D60FF;
+    background: #ffffff;
     box-shadow: 0 0 0 4px rgba(13, 96, 255, 0.08);
 }
 
 .sop-modal .sop-modal-actions {
     flex: none;
-    margin-top: 12px;
-    padding-top: 12px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 14px;
+    padding-top: 14px;
     border-top: 1px solid #e5e7eb;
 }
 
 .sop-modal .sop-modal-actions .btn {
     width: clamp(90px, 7vw, 130px);
     min-width: clamp(90px, 7vw, 130px);
+    margin: 0;
     padding: clamp(0.375rem, 0.42vw, 0.5rem) 1.25rem;
     font-size: var(--text-medium);
     font-family: var(--font-heading-page);
@@ -3887,15 +4176,19 @@ body.process-page .custom-select-dropdown.custom-select-dropdown-portal .custom-
     align-items: center;
     justify-content: center;
     line-height: 1;
-    font-size: 1.1rem;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.remove-profit-sharing-item-icon {
+    display: block;
     flex-shrink: 0;
 }
 
 .remove-profit-sharing-item:hover {
     background: #ef4444;
     color: white;
-    transform: rotate(90deg);
+    transform: scale(1.1);
 }
 

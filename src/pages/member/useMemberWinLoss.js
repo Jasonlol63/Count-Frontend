@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { getMemberText, translateMemberApiMessage } from "../../translateFile/pages/memberTranslate.js";
 import {
@@ -19,6 +19,21 @@ import {
   sanitizeCurrencySelection,
 } from "./memberPageHelpers.js";
 import { fetchAccountHistoryClosingBalance, mapBatchCurrencies, mapLinkedAccountsApiList, parseJsonResponse } from "./memberWinLossApi.js";
+import { useRealtimeDomain } from "../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS } from "../../lib/realtime/realtimeEvents.js";
+
+/**
+ * Empty-group members: $_SESSION['company_id'] resolved at login is an arbitrary
+ * linked subsidiary, not the ledger the account actually lives on. When the member
+ * logged in via a group code, scope every query by group_id instead of company_id.
+ */
+function scopeQueryFields(compId, gid) {
+  return gid ? { group_id: gid } : { company_id: String(compId) };
+}
+
+function hasScope(compId, gid) {
+  return Boolean(compId) || Boolean(gid);
+}
 
 export function useMemberWinLoss({ showNotification, lang }) {
   const t = useCallback((key, params) => getMemberText(lang, key, params), [lang]);
@@ -31,6 +46,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
   const [loginRootAccountId, setLoginRootAccountId] = useState(0);
   const [viewAccountId, setViewAccountId] = useState(0);
   const [companyId, setCompanyId] = useState(0);
+  const [groupId, setGroupId] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [linkedAccounts, setLinkedAccounts] = useState([]);
@@ -77,12 +93,13 @@ export function useMemberWinLoss({ showNotification, lang }) {
       [
         Number(viewId) || 0,
         Number(compId) || 0,
+        String(groupId || ""),
         String(from || ""),
         String(to || ""),
         useAll ? "all" : "sel",
         useAll ? "" : (useSelected || []).map((c) => String(c || "").trim().toUpperCase()).filter(Boolean).join(","),
       ].join("|"),
-    [],
+    [groupId],
   );
 
   const linkedAccountCurrenciesMapRef = useRef(linkedAccountCurrenciesMap);
@@ -90,24 +107,32 @@ export function useMemberWinLoss({ showNotification, lang }) {
 
   const loadCurrencyOrder = useCallback(async () => {
     try {
-      const res = await fetch(buildApiUrl("api/transactions/user_currency_order_api.php"), { credentials: "include" });
+      const params = new URLSearchParams(groupId ? { view_group: groupId } : {});
+      const qs = params.toString();
+      const res = await fetch(
+        buildApiUrl(`api/transactions/user_currency_order_api.php${qs ? `?${qs}` : ""}`),
+        { credentials: "include" },
+      );
       const json = await res.json();
       setCurrencyOrder(Array.isArray(json?.data?.order) ? json.data.order : []);
     } catch {
       setCurrencyOrder([]);
     }
-  }, []);
+  }, [groupId]);
 
-  const loadOwnedCurrencies = useCallback(async (accountId, compId) => {
-    if (!accountId || !compId) {
+  const loadOwnedCurrencies = useCallback(async (accountId, compId, gid) => {
+    if (!accountId || !hasScope(compId, gid)) {
       setOwnedCurrencies([]);
       return;
     }
     try {
+      const params = new URLSearchParams({
+        action: "get_account_currencies",
+        account_id: String(accountId),
+        ...scopeQueryFields(compId, gid),
+      });
       const res = await fetch(
-        buildApiUrl(
-          `api/accounts/account_currency_api.php?action=get_account_currencies&account_id=${accountId}&tenant_id=${compId}`,
-        ),
+        buildApiUrl(`api/accounts/account_currency_api.php?${params}`),
         { credentials: "include", cache: "no-store" },
       );
       const json = await parseJsonResponse(await res.text());
@@ -134,9 +159,9 @@ export function useMemberWinLoss({ showNotification, lang }) {
     }
   }, []);
 
-  const loadLinkedCurrenciesMap = useCallback(async (accounts, compId) => {
+  const loadLinkedCurrenciesMap = useCallback(async (accounts, compId, gid) => {
     const ids = accounts.map((a) => Number(a.id)).filter(Boolean);
-    if (!ids.length || !compId) {
+    if (!ids.length || !hasScope(compId, gid)) {
       setLinkedAccountCurrenciesMap(new Map());
       setLinkedCurrenciesLoaded(true);
       return;
@@ -146,7 +171,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
       const qs = new URLSearchParams({
         action: "get_batch_account_currencies",
         account_ids: ids.join(","),
-        company_id: String(compId),
+        ...scopeQueryFields(compId, gid),
         _t: String(Date.now()),
       });
       const res = await fetch(buildApiUrl(`api/accounts/account_currency_api.php?${qs}`), {
@@ -166,12 +191,15 @@ export function useMemberWinLoss({ showNotification, lang }) {
     }
   }, []);
 
-  const fetchLinkedAccountsForAccount = useCallback(async (accountId, compId) => {
-    if (!accountId || !compId) return [];
+  const fetchLinkedAccountsForAccount = useCallback(async (accountId, compId, gid) => {
+    if (!accountId || !hasScope(compId, gid)) return [];
+    const params = new URLSearchParams({
+      action: "get_all_linked_accounts",
+      account_id: String(accountId),
+      ...scopeQueryFields(compId, gid),
+    });
     const res = await fetch(
-      buildApiUrl(
-        `api/accounts/account_link_api.php?action=get_all_linked_accounts&account_id=${accountId}&tenant_id=${compId}`,
-      ),
+      buildApiUrl(`api/accounts/account_link_api.php?${params}`),
       { credentials: "include", cache: "no-store" },
     );
     const json = await parseJsonResponse(await res.text());
@@ -179,8 +207,8 @@ export function useMemberWinLoss({ showNotification, lang }) {
   }, []);
 
   const loadLinkedAccounts = useCallback(
-    async (rootId, compId) => {
-      if (!rootId || !compId) {
+    async (rootId, compId, gid) => {
+      if (!rootId || !hasScope(compId, gid)) {
         setLinkedAccounts([]);
         setWlGridSelectedIds([]);
         setLinkedAccountCurrenciesMap(new Map());
@@ -189,13 +217,13 @@ export function useMemberWinLoss({ showNotification, lang }) {
         return;
       }
       try {
-        const list = await fetchLinkedAccountsForAccount(rootId, compId);
+        const list = await fetchLinkedAccountsForAccount(rootId, compId, gid);
         setLinkedAccounts(list);
         const linkedIds = list.map((a) => Number(a.id)).filter(Boolean);
         const selectedIds = applyDefaultWLGridSelection(linkedIds, compId, rootId);
         wlGridSelectedIdsRef.current = selectedIds;
         setWlGridSelectedIds(selectedIds);
-        await loadLinkedCurrenciesMap(list, compId);
+        await loadLinkedCurrenciesMap(list, compId, gid);
       } catch {
         setLinkedAccounts([]);
         setWlGridSelectedIds([]);
@@ -347,8 +375,8 @@ export function useMemberWinLoss({ showNotification, lang }) {
   );
 
   const fetchMissingMiniGridBalances = useCallback(
-    async (seq, gridCurrencies, fromDate, toDate, compId) => {
-      if (!linkedAccounts.length || !fromDate || !toDate || !compId) return;
+    async (seq, gridCurrencies, fromDate, toDate, compId, gid) => {
+      if (!linkedAccounts.length || !fromDate || !toDate || !hasScope(compId, gid)) return;
       const orderUpper = (gridCurrencies || []).map((c) => String(c || "").trim().toUpperCase()).filter(Boolean);
       if (!orderUpper.length) return;
       const orderedAccounts = getOrderedMiniGridAccounts(
@@ -374,7 +402,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
       try {
         const pairs = await Promise.all(
           missing.map(({ id, cu }) =>
-            fetchAccountHistoryClosingBalance(id, cu, fromDate, toDate, compId, signal).then((dec) => ({
+            fetchAccountHistoryClosingBalance(id, cu, fromDate, toDate, compId, gid, signal).then((dec) => ({
               id,
               cu,
               dec,
@@ -402,10 +430,10 @@ export function useMemberWinLoss({ showNotification, lang }) {
   );
 
   const refreshMiniGrid = useCallback(
-    async (seq, gridCurrencies, fromDate, toDate, viewId, compId) => {
+    async (seq, gridCurrencies, fromDate, toDate, viewId, compId, gid) => {
       if (seq === searchSeqRef.current) setMiniGridLoading(true);
       try {
-        if (!linkedAccounts.length || !fromDate || !toDate || !viewId || !compId) {
+        if (!linkedAccounts.length || !fromDate || !toDate || !viewId || !hasScope(compId, gid)) {
           setMiniGridBalances(new Map());
           miniGridBalancesRef.current = new Map();
           setMiniGridTotals(new Map());
@@ -459,7 +487,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
         );
         const pairs = await Promise.all(
           missing.map(({ id, cu }) =>
-            fetchAccountHistoryClosingBalance(id, cu, fromDate, toDate, compId, signal).then((dec) => ({
+            fetchAccountHistoryClosingBalance(id, cu, fromDate, toDate, compId, gid, signal).then((dec) => ({
               id,
               cu,
               dec,
@@ -507,7 +535,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
 
   const fetchMemberHistory = useCallback(
     async (seq = searchSeqRef.current, selectionOverride = null) => {
-      if (!viewAccountId || !companyId || !dateFrom || !dateTo) return;
+      if (!viewAccountId || !hasScope(companyId, groupId) || !dateFrom || !dateTo) return;
       if (historyAbortRef.current) historyAbortRef.current.abort();
       historyAbortRef.current = new AbortController();
       const signal = historyAbortRef.current.signal;
@@ -519,7 +547,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
         commitTableDisplayContext(false, [], [], availableCurrencies);
         finishHistoryFetch(seq);
         const gridCur = getMemberMiniGridCurrencies(availableCurrencies, false, []);
-        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId);
+        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId, groupId);
         return;
       }
       const cacheKey = buildViewCacheKey(viewAccountId, companyId, dateFrom, dateTo, useAll, useSelected);
@@ -529,7 +557,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
           account_id: String(viewAccountId),
           date_from: dateFrom,
           date_to: dateTo,
-          company_id: String(companyId),
+          ...scopeQueryFields(companyId, groupId),
         });
         try {
           const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params}&_t=${Date.now()}`), {
@@ -568,7 +596,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
           finishHistoryFetch(seq);
         }
         const gridCur = getMemberMiniGridCurrencies(availableCurrencies, useAll, useSelected);
-        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId);
+        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId, groupId);
         return;
       }
 
@@ -580,7 +608,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
                 account_id: String(viewAccountId),
                 date_from: dateFrom,
                 date_to: dateTo,
-                company_id: String(companyId),
+                ...scopeQueryFields(companyId, groupId),
                 currency: String(cu || "").trim().toUpperCase(),
               });
               const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params}&_t=${Date.now()}`), {
@@ -616,7 +644,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
           finishHistoryFetch(seq);
         }
         const gridCur = getMemberMiniGridCurrencies(availableCurrencies, useAll, useSelected);
-        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId);
+        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId, groupId);
         return;
       }
 
@@ -624,7 +652,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
         account_id: String(viewAccountId),
         date_from: dateFrom,
         date_to: dateTo,
-        company_id: String(companyId),
+        ...scopeQueryFields(companyId, groupId),
       });
       if (targetCurrencies[0]) params.append("currency", targetCurrencies[0]);
 
@@ -659,11 +687,12 @@ export function useMemberWinLoss({ showNotification, lang }) {
         finishHistoryFetch(seq);
       }
       const gridCur = getMemberMiniGridCurrencies(availableCurrencies, useAll, useSelected);
-      void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId);
+      void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId, groupId);
     },
     [
       viewAccountId,
       companyId,
+      groupId,
       dateFrom,
       dateTo,
       isAllSelected,
@@ -698,7 +727,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
 
   const fetchMemberSummary = useCallback(
     async (seq = searchSeqRef.current) => {
-      if (!viewAccountId || !companyId || !dateFrom || !dateTo) return false;
+      if (!viewAccountId || !hasScope(companyId, groupId) || !dateFrom || !dateTo) return false;
       if (summaryAbortRef.current) summaryAbortRef.current.abort();
       summaryAbortRef.current = new AbortController();
       try {
@@ -706,7 +735,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
           date_from: dateFrom,
           date_to: dateTo,
           target_account_id: String(viewAccountId),
-          company_id: String(companyId),
+          ...scopeQueryFields(companyId, groupId),
           show_inactive: "1",
           hide_zero_balance: "0",
         });
@@ -746,11 +775,11 @@ export function useMemberWinLoss({ showNotification, lang }) {
         return false;
       }
     },
-    [viewAccountId, companyId, dateFrom, dateTo, hasFallbackCurrencySources, notifyApi, t],
+    [viewAccountId, companyId, groupId, dateFrom, dateTo, hasFallbackCurrencySources, notifyApi, t],
   );
 
   const performMemberSearch = useCallback(async () => {
-    if (!viewAccountId || !companyId || !dateFrom || !dateTo) return;
+    if (!viewAccountId || !hasScope(companyId, groupId) || !dateFrom || !dateTo) return;
     searchSeqRef.current += 1;
     const seq = searchSeqRef.current;
     const preKey = buildViewCacheKey(
@@ -794,6 +823,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
   }, [
     viewAccountId,
     companyId,
+    groupId,
     dateFrom,
     dateTo,
     isAllSelected,
@@ -806,20 +836,28 @@ export function useMemberWinLoss({ showNotification, lang }) {
 
   performMemberSearchRef.current = performMemberSearch;
 
+  useRealtimeDomain(REALTIME_DOMAINS.LEDGER, () => {
+    void performMemberSearchRef.current?.();
+  }, { enabled: Boolean(viewAccountId && hasScope(companyId, groupId) && dateFrom && dateTo) });
+
   const initSession = useCallback((u, compId, from, to) => {
     const loginId = Number(u.member_login_account_id || u.user_id) || 0;
     const viewId = Number(u.member_winloss_view_account_id || u.winloss_view_account_id || u.user_id) || 0;
+    const gid = String(u?.login_scope || "").toLowerCase() === "group"
+      ? String(u?.login_identifier || "").trim().toUpperCase()
+      : "";
     setLoginRootAccountId(loginId);
     setViewAccountId(viewId);
     setCompanyId(Number(compId) || 0);
+    setGroupId(gid);
     setDateFrom(from);
     setDateTo(to);
   }, []);
 
   const reloadLinkedChain = useCallback(
-    async (rootId, compId) => {
+    async (rootId, compId, gid) => {
       setLinkedDataReady(false);
-      await loadLinkedAccounts(rootId, compId);
+      await loadLinkedAccounts(rootId, compId, gid);
     },
     [loadLinkedAccounts],
   );
@@ -828,7 +866,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
     async (nextCompanyId, companyLabel) => {
       if (!nextCompanyId || Number(nextCompanyId) === Number(companyId)) return;
       try {
-        const res = await fetch(buildApiUrl(`auth/switch-tenant?tenant_id=${nextCompanyId}`), {
+        const res = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${nextCompanyId}`), {
           credentials: "include",
         });
         const json = await parseJsonResponse(await res.text());
@@ -837,9 +875,10 @@ export function useMemberWinLoss({ showNotification, lang }) {
           window.updateSidebarDataCaptureVisibility(json.data.has_gambling, json.data.has_bank);
         }
         setCompanyId(Number(nextCompanyId));
+        setGroupId(""); // explicit company pill: leave group ledger scope
         showNotification(t("switchedToCompany", { label: companyLabel || nextCompanyId }), "success");
-        await reloadLinkedChain(loginRootAccountId, Number(nextCompanyId));
-        await loadOwnedCurrencies(viewAccountId, Number(nextCompanyId));
+        await reloadLinkedChain(loginRootAccountId, Number(nextCompanyId), "");
+        await loadOwnedCurrencies(viewAccountId, Number(nextCompanyId), "");
       } catch (e) {
         notifyApi(e?.message, "error", "failedSwitchCompany");
       }
@@ -863,12 +902,12 @@ export function useMemberWinLoss({ showNotification, lang }) {
           t("switchedToAccount", { label: payload.account_code || code || name || newId }),
           "success",
         );
-        await loadOwnedCurrencies(newId, companyId);
+        await loadOwnedCurrencies(newId, companyId, groupId);
       } catch (e) {
         notifyApi(e?.message, "error", "failedSwitchAccount");
       }
     },
-    [viewAccountId, companyId, loadOwnedCurrencies, performMemberSearch, notifyApi, showNotification, t],
+    [viewAccountId, companyId, groupId, loadOwnedCurrencies, performMemberSearch, notifyApi, showNotification, t],
   );
 
   const persistCurrencyOrder = useCallback(
@@ -878,7 +917,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ order: nextOrder }),
+          body: JSON.stringify({ order: nextOrder, ...(groupId ? { group_id: groupId } : {}) }),
         });
         const json = await parseJsonResponse(await res.text());
         if (json?.success) {
@@ -892,7 +931,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
         showNotification(t("saveOrderFailed"), "error");
       }
     },
-    [fetchMemberHistory, showNotification, t],
+    [groupId, fetchMemberHistory, showNotification, t],
   );
 
   const applyWlGridSelection = useCallback(
@@ -935,10 +974,11 @@ export function useMemberWinLoss({ showNotification, lang }) {
         sanitized.selectedCurrencies,
       );
       syncMiniGridTotalsAndHint(gridCur);
-      void fetchMissingMiniGridBalances(searchSeqRef.current, gridCur, dateFrom, dateTo, companyId);
+      void fetchMissingMiniGridBalances(searchSeqRef.current, gridCur, dateFrom, dateTo, companyId, groupId);
     },
     [
       companyId,
+      groupId,
       loginRootAccountId,
       linkedCurrenciesLoaded,
       linkedAccountCurrenciesMap,
@@ -1003,19 +1043,19 @@ export function useMemberWinLoss({ showNotification, lang }) {
   ]);
 
   useEffect(() => {
-    if (loginRootAccountId && companyId) {
-      reloadLinkedChain(loginRootAccountId, companyId);
+    if (loginRootAccountId && hasScope(companyId, groupId)) {
+      reloadLinkedChain(loginRootAccountId, companyId, groupId);
     }
-  }, [loginRootAccountId, companyId, reloadLinkedChain]);
+  }, [loginRootAccountId, companyId, groupId, reloadLinkedChain]);
 
   useEffect(() => {
-    if (viewAccountId && companyId) {
-      loadOwnedCurrencies(viewAccountId, companyId);
+    if (viewAccountId && hasScope(companyId, groupId)) {
+      loadOwnedCurrencies(viewAccountId, companyId, groupId);
     }
-  }, [viewAccountId, companyId, loadOwnedCurrencies]);
+  }, [viewAccountId, companyId, groupId, loadOwnedCurrencies]);
 
   useEffect(() => {
-    if (!linkedDataReady || !viewAccountId || !companyId || !dateFrom || !dateTo) return undefined;
+    if (!linkedDataReady || !viewAccountId || !hasScope(companyId, groupId) || !dateFrom || !dateTo) return undefined;
 
     let cancelled = false;
     (async () => {
@@ -1029,13 +1069,14 @@ export function useMemberWinLoss({ showNotification, lang }) {
       if (historyAbortRef.current) historyAbortRef.current.abort();
       if (gridAbortRef.current) gridAbortRef.current.abort();
     };
-  }, [linkedDataReady, viewAccountId, companyId, dateFrom, dateTo]);
+  }, [linkedDataReady, viewAccountId, companyId, groupId, dateFrom, dateTo]);
 
   return {
     loginRootAccountId,
     viewAccountId,
     companyId,
     setCompanyId,
+    groupId,
     dateFrom,
     setDateFrom,
     dateTo,

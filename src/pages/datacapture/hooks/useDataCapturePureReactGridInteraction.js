@@ -20,7 +20,7 @@ import {
   clearAllSelections,
   getSelectedCellPositions,
 } from "../grid/dataCaptureGridSelection.js";
-import { clearCellsInGrid } from "../grid/gridModel.js";
+import { clearCellsInGrid, clearGridCells } from "../grid/gridModel.js";
 import { undoLastPaste as undoPasteFromHistory, commitGridUndoCheckpoint } from "../grid/dataCaptureGridPasteHistory.js";
 import {
   appendColumnInGrid,
@@ -258,6 +258,18 @@ export function useDataCapturePureReactGridInteraction(engineReady) {
       recomputeSubmitState();
     };
 
+    const flushDraftAfterClear = (nextGrid) => {
+      const lang = localStorage.getItem("login_lang") === "zh" ? "zh" : "en";
+      // Group-only and Games save-draft: persist the clear (empty grid deletes the
+      // process draft on server). Reset only clears the UI and keeps the draft.
+      void (async () => {
+        const flushed = await callDataCaptureRuntime("flushGroupOnlyTableDraftNow", nextGrid);
+        if (flushed === false) {
+          pushDataCaptureNotification(getDataCaptureText(lang, "draftFlushNeedsProcessCurrency"), "danger");
+        }
+      })();
+    };
+
     const deleteSelectedRowData = () => {
       const grid = getGrid();
       if (!grid) return;
@@ -279,15 +291,22 @@ export function useDataCapturePureReactGridInteraction(engineReady) {
       hideContextMenu();
       clearAllSelections();
       recomputeSubmitState();
+      flushDraftAfterClear(nextGrid);
+    };
 
-      if (getDataCaptureState().isGroupOnlyGrid === true) {
-        void (async () => {
-          const flushed = await callDataCaptureRuntime("flushGroupOnlyTableDraftNow", nextGrid);
-          if (flushed === false) {
-            pushDataCaptureNotification(getDataCaptureText(lang, "draftFlushNeedsProcessCurrency"), "danger");
-          }
-        })();
-      }
+    /**
+     * Toolbar "Delete Draft" (only shown when process Save Data Capture Table is on).
+     * Clears the whole grid and flushes draft; empty table removes the server draft.
+     */
+    const deleteDraftClearTable = () => {
+      const grid = getGrid();
+      if (!grid) return;
+      const nextGrid = clearGridCells(grid);
+      applyGridChange(nextGrid);
+      hideContextMenu();
+      clearAllSelections();
+      recomputeSubmitState();
+      flushDraftAfterClear(nextGrid);
     };
 
     const appendGridRow = () => {
@@ -390,6 +409,7 @@ export function useDataCapturePureReactGridInteraction(engineReady) {
       deleteRow,
       clearRow,
       deleteSelectedRowData,
+      deleteDraftClearTable,
       clearSelectedCellsInGrid,
       shiftSelectedCellsLeft,
       shiftSelectedCellsUp,

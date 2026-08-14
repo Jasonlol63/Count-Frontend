@@ -2,6 +2,7 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 import { flushSync } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { spaPath } from "../../../utils/routing/pageRoutes.js";
+import { canShowReportInSidebar } from "../../../utils/auth/sidebarPermissions.js";
 import {
   getCachedOwnerCompanies,
   DASHBOARD_GROUP_FILTER_KEY,
@@ -11,6 +12,7 @@ import {
   resolveInitialSelectedGroupFromSession,
   sortedUniqueGroupIds,
   fetchOwnerCompaniesAll,
+  fetchOwnerGroupsAll,
   resolveGcFilterBootCompanyId,
   readPersistedDashboardGcFilter,
   readDashboardSelectedCompanyId,
@@ -47,6 +49,8 @@ import { getReportText, REPORT_I18N } from "../../../translateFile/pages/reportT
 import CustomerReportFilters from "./CustomerReportFilters.jsx";
 import CustomerReportTable from "./CustomerReportTable.jsx";
 import { reportToastMaintenanceVariant } from "../shared/reportAmountFormat.js";
+import { useRealtimeDomain } from "../../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS } from "../../../lib/realtime/realtimeEvents.js";
 import {
   buildReportSnapshotKey,
   getReportSnapshot,
@@ -60,7 +64,6 @@ import {
   resolveCustomerReportScope,
 } from "../shared/reportScope.js";
 import { useAuthSession } from "../../../context/AuthSessionContext.jsx";
-import { sessionHasTenantGame } from "../../../utils/auth/sessionTenant.js";
 import { canUseGroupOnlyMode } from "../../../utils/company/loginScope.js";
 import { syncCompanySessionInBackground } from "../../../utils/company/companySessionSwitchCore.js";
 
@@ -207,10 +210,7 @@ export default function CustomerReportPage() {
     pageBootOnceRef.current = true;
 
     const u = me;
-    const perms = Array.isArray(u.permissions) ? u.permissions : [];
-    const hasFull = perms.length === 0;
-    const canReport = hasFull || perms.includes("report");
-    if (!canReport || !sessionHasTenantGame(u)) {
+    if (!canShowReportInSidebar(u)) {
       navigate(spaPath("dashboard"), { replace: true });
       return;
     }
@@ -219,6 +219,7 @@ export default function CustomerReportPage() {
     (async () => {
       try {
         const rows = await fetchOwnerCompaniesAll({ me: u });
+        await fetchOwnerGroupsAll(u).catch(() => null);
         if (cancelled) return;
         setCompanies(rows);
 
@@ -314,12 +315,13 @@ export default function CustomerReportPage() {
       const comp = companies.find(c => Number(c.id) === Number(compId));
       const perms = await fetchCompanyPermissions(comp?.company_id || "");
       if (isBankOnlyCategoryCompany(perms)) {
-        window.location.assign(new URL(spaPath("process-list"), window.location.origin).href);
+        // Bank-only companies use Bank Process UI, not Games process-list.
+        navigate(spaPath("bank-process-list"), { replace: true });
       }
     } catch (err) {
       console.error("Bank only check error:", err);
     }
-  }, [companies]);
+  }, [companies, navigate]);
 
   const handleClearCompany = useCallback(
     (groupForScope) => {
@@ -340,16 +342,21 @@ export default function CustomerReportPage() {
   const onPrepareCompanySelect = useCallback((c) => {
     const nextId = Number(c?.id);
     if (!nextId) return;
-    const groupForPersist = c?.group_id ? String(c.group_id).trim().toUpperCase() : null;
+    const fromRow = c?.group_id ? String(c.group_id).trim().toUpperCase() : "";
+    const fromSel = selectedGroup ? String(selectedGroup).trim().toUpperCase() : "";
+    const groupForPersist = fromRow || fromSel || null;
     persistDashboardFilterState(groupForPersist, nextId, { allowGroupOnly: false });
     persistDashboardGroupOnlyMode(false);
-    flushSync(() => setCompanyId(nextId));
+    flushSync(() => {
+      if (groupForPersist) setSelectedGroup(groupForPersist);
+      setCompanyId(nextId);
+    });
     if (reportDataRef.current != null) setReportSyncing(true);
     startTransition(() => {
       setAccountId("");
       setCurrencyFilterReady(false);
     });
-  }, []);
+  }, [selectedGroup]);
 
   const onSwitchCompany = useCallback(
     async (c) => {
@@ -402,16 +409,38 @@ export default function CustomerReportPage() {
     preferredCompanyId: companyId,
   });
 
+  /** Stale company (e.g. Bank TK1) with empty/mismatched pills must not drive Games report scope. */
+  const scopeCompanyId = useMemo(() => {
+    if (companyId == null) return null;
+    const cid = Number(companyId);
+    if (!Number.isFinite(cid) || cid <= 0) return null;
+    if (!companyButtons.some((c) => Number(c.id) === cid)) return null;
+    return cid;
+  }, [companyId, companyButtons]);
+
+  useEffect(() => {
+    if (companyId == null) return;
+    if (scopeCompanyId != null) return;
+    // Drop invisible/stale company so Group-only ledger requests succeed.
+    handleClearCompany(selectedGroup);
+  }, [companyId, scopeCompanyId, selectedGroup, handleClearCompany]);
+
+  useEffect(() => {
+    if (scopeCompanyId == null) return;
+    void checkBankOnly(scopeCompanyId);
+  }, [scopeCompanyId, checkBankOnly]);
+
   const reportScope = useMemo(
     () =>
       resolveCustomerReportScope({
         companies,
         selectedGroup,
-        companyId,
+        companyId: scopeCompanyId,
         groupsAllMode,
         groupAllMode,
+        me,
       }),
-    [companies, selectedGroup, companyId, groupsAllMode, groupAllMode],
+    [companies, selectedGroup, scopeCompanyId, groupsAllMode, groupAllMode, me],
   );
 
   const reportCurrencyCodes = useMemo(
@@ -485,6 +514,10 @@ export default function CustomerReportPage() {
       }
     }
   }, [reportScope, dateFrom, dateTo, reportParams, beginReportFetch, isReportFetchCurrent, t, notify]);
+
+  useRealtimeDomain(REALTIME_DOMAINS.LEDGER, () => {
+    void loadReport();
+  }, { enabled: customerReportScopeIsReady(reportScope) && currencyFilterReady });
 
   const persistCurrencyPrefs = useCallback((scope, currencies, showAll) => {
     const key = customerReportScopeCacheCompanyKey(scope);
@@ -600,6 +633,7 @@ export default function CustomerReportPage() {
         companies,
         selectedGroup,
         companyId: prev,
+        me,
       });
       persistCurrencyPrefs(
         prevScope,
@@ -607,7 +641,7 @@ export default function CustomerReportPage() {
         showAllCurrenciesRef.current,
       );
       const savedKey = customerReportScopeCacheCompanyKey(
-        resolveCustomerReportScope({ companies, selectedGroup, companyId }),
+        resolveCustomerReportScope({ companies, selectedGroup, companyId, me }),
       );
       const saved = savedKey != null ? currencyPrefsByCompanyRef.current[savedKey] : null;
       if (saved?.showAllCurrencies) {
@@ -627,7 +661,7 @@ export default function CustomerReportPage() {
       if (reportDataRef.current != null) setReportSyncing(true);
     }
     prevCompanyIdRef.current = companyId;
-  }, [companyId, companies, selectedGroup, persistCurrencyPrefs, invalidateReportFetch]);
+  }, [companyId, companies, selectedGroup, me, persistCurrencyPrefs, invalidateReportFetch]);
 
   useEffect(() => {
     if (!currencyFilterReady) {
@@ -704,7 +738,7 @@ export default function CustomerReportPage() {
     <div className="container">
       <div className="content">
         <CustomerReportFilters
-          companyId={companyId}
+          companyId={scopeCompanyId}
           onSwitchCompany={handlePickCompany}
           onClearCompany={handleClearCompany}
           allowClearCompany={allowClearCompany}
@@ -716,7 +750,7 @@ export default function CustomerReportPage() {
           groupsAllMode={groupsAllMode}
           groupAllMode={groupAllMode}
           companyButtons={companyButtons}
-          highlightCompanyId={companyId}
+          highlightCompanyId={scopeCompanyId}
           accountId={accountId}
           setAccountId={setAccountId}
           accounts={accounts}

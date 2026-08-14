@@ -1,24 +1,7 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { fetchAccountListByTenantId } from "../../account/accountListApi.js";
-import { fetchCurrencyListByTenantId, normalizeCurrencyRow } from "../../../utils/api/currencyApi.js";
-import {
-  deriveCategoryList,
-  normalizeTransactionAccountOption,
-} from "./transactionAccountHelpers.js";
-import {
-  buildSpringSearchRequest,
-  normalizeSpringSearchToGrid,
-} from "./transactionSearchNormalize.js";
-import {
-  buildSpringHistoryRequest,
-  normalizeSpringHistoryResponse,
-} from "./transactionHistoryNormalize.js";
-import {
-  buildSpringSubmitRequest,
-  isSpringSubmitType,
-  normalizeSpringSubmitResponse,
-} from "./transactionSubmitNormalize.js";
-import { persistUserCurrencyDisplayOrder } from "../../../utils/company/currencyDisplayOrder.js";
+import { buildSpringSearchRequest, normalizeSpringSearchToGrid } from "./transactionSearchNormalize.js";
+import { buildSpringHistoryRequest, normalizeSpringHistoryResponse } from "./transactionHistoryNormalize.js";
+import { buildSpringSubmitRequest, normalizeSpringSubmitResponse, isSpringSubmitType } from "./transactionSubmitNormalize.js";
 
 export const transactionQueryKeys = {
   searchRoot: () => ["tx-search"],
@@ -89,8 +72,24 @@ async function safeJson(res) {
   }
 }
 
+function isSpringOk(json) {
+  return json?.success === true || json?.status === "success";
+}
+
+async function postSpringJson(path, body, signal) {
+  const res = await fetch(buildApiUrl(path), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  return safeJson(res);
+}
+
 export async function getCategories() {
-  return { success: true, data: deriveCategoryList() };
+  const res = await fetch(buildApiUrl("api/transactions/get_categories_api.php"), { credentials: "include" });
+  return safeJson(res);
 }
 
 function appendViewGroup(params, viewGroup) {
@@ -129,28 +128,17 @@ function appendTransactionScope(
   }
 }
 
-export async function getAccounts({ companyId, viewGroup, groupId, role, status = "active", signal } = {}) {
-  void viewGroup;
-  void groupId;
-  const tid = Number(companyId);
-  if (!Number.isFinite(tid) || tid <= 0) {
-    return { success: true, data: [] };
-  }
-  try {
-    const rows = await fetchAccountListByTenantId(tid, signal);
-    let options = rows.map(normalizeTransactionAccountOption).filter(Boolean);
-    if (role) {
-      const want = String(role).trim().toUpperCase();
-      options = options.filter((a) => String(a.role || "").toUpperCase() === want);
-    }
-    if (status) {
-      const wantStatus = String(status).trim().toLowerCase();
-      options = options.filter((a) => String(a.status || "").toLowerCase() === wantStatus);
-    }
-    return { success: true, data: options };
-  } catch (err) {
-    return { success: false, message: err?.message || "failedToLoadAccounts", data: [] };
-  }
+export async function getAccounts({ companyId, viewGroup, groupId, role, status = "active", currency, signal } = {}) {
+  const params = new URLSearchParams();
+  appendTransactionScope(params, { companyId, viewGroup, groupId });
+  if (role) params.set("role", role);
+  if (status) params.set("status", status);
+  if (currency) params.set("currency", currency);
+  const res = await fetch(buildApiUrl(`api/transactions/get_accounts_api.php?${params.toString()}`), {
+    credentials: "include",
+    signal,
+  });
+  return safeJson(res);
 }
 
 export async function getCompanyCurrencies({
@@ -161,43 +149,59 @@ export async function getCompanyCurrencies({
   subsidiaryAccountsOnly,
   signal,
 } = {}) {
-  void viewGroup;
-  void groupId;
-  void groupAggregate;
-  void subsidiaryAccountsOnly;
-  const tid = Number(companyId);
-  if (!Number.isFinite(tid) || tid <= 0) {
-    return { success: true, data: [] };
-  }
-  try {
-    const rows = await fetchCurrencyListByTenantId(tid, signal);
-    const data = rows
-      .map((row) => normalizeCurrencyRow(row))
-      .filter((row) => row.code);
-    return { success: true, data };
-  } catch (err) {
-    return { success: false, message: err?.message || "failedToLoadCurrencies", data: [] };
-  }
+  const params = new URLSearchParams();
+  appendTransactionScope(params, {
+    companyId,
+    viewGroup,
+    groupId,
+    groupAggregate,
+    subsidiaryAccountsOnly,
+  });
+  const cid = companyId != null && companyId !== "" ? Number(companyId) : 0;
+  const useScopeCurrencyApi =
+    (groupAggregate && !(Number.isFinite(cid) && cid > 0) && (viewGroup || groupId)) ||
+    (Number.isFinite(cid) && cid > 0 && subsidiaryAccountsOnly);
+  const path = useScopeCurrencyApi
+    ? "api/transactions/get_scope_account_currencies_api.php"
+    : "api/transactions/get_company_currencies_api.php";
+  const res = await fetch(buildApiUrl(`${path}?${params.toString()}`), {
+    credentials: "include",
+    signal,
+  });
+  return safeJson(res);
 }
 
-export async function getUserCurrencyOrder({ companyId, signal } = {}) {
-  void signal;
-  const cid = Number(companyId);
-  return {
-    success: true,
-    data: {
-      order: null,
-      company_id: Number.isFinite(cid) && cid > 0 ? cid : null,
-    },
-  };
+export async function getUserCurrencyOrder({ companyId, groupId, signal } = {}) {
+  const params = new URLSearchParams({ _t: String(Date.now()) });
+  const cid = companyId != null && companyId !== "" ? Number(companyId) : 0;
+  if (Number.isFinite(cid) && cid > 0) params.set("company_id", String(cid));
+  const gid = groupId != null ? String(groupId).trim().toUpperCase() : "";
+  if (gid && !(Number.isFinite(cid) && cid > 0)) params.set("group_id", gid);
+  const res = await fetch(
+    buildApiUrl(`api/transactions/user_currency_order_api.php?${params.toString()}`),
+    { credentials: "include", signal },
+  );
+  return safeJson(res);
 }
 
-/** Persist pill order in browser only (no Spring endpoint yet). */
-export async function saveUserCurrencyOrder(order, { companyId } = {}) {
+/** Same contract as legacy JS: POST JSON `{ order: string[] }` (see api/transactions/user_currency_order_api.php). */
+export async function saveUserCurrencyOrder(order, { companyId, groupId } = {}) {
   const codes = Array.isArray(order) ? order.map((c) => String(c || "").trim()).filter(Boolean) : [];
-  persistUserCurrencyDisplayOrder(codes);
-  void companyId;
-  return { success: true, data: { order: codes } };
+  const body = { order: codes };
+  const cid = companyId != null && companyId !== "" ? Number(companyId) : 0;
+  if (Number.isFinite(cid) && cid > 0) {
+    body.company_id = cid;
+  } else {
+    const gid = groupId != null ? String(groupId).trim().toUpperCase() : "";
+    if (gid) body.group_id = gid;
+  }
+  const res = await fetch(buildApiUrl("api/transactions/user_currency_order_api.php"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    credentials: "include",
+  });
+  return safeJson(res);
 }
 
 function appendTxSearchWlDebugToPath(pathWithQuery) {
@@ -310,66 +314,115 @@ export async function fetchTypeTransactionSearch({
 
 export async function searchTransactions({
   companyId,
-  dateFrom,
-  dateTo,
-  currencyCodes,
-  categories,
-  signal,
-  // BP-only v1: ignore legacy / filter params until those flows migrate
   viewGroup,
   groupId,
   groupAggregate,
   subsidiaryAccountsOnly,
+  dateFrom,
+  dateTo,
   showInactive,
   showCaptureOnly,
   hideZeroBalance,
+  currencyCodes,
+  categories,
   typeSearch,
   typeAccountIds,
   typeSearchFormType,
+  signal,
+  skipCache = false,
 } = {}) {
-  void viewGroup;
-  void groupId;
-  void groupAggregate;
-  void subsidiaryAccountsOnly;
-  void showInactive;
-  void showCaptureOnly;
-  void typeSearch;
-  void typeAccountIds;
-  void typeSearchFormType;
-
-  try {
-    const body = buildSpringSearchRequest({
-      companyId,
+  // Spring /api/transaction/search covers single-tenant scope (incl. the aggregate
+  // fan-out below, which calls this once per company id). Pure Group ledger (no
+  // company_id) and Type Search have no Spring equivalent yet — those stay on PHP.
+  const springTenantId = Number(companyId);
+  if (Number.isFinite(springTenantId) && springTenantId > 0 && !typeSearch) {
+    const request = buildSpringSearchRequest({
+      companyId: springTenantId,
       dateFrom,
       dateTo,
       currencyCodes,
       categories,
-      // hideZeroBalance=false → Show all 0 balance ON → include never-transacted shells
       showAllZeroBalance: !hideZeroBalance,
     });
-    const res = await fetch(buildApiUrl("api/transaction/search"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      credentials: "include",
-      cache: "no-cache",
-      signal,
-    });
-    const json = await safeJson(res);
-    if (!json?.success) {
-      return json;
+    const json = await postSpringJson("api/transaction/search", request, signal);
+    logTxSearchResponse(json);
+    if (!isSpringOk(json)) {
+      return { success: false, message: json?.message || "Transaction search failed", data: null };
     }
-    const grid = normalizeSpringSearchToGrid(json.data);
-    const payload = { success: true, message: json.message || "", data: grid };
-    logTxSearchResponse(payload);
-    return payload;
-  } catch (err) {
-    return {
-      success: false,
-      message: err?.message || "searchFailed",
-      data: null,
-    };
+    return { success: true, message: json.message || "", data: normalizeSpringSearchToGrid(json.data) };
   }
+
+  const params = new URLSearchParams();
+  appendTransactionScope(params, {
+    companyId,
+    viewGroup,
+    groupId,
+    groupAggregate,
+    subsidiaryAccountsOnly,
+  });
+  params.set("date_from", String(dateFrom || ""));
+  params.set("date_to", String(dateTo || ""));
+  params.set("show_inactive", showInactive ? "1" : "0");
+  params.set("show_capture_only", showCaptureOnly ? "1" : "0");
+  params.set("hide_zero_balance", hideZeroBalance ? "1" : "0");
+  if (skipCache) {
+    params.set("skip_cache", "1");
+  }
+  if (typeSearch) {
+    params.set("type_search", "1");
+    const ids = Array.isArray(typeAccountIds)
+      ? typeAccountIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+      : [];
+    if (ids.length > 0) {
+      params.set("type_account_ids", ids.join(","));
+    }
+  }
+  const formType = String(typeSearchFormType || "").toUpperCase().trim();
+  if (formType) {
+    params.set("type_search_form_type", formType);
+  }
+  if (Array.isArray(currencyCodes) && currencyCodes.length > 0) params.set("currency", currencyCodes.join(","));
+  if (Array.isArray(categories) && categories.length > 0) params.set("category", categories.join(","));
+
+  const base = `api/transactions/search_api.php?${params.toString()}`;
+  const withDebug = appendTxSearchWlDebugToPath(base);
+  const url = buildApiUrl(withDebug);
+
+  const res = await fetch(url, {
+    credentials: "include",
+    cache: "no-cache",
+    headers: { "Cache-Control": "no-cache" },
+    signal,
+  });
+  const body = await safeJson(res);
+  logTxSearchResponse(body);
+  return body;
+}
+
+/** Short-lived SSE ticket for Transaction Payment live sync. */
+export async function fetchRealtimeTicket({
+  companyId,
+  viewGroup,
+  groupId,
+  groupAggregate,
+  subsidiaryAccountsOnly,
+  signal,
+} = {}) {
+  const params = new URLSearchParams();
+  appendTransactionScope(params, {
+    companyId,
+    viewGroup,
+    groupId,
+    groupAggregate,
+    subsidiaryAccountsOnly,
+  });
+  const res = await fetch(buildApiUrl(`api/transactions/realtime_ticket_api.php?${params}`), {
+    credentials: "include",
+    cache: "no-cache",
+    headers: { "Cache-Control": "no-cache" },
+    signal,
+  });
+  return safeJson(res);
 }
 
 export async function submitTransaction({
@@ -380,30 +433,18 @@ export async function submitTransaction({
   payload,
   clientRequestId,
 }) {
-  const txType = String(payload?.transaction_type || "").toUpperCase().trim();
-
-  if (isSpringSubmitType(txType)) {
+  // Spring /api/transaction/submit covers PAYMENT/CLAIM/CLEAR/CONTRA/ADJUSTMENT/PROFIT
+  // (incl. legacy WIN/LOSE-shaped PROFIT payloads — see transactionSubmitNormalize.js).
+  // RATE stays on PHP: Spring's submit has no Platform Fee / PT-Fee equivalent yet.
+  const springTenantId = Number(companyId);
+  const springType = String(payload?.transaction_type || "").toUpperCase().trim();
+  if (Number.isFinite(springTenantId) && springTenantId > 0 && springType !== "RATE" && isSpringSubmitType(springType)) {
     try {
-      void viewGroup;
-      void groupId;
-      void groupAggregate;
-      void clientRequestId;
-      const body = buildSpringSubmitRequest({ companyId, payload });
-      const res = await fetch(buildApiUrl("api/transaction/submit"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        credentials: "include",
-        cache: "no-cache",
-      });
-      const json = await safeJson(res);
+      const request = buildSpringSubmitRequest({ companyId: springTenantId, payload });
+      const json = await postSpringJson("api/transaction/submit", request);
       return normalizeSpringSubmitResponse(json);
-    } catch (err) {
-      return {
-        success: false,
-        message: err?.message || "submitFailed",
-        data: null,
-      };
+    } catch (e) {
+      return { success: false, message: e?.message || "submitFailed", data: null };
     }
   }
 
@@ -436,39 +477,71 @@ export async function getHistory({
   pureTypeSearch,
   signal,
 } = {}) {
-  void viewGroup;
-  void groupId;
-  void groupAggregate;
-  void subsidiaryAccountsOnly;
-  void virtualCompanyCode;
-  void pureTypeSearch;
-
-  try {
-    const body = buildSpringHistoryRequest({
-      companyId,
-      accountId,
+  // Spring /api/transaction/history needs a real tenant + account id and has no Group
+  // ledger / virtual-company / pure-type-search concept — those cases stay on PHP.
+  const springTenantId = Number(companyId);
+  const springAccountId = Number(accountId);
+  if (
+    Number.isFinite(springTenantId) &&
+    springTenantId > 0 &&
+    Number.isFinite(springAccountId) &&
+    springAccountId > 0 &&
+    !virtualCompanyCode &&
+    !pureTypeSearch
+  ) {
+    const request = buildSpringHistoryRequest({
+      companyId: springTenantId,
+      accountId: springAccountId,
       dateFrom,
       dateTo,
       currency,
     });
-    const res = await fetch(buildApiUrl("api/transaction/history"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(body),
-      signal,
-    });
-    const json = await safeJson(res);
+    const json = await postSpringJson("api/transaction/history", request, signal);
     return normalizeSpringHistoryResponse(json);
-  } catch (err) {
+  }
+
+  const params = new URLSearchParams();
+  appendTransactionScope(params, {
+    companyId,
+    viewGroup,
+    groupId,
+    groupAggregate,
+    subsidiaryAccountsOnly,
+  });
+  const numericAccountId = Number(accountId);
+  if (Number.isFinite(numericAccountId) && numericAccountId > 0) {
+    params.set("account_id", String(numericAccountId));
+  }
+  if (dateFrom) params.set("date_from", String(dateFrom));
+  if (dateTo) params.set("date_to", String(dateTo));
+  if (currency) params.set("currency", String(currency));
+  if (virtualCompanyCode) params.set("virtual_company_code", String(virtualCompanyCode));
+  const pureType = String(pureTypeSearch || "").toUpperCase().trim();
+  if (pureType) params.set("pure_type_search", pureType);
+
+  const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params.toString()}&_t=${Date.now()}`), {
+    credentials: "include",
+    cache: "no-cache",
+    headers: { "Cache-Control": "no-cache" },
+    signal,
+  });
+  const body = await safeJson(res);
+  /** PHP returns { data: { account, date_range, history: Row[] } }; normalize to rows + meta for React. */
+  if (
+    body?.success &&
+    body.data &&
+    typeof body.data === "object" &&
+    !Array.isArray(body.data) &&
+    Array.isArray(body.data.history)
+  ) {
     return {
-      success: false,
-      message: err?.message || "failedToLoadHistory",
-      data: [],
-      account: null,
-      date_range: null,
+      ...body,
+      data: body.data.history,
+      account: body.data.account,
+      date_range: body.data.date_range,
     };
   }
+  return body;
 }
 
 export async function loadContraInbox({ companyId, viewGroup, groupId, groupAggregate, signal } = {}) {

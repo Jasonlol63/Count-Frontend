@@ -82,6 +82,8 @@ function isSummaryLabelToken(text) {
     .replace(/:$/, "")
     .replace(/\s+/g, " ")
     .toUpperCase();
+  // iview allGames footer uses Total(1) / Total(12) — keep as summary, not junk.
+  if (/^TOTAL\(\d+\)$/.test(normalized)) return true;
   return (
     normalized === "SUBTOTAL" ||
     normalized === "SUB TOTAL" ||
@@ -93,20 +95,19 @@ function isSummaryLabelToken(text) {
 }
 
 /**
- * Real footer total rows often have fewer filled cells than body (no serial / code),
- * but still carry many amount columns — must not be treated as over-select stubs.
+ * Real footer total rows often have fewer filled cells than body (no serial / code).
+ * Win Loss Detail Subtotal footers are frequently much narrower than agent rows
+ * (colspan / sparse leading empties) — still keep them when labeled.
  */
-function rowLooksLikeKeptSummaryTotalRow(row, bodyWidth) {
+function rowLooksLikeKeptSummaryTotalRow(row, _bodyWidth) {
   if (!Array.isArray(row)) return false;
   const tokens = row.map((cell) => cellValue(cell)).filter(Boolean);
   if (!tokens.length || !isSummaryLabelToken(tokens[0])) return false;
 
+  // Label + at least one amount is enough. Do not require ~50% of body width —
+  // that dropped legitimate Subtotal rows from C8 / Material win-loss copies.
   const moneyCount = tokens.filter((token) => isMoneyOrNumberLikeToken(token)).length;
-  if (moneyCount < 2) return false;
-
-  const minKeepWidth = Math.max(3, Math.ceil(bodyWidth * 0.5));
-  const minKeepMoney = Math.max(2, Math.ceil(bodyWidth * 0.35));
-  return tokens.length >= minKeepWidth || moneyCount >= minKeepMoney;
+  return moneyCount >= 1;
 }
 
 /** Drop trailing empty / paginator / truncated stub rows (loop for multi-line chrome). */
@@ -178,6 +179,28 @@ export function plainTabTextLooksPasteable(text) {
   const widths = lines.map((line) => line.split("\t").length);
   const maxCols = Math.max(...widths);
   return maxCols >= 2;
+}
+
+/**
+ * True when text/plain is a real spreadsheet TSV (most rows tab-separated),
+ * not C8Play Win Loss vertical dumps that only have sparse tabs like `87\\tAgent\\t`.
+ * Only aligned TSV may grill-reject Format HTML fills.
+ */
+export function plainTextLooksLikeAlignedTsv(text) {
+  if (!text || !String(text).includes("\t")) return false;
+  const lines = String(text)
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .filter((line) => String(line).trim() !== "");
+  if (lines.length < 2) return false;
+  const tabLines = lines.filter((line) => line.includes("\t"));
+  // Vertical field dumps: dozens of single-field lines + a few sparse tabs.
+  if (tabLines.length < Math.ceil(lines.length * 0.5)) return false;
+  const widths = tabLines.map((line) => line.split("\t").length);
+  const maxCols = Math.max(...widths);
+  const minCols = Math.min(...widths);
+  return maxCols >= 2 && maxCols - minCols <= 2;
 }
 
 /** Sanitized plain matrix is usable as the alignment source of truth. */

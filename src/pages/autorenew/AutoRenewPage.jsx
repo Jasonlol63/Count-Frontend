@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useNavigate } from "react-router-dom";
 import { useAuthSession } from "../../context/AuthSessionContext.jsx";
 import { canAccessC168AutoRenew } from "../../utils/company/loginScope.js";
+import { ensureC168DomainApiSession } from "../../utils/company/companySessionSync.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
 import {
   AUTO_RENEW_PENDING_CHANGED_EVENT,
@@ -11,10 +12,6 @@ import { useLoginLang } from "../../utils/i18n/useLoginLang.js";
 import { getAutoRenewText } from "../../translateFile/pages/autoRenewTranslate.js";
 import { DASHBOARD_I18N } from "../../translateFile/shell/dashboardTranslate.js";
 import { formatDate, formatDomainFeeDisplay2, normalizeDomainFeeSettingsFromApi } from "../domain/domainHelpers.js";
-import {
-  resolveShareLedgerTenantCode,
-  resolveShareLedgerTenantId,
-} from "../domain/domainApi.js";
 import CompanySettingsModal from "../domain/components/CompanySettingsModal.jsx";
 import GroupSettingsModal from "../domain/components/GroupSettingsModal.jsx";
 import DomainNotification from "../domain/components/DomainNotification.jsx";
@@ -38,6 +35,8 @@ import {
   consumeAutoRenewPrefetch,
   rememberAutoRenewListCache,
 } from "./autoRenewRoutePrefetch.js";
+import { useRealtimeDomain } from "../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS } from "../../lib/realtime/realtimeEvents.js";
 import {
   useAutoRenewDateRange,
   useAutoRenewDateRangeState,
@@ -354,6 +353,13 @@ export default function AutoRenewPage() {
       }
 
       try {
+        // Same race as Domain: UI may trust sessionStorage C168 before PHP session catches up.
+        const synced = await ensureC168DomainApiSession(me);
+        if (!synced) {
+          if (!cancelled) navigate(spaPath("dashboard"), { replace: true });
+          return;
+        }
+        if (cancelled) return;
         const cached = consumeAutoRenewPrefetch(statusFilter, { dateFrom, dateTo, entityType: entityTab });
         const data =
           cached ||
@@ -389,12 +395,17 @@ export default function AutoRenewPage() {
     if (bootLoading || !sessionReady || !me) return;
     const key = listFetchKey(statusFilter, { dateFrom, dateTo }, entityTab);
     if (bootFetchedListKeyRef.current === key) {
+      // Warm/boot may have painted; still silent-refetch so remount cannot stick on stale warm.
       bootFetchedListKeyRef.current = null;
-      setListRefreshing(false);
+      void fetchList();
       return;
     }
     void fetchList();
   }, [bootLoading, dateFrom, dateTo, entityTab, fetchList, listFetchKey, sessionReady, statusFilter]);
+
+  useRealtimeDomain(REALTIME_DOMAINS.LEDGER, () => {
+    void refreshListAfterMutation();
+  }, { enabled: sessionReady && Boolean(me) && !bootLoading });
 
   useEffect(() => {
     if (bootLoading || !sessionReady || !me) return;
@@ -462,14 +473,17 @@ export default function AutoRenewPage() {
     if (!row || !canEditGlobal || busyRequestId) return;
     if (!canApproveRow(row, rowDrafts, feeSettings)) return;
 
-    const { period } = getRowDraftValues(row, rowDrafts);
+    const { period, fromAccountId, toAccountId } = getRowDraftValues(row, rowDrafts);
     setApproveConfirmRow(null);
     setBusyRequestId(row.request_id);
     try {
       await approveAutoRenew({
         requestId: row.request_id,
         period,
+        fromAccountId,
+        toAccountId,
       });
+      invalidateTransactionListCache("auto_renew_approve");
       notify(t("approvedSuccess"), "success");
       await refreshListAfterMutation();
     } catch (err) {
@@ -798,7 +812,8 @@ export default function AutoRenewPage() {
                     className="search-input userlist-search-input"
                     placeholder={t("searchPlaceholder")}
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value.toUpperCase())}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{ textTransform: "uppercase" }}
                   />
                 </div>
                 <div className="transaction-date-range-group auto-renew-date-range-group">
@@ -1019,10 +1034,9 @@ export default function AutoRenewPage() {
         <CompanySettingsModal
           lang={lang}
           company={settingsModal.tenant}
-          ownerId={settingsModal.ownerId}
           domainPeriodPrices={domainPeriodPrices}
-          shareLedgerTenantId={resolveShareLedgerTenantId(me)}
-          shareLedgerTenantCode={resolveShareLedgerTenantCode(me)}
+          sessionCompanyId={me?.company_id ?? null}
+          sessionCompanyCode={me?.company_code ?? null}
           excludeOwnerId={settingsModal.ownerId}
           commissionOnly
           sharePricePeriod={settingsModal.sharePricePeriod ?? ""}
@@ -1035,10 +1049,9 @@ export default function AutoRenewPage() {
         <GroupSettingsModal
           lang={lang}
           group={settingsModal.tenant}
-          ownerId={settingsModal.ownerId}
           domainPeriodPrices={domainPeriodPrices}
-          shareLedgerTenantId={resolveShareLedgerTenantId(me)}
-          shareLedgerTenantCode={resolveShareLedgerTenantCode(me)}
+          sessionCompanyId={me?.company_id ?? null}
+          sessionCompanyCode={me?.company_code ?? null}
           excludeOwnerId={settingsModal.ownerId}
           commissionOnly
           sharePricePeriod={settingsModal.sharePricePeriod ?? ""}

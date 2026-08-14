@@ -1,11 +1,20 @@
 import { toUpperDisplay } from "../lib/transactionFormat.js";
 import TransactionWinLossCell from "./TransactionWinLossCell.jsx";
 
+/** Win/Loss 展示：优先高精度字段，由单元格 Half Up 到 2 位；展示值不参与汇总逻辑。 */
+function displayWinLossValue(row) {
+  if (row?.win_loss_full != null && String(row.win_loss_full).trim() !== "") {
+    return row.win_loss_full;
+  }
+  return row?.win_loss;
+}
+
 export default function TransactionTablesSection({
   tablesVisible,
   searchLoading,
   tp,
   searchState,
+  listPresentationModeActive = false,
   getRoleClass,
   fallbackRoleClass,
   openHistory,
@@ -14,7 +23,8 @@ export default function TransactionTablesSection({
   t,
 }) {
   const hasTableData = tp.mode !== "none";
-  const showNameColumn = Boolean(searchState.showName);
+  // Type Search / submit-focus: Show Name chip may toggle for UI only.
+  const showNameColumn = Boolean(searchState.showName) && !listPresentationModeActive;
   const presentationRowCount =
     (tp.defaultLeft?.length || 0) +
     (tp.defaultRight?.length || 0) +
@@ -71,7 +81,7 @@ export default function TransactionTablesSection({
                         <td className={accountCellClass} style={{ cursor: "pointer" }} onClick={() => openHistory(row)}>{row.account_id}</td>
                         <td className="transaction-name-column" style={{ display: showNameColumn ? "" : "none" }}>{toUpperDisplay(row.account_name)}</td>
                         <td><TransactionWinLossCell value={row.bf} /></td>
-                        <td><TransactionWinLossCell value={row.win_loss} /></td>
+                        <td><TransactionWinLossCell value={displayWinLossValue(row)} /></td>
                         <td><TransactionWinLossCell value={row.cr_dr} /></td>
                         <td className="transaction-balance-cell" style={{ cursor: "pointer" }} onClick={() => handleBalanceCellClick(row, "left")}><TransactionWinLossCell value={row.balance} /></td>
                       </tr>
@@ -108,7 +118,7 @@ export default function TransactionTablesSection({
                         <td className={accountCellClass} style={{ cursor: "pointer" }} onClick={() => openHistory(row)}>{row.account_id}</td>
                         <td className="transaction-name-column" style={{ display: showNameColumn ? "" : "none" }}>{toUpperDisplay(row.account_name)}</td>
                         <td><TransactionWinLossCell value={row.bf} /></td>
-                        <td><TransactionWinLossCell value={row.win_loss} /></td>
+                        <td><TransactionWinLossCell value={displayWinLossValue(row)} /></td>
                         <td><TransactionWinLossCell value={row.cr_dr} /></td>
                         <td className="transaction-balance-cell" style={{ cursor: "pointer" }} onClick={() => handleBalanceCellClick(row, "right")}><TransactionWinLossCell value={row.balance} /></td>
                       </tr>
@@ -164,7 +174,7 @@ export default function TransactionTablesSection({
                               <td className={accountCellClass} style={{ cursor: "pointer" }} onClick={() => openHistory(row)}>{row.account_id}</td>
                               <td className="transaction-name-column" style={{ display: showNameColumn ? "" : "none" }}>{toUpperDisplay(row.account_name)}</td>
                               <td><TransactionWinLossCell value={row.bf} /></td>
-                              <td><TransactionWinLossCell value={row.win_loss} /></td>
+                              <td><TransactionWinLossCell value={displayWinLossValue(row)} /></td>
                               <td><TransactionWinLossCell value={row.cr_dr} /></td>
                               <td className="transaction-balance-cell" style={{ cursor: "pointer" }} onClick={() => handleBalanceCellClick(row, side.isLeft ? "left" : "right")}><TransactionWinLossCell value={row.balance} /></td>
                             </tr>

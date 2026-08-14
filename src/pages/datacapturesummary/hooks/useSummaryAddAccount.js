@@ -295,7 +295,10 @@ export function useSummaryAddAccount({
           emitNotify(apiMsg(json, "createFailed"), "danger");
           return;
         }
-        setCurrencies((prev) => [...prev, { id: json.data.id, code: json.data.code, is_linked: false }]);
+        const newId = Number(json.data.id);
+        if (Number.isFinite(newId) && newId > 0) {
+          setCurrencies((prev) => [...prev, { id: newId, code: json.data.code, is_linked: false }]);
+        }
         setCurrencyInput("");
       } catch {
         emitNotify(t("createFailed"), "danger");
@@ -339,8 +342,15 @@ export function useSummaryAddAccount({
 
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => {
-        if (k === "alert_amount") fd.append(k, alertAmount);
-        else fd.append(k, v ?? "");
+        if (k === "alert_amount") {
+          fd.append(k, alertAmount);
+          return;
+        }
+        const raw = v ?? "";
+        // Align with AccountListPage: CSS text-transform is visual-only; normalize before POST.
+        const out =
+          k === "account_id" || k === "name" || k === "remark" ? toUpper(raw) : raw;
+        fd.append(k, out);
       });
       if (form.payment_alert === "0") {
         fd.set("alert_type", "");

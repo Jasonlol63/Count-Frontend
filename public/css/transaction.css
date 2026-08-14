@@ -876,6 +876,40 @@ body.dashboard-page.report-page .transaction-date-range-group .date-range-picker
     display: block;
 }
 
+/* AccountSelect portal：挂到 body，避免 RATE/Middle-Man 底部被卡片 overflow 裁切 */
+body.transaction-page .custom-select-dropdown.custom-select-dropdown-portal.transaction-account-select-portal,
+.custom-select-dropdown.custom-select-dropdown-portal.transaction-account-select-portal {
+    display: flex !important;
+    flex-direction: column;
+    box-sizing: border-box;
+    background: #f6f6f6;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    max-height: min(300px, calc(100vh - 32px));
+    z-index: 10060;
+}
+
+body.transaction-page .custom-select-dropdown.transaction-account-select-portal .custom-select-search,
+.custom-select-dropdown.transaction-account-select-portal .custom-select-search {
+    flex-shrink: 0;
+    background: #f6f6f6;
+}
+
+body.transaction-page .custom-select-dropdown.transaction-account-select-portal .custom-select-search input,
+.custom-select-dropdown.transaction-account-select-portal .custom-select-search input {
+    background-color: #f2f2f2ad !important;
+}
+
+body.transaction-page .custom-select-dropdown.transaction-account-select-portal .custom-select-options,
+.custom-select-dropdown.transaction-account-select-portal .custom-select-options {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+    overflow-y: auto;
+}
+
 .transaction-page .custom-select-search {
     padding: 8px;
     border-bottom: 1px solid #eee;
@@ -1972,11 +2006,11 @@ body.transaction-page #historyModal .transaction-history-modal .transaction-moda
 }
 
 .transaction-history-modal .transaction-modal-body .transaction-table tbody tr:nth-child(even) td {
-    background-color: #eef2ff;
+    background-color: rgb(228, 235, 255);
 }
 
 .transaction-history-modal .transaction-modal-body .transaction-table tbody tr:nth-child(odd) td {
-    background-color: #ffffff;
+    background-color: #f9fbff;
 }
 
 .transaction-history-modal .transaction-modal-body .transaction-table tbody tr:hover td {
@@ -2074,7 +2108,7 @@ body.transaction-page #historyModal .transaction-history-modal .transaction-moda
     /* font-weight: 600 !important; */
 }
 
-.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-supplier {
+.transaction-page .transaction-table tbody .transaction-account-cell.transaction-role-upline {
     background-color: #d6f9ff !important;
     color: #0a6b78 !important;
     /* font-weight: 600 !important; */
@@ -2116,7 +2150,7 @@ body.transaction-page #historyModal .transaction-history-modal .transaction-moda
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-company,
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-partner,
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-staff,
-.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-supplier,
+.transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-upline,
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-agent,
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-member,
 .transaction-page .transaction-table tbody .transaction-table-row:hover .transaction-account-cell.transaction-role-debtor,
@@ -3200,11 +3234,27 @@ body.transaction-page .transaction-add-section .rate-fields .rate-row.rate-row-f
 }
 
 /*
- * Middle-Man：三欄同等寬（舊版 rate-row-three-cols / PHP 版面）
+ * Middle-Man：与 Account 行共用三列栅格（To | From | Reverse），
+ * Select Account 对齐 To Account；其余四字段占满 From+Reverse 区域。
  */
+body.transaction-page .transaction-add-section .rate-fields .transaction-account-inputs {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--tx-add-reverse-col);
+    gap: 5px;
+    align-items: stretch;
+    width: 100%;
+}
+
+body.transaction-page .transaction-add-section .rate-fields .transaction-account-inputs > .custom-select-wrapper {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    flex: none;
+}
+
 body.transaction-page .transaction-add-section .rate-fields .rate-row.rate-row-mm {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--tx-add-reverse-col);
     gap: 5px;
     align-items: stretch;
     flex: 1 1 auto;
@@ -3216,11 +3266,14 @@ body.transaction-page .transaction-add-section .rate-fields .rate-mm-to-wrap {
     display: flex;
     min-width: 0;
     align-self: stretch;
+    grid-column: 1;
 }
 
 body.transaction-page .transaction-add-section .rate-fields .rate-mm-to-wrap > .custom-select-wrapper {
     flex: 1 1 auto;
     display: flex;
+    width: 100%;
+    max-width: none;
     min-width: 0;
     align-self: stretch;
 }
@@ -3231,9 +3284,20 @@ body.transaction-page .transaction-add-section .rate-fields .rate-mm-to-wrap .cu
     align-items: center;
 }
 
+body.transaction-page .transaction-add-section .rate-fields .rate-mm-rest {
+    grid-column: 2 / 4;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+    min-width: 0;
+    align-items: stretch;
+}
+
 body.transaction-page .transaction-add-section .rate-fields .rate-row.rate-row-mm .transaction-input {
     box-sizing: border-box;
     align-self: stretch;
+    width: 100%;
+    min-width: 0;
 }
 
 body.transaction-page .transaction-add-section .rate-fields .rate-row-five-cols .transaction-select,
@@ -3370,6 +3434,11 @@ body.transaction-page .transaction-add-section .rate-fields .transaction-account
 .category-tag[data-category-value="STAFF"] {
     background-color: #ffe5cc !important;
     color: #a24700 !important;
+}
+
+.category-tag[data-category-value="UPLINE"] {
+    background-color: #d6f9ff !important;
+    color: #0a6b78 !important;
 }
 
 .category-tag[data-category-value="SUPPLIER"] {

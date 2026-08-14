@@ -720,8 +720,7 @@ body.ec-auth-shell .domain-form-modal-backdrop .group-pill:focus-visible {
 }
 
 /*
- * Multiple Choice — 对齐图一：略醒目的蓝胶囊（仍小于内容区两行按钮）
- * Done — 对齐图二：暖色强调完成状态
+ * Multiple Choice — 主题蓝胶囊；Done — 绿色完成态
  */
 body.ec-auth-shell .domain-form-modal-backdrop .dfm-multi-choice-btn {
     box-sizing: border-box !important;
@@ -753,7 +752,7 @@ body.ec-auth-shell .domain-form-modal-backdrop .dfm-multi-choice-btn:focus-visib
     outline-offset: 3px !important;
 }
 
-/* 「Multiple Choice」：蓝渐变白字（对齐图一） */
+/* 「Multiple Choice」：主题蓝渐变白字 */
 body.ec-auth-shell .domain-form-modal-backdrop .dfm-multi-choice-btn--off {
     color: var(--color-text-inverse) !important;
     border: none !important;
@@ -767,9 +766,9 @@ body.ec-auth-shell .domain-form-modal-backdrop .dfm-multi-choice-btn--off:hover 
 
 body.ec-auth-shell .domain-form-modal-backdrop .dfm-multi-choice-btn--on {
     color: var(--color-text-inverse) !important;
-    border: 1px solid rgba(0, 0, 0, 0.45) !important;
-    background: linear-gradient(180deg, #ffcd55 0%, #ffa01a 100%) !important;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18) !important;
+    border: 1px solid rgba(4, 120, 87, 0.45) !important;
+    background: linear-gradient(180deg, #34d399 0%, #059669 100%) !important;
+    box-shadow: 0 1px 4px rgba(5, 150, 105, 0.28) !important;
     gap: 6px !important;
 }
 
@@ -1038,7 +1037,7 @@ body.ec-auth-shell .domain-form-modal-backdrop .dfm-assign-ref-label {
     cursor: pointer !important;
 }
 
-/* 紫色选中 + 白勾（参考图二） */
+/* 主题蓝选中 + 白勾（与 Domain 页其它 checkbox accent-color 一致） */
 body.ec-auth-shell .domain-form-modal-backdrop .dfm-assign-ref-checkbox {
     appearance: none !important;
     -webkit-appearance: none !important;
@@ -1380,55 +1379,6 @@ body.domain-page .domain-react-page .domain-fee-inline-summary {
     white-space: nowrap;
     flex-shrink: 0;
     align-self: center;
-}
-
-body.domain-page .domain-react-page .domain-fee-price-chips {
-    display: flex;
-    align-items: center;
-    gap: clamp(6px, 0.5vw, 10px);
-    flex-shrink: 0;
-    flex-wrap: nowrap;
-}
-
-body.domain-page .domain-react-page .domain-fee-price-chip {
-    font-family: var(--font-heading-page);
-    font-size: var(--text-small);
-    font-weight: var(--font-weight-semibold);
-    line-height: 1.2;
-    white-space: nowrap;
-    padding: clamp(5px, 0.35vw, 7px) clamp(8px, 0.55vw, 12px);
-    border-radius: 6px;
-    border: 1px solid transparent;
-    cursor: pointer;
-    background: rgba(255, 255, 255, 0.72);
-    color: var(--color-text-toolbar-meta);
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
-}
-
-body.domain-page .domain-react-page .domain-fee-price-chip:hover {
-    transform: translateY(-1px);
-    background: rgba(255, 255, 255, 0.95);
-}
-
-body.domain-page .domain-react-page .domain-fee-price-chip--company {
-    border-color: rgba(37, 99, 235, 0.22);
-    color: #1e40af;
-}
-
-body.domain-page .domain-react-page .domain-fee-price-chip--company:hover {
-    border-color: rgba(37, 99, 235, 0.4);
-    background: rgba(239, 246, 255, 0.95);
-}
-
-body.domain-page .domain-react-page .domain-fee-price-chip--group {
-    border-color: rgba(13, 148, 136, 0.22);
-    color: #0f766e;
-}
-
-body.domain-page .domain-react-page .domain-fee-price-chip--group:hover {
-    border-color: rgba(13, 148, 136, 0.4);
-    background: rgba(240, 253, 250, 0.95);
 }
 
 /* Price modal (Domain fee settings): match measured legacy layout */
@@ -2696,19 +2646,7 @@ body.auto-renew-page-body .company-settings-react-modal.modal-content .company-s
     cursor: pointer;
 }
 
-.company-settings-react-modal .company-settings-period-wrap::after {
-    content: "";
-    position: absolute;
-    right: 14px;
-    top: 50%;
-    width: 7px;
-    height: 7px;
-    border-right: 2px solid #64748b;
-    border-bottom: 2px solid #64748b;
-    transform: translateY(-70%) rotate(45deg);
-    pointer-events: none;
-    z-index: 1;
-}
+/* Period chevron: single SVG on the select (do not also use wrap::after — doubles with native arrow). */
 
 .company-settings-react-modal .company-settings-date-row .company-settings-start-date-field > .company-settings-start-hint {
     grid-row: 3;
@@ -2744,12 +2682,20 @@ body.auto-renew-page-body .company-settings-react-modal.modal-content .company-s
 }
 
 .company-settings-react-modal .company-settings-date-row .company-settings-period-select {
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
     padding-right: 36px;
     cursor: pointer;
-    background-image: none;
+    background-color: var(--color-surface);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px 12px;
+}
+
+.company-settings-react-modal .company-settings-date-row .company-settings-period-select::-ms-expand {
+    display: none;
 }
 
 .company-settings-react-modal .company-settings-date-row .company-settings-form-datepicker-input {
@@ -3289,7 +3235,7 @@ body.auto-renew-page-body .company-settings-react-modal.modal-content .company-s
 
 .company-share-role-badge--it {
     background: var(--gradient-domain-banner-violet);
-    color: var(--color-control-accent-border);
+    color: #5b21b6;
     border: 1px solid var(--color-violet-border-soft);
 }
 
@@ -3854,7 +3800,8 @@ body.domain-page .domain-react-page .btn-delete.active {
 
 
 /* Add Account (Share % in Company Settings) — above Company Settings overlay (2147483001) */
-body.domain-page #account-addModal.account-modal {
+body.domain-page #account-addModal.account-modal,
+body.auto-renew-page-body #account-addModal.account-modal {
     z-index: 2147483002 !important;
 }
 
@@ -3864,7 +3811,8 @@ body.domain-page #account-editModal .account-modal-header h2 {
 }
 
 /* Company picker from Add Account — above #account-addModal (2147483002) */
-body.domain-page .user-modal-company-picker-root--above-modals {
+body.domain-page .user-modal-company-picker-root--above-modals,
+body.auto-renew-page-body .user-modal-company-picker-root--above-modals {
     z-index: 2147483003 !important;
 }
 
@@ -4666,6 +4614,11 @@ body.domain-page .domain-react-page .domain-list-table {
         minmax(0, 1.4fr)
         minmax(0, 0.85fr)
         92px;
+    /* Stride (row height + row gap) used by useAutoListPageSize to compute how many
+       rows fit per page. Includes headroom above the ~38px typical single-line row
+       + 4px .domain-cards gap so occasional two-line (wrapped name/email) rows don't
+       push the page past the available budget. */
+    --domain-list-row-min-height: 44px;
     width: 100%;
     min-width: 0;
     flex: 1 1 auto;
@@ -4719,7 +4672,7 @@ body.domain-page .domain-react-page .domain-cards {
     flex: 1 1 auto;
     min-height: 0;
     max-height: none;
-    overflow-y: auto;
+    overflow-y: hidden;
     overflow-x: hidden;
     padding-top: 2px;
     padding-bottom: 52px;
@@ -5522,11 +5475,6 @@ body.domain-page .domain-react-page .domain-renew-badge--approved {
     body.domain-page .domain-react-page .btn-add,
     body.domain-page .domain-react-page .btn-fee-settings {
         flex-shrink: 0;
-    }
-
-    /* Tablet：隐藏 C/G 价格标签，顶栏留给搜索与按钮 */
-    body.domain-page .domain-react-page .domain-fee-price-chips {
-        display: none !important;
     }
 
     body.domain-page .domain-react-page .domain-list-table {

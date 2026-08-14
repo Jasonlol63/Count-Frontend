@@ -4,6 +4,7 @@ import { accountModalOverlayZIndex, accountCompanyPickerZIndex } from "./Process
 import SimpleSelect from "./SimpleSelect.jsx";
 import { useSubmitGuard } from "../hooks/useSubmitGuard.js";
 import { formatAccountRoleDisplay } from "../translateFile/pages/accountTranslate.js";
+import PasswordInput from "./PasswordInput.jsx";
 
 function upper(v) {
   return String(v || "").toUpperCase();
@@ -247,7 +248,8 @@ export default function AccountModal({
                 <input
                   type="text"
                   value={form.account_id}
-                  onChange={(e) => setForm((f) => ({ ...f, account_id: upper(e.target.value) }))}
+                  onChange={(e) => setForm((f) => ({ ...f, account_id: e.target.value }))}
+                  style={{ textTransform: "uppercase" }}
                   disabled={!!isEditMode}
                   required
                 />
@@ -285,7 +287,8 @@ export default function AccountModal({
                 <input
                   type="text"
                   value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: upper(e.target.value) }))}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  style={{ textTransform: "uppercase" }}
                   required
                 />
               </div>
@@ -328,7 +331,8 @@ export default function AccountModal({
                     type="text"
                     id={isEditMode ? "edit_remark" : "add_remark"}
                     value={form.remark}
-                    onChange={(e) => setForm((f) => ({ ...f, remark: upper(e.target.value) }))}
+                    onChange={(e) => setForm((f) => ({ ...f, remark: e.target.value }))}
+                    style={{ textTransform: "uppercase" }}
                   />
                 </div>
               )}
@@ -359,13 +363,15 @@ export default function AccountModal({
               )}
 
               <div className="account-form-group">
-                <label>{text(isEditMode ? "passwordOptional" : "passwordRequired")}</label>
-                <input
-                  type="password"
+                <label>{isEditMode ? text("password") : text("passwordRequired")}</label>
+                <PasswordInput
                   value={form.password}
                   onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  placeholder={isEditMode ? text("passwordLeaveBlankHint") : undefined}
                   required={!isEditMode}
+                  placeholder={isEditMode ? text("passwordEditHint") : undefined}
+                  showLabel={text("showPassword")}
+                  hideLabel={text("hidePassword")}
+                  autoComplete="new-password"
                 />
               </div>
               {paymentAlertOn ? (
@@ -375,7 +381,8 @@ export default function AccountModal({
                     type="text"
                     id={isEditMode ? "edit_remark" : "add_remark"}
                     value={form.remark}
-                    onChange={(e) => setForm((f) => ({ ...f, remark: upper(e.target.value) }))}
+                    onChange={(e) => setForm((f) => ({ ...f, remark: e.target.value }))}
+                    style={{ textTransform: "uppercase" }}
                   />
                 </div>
               ) : (
@@ -394,7 +401,8 @@ export default function AccountModal({
                       size={currencyInputCols}
                       placeholder={currencyPlaceholder}
                       value={currencyInput}
-                      onChange={(e) => setCurrencyInput(upper(e.target.value))}
+                      onChange={(e) => setCurrencyInput(e.target.value)}
+                      style={{ textTransform: "uppercase" }}
                     />
                     <button type="button" className="account-btn-add-currency" onClick={onCreateCurrency}>
                       {text("createCurrency")}

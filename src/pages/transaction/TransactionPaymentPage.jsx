@@ -1,5 +1,5 @@
-import { useLayoutEffect, useMemo, useEffect, useCallback, useRef } from "react";
-import { Navigate, useLocation, useSearchParams } from "react-router-dom";
+import { useLayoutEffect, useMemo, useEffect, useCallback, useRef, useState } from "react";
+import { Navigate, useLocation, useOutletContext, useSearchParams } from "react-router-dom";
 import TransactionPaymentHistoryPage from "./TransactionPaymentHistoryPage.jsx";
 import { isPaymentHistoryView } from "./lib/transactionPaymentHistoryUrl.js";
 import TransactionAddSection from "./components/TransactionAddSection.jsx";
@@ -15,7 +15,11 @@ import { useTransactionSync } from "./hooks/useTransactionSync.js";
 import { useTransactionDateRange } from "./hooks/useTransactionDateRange.js";
 import { useTransactionInitialization } from "./hooks/useTransactionInitialization.js";
 import { installTransactionExcelCopy } from "./lib/transactionExcelCopy.js";
-import { getRoleClass, shouldShowTransactionTablesSection } from "./lib/transactionPaymentLogic.js";
+import {
+  countTransactionPresentationRows,
+  getRoleClass,
+  shouldShowTransactionTablesSection,
+} from "./lib/transactionPaymentLogic.js";
 import "../../../public/css/report-outlined-fields.css";
 import "../../../public/css/transaction.css";
 import "../../../public/css/userlist.css";
@@ -24,6 +28,30 @@ import { getTransactionText, TRANSACTION_I18N } from "../../translateFile/pages/
 import { transactionScopeApiParams } from "./lib/transactionScope.js";
 import { clearInlineScrollLock } from "../../utils/layout/clearInlineScrollLock.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
+import { consumeSidebarPageSoftRefresh } from "../../utils/routing/sidebarPageSoftRefresh.js";
+
+const TX_CCY_STICKY_KEY = "transaction.payment.currencyRows.v1";
+
+function readStickyCurrencyRows() {
+  if (typeof sessionStorage === "undefined") return [];
+  try {
+    const raw = sessionStorage.getItem(TX_CCY_STICKY_KEY);
+    if (!raw) return [];
+    const rows = JSON.parse(raw);
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStickyCurrencyRows(rows) {
+  if (typeof sessionStorage === "undefined" || !Array.isArray(rows) || !rows.length) return;
+  try {
+    sessionStorage.setItem(TX_CCY_STICKY_KEY, JSON.stringify(rows));
+  } catch {
+    /* quota */
+  }
+}
 
 /** Cleared on mount so SPA navigation cannot leave stale route classes on `body` before paint (e.g. Process uses `useEffect`; this page uses `useLayoutEffect`, which runs first). */
 const ROUTE_BODY_CLASSES_TO_CLEAR = [
@@ -51,6 +79,7 @@ const TYPE_SEARCH_FULL_ACCOUNT_LEDGER_TYPES = new Set([
   "RATE",
   "ADJUSTMENT",
   "PROFIT",
+  "ALL",
 ]);
 
 export default function TransactionPaymentPage() {
@@ -63,6 +92,7 @@ export default function TransactionPaymentPage() {
 
 function TransactionPaymentPageMain() {
   const location = useLocation();
+  const { pageRefreshKey = 0 } = useOutletContext() || {};
   const todayDmy = useMemo(() => formatDmy(new Date()), []);
   
   // Translation
@@ -78,6 +108,19 @@ function TransactionPaymentPageMain() {
   const data = useTransactionData({ todayDmy });
   const { filterSnapshot, transactionScope, currencyRowsOrdered, loading, forbidden } = data;
   const scopeApi = useMemo(() => transactionScopeApiParams(transactionScope), [transactionScope]);
+
+  // Sticky currency package so Group/Company never paint alone without Currency.
+  const stickyCcyRef = useRef(readStickyCurrencyRows());
+  if (currencyRowsOrdered?.length) {
+    stickyCcyRef.current = currencyRowsOrdered;
+    writeStickyCurrencyRows(currencyRowsOrdered);
+  }
+  const paintCurrencyRows =
+    currencyRowsOrdered?.length > 0 ? currencyRowsOrdered : stickyCcyRef.current;
+  const gcPackageReady = paintCurrencyRows.length > 0;
+
+  // Sticky last table presentation while a new search is in flight (unified swap).
+  const stickyTableRef = useRef(null);
 
   // 3. Form Logic
   const formSearchRef = useRef(null);
@@ -143,6 +186,16 @@ function TransactionPaymentPageMain() {
     setRateDate: form.setRateDate,
   });
 
+  // Sidebar same-page re-click: force filters back to defaults (keep company/group).
+  const lastHandledSoftRefreshKeyRef = useRef(0);
+  useLayoutEffect(() => {
+    if (!pageRefreshKey) return;
+    if (!consumeSidebarPageSoftRefresh("transaction")) return;
+    if (pageRefreshKey === lastHandledSoftRefreshKeyRef.current) return;
+    lastHandledSoftRefreshKeyRef.current = pageRefreshKey;
+    void search.resetPageFiltersToDefaults?.();
+  }, [pageRefreshKey, search.resetPageFiltersToDefaults]);
+
   // 7. Sync & Lifecycle
   const canApproveContra = useMemo(() => {
     const role = filterSnapshot?.viewerRole;
@@ -160,6 +213,10 @@ function TransactionPaymentPageMain() {
     selectedCurrencies: search.selectedCurrencies,
     lastSearchCommitMsRef: search.lastSearchCommitMsRef,
     runSearch: search.runSearch,
+    runTypeSearch: search.runTypeSearch,
+    typeSearchActive: search.typeSearchActive,
+    typeSearchFormType: search.typeSearchFormType,
+    submitFocusActive: search.submitFocusActive,
     loading,
     forbidden,
     canApproveContra,
@@ -230,10 +287,9 @@ function TransactionPaymentPageMain() {
   }, [search.runTypeSearch, form.txType]);
 
   const onExitTypeSearch = useCallback(async () => {
+    // Keep right form date (users often book many payments on the same day).
     await search.exitTypeSearchAndRefresh();
-    form.setTxDate(todayDmy);
-    form.setRateDate(todayDmy);
-  }, [search.exitTypeSearchAndRefresh, form.setTxDate, form.setRateDate, todayDmy]);
+  }, [search.exitTypeSearchAndRefresh]);
 
   const onSearch = useCallback(() => {
     search.runSearch({ silent: false });
@@ -281,17 +337,42 @@ function TransactionPaymentPageMain() {
     [ui.onRejectContra, scopeApi, search.runSearch],
   );
 
+  // Hold top form+filter until GC package is ready — same "dead board" idea as dashboard.
+  // Must be before any early return (hooks order).
+  const [surfaceReady, setSurfaceReady] = useState(gcPackageReady);
+  useLayoutEffect(() => {
+    if (surfaceReady) return;
+    if (gcPackageReady) setSurfaceReady(true);
+  }, [surfaceReady, gcPackageReady]);
+  useLayoutEffect(() => {
+    if (surfaceReady || loading) return undefined;
+    if (!filterSnapshot) return undefined;
+    const t = window.setTimeout(() => setSurfaceReady(true), 900);
+    return () => window.clearTimeout(t);
+  }, [surfaceReady, loading, filterSnapshot]);
+
   if (forbidden) {
     return <Navigate to={spaPath("dashboard")} replace />;
   }
 
   // Never paint Loading / empty chrome — tables appear when rows exist.
-  const tablesVisible = shouldShowTransactionTablesSection({
-    showAllCurrencies: search.showAllCurrencies,
-    selectedCurrencies: search.selectedCurrencies,
-    tablePresentation: search.tablePresentation,
-    searchLoading: false,
-  });
+  // Keep last solid table frame during searchLoading so filter + tables flip together.
+  if (countTransactionPresentationRows(search.tablePresentation) > 0) {
+    stickyTableRef.current = search.tablePresentation;
+  }
+  const paintTablePresentation =
+    search.searchLoading && stickyTableRef.current
+      ? stickyTableRef.current
+      : search.tablePresentation;
+
+  const tablesVisible =
+    gcPackageReady &&
+    shouldShowTransactionTablesSection({
+      showAllCurrencies: search.showAllCurrencies,
+      selectedCurrencies: search.selectedCurrencies,
+      tablePresentation: paintTablePresentation,
+      searchLoading: false,
+    });
 
   return (
     <div className="container-fluid transaction-container">
@@ -325,130 +406,137 @@ function TransactionPaymentPageMain() {
             dangerouslySetInnerHTML={{ __html: m.toleranceBanner }}
           />
         ) : null}
-        <div className="transaction-main-content">
-          <TransactionSearchSection
-            categoryOpen={search.categoryOpen}
-            toggleCategory={search.toggleCategory}
-            categories={data.categories}
-            selectedCategories={search.selectedCategories}
-            categoryAllCheckboxRef={search.categoryAllCheckboxRef}
-            onCategoryAllChange={search.onCategoryAllChange}
-            toggleCategoryValue={search.toggleCategoryValue}
-            removeCategoryTag={search.removeCategoryTag}
-            searchState={search.searchState}
-            setSearchState={search.setSearchState}
-            showAllCurrencies={search.showAllCurrencies}
-            selectedCurrencies={search.selectedCurrencies}
-            setSelectedCurrencies={search.setSelectedCurrencies}
-            toggleAllCurrenciesBtn={search.toggleAllCurrenciesBtn}
-            currencyOptions={data.currencyOptions}
-            searchLoading={search.searchLoading}
-            onSearch={onSearch}
-            fs={filterSnapshot}
-            onGroupButtonClick={data.onGroupButtonClick}
-            onCompanyButtonClick={data.onCompanyButtonClick}
-            onWarmCompany={data.onWarmCompany}
-            onPickAllGroups={data.onPickAllGroups}
-            onPickAllInGroup={data.onPickAllInGroup}
-            allowCompanyDeselect={data.allowCompanyDeselect}
-            currencyRowsOrdered={currencyRowsOrdered}
-            onCurrencyDragStart={search.onCurrencyDragStart}
-            onCurrencyDropOn={search.onCurrencyDropOn}
-            toggleCurrencyBtn={search.toggleCurrencyBtn}
-            m={m}
-            t={t}
-          />
+        {surfaceReady ? (
+          <>
+            <div className="transaction-main-content">
+              <TransactionSearchSection
+                categoryOpen={search.categoryOpen}
+                toggleCategory={search.toggleCategory}
+                categories={data.categories}
+                selectedCategories={search.selectedCategories}
+                categoryAllCheckboxRef={search.categoryAllCheckboxRef}
+                onCategoryAllChange={search.onCategoryAllChange}
+                toggleCategoryValue={search.toggleCategoryValue}
+                removeCategoryTag={search.removeCategoryTag}
+                searchState={search.searchState}
+                setSearchState={search.setSearchState}
+                showAllCurrencies={search.showAllCurrencies}
+                selectedCurrencies={search.selectedCurrencies}
+                setSelectedCurrencies={search.setSelectedCurrencies}
+                toggleAllCurrenciesBtn={search.toggleAllCurrenciesBtn}
+                currencyOptions={data.currencyOptions}
+                searchLoading={search.searchLoading}
+                onSearch={onSearch}
+                fs={filterSnapshot}
+                onGroupButtonClick={data.onGroupButtonClick}
+                onCompanyButtonClick={data.onCompanyButtonClick}
+                onWarmCompany={data.onWarmCompany}
+                onPickAllGroups={data.onPickAllGroups}
+                onPickAllInGroup={data.onPickAllInGroup}
+                allowCompanyDeselect={data.allowCompanyDeselect}
+                currencyRowsOrdered={paintCurrencyRows}
+                onCurrencyDragStart={search.onCurrencyDragStart}
+                onCurrencyDropOn={search.onCurrencyDropOn}
+                toggleCurrencyBtn={search.toggleCurrencyBtn}
+                m={m}
+                t={t}
+              />
 
-          <TransactionAddSection
-            txType={form.txType}
-            setTxType={form.setTxType}
-            todayDmy={todayDmy}
-            txDate={form.txDate}
-            rateDate={form.rateDate}
-            txToAccount={form.txToAccount}
-            setTxToAccount={form.setTxToAccount}
-            txFromAccount={form.txFromAccount}
-            setTxFromAccount={form.setTxFromAccount}
-            selectedCategories={search.selectedCategories}
-            txCurrency={form.txCurrency}
-            setTxCurrency={form.setTxCurrency}
-            txAmount={form.txAmount}
-            setTxAmount={form.setTxAmount}
-            txRemark={form.txRemark}
-            setTxRemark={form.setTxRemark}
-            txConfirm={form.txConfirm}
-            setTxConfirm={form.setTxConfirm}
-            submitting={form.submitting}
-            onSubmitTx={form.onSubmitTx}
-            onTypeSearch={onTypeSearch}
-            onExitTypeSearch={onExitTypeSearch}
-            typeSearchActive={search.listPresentationModeActive}
-            searchLoading={search.searchLoading}
-            accountOptions={data.accountOptions}
-            currencyOptions={data.currencyOptions}
-            showStandardFromAndReverse={form.showStandardFromAndReverse}
-            onReverseAccounts={form.onReverseAccounts}
-            mutationsBlocked={Boolean(filterSnapshot?.mutationsBlocked)}
-            rateToAccount={form.rateToAccount}
-            setRateToAccount={form.setRateToAccount}
-            rateFromAccount={form.rateFromAccount}
-            setRateFromAccount={form.setRateFromAccount}
-            rateCurrencyFrom={form.rateCurrencyFrom}
-            setRateCurrencyFrom={form.setRateCurrencyFrom}
-            rateCurrencyTo={form.rateCurrencyTo}
-            setRateCurrencyTo={form.setRateCurrencyTo}
-            rateCurrencyFromAmount={form.rateCurrencyFromAmount}
-            setRateCurrencyFromAmount={form.setRateCurrencyFromAmount}
-            rateExchangeRateRaw={form.rateExchangeRateRaw}
-            setRateExchangeRateRaw={form.setRateExchangeRateRaw}
-            rateCurrencyToAmount={form.rateCurrencyToAmount}
-            onRateCurrencyRowReverse={form.onRateCurrencyRowReverse}
-            rateTransferToAccount={form.rateTransferToAccount}
-            setRateTransferToAccount={form.setRateTransferToAccount}
-            rateTransferFromAccount={form.rateTransferFromAccount}
-            setRateTransferFromAccount={form.setRateTransferFromAccount}
-            rateMiddlemanAccount={form.rateMiddlemanAccount}
-            setRateMiddlemanAccount={form.setRateMiddlemanAccount}
-            rateMiddlemanRate={form.rateMiddlemanRate}
-            setRateMiddlemanRate={form.setRateMiddlemanRate}
-            rateMiddlemanAmount={form.rateMiddlemanAmount}
-            rateMiddlemanInputAmount={form.rateMiddlemanInputAmount}
-            setRateMiddlemanInputAmount={form.setRateMiddlemanInputAmount}
-            m={m}
-            t={t}
-          />
-        </div>
+              <TransactionAddSection
+                txType={form.txType}
+                setTxType={form.setTxType}
+                todayDmy={todayDmy}
+                txDate={form.txDate}
+                rateDate={form.rateDate}
+                txToAccount={form.txToAccount}
+                setTxToAccount={form.setTxToAccount}
+                txFromAccount={form.txFromAccount}
+                setTxFromAccount={form.setTxFromAccount}
+                selectedCategories={search.selectedCategories}
+                txCurrency={form.txCurrency}
+                setTxCurrency={form.setTxCurrency}
+                txAmount={form.txAmount}
+                setTxAmount={form.setTxAmount}
+                txRemark={form.txRemark}
+                setTxRemark={form.setTxRemark}
+                txConfirm={form.txConfirm}
+                setTxConfirm={form.setTxConfirm}
+                submitting={form.submitting}
+                onSubmitTx={form.onSubmitTx}
+                onTypeSearch={onTypeSearch}
+                onExitTypeSearch={onExitTypeSearch}
+                typeSearchActive={search.listPresentationModeActive}
+                searchLoading={search.searchLoading}
+                accountOptions={data.accountOptions}
+                currencyOptions={data.currencyOptions}
+                showStandardFromAndReverse={form.showStandardFromAndReverse}
+                onReverseAccounts={form.onReverseAccounts}
+                mutationsBlocked={Boolean(filterSnapshot?.mutationsBlocked)}
+                rateToAccount={form.rateToAccount}
+                setRateToAccount={form.setRateToAccount}
+                rateFromAccount={form.rateFromAccount}
+                setRateFromAccount={form.setRateFromAccount}
+                rateCurrencyFrom={form.rateCurrencyFrom}
+                setRateCurrencyFrom={form.setRateCurrencyFrom}
+                rateCurrencyTo={form.rateCurrencyTo}
+                setRateCurrencyTo={form.setRateCurrencyTo}
+                rateCurrencyFromAmount={form.rateCurrencyFromAmount}
+                setRateCurrencyFromAmount={form.setRateCurrencyFromAmount}
+                rateExchangeRateRaw={form.rateExchangeRateRaw}
+                setRateExchangeRateRaw={form.setRateExchangeRateRaw}
+                rateCurrencyToAmount={form.rateCurrencyToAmount}
+                onRateCurrencyRowReverse={form.onRateCurrencyRowReverse}
+                rateTransferToAccount={form.rateTransferToAccount}
+                setRateTransferToAccount={form.setRateTransferToAccount}
+                rateTransferFromAccount={form.rateTransferFromAccount}
+                setRateTransferFromAccount={form.setRateTransferFromAccount}
+                rateMiddlemanAccount={form.rateMiddlemanAccount}
+                setRateMiddlemanAccount={form.setRateMiddlemanAccount}
+                rateMiddlemanRate={form.rateMiddlemanRate}
+                setRateMiddlemanRate={form.setRateMiddlemanRate}
+                rateMiddlemanAmount={form.rateMiddlemanAmount}
+                rateMiddlemanInputAmount={form.rateMiddlemanInputAmount}
+                setRateMiddlemanInputAmount={form.setRateMiddlemanInputAmount}
+                rateMiddlemanPlatformFee={form.rateMiddlemanPlatformFee}
+                setRateMiddlemanPlatformFee={form.setRateMiddlemanPlatformFee}
+                m={m}
+                t={t}
+              />
+            </div>
 
-        <TransactionTablesSection
-          tablesVisible={tablesVisible}
-          searchLoading={false}
-          tp={search.tablePresentation}
-          searchState={search.searchState}
-          getRoleClass={getRoleClass}
-          fallbackRoleClass={singleCategoryFallbackRoleClass}
-          openHistory={(row) =>
-            ui.onViewHistory(
-              row,
-              search.effectiveDateFrom,
-              search.effectiveDateTo,
-              scopeApi,
-              {
-                selectedCurrencies: search.selectedCurrencies,
-                showAllCurrencies: search.showAllCurrencies,
-                pureTypeSearch:
-                  search.typeSearchActive &&
-                  !TYPE_SEARCH_FULL_ACCOUNT_LEDGER_TYPES.has(
-                    String(search.typeSearchFormType || "").toUpperCase(),
-                  )
-                    ? search.typeSearchFormType
-                    : null,
-              },
-            )
-          }
-          handleBalanceCellClick={form.handleBalanceCellClick}
-          m={m}
-          t={t}
-        />
+            <TransactionTablesSection
+              tablesVisible={tablesVisible}
+              searchLoading={false}
+              tp={paintTablePresentation}
+              searchState={search.searchState}
+              listPresentationModeActive={search.listPresentationModeActive}
+              getRoleClass={getRoleClass}
+              fallbackRoleClass={singleCategoryFallbackRoleClass}
+              openHistory={(row) =>
+                ui.onViewHistory(
+                  row,
+                  search.effectiveDateFrom,
+                  search.effectiveDateTo,
+                  scopeApi,
+                  {
+                    selectedCurrencies: search.selectedCurrencies,
+                    showAllCurrencies: search.showAllCurrencies,
+                    pureTypeSearch:
+                      search.typeSearchActive &&
+                      !TYPE_SEARCH_FULL_ACCOUNT_LEDGER_TYPES.has(
+                        String(search.typeSearchFormType || "").toUpperCase(),
+                      )
+                        ? search.typeSearchFormType
+                        : null,
+                  },
+                )
+              }
+              handleBalanceCellClick={form.handleBalanceCellClick}
+              m={m}
+              t={t}
+            />
+          </>
+        ) : null}
       </main>
 
       {/* Same date logic as legacy page, with Transaction-specific range picker layout. */}

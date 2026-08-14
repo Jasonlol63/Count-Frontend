@@ -1,8 +1,8 @@
 export const DASHBOARD_API = "api/transactions/dashboard_api.php";
 export const DASHBOARD_BOOTSTRAP_API = "api/transactions/dashboard_bootstrap_api.php";
 
-/** Trend + pie panels: shared Recharts / number animation timing. */
-export const DASHBOARD_PANEL_ANIM_DURATION_MS = 800;
+/** @deprecated Dashboard panels no longer animate; kept for import compatibility. */
+export const DASHBOARD_PANEL_ANIM_DURATION_MS = 0;
 export const DASHBOARD_PANEL_ANIM_BEGIN_MS = 0;
 export const DASHBOARD_PANEL_ANIM_EASING = "ease-out";
 

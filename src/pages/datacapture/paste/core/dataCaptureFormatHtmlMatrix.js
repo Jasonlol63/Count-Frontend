@@ -1,9 +1,7 @@
 /** 2.Format HTML table → body matrix (PR6 batch 1). */
 
-import {
-  sanitizeFormatHtmlFragment,
-  sanitizeCopiedStyleString,
-} from "./dataCaptureFormatStyleUtils.js";
+import { sanitizeCopiedStyleString } from "./dataCaptureFormatStyleUtils.js";
+import { sanitizePastedCellHtml } from "./dataCaptureClipboard.js";
 import {
   expandCollapsedTableRows,
   tokenizeCollapsedReportRow,
@@ -195,18 +193,42 @@ function trLooksLikePaginatorOrInfoRow(tr) {
   return /^Showing\s+\d+\s+to\s+\d+\s+of\s+\d+/i.test(joined);
 }
 
-/** @returns {{ headerRows: Element[], dataRows: Element[], maxCols: number, allRows: Element[] } | null} */
+/**
+ * Parse clipboard HTML into table rows.
+ * Mounts into the document so Excel/Material &lt;style&gt; rules apply to
+ * getComputedStyle when baking cell backgrounds/colors (org 1.Text fidelity).
+ *
+ * @returns {{ headerRows: Element[], dataRows: Element[], maxCols: number, allRows: Element[], dispose: () => void } | null}
+ */
 export function parseFormatHtmlTableStructure(htmlString) {
-  const tempDiv = document.createElement("div");
-  tempDiv.innerHTML = htmlString;
+  const host = document.createElement("div");
+  host.setAttribute("data-dc-format-paste-host", "1");
+  host.style.cssText =
+    "position:fixed;left:-10000px;top:0;width:auto;height:auto;overflow:hidden;pointer-events:none;opacity:0;";
+  host.innerHTML = String(htmlString ?? "");
+  document.body.appendChild(host);
 
-  const table = tempDiv.querySelector("table");
-  if (!table) return null;
+  const dispose = () => {
+    try {
+      host.remove();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const table = host.querySelector("table");
+  if (!table) {
+    dispose();
+    return null;
+  }
 
   expandCollapsedTableRows(table);
 
   const allRows = Array.from(table.querySelectorAll("tr"));
-  if (allRows.length === 0) return null;
+  if (allRows.length === 0) {
+    dispose();
+    return null;
+  }
 
   const headerRows = [];
   const dataRows = [];
@@ -236,9 +258,12 @@ export function parseFormatHtmlTableStructure(htmlString) {
     maxCols = Math.max(maxCols, colCount);
   });
 
-  if (maxCols === 0) return null;
+  if (maxCols === 0) {
+    dispose();
+    return null;
+  }
 
-  return { headerRows, dataRows, maxCols, allRows };
+  return { headerRows, dataRows, maxCols, allRows, dispose };
 }
 
 function extractCellLines(sourceCell) {
@@ -375,6 +400,21 @@ function inferVisualStyleFromCellClass(sourceCell) {
   return parts.length ? `${parts.join("; ")};` : "";
 }
 
+function isUsableBackgroundColor(backgroundColor) {
+  if (!backgroundColor) return false;
+  const bg = String(backgroundColor).trim().toLowerCase();
+  return (
+    bg &&
+    bg !== "rgba(0, 0, 0, 0)" &&
+    bg !== "transparent" &&
+    bg !== "rgba(0,0,0,0)" &&
+    bg !== "rgb(255, 255, 255)" &&
+    bg !== "#ffffff" &&
+    bg !== "#fff" &&
+    bg !== "white"
+  );
+}
+
 export function buildFormatDataCellStyle(sourceCell) {
   const sourceCellStyle = sourceCell.getAttribute("style");
   let sourceCellComputedStyle = null;
@@ -387,28 +427,35 @@ export function buildFormatDataCellStyle(sourceCell) {
   }
 
   const classVisual = inferVisualStyleFromCellClass(sourceCell);
+  const computedBg = sourceCellComputedStyle?.backgroundColor;
+  const bakeBg =
+    isUsableBackgroundColor(computedBg) &&
+    !/background(-color)?\s*:/i.test(String(sourceCellStyle || ""));
 
-  // 2.Format 1:1 — keep color/background/weight from clipboard; only drop layout props.
+  // 1:1 — keep color/background/weight from clipboard; only drop layout props.
+  // Bake computed background when Excel put yellow via class + &lt;style&gt; block.
   if (sourceCellStyle) {
     const sanitizedCellStyle = sanitizeCopiedStyleString(sourceCellStyle);
-    const merged = [sanitizedCellStyle, classVisual].filter(Boolean).join(" ").trim();
-    return merged && !merged.includes("border")
-      ? `border: 1px solid #d0d7de !important; ${merged}`
-      : merged || "border: 1px solid #d0d7de !important;";
+    const extras = [
+      sanitizedCellStyle,
+      classVisual,
+      bakeBg ? `background-color: ${computedBg} !important;` : "",
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    return extras && !extras.includes("border")
+      ? `border: 1px solid #d0d7de !important; ${extras}`
+      : extras || "border: 1px solid #d0d7de !important;";
   }
 
   const color = sourceCellComputedStyle?.color;
   const fontWeight = sourceCellComputedStyle?.fontWeight;
   const textAlign = sourceCellComputedStyle?.textAlign;
-  const backgroundColor = sourceCellComputedStyle?.backgroundColor;
   let styleString = "border: 1px solid #d0d7de !important;";
   if (color && color !== "rgb(0, 0, 0)") styleString += ` color: ${color} !important;`;
-  if (
-    backgroundColor &&
-    backgroundColor !== "rgba(0, 0, 0, 0)" &&
-    backgroundColor !== "transparent"
-  ) {
-    styleString += ` background-color: ${backgroundColor} !important;`;
+  if (isUsableBackgroundColor(computedBg)) {
+    styleString += ` background-color: ${computedBg} !important;`;
   }
   if (fontWeight && fontWeight !== "normal" && fontWeight !== "400") {
     styleString += ` font-weight: ${fontWeight} !important;`;
@@ -432,16 +479,13 @@ export function buildFormatDataCellPatch(sourceCell, displayText) {
   }
   const cellText = sourceCell.textContent || sourceCell.innerText || "";
 
-  const cleanContent = cellContent
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/javascript:/gi, "")
-    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, "");
+  // Match org 1.Text: keep classes / icons / inline styles (do not strip class attrs).
+  const cleanContent = sanitizePastedCellHtml(cellContent);
 
   if (cleanContent.includes("<") && cleanContent.includes(">")) {
     return {
       value: cellText,
-      html: sanitizeFormatHtmlFragment(cleanContent),
+      html: cleanContent,
       styleCssText,
     };
   }
@@ -449,7 +493,7 @@ export function buildFormatDataCellPatch(sourceCell, displayText) {
   if (cellText && cellText.trim() !== "") {
     const sourceCellStyle = sourceCell.getAttribute("style");
     const classVisual = inferVisualStyleFromCellClass(sourceCell);
-    if (sourceCellStyle || classVisual) {
+    if (sourceCellStyle || classVisual || styleCssText) {
       const sanitizedSpanStyle = [sanitizeCopiedStyleString(sourceCellStyle || ""), classVisual]
         .filter(Boolean)
         .join(" ")

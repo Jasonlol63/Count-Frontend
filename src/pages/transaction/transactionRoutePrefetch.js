@@ -5,7 +5,7 @@ import {
 import { getCategories, getUserCurrencyOrder } from "./lib/transactionApi.js";
 import { formatDmy } from "./lib/transactionFormat.js";
 import { buildTransactionBootSnapshot } from "./lib/transactionBootSnapshot.js";
-import { resolveTransactionScope, resolveTransactionCurrencyOrderCompanyId } from "./lib/transactionScope.js";
+import { resolveTransactionScope, resolveTransactionCurrencyOrderParams, resolveTransactionCurrencyOrderCacheKey } from "./lib/transactionScope.js";
 import { prefetchTransactionScopeBundle } from "./lib/transactionScopePrefetch.js";
 
 const warmInflight = new Map();
@@ -36,9 +36,8 @@ export function warmTransactionRouteCache({ me = null } = {}) {
         return;
       }
     }
-    if (!rows?.length) return;
-
-    const snap = buildTransactionBootSnapshot(me, rows, {
+    // Empty Group: rows may be [] — boot snapshot still allowed for group login.
+    const snap = buildTransactionBootSnapshot(me, rows || [], {
       queryCompany: new URL(window.location.href).searchParams.get("company_id"),
     });
     if (!snap) return;
@@ -46,15 +45,22 @@ export function warmTransactionRouteCache({ me = null } = {}) {
     const scope = resolveTransactionScope(snap);
     if (!scope) return;
     const todayDmy = formatDmy(new Date());
-    const orderCompanyId = resolveTransactionCurrencyOrderCompanyId(
+    const orderParams = resolveTransactionCurrencyOrderParams(
+      scope,
+      snap.snapCompaniesAll || snap.snapCompanies,
+    );
+    const orderCacheKey = resolveTransactionCurrencyOrderCacheKey(
       scope,
       snap.snapCompaniesAll || snap.snapCompanies,
     );
 
     await Promise.all([
       getCategories().catch(() => null),
-      orderCompanyId
-        ? getUserCurrencyOrder({ companyId: orderCompanyId }).catch(() => null)
+      orderCacheKey
+        ? getUserCurrencyOrder({
+            companyId: orderParams.companyId,
+            groupId: orderParams.groupId,
+          }).catch(() => null)
         : Promise.resolve(null),
       prefetchTransactionScopeBundle(null, { nextSnap: snap, todayDmy }),
     ]);

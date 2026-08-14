@@ -125,6 +125,72 @@ export function alignTotalRowArray(row) {
   return row;
 }
 
+/** Body rows look like id | short-code | number | … (e.g. E1911 | XQ | 101). */
+export function matrixHasCodeColumnPattern(matrix) {
+  if (!Array.isArray(matrix) || matrix.length < 2) return false;
+
+  let matches = 0;
+  for (const row of matrix) {
+    if (!Array.isArray(row) || row.length < 3) continue;
+    if (rowHasTotalLabel(row)) continue;
+
+    const col0 = trimCellValue(row[0]);
+    const col1 = trimCellValue(row[1]);
+    const col2 = trimCellValue(row[2]);
+    if (!col0 || !col1 || !col2) continue;
+    if (isAlphaCode(col1) && isNumericValue(col2)) {
+      matches += 1;
+      if (matches >= 2) return true;
+    }
+  }
+  return false;
+}
+
+function isEnglishTotalBalanceLabel(value) {
+  const upper = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+  if (!upper) return false;
+  if (upper === "TOTAL BALANCE" || upper === "TOTAL") return true;
+  if (upper === "SUB TOTAL" || upper === "SUBTOTAL" || upper === "GRAND TOTAL" || upper === "GRANDTOTAL") {
+    return false;
+  }
+  return /^TOTAL\b/.test(upper);
+}
+
+/**
+ * Plain TSV often drops the empty code-column cell after TOTAL BALANCE while HTML
+ * keeps it (colspan / blank TD). Re-insert the blank so totals line up under the
+ * numeric columns (matches org 1.TEXT / PHP visible result).
+ */
+export function ensureTotalRowCodeColumnGap(matrix) {
+  if (!matrixHasCodeColumnPattern(matrix)) return matrix;
+
+  let changed = false;
+  const next = matrix.map((row) => {
+    if (!Array.isArray(row) || !row.length) return row;
+    const labelIdx = rowFirstNonEmptyIndex(row);
+    if (labelIdx < 0) return row;
+    if (!isEnglishTotalBalanceLabel(trimCellValue(row[labelIdx]))) return row;
+
+    const afterIdx = labelIdx + 1;
+    if (afterIdx >= row.length) return row;
+    if (isBlankCell(trimCellValue(row[afterIdx]))) return row;
+    if (!isNumericValue(trimCellValue(row[afterIdx]))) return row;
+
+    const out = [...row];
+    out.splice(afterIdx, 0, makeBlankCellLike(row));
+    changed = true;
+    return out;
+  });
+
+  if (changed) {
+    console.log("Inserted blank after TOTAL label so totals align under code-column body rows.");
+  }
+  return changed ? next : matrix;
+}
+
 /**
  * Collapse the blank gap between a TOTAL / 总数 label and its first number so the
  * total row's numbers start in column 2 (matches PHP). Cells after the first

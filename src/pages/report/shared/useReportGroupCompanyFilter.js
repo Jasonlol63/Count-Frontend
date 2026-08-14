@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { useAuthSession } from "../../../context/AuthSessionContext.jsx";
-import { canUseGroupOnlyMode } from "../../../utils/company/loginScope.js";
+import { canUseGroupOnlyMode, resolveVisibleGroupIds } from "../../../utils/company/loginScope.js";
 import {
   clearDashboardGroupFilterKeepCompany,
   companiesForCompanyPicker,
@@ -15,7 +15,7 @@ import {
   persistDashboardFilterState,
   persistDashboardGroupFilter,
   persistDashboardGroupOnlyMode,
-  sortedUniqueGroupIds,
+  resolveOwnerDashboardGroupIds,
 } from "../../../utils/company/sharedCompanyFilter.js";
 import { useGcFilterWithAllModes } from "../../../utils/company/useGcFilterWithAllModes.js";
 import { resolveReportCompanyWhenClosingGroup } from "./reportGcBoot.js";
@@ -63,11 +63,11 @@ export function useReportGroupCompanyFilter({
     enableGroupAnchorSession,
     broadcastFilterToLayout,
     forceAllowGroupOnly: canUseGroupOnlyMode(me),
-    clearCompanyOnActiveGroupReselect: false,
+    // Re-click active Group while a company is selected → enter group-only (clear company).
+    clearCompanyOnActiveGroupReselect: true,
   });
 
   const {
-    groupIds,
     companiesForPicker: baseCompaniesForPicker,
     groupsAllMode,
     groupAllMode,
@@ -80,6 +80,12 @@ export function useReportGroupCompanyFilter({
     allowClearCompany,
     allowGroupOnly,
   } = base;
+
+  /** Include Domain / login Group codes (empty Group KK) — not only company.group_id. */
+  const groupIds = useMemo(
+    () => resolveVisibleGroupIds(resolveOwnerDashboardGroupIds(companies, me), me, companies),
+    [companies, me],
+  );
 
   const companiesForPicker = useMemo(() => {
     const preferredId = preferredCompanyId ?? companyId ?? null;
@@ -96,21 +102,31 @@ export function useReportGroupCompanyFilter({
       ).filter((c) => !String(c.group_id || "").trim());
     };
 
+    /** All subsidiaries (drop group-label rows) — used when native group_id rows are empty. */
+    const allSubsidiaryPicker = () =>
+      excludeGroupLabelsFromCompanyPicker(
+        dedupeOwnerCompaniesByCode(filterCompaniesWithDisplayId(companies), preferredId),
+        groupIds,
+      );
+
     if (groupsAllMode) {
       return baseCompaniesForPicker;
     }
 
     if (!selectedGroup || groupFilterOptOut) {
-      return independentPicker();
+      const independent = independentPicker();
+      return independent.length ? independent : allSubsidiaryPicker();
     }
 
     if (baseCompaniesForPicker.length > 0) return baseCompaniesForPicker;
 
     const effectiveGroup = String(selectedGroup).trim().toUpperCase();
-    return dedupeOwnerCompaniesByCode(
+    const inGroup = dedupeOwnerCompaniesByCode(
       companiesForCompanyPicker(companies, effectiveGroup, groupIds),
       preferredId,
     );
+    // Empty Group / missing company.group_id: still show portfolio subsidiaries so user can enter company mode.
+    return inGroup.length ? inGroup : allSubsidiaryPicker();
   }, [
     baseCompaniesForPicker,
     companies,
@@ -172,6 +188,20 @@ export function useReportGroupCompanyFilter({
 
       const current = String(selectedGroup || "").trim().toUpperCase();
 
+      // Re-click active group with company selected → group-only (not close group).
+      if (g === current && companyId != null && allowGroupOnly) {
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.removeItem(DASHBOARD_GROUP_FILTER_OPT_OUT_KEY);
+        }
+        setGroupFilterOptOutTick((n) => n + 1);
+        persistDashboardGroupFilter(g);
+        persistDashboardGroupOnlyMode(true);
+        persistDashboardFilterState(g, null, { allowGroupOnly: true });
+        onClearCompany?.(g);
+        notifyDashboardGroupFilterChanged(g, null);
+        return;
+      }
+
       if (g === current && companyId == null && allowGroupOnly) {
         await deselectGroupKeepCompany();
         return;
@@ -191,6 +221,7 @@ export function useReportGroupCompanyFilter({
       allowGroupOnly,
       deselectGroupKeepCompany,
       baseHandlePickGroup,
+      onClearCompany,
     ],
   );
 

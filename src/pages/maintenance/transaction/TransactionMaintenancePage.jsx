@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { flushSync } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { canAccessTransactionFormulaMaintenance } from "../../../utils/auth/sidebarPermissions.js";
 import { removeOtherMaintenanceStylesheets } from "../../../utils/maintenance/maintenanceStylesheets.js";
 import { ensureMaintenanceDateRangePicker } from "../../../utils/date/dateRangePicker.js";
@@ -10,7 +9,6 @@ import { runMaintenanceCompanySwitch } from "../shared/maintenanceCompanySwitch.
 import { companyPermsAllowDataCaptureMaintenance } from "../shared/maintenanceCompanyApi.js";
 import { spaPath } from "../../../utils/routing/pageRoutes.js";
 import {
-  companiesInGroupList,
   getCachedOwnerCompanies,
   isDashboardGroupOnlyMode,
   persistDashboardFilterState,
@@ -35,21 +33,16 @@ import "../../../../public/css/report-outlined-fields.css";
 import "../../../../public/css/transaction_maintenance.css";
 import "../../../../public/css/maintenance_unified_filters.css";
 import { useGroupAnchorSessionSync } from "../../../utils/company/useGroupAnchorSessionSync.js";
-import { notifyCompanySessionUpdated } from "../../../utils/company/companySessionEvents.js";
 import {
   fetchCompanyPermissions,
-  fetchProcessesForPermission,
+  fetchProcesses,
   normalizeMaintenanceProcessFilter,
-  filterTransactionMaintenancePermissions,
-  pickTransactionMaintenancePermission,
-  resolveTransactionMaintenanceActivePermission,
   filterTransactionMaintenanceRowsBySearch,
   searchTransactionData,
   updateSessionCompany,
   syncTransactionMaintenanceGroupAnchorSession,
   isMaintenanceRecoverableError,
   getMaintenanceSearchUserMessage,
-  bootstrapTransactionMaintenanceMeta,
 } from "./transactionMaintenanceLogic.js";
 import {
   resolveTransactionMaintenanceScope,
@@ -57,6 +50,8 @@ import {
   transactionMaintenanceScopeIsReady,
   transactionMaintenanceUsesGroupProcesses,
 } from "./transactionMaintenanceScope.js";
+import { useRealtimeDomain } from "../../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS } from "../../../lib/realtime/realtimeEvents.js";
 import { useLoginLang } from "../../../utils/i18n/useLoginLang.js";
 import { getMaintenanceText, MAINTENANCE_I18N } from "../../../translateFile/pages/maintenanceTranslate.js";
 import { formatDmyFromYmd } from "../shared/maintenanceDateHelpers.js";
@@ -99,7 +94,6 @@ export default function TransactionMaintenancePage() {
   useMaintenancePageScrollLock();
 
   const [companies, setCompanies] = useState(() => getCachedOwnerCompanies() || []);
-  const [permissions, setPermissions] = useState([]);
 
   // -- Filter State --
   const [companyId, setCompanyId] = useState(readInitialMaintenanceCompanyId);
@@ -107,8 +101,7 @@ export default function TransactionMaintenancePage() {
   const [selectedGroup, setSelectedGroup] = useState(readInitialMaintenanceSelectedGroup);
   const [selectedProcess, setSelectedProcess] = useState("");
   const [query, setQuery] = useState("");
-  const [activePermission, setActivePermission] = useState("");
-  
+
   const today = useMemo(() => new Date(), []);
   const todayDmy = useMemo(() => {
     const d = String(today.getDate()).padStart(2, "0");
@@ -141,9 +134,7 @@ export default function TransactionMaintenancePage() {
 
   // -- Data State --
   const [processes, setProcesses] = useState([]);
-  /** When set, meta effect reuses permissions from the last company switch instead of calling domain_api again. */
-  const switchPermsCacheRef = useRef(null);
-  /** Boot already loaded process/permission meta — skip duplicate meta effect on first paint. */
+  /** Boot already loaded process meta — skip duplicate meta effect on first paint. */
   const skipMetaAfterBootRef = useRef(false);
   const maintenanceAbortRef = useRef(null);
   const maintenanceSeqRef = useRef(0);
@@ -152,7 +143,7 @@ export default function TransactionMaintenancePage() {
   const scopeKeyRef = useRef("");
   /** Last successful search key — detect scope/filter change to drop stale rows. */
   const lastSearchQueryKeyRef = useRef("");
-  /** Boot finished with scope/permission — trigger one explicit search before auto-effect. */
+  /** Boot finished with scope — trigger one explicit search before auto-effect. */
   const pendingBootSearchRef = useRef(null);
   const searchDebounceRef = useRef(null);
   const firstProgressPaintRef = useRef(true);
@@ -222,8 +213,9 @@ export default function TransactionMaintenancePage() {
         companyId,
         groupsAllMode,
         groupAllMode,
+        me,
       }),
-    [companies, selectedGroup, companyId, groupsAllMode, groupAllMode],
+    [companies, selectedGroup, companyId, groupsAllMode, groupAllMode, me],
   );
 
   const transactionScopeKey = useMemo(
@@ -285,9 +277,9 @@ export default function TransactionMaintenancePage() {
         dateFrom,
         dateTo,
         processFilter,
-        activePermission || "",
+        "Games",
       ]),
-    [transactionScopeKey, dateFrom, dateTo, processFilter, activePermission],
+    [transactionScopeKey, dateFrom, dateTo, processFilter],
   );
 
   useEffect(() => {
@@ -311,11 +303,7 @@ export default function TransactionMaintenancePage() {
           groupsAllMode,
           groupAllMode,
         });
-      const category =
-        overrides.category ??
-        (activePermission ||
-          pickTransactionMaintenancePermission(permissions, null) ||
-          "Games");
+      const category = overrides.category ?? "Games";
       if (
         !transactionMaintenanceScopeIsReady(effectiveScope) ||
         !dateFrom ||
@@ -430,8 +418,6 @@ export default function TransactionMaintenancePage() {
       dateFrom,
       dateTo,
       processFilter,
-      activePermission,
-      permissions,
       notify,
       t,
       publishTransactionRows,
@@ -439,12 +425,13 @@ export default function TransactionMaintenancePage() {
     ],
   );
 
+  useRealtimeDomain(REALTIME_DOMAINS.LEDGER, () => {
+    void performMaintenanceSearch();
+  }, { enabled: listQueryEnabled });
+
   const runBootMaintenanceSearch = useCallback(async (pending) => {
     if (!pending?.scope || !transactionMaintenanceScopeIsReady(pending.scope)) return false;
-    const category =
-      pending.category ||
-      pickTransactionMaintenancePermission(permissions, null) ||
-      "Games";
+    const category = pending.category || "Games";
     maintenanceAbortRef.current?.abort();
     const ac = new AbortController();
     maintenanceAbortRef.current = ac;
@@ -499,7 +486,7 @@ export default function TransactionMaintenancePage() {
     } finally {
       if (seq === maintenanceSeqRef.current) setListLoading(false);
     }
-  }, [permissions, processFilter, publishTransactionRows, clearTransactionRows]);
+  }, [processFilter, publishTransactionRows, clearTransactionRows]);
 
   useEffect(() => {
     if (!listQueryEnabled || !searchRecoverable) return;
@@ -709,21 +696,9 @@ export default function TransactionMaintenancePage() {
             selectedGroup: bootGroup,
             companyId: null,
           });
-          const meta = await bootstrapTransactionMaintenanceMeta({
-            companies: filtered,
-            groupId: bootGroup,
-          });
-          if (cancelled) return;
-          const nextPerm =
-            meta.activePermission ||
-            pickTransactionMaintenancePermission(meta.permissions, null);
-          setPermissions(meta.permissions);
-          setActivePermission(nextPerm);
-          pendingBootSearchRef.current = { scope: bootScope, category: nextPerm };
+          pendingBootSearchRef.current = { scope: bootScope, category: "Games" };
           try {
-            const procList = bootScope
-              ? await fetchProcessesForPermission(null, nextPerm, bootScope)
-              : [];
+            const procList = bootScope ? await fetchProcesses(null, bootScope) : [];
             if (!cancelled) setProcesses(procList);
           } catch (err) {
             console.error("Process list load error:", err);
@@ -751,7 +726,7 @@ export default function TransactionMaintenancePage() {
           const code = currentComp.company_id || "";
           setCompanyCode(code);
 
-          // Fetch permissions first to pick the correct category for downstream APIs.
+          // Access guard: Data Capture maintenance requires eligible company permissions.
           const companyPerms = await fetchCompanyPermissions(code);
 
           if (!companyPermsAllowDataCaptureMaintenance(companyPerms)) {
@@ -760,44 +735,25 @@ export default function TransactionMaintenancePage() {
           }
 
           try {
-            const sessionData = await updateSessionCompany(initialCompanyId);
-            // Warm the bank/games flags cache so isBankOnlyCompanyRow() below sees this company's
-            // real category on a cold boot, not just after a same-session pill switch.
-            if (sessionData) notifyCompanySessionUpdated(sessionData);
+            await updateSessionCompany(initialCompanyId);
           } catch (err) {
             console.error("Session company sync error:", err);
           }
           if (cancelled) return;
-
-          setPermissions(companyPerms);
 
           const bootScope = resolveTransactionMaintenanceScope({
             companies: filtered,
             selectedGroup: bootGroup,
             companyId: initialCompanyId,
           });
-          const savedPerm = localStorage.getItem(`selectedPermission_${code}`);
-          const initialActive = resolveTransactionMaintenanceActivePermission(
-            companyPerms,
-            savedPerm,
-            bootScope,
-          );
-          setActivePermission(initialActive);
-
-          pendingBootSearchRef.current = { scope: bootScope, category: initialActive };
+          pendingBootSearchRef.current = { scope: bootScope, category: "Games" };
           try {
-            const procList = await fetchProcessesForPermission(
-              initialCompanyId,
-              initialActive,
-              bootScope,
-            );
+            const procList = await fetchProcesses(initialCompanyId, bootScope);
             if (!cancelled) setProcesses(procList);
           } catch (err) {
             console.error("Process list load error:", err);
           }
 
-          // Cache permissions so the meta-effect below skips redundant API call
-          switchPermsCacheRef.current = { companyCode: code, perms: companyPerms };
           skipMetaAfterBootRef.current = true;
           handledMetaScopeKeyRef.current = buildMaintenanceMetaEffectKey(
             transactionMaintenanceScopeCacheKey(
@@ -837,7 +793,7 @@ export default function TransactionMaintenancePage() {
     };
   }, [sessionReady, navigate, me?.user_id]);
 
-  // -- Load Meta Data (Processes & Permissions) on filter change --
+  // -- Load Meta Data (Processes) on filter change --
   useEffect(() => {
     if (!filtersReady || !transactionMaintenanceScopeIsReady(transactionScope)) return;
 
@@ -858,59 +814,25 @@ export default function TransactionMaintenancePage() {
     let cancelled = false;
     const scope = transactionScope;
     const cid = companyId;
-    const permCode =
-      companyCode ||
-      (selectedGroup
-        ? companiesInGroupList(companies, selectedGroup)[0]?.company_id
-        : "") ||
-      "";
 
     (async () => {
       try {
-        const cached = switchPermsCacheRef.current;
-        let permList;
-        if (cached && cached.companyCode === permCode) {
-          permList = cached.perms;
-          switchPermsCacheRef.current = null;
-        } else if (permCode) {
-          permList = await fetchCompanyPermissions(permCode);
-        } else {
-          permList = filterTransactionMaintenancePermissions(["Games", "Gambling", "Bank"]);
-        }
+        const procList = await fetchProcesses(cid, scope);
         if (cancelled) return;
-        setPermissions(permList);
-
-        const nextPerm = resolveTransactionMaintenanceActivePermission(
-          permList,
-          permCode ? localStorage.getItem(`selectedPermission_${permCode}`) : null,
-          scope,
-        );
-        setActivePermission(nextPerm);
-
-        try {
-          const procList = await fetchProcessesForPermission(cid, nextPerm, scope);
-          if (cancelled) return;
-          setProcesses(procList);
-          const usesGroup = transactionMaintenanceUsesGroupProcesses(scope);
-          setSelectedProcess((prev) => {
-            const filter = normalizeMaintenanceProcessFilter(prev);
-            if (!filter) return "";
-            if (usesGroup) {
-              return procList.some((p) => String(p.id) === String(filter)) ? filter : "";
-            }
-            return procList.some((p) => String(p.process_name) === filter) ? filter : "";
-          });
-        } catch (err) {
-          if (cancelled) return;
-          console.error("Process list load error:", err);
-        }
+        setProcesses(procList);
+        const usesGroup = transactionMaintenanceUsesGroupProcesses(scope);
+        setSelectedProcess((prev) => {
+          const filter = normalizeMaintenanceProcessFilter(prev);
+          if (!filter) return "";
+          if (usesGroup) {
+            return procList.some((p) => String(p.id) === String(filter)) ? filter : "";
+          }
+          return procList.some((p) => String(p.process_name) === filter) ? filter : "";
+        });
       } catch (err) {
         if (cancelled) return;
-        console.error("Meta data load error:", err);
+        console.error("Process list load error:", err);
         notify(t("failedLoadMetaData"), "error");
-        setActivePermission((prev) =>
-          prev || pickTransactionMaintenancePermission(["Games", "Gambling", "Bank"], null),
-        );
       }
     })();
 
@@ -924,7 +846,6 @@ export default function TransactionMaintenancePage() {
     companyId,
     companyCode,
     selectedGroup,
-    companies,
     notify,
     t,
   ]);
@@ -960,7 +881,6 @@ export default function TransactionMaintenancePage() {
       groupAllMode,
     });
     resetAnchorSessionRef();
-    switchPermsCacheRef.current = null;
     handledMetaScopeKeyRef.current = "";
     suppressNextSearchEffectRef.current = true;
     setCompanyId(null);
@@ -1023,7 +943,6 @@ export default function TransactionMaintenancePage() {
       groupsAllMode,
       groupAllMode,
     });
-    switchPermsCacheRef.current = null;
     resetAnchorSessionRef();
     setCompanySwitchInFlight(true);
     suppressNextSearchEffectRef.current = true;
@@ -1047,7 +966,6 @@ export default function TransactionMaintenancePage() {
     const nextCompanyId = Number(c.id);
     const code = c.company_id || "";
     const newGroup = c.group_id ? String(c.group_id).toUpperCase().trim() : null;
-    const savedPerm = localStorage.getItem(`selectedPermission_${code}`);
 
     try {
       const { redirected } = await runMaintenanceCompanySwitch({
@@ -1063,6 +981,7 @@ export default function TransactionMaintenancePage() {
             navigate(spaPath("dashboard"), { replace: true });
             return;
           }
+
           const nextScope = resolveTransactionMaintenanceScope({
             companies,
             selectedGroup: newGroup,
@@ -1070,15 +989,6 @@ export default function TransactionMaintenancePage() {
             groupsAllMode,
             groupAllMode,
           });
-          const nextActive = resolveTransactionMaintenanceActivePermission(
-            perms,
-            savedPerm,
-            nextScope,
-          );
-          switchPermsCacheRef.current = { companyCode: code, perms };
-          setActivePermission(nextActive);
-          setPermissions(perms);
-
           handledMetaScopeKeyRef.current = buildMaintenanceMetaEffectKey(
             transactionMaintenanceScopeCacheKey(nextScope),
             nextCompanyId,
@@ -1087,11 +997,11 @@ export default function TransactionMaintenancePage() {
           );
 
           try {
-            const procList = await fetchProcessesForPermission(nextCompanyId, nextActive, nextScope);
+            const procList = await fetchProcesses(nextCompanyId, nextScope);
             setProcesses(procList);
             setSelectedProcess("");
             suppressNextSearchEffectRef.current = true;
-            await performMaintenanceSearch({ scope: nextScope, category: nextActive });
+            await performMaintenanceSearch({ scope: nextScope, category: "Games" });
           } catch (err) {
             console.error("Process list load error:", err);
             setListSyncing(false);

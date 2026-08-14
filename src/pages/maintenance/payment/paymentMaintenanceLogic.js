@@ -1,246 +1,207 @@
-﻿import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+import { fetchReportScopeCurrencies } from "../../report/shared/reportCompanyApi.js";
+import { paymentMaintenanceScopeApiParams } from "./paymentMaintenanceScope.js";
 import {
-  fetchCurrencyListByTenantId,
-  normalizeCurrencyRow,
-} from "../../../utils/api/currencyApi.js";
-import { fetchDomainCompanyPermissions } from "../shared/maintenanceCompanyApi.js";
-import {
-  companiesInGroupList,
-  companyRowIsGroupEntity,
-} from "../../../utils/company/sharedCompanyFilter.js";
+  mergeCurrencyCodesWithSavedOrder,
+  resolvePaymentMaintenanceCurrencyOrder,
+} from "../../../utils/company/currencyDisplayOrder.js";
 
-/**
- * Active tenant for Payment Maintenance APIs.
- * UI may still show Group / Company pills; APIs only receive this numeric tenant id.
- */
-export function resolvePaymentMaintenanceTenantId({
-  tenantId = null,
-  companyId = null,
-  selectedGroup = null,
-  companies = [],
-} = {}) {
-  const fromExplicit = Number(tenantId ?? companyId);
-  if (Number.isFinite(fromExplicit) && fromExplicit > 0) return fromExplicit;
-
-  const g = selectedGroup ? String(selectedGroup).trim().toUpperCase() : "";
-  if (!g || !Array.isArray(companies) || companies.length === 0) return null;
-
-  const inGroup = companiesInGroupList(companies, g);
-  const entity = inGroup.find((c) => companyRowIsGroupEntity(c, g)) || inGroup[0] || null;
-  const id = Number(entity?.id);
-  return Number.isFinite(id) && id > 0 ? id : null;
+function appendPaymentScopeToParams(params, scope) {
+  const {
+    companyId,
+    viewGroup,
+    groupId,
+    reportScope,
+    groupOnly,
+    groupAggregate,
+    subsidiaryAccountsOnly,
+  } = paymentMaintenanceScopeApiParams(scope);
+  if (companyId) params.append("company_id", String(companyId));
+  const vg = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
+  if (vg) params.append("view_group", vg);
+  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
+  if (gid) params.append("group_id", gid);
+  if (reportScope) params.append("report_scope", reportScope);
+  if (groupOnly) params.append("group_only", "1");
+  if (groupAggregate) params.append("group_aggregate", "1");
+  if (subsidiaryAccountsOnly) params.append("subsidiary_accounts_only", "1");
 }
 
-/** Default currency pill: prefer MYR, else first code. */
-export function pickPaymentMaintenanceCurrency(currList) {
+/** Default currency pill for group vs subsidiary company scope. */
+export function pickPaymentMaintenanceCurrency(currList, scope) {
   if (!Array.isArray(currList) || currList.length === 0) return null;
+  if (scope?.mode === "company") {
+    return currList[0]?.code || null;
+  }
   const hasMYR = currList.some((c) => String(c?.code || "").toUpperCase() === "MYR");
   return hasMYR ? "MYR" : currList[0]?.code || null;
 }
 
-export async function fetchCompanyPermissions(companyCode) {
-  return fetchDomainCompanyPermissions(companyCode, { emptyForC168: true });
+/** Currencies for active group ledger vs subsidiary company (no cross-scope bleed). */
+export async function fetchCompanyCurrencies(_companyId, scope = null) {
+  if (!scope) return [];
+  return fetchReportScopeCurrencies(scope);
 }
 
-/** Spring POST /api/currency/list?tenant_id= */
-export async function fetchCompanyCurrencies(tenantId, signal) {
-  const tid = Number(tenantId);
-  if (!Number.isFinite(tid) || tid <= 0) return [];
-  const rows = await fetchCurrencyListByTenantId(tid, signal);
-  return rows.map((row) => normalizeCurrencyRow(row)).filter((row) => row.code);
+/** Storage key for currency order: numeric company id, or `g:GROUPCODE` for pure Group ledger. */
+export function resolvePaymentMaintenanceCurrencyOrderKey(scope) {
+  const { companyId, groupId } = paymentMaintenanceScopeApiParams(scope);
+  const cid = companyId != null ? Number(companyId) : NaN;
+  if (Number.isFinite(cid) && cid > 0) return cid;
+  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
+  return gid ? `g:${gid}` : null;
 }
 
 /**
- * Spring POST /api/maintenance/payment-maintenance/list body (tenant-only).
+ * Reorder currency rows for pill display only (selection logic keeps using the raw API list).
+ * Local Payment Maintenance drag order wins; otherwise follows the shared Dashboard order.
  */
-export function buildSpringPaymentMaintenanceRequest({
-  tenantId,
-  dateFrom,
-  dateTo,
-  transactionType,
-  currency,
-  query,
-} = {}) {
-  const tid = Number(tenantId);
-  if (!Number.isFinite(tid) || tid <= 0) {
-    throw new Error("tenantIdRequired");
-  }
-  const type = String(transactionType || "").trim().toUpperCase();
-  const code = String(currency || "").trim().toUpperCase();
-  const q = String(query || "").trim();
-  return {
-    tenantId: tid,
-    dateFrom: String(dateFrom || "").trim(),
-    dateTo: String(dateTo || "").trim(),
-    transactionType: type || null,
-    currencyCodes: code ? [code] : [],
-    q: q || null,
-  };
-}
-
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
-
-/** Spring LocalDateTime → dd/MM/yyyy HH:mm:ss for existing table display. */
-export function formatPaymentMaintenanceCreatedAt(value) {
-  if (value == null || value === "") return "";
-  if (Array.isArray(value) && value.length >= 3) {
-    const [y, m, d, hh = 0, mm = 0, ss = 0] = value;
-    return `${pad2(d)}/${pad2(m)}/${y} ${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`;
-  }
-  const raw = String(value).trim();
-  if (/^\d{2}\/\d{2}\/\d{4}/.test(raw)) return raw;
-  const m = raw.match(
-    /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/,
+export function orderPaymentMaintenanceCurrencies(currList, scope) {
+  if (!Array.isArray(currList) || currList.length === 0) return currList || [];
+  const orderKey = resolvePaymentMaintenanceCurrencyOrderKey(scope);
+  if (orderKey == null) return currList;
+  const savedOrder = resolvePaymentMaintenanceCurrencyOrder(orderKey);
+  if (!savedOrder?.length) return currList;
+  const byCode = new Map(currList.map((row) => [String(row?.code || "").toUpperCase(), row]));
+  const orderedCodes = mergeCurrencyCodesWithSavedOrder(
+    currList.map((row) => row?.code),
+    savedOrder,
   );
-  if (m) {
-    return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}:${m[6] || "00"}`;
-  }
-  return raw;
+  return orderedCodes.map((code) => byCode.get(code)).filter(Boolean);
 }
 
 /**
- * Spring PaymentMaintenanceRow → table row fields (aligned to backend camelCase).
- */
-export function normalizeSpringPaymentMaintenanceRow(row) {
-  if (!row || typeof row !== "object") return null;
-  const id = row.id ?? row.transactionId ?? null;
-  const remarkRaw = row.remark ?? "";
-  const isDeleted = row.deleted === true || row.deleted === 1 || row.deleted === "1";
-  return {
-    transaction_id: id,
-    transaction_type: String(row.transactionType || "").toUpperCase(),
-    dts_created: formatPaymentMaintenanceCreatedAt(row.createdAt),
-    account: String(row.toAccountCode || "").trim() || "-",
-    from_account: String(row.fromAccountCode || "").trim() || "-",
-    amount: row.amount,
-    currency: String(row.currencyCode || "").trim().toUpperCase(),
-    description: row.description ?? "",
-    remark: remarkRaw ? String(remarkRaw).toUpperCase() : remarkRaw,
-    created_by: row.createdBy ?? "",
-    is_deleted: isDeleted ? 1 : 0,
-    deleted_by: row.deletedBy ?? "",
-    dts_deleted: formatPaymentMaintenanceCreatedAt(row.deletedAt),
-  };
-}
-
-function sortPaymentMaintenanceRows(data) {
-  if (!Array.isArray(data)) return [];
-  return [...data].sort((a, b) => {
-    const cmp = parseMaintenanceSortTime(b) - parseMaintenanceSortTime(a);
-    if (cmp !== 0) return cmp;
-    return Number(b?.transaction_id || 0) - Number(a?.transaction_id || 0);
-  });
-}
-
-/**
- * Search via Spring POST /api/maintenance/payment-maintenance/list (tenantId only).
+ * Search payment data
  * @param {object} opts
- * @param {AbortSignal} [opts.signal]
+ * @param {AbortSignal} [opts.signal] — cancel in-flight request when company / filters change
  */
 export async function searchPaymentData({
-  tenantId,
   dateFrom,
   dateTo,
   transactionType,
   query,
+  companyId,
   currency,
+  scope,
   signal,
 }) {
-  const body = buildSpringPaymentMaintenanceRequest({
-    tenantId,
-    dateFrom,
-    dateTo,
-    transactionType,
-    currency,
-    query,
-  });
-
-  const response = await fetch(buildApiUrl("api/maintenance/payment-maintenance/list"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    cache: "no-cache",
-    body: JSON.stringify(body),
-    signal,
-  });
-  const data = await response.json();
-
-  if (!data?.success) {
-    throw new Error(data?.message || "Search failed");
+  const params = new URLSearchParams();
+  params.append("date_from", dateFrom);
+  params.append("date_to", dateTo);
+  if (transactionType) params.append("transaction_type", transactionType);
+  if (query?.trim()) params.set("q", query.trim().toUpperCase());
+  if (companyId && scope?.mode !== "group") {
+    params.append("company_id", String(companyId));
   }
-
-  const rows = Array.isArray(data.data) ? data.data : [];
-  const normalized = rows.map(normalizeSpringPaymentMaintenanceRow).filter(Boolean);
-  return sortPaymentMaintenanceRows(normalized);
+  appendPaymentScopeToParams(params, scope);
+  if (currency) params.append("currency", currency);
+  
+  const url = buildApiUrl(`api/payment_maintenance/search_api.php?${params.toString()}`);
+  const response = await fetch(url, { credentials: "include", signal });
+  const data = await response.json();
+  
+  if (!data.success) {
+    throw new Error(data.message || 'Search failed');
+  }
+  
+  const merged = mergeProfitRows(data.data || []);
+  return sortAndNormalizePaymentRows(merged);
 }
 
 /**
- * Spring POST /api/maintenance/payment-maintenance/delete body.
- * Matches TransactionDTO.PaymentMaintenanceDeleteRequest.
+ * Delete payment records
  */
-export function buildSpringPaymentMaintenanceDeleteRequest({ tenantId, transactionIds } = {}) {
-  const tid = Number(tenantId);
-  if (!Number.isFinite(tid) || tid <= 0) {
-    throw new Error("tenantIdRequired");
-  }
-  const ids = [];
-  const seen = new Set();
-  for (const raw of Array.isArray(transactionIds) ? transactionIds : []) {
-    const id = Number(raw);
-    if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue;
-    seen.add(id);
-    ids.push(id);
-  }
-  if (ids.length === 0) {
-    throw new Error("Please select at least one record");
-  }
-  return {
-    tenantId: tid,
-    transactionIds: ids,
-  };
-}
+export async function deletePaymentRecords(transactionIds, scope = null) {
+  const payload = { transaction_ids: transactionIds };
+  const {
+    companyId,
+    viewGroup,
+    groupId,
+    reportScope,
+    groupOnly,
+    groupAggregate,
+    subsidiaryAccountsOnly,
+  } = paymentMaintenanceScopeApiParams(scope);
+  if (companyId) payload.company_id = companyId;
+  if (viewGroup) payload.view_group = viewGroup;
+  if (groupId) payload.group_id = groupId;
+  if (reportScope) payload.report_scope = reportScope;
+  if (groupOnly) payload.group_only = "1";
+  if (groupAggregate) payload.group_aggregate = "1";
+  if (subsidiaryAccountsOnly) payload.subsidiary_accounts_only = "1";
 
-/**
- * Soft-delete via Spring POST /api/maintenance/payment-maintenance/delete.
- */
-export async function deletePaymentRecords(transactionIds, tenantId) {
-  const body = buildSpringPaymentMaintenanceDeleteRequest({
-    tenantId,
-    transactionIds,
-  });
-
-  const response = await fetch(buildApiUrl("api/maintenance/payment-maintenance/delete"), {
+  const response = await fetch(buildApiUrl("api/payment_maintenance/delete_api.php"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    cache: "no-cache",
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
   const data = await response.json();
-  if (!data?.success) {
-    throw new Error(data?.message || "Delete failed");
+  if (!data.success) {
+    throw new Error(data.message || 'Delete failed');
   }
   return data;
 }
 
-/** Spring auth/switch-tenant?tenant_id= */
-export async function updateSessionCompany(tenantId) {
-  const response = await fetch(buildApiUrl(`auth/switch-tenant?tenant_id=${tenantId}`), {
+/**
+ * Update session company
+ */
+export async function updateSessionCompany(companyId) {
+  const response = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`), {
     credentials: "include",
   });
   const result = await response.json();
   if (!result.success) {
-    throw new Error(result.error || "Failed to update session company");
+    throw new Error(result.error || 'Failed to update session company');
   }
   return result.data;
 }
 
+/**
+ * Bank Process description stripping
+ */
 export function stripBankProcessDescriptionPrefix(text) {
-  const s = String(text || "");
+  const s = String(text || '');
   const m = s.match(/^\s*process:\s*(.*)$/i);
   return m ? m[1].trim() : s;
+}
+
+/**
+ * Merge profit rows for display
+ */
+function mergeProfitRows(data) {
+  if (!Array.isArray(data) || data.length === 0) return data || [];
+  const type = (row) => (row.transaction_type || '').toUpperCase();
+  const acc = (row) => (row.account || '').toString().toUpperCase();
+  const isProfitRow = (row) => (type(row) === 'WIN' || type(row) === 'LOSE') && acc(row).startsWith('PROFIT');
+  const isWinLoseRow = (row) => type(row) === 'WIN' || type(row) === 'LOSE';
+  const key = (row) => [row.dts_created, String(row.amount || ''), (row.currency || '').toUpperCase()].join('\t');
+  
+  const profitByKey = {};
+  data.forEach(row => {
+    if (!isProfitRow(row)) return;
+    const k = key(row);
+    if (!profitByKey[k]) profitByKey[k] = [];
+    profitByKey[k].push(row.account || 'PROFIT');
+  });
+
+  return data.filter(row => {
+    if (isProfitRow(row)) return false;
+    if (isWinLoseRow(row)) {
+      const k = key(row);
+      const fromCandidates = profitByKey[k];
+      if (fromCandidates && fromCandidates.length > 0) {
+        row.from_account = fromCandidates[0];
+        const desc = (row.description || '').trim();
+        if (!desc || desc === '-' || desc === 'PROFIT' || desc.toUpperCase() === 'WIN' || desc.toUpperCase() === 'LOSE') {
+          const toAccountLabel = row.account || '';
+          row.description = toAccountLabel ? `PROFIT FROM ${toAccountLabel}` : 'PROFIT';
+        }
+        fromCandidates.shift();
+      }
+    }
+    return true;
+  });
 }
 
 function parseMaintenanceSortTime(row) {
@@ -252,16 +213,15 @@ function parseMaintenanceSortTime(row) {
   return Number.isFinite(ts) ? ts : 0;
 }
 
+/** Virtual rollup rows from the API use transaction_id 0; they are not real DB rows. */
 export function isPaymentMaintenanceRowSelectable(row) {
-  if (row?.is_deleted === 1 || row?.is_deleted === "1" || row?.is_deleted === true) {
-    return false;
-  }
   const id = row?.transaction_id;
   if (id === null || id === undefined || id === "") return false;
   const n = Number(id);
   return Number.isFinite(n) && n !== 0;
 }
 
+/** Stable unique key per rendered row (avoids duplicate React keys when transaction_id is 0). */
 export function getPaymentMaintenanceRowRenderKey(row, index) {
   if (isPaymentMaintenanceRowSelectable(row)) {
     return `t-${row.transaction_id}`;
@@ -269,14 +229,32 @@ export function getPaymentMaintenanceRowRenderKey(row, index) {
   return `v-${index}-${String(row.dts_created ?? "")}-${String(row.amount ?? "")}-${String(row.description ?? "").slice(0, 48)}`;
 }
 
+function sortAndNormalizePaymentRows(data) {
+  if (!Array.isArray(data)) return [];
+  return [...data]
+    .sort((a, b) => {
+      const cmp = parseMaintenanceSortTime(b) - parseMaintenanceSortTime(a);
+      if (cmp !== 0) return cmp;
+      return Number(b?.transaction_id || 0) - Number(a?.transaction_id || 0);
+    })
+    .map((row) => ({
+      ...row,
+      // Keep behavior aligned with legacy payment_maintenance.js display.
+      remark: row?.remark ? String(row.remark).toUpperCase() : row?.remark,
+    }));
+}
+
+/**
+ * Format amount
+ */
 export function formatAmount(num) {
   try {
-    if (num === null || num === undefined || num === "") return "0.00";
-    return parseFloat(num).toLocaleString("en-US", {
+    if (num === null || num === undefined || num === '') return '0.00';
+    return parseFloat(num).toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
   } catch (_) {
-    return "0.00";
+    return '0.00';
   }
 }

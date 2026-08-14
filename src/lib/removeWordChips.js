@@ -1,8 +1,40 @@
+/**
+ * Normalize one chip. Leading `=` marks exact-token mode (kept in the stored
+ * chip); Excel-style apostrophes are stripped from the body.
+ */
 function normalizeRemoveWordToken(value) {
-  return String(value ?? "").trim().toUpperCase();
+  let raw = String(value ?? "")
+    .trim()
+    .replace(/^'+|'+$/g, "")
+    .trim();
+  if (!raw) return "";
+
+  const exact = raw.startsWith("=");
+  if (exact) {
+    raw = raw
+      .slice(1)
+      .trim()
+      .replace(/^'+|'+$/g, "")
+      .trim();
+  }
+  if (!raw) return "";
+
+  const body = raw.toUpperCase();
+  return exact ? `=${body}` : body;
 }
 
-/** Split on comma or legacy semicolon; store uppercase. */
+/** True when chip uses exact-token mode (`=WORD`). */
+export function isExactRemoveWordChip(chip) {
+  return String(chip ?? "").startsWith("=");
+}
+
+/** Match body without the optional `=` mode prefix. */
+export function removeWordChipBody(chip) {
+  const raw = String(chip ?? "");
+  return isExactRemoveWordChip(raw) ? raw.slice(1) : raw;
+}
+
+/** Split on comma or legacy semicolon; store uppercase (preserve `=` prefix). */
 export function parseRemoveWordChips(value) {
   const seen = new Set();
   const chips = [];
@@ -16,7 +48,7 @@ export function parseRemoveWordChips(value) {
   return chips;
 }
 
-/** Persist as `FREE,BONUS` (comma, no spaces, uppercase). */
+/** Persist as `FREE,BONUS` or `=XX123,=XX1234` (comma, uppercase). */
 export function serializeRemoveWordChips(chips) {
   const list = Array.isArray(chips) ? chips : parseRemoveWordChips(chips);
   return parseRemoveWordChips(list.join(",")).join(",");

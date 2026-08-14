@@ -16,6 +16,11 @@ export function DashboardKpiCard({
   const showCompare = compare && !loading;
   const badgeUp = compare?.pct >= 0;
   const deltaUp = compare?.isUp;
+  // KPI cards must paint immediately — never sit invisible while the rest of the
+  // dashboard's heavier fetch (per-company × currency fan-out) resolves. The value
+  // shows 0.00 during scope loading and snaps to real figures as data lands; only
+  // the compare row waits for data so it doesn't flash wrong deltas.
+  const revealed = true;
 
   return (
     <div
@@ -26,7 +31,7 @@ export function DashboardKpiCard({
         <i className={`kpi-card-head-icon ${KPI_CARD_ICONS[variant] || "far fa-chart-bar"}`} aria-hidden="true" />
         <span className="kpi-card-head-label">{label}</span>
       </div>
-      <div className="kpi-card-main">
+      <div className={`kpi-card-main dashboard-summary-reveal${revealed ? " is-revealed" : ""}`}>
         <div className="kpi-card-value">
           {formatCurrency(value)}
         </div>
@@ -37,7 +42,7 @@ export function DashboardKpiCard({
           </span>
         )}
       </div>
-      <div className="kpi-card-foot">
+      <div className={`kpi-card-foot dashboard-summary-reveal${revealed ? " is-revealed" : ""}`}>
         {showCompare ? (
           <>
             <span className={`kpi-card-delta${deltaUp ? " is-up" : " is-down"}`}>

@@ -33,11 +33,20 @@ function cellMinHeight(region) {
   if (autoRenewRow > 0) return autoRenewRow;
   const processRow = readCssPx(region, "--games-process-row-min-height", 0);
   if (processRow > 0) return processRow;
+  const domainRow = readCssPx(region, "--domain-list-row-min-height", 0);
+  if (domainRow > 0) return domainRow;
   return readCssPx(region, "--bank-list-cell-min-height", DEFAULT_FALLBACK_ROW_HEIGHT);
 }
 
 function findPaginationEl(region, paginationSelector) {
-  const scopes = [region.closest(".bank-process-list-body"), region.closest(".content")].filter(Boolean);
+  const scopes = [
+    region.closest(".bank-process-list-body"),
+    region.closest(".content"),
+    // Fallback for pages (e.g. Domain) that don't wrap their list + pagination in a
+    // literal ".content"/".bank-process-list-body" div — the universal page-shell
+    // wrapper still scopes the lookup to this page's own DOM, not a sibling page's.
+    region.closest(".ec-page-shell__content"),
+  ].filter(Boolean);
   for (const scope of scopes) {
     const el = scope.querySelector(paginationSelector);
     if (el) return el;

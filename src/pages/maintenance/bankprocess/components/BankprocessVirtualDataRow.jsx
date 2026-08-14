@@ -11,14 +11,6 @@ const BankprocessVirtualDataRow = memo(function BankprocessVirtualDataRow({
   alreadyDeletedTitle,
 }) {
   const isDeleted = row.is_deleted === 1 || row.is_deleted === "1" || row.is_deleted === true;
-  const deletedBy = row.deleted_by || "";
-  const dtsDeleted = row.dts_deleted || "";
-  const deletedDisplay =
-    isDeleted && deletedBy
-      ? `${deletedBy} (${dtsDeleted || "-"})`
-      : isDeleted
-        ? dtsDeleted || "-"
-        : "-";
   const tid = row.transaction_id;
   const stripe = index % 2 === 1 ? "maintenance-virtual-data-row--stripe" : "";
   const currency = row.currency ? `${row.currency} ` : "";
@@ -75,9 +67,6 @@ const BankprocessVirtualDataRow = memo(function BankprocessVirtualDataRow({
       </div>
       <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left">
         <MaintenanceEllipsisText value={row.created_by} className="bankprocess-cell-text" />
-      </div>
-      <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left">
-        <MaintenanceEllipsisText value={deletedDisplay} className="bankprocess-cell-text" />
       </div>
       <div role="cell" className="maintenance-virtual-cell maintenance-virtual-cell--left bankprocess-virtual-cell-checkbox">
         <input

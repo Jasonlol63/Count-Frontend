@@ -107,13 +107,6 @@ export function saveCaptureSession(tableData, processData, captureType, context 
   const enrichedProcess = {
     ...processData,
     dataCaptureType: type,
-    tenantId:
-      processData?.tenantId != null && Number(processData.tenantId) > 0
-        ? Number(processData.tenantId)
-        : context.tenantId != null && Number(context.tenantId) > 0
-          ? Number(context.tenantId)
-          : null,
-    category: processData?.category || context.category || null,
     groupPayrollUi,
     groupPayrollCapture,
     groupOnlyCapture: groupLedgerCapture,

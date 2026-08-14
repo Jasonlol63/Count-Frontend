@@ -22,7 +22,7 @@ Route: `/dashboard` (see `App.jsx`). Entry: `TransactionDashboardPage.jsx` (re-e
 | Date helpers | `lib/dashboardDateUtils.js` |
 | Colors / API constant | `lib/dashboardConstants.js` |
 | Group merge (multi-company) | `utils/dashboard/dashboardMerge.js` |
-| FX rates | `utils/dashboard/frankfurterRates.js` |
+| FX rates | `utils/dashboard/frankfurterRates.js` → `api/fx/fx_rates_api.php` (DB `fx_daily_rates`, cron `warm_fx_rates.php`) |
 
 ## Styles & i18n
 

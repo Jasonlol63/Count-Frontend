@@ -1,11 +1,12 @@
 import React from "react";
 import ProcessModalPortal, { processModalBackdropStyle } from "../../../components/ProcessModalPortal.jsx";
 import { bankProcessFrequencyNormalized } from "../lib/bankProcessHelpers.js";
-import { BankFormDateField, BankSimpleSelect } from "./bankProcessFormFields.jsx";
+import { BankFormCalendarDateField, BankSimpleSelect } from "./bankProcessFormFields.jsx";
 
 export default function ResendModal({
   resendTarget,
   resendDayStart,
+  setResendDayStart,
   resendDayEnd,
   setResendDayEnd,
   resendFrequency,
@@ -15,6 +16,7 @@ export default function ResendModal({
   resendConfirmDisabled = false,
   resendConfirmBlockReason = "",
   resendLockChecking = false,
+  calendarI18n,
   onResend,
   onClose,
   t,
@@ -57,26 +59,32 @@ export default function ResendModal({
             </p>
           </div>
           <div className="bank-resend-schedule-grid">
-            <BankFormDateField
-              fieldKey="bank_resend_day_start"
-              htmlFor="bank_resend_day_start"
+            <BankFormCalendarDateField
+              id="bank_resend_day_start"
               label={t("dayStart")}
               value={resendDayStart}
               placeholder={t("pickDate")}
               clearLabel={t("clearDate")}
+              monthLabels={calendarI18n?.monthLabels}
+              weekdaysShort={calendarI18n?.weekdaysShort}
               className={`bank-resend-datepicker-field${resendInlineError ? " bank-resend-datepicker-field--error" : ""}`}
+              onValueChange={(iso) => {
+                setResendInlineError("");
+                setResendDayStart?.(iso || "");
+              }}
             />
-            <BankFormDateField
-              fieldKey="bank_resend_day_end"
-              htmlFor="bank_resend_day_end"
+            <BankFormCalendarDateField
+              id="bank_resend_day_end"
               label={t("dayEnd")}
               value={resendDayEnd}
               disabled={dayEndDisabled}
-              minYmd={isFirstOfMonth ? (resendDayStart || undefined) : (dayEndDisabled ? undefined : (resendDayStart || undefined))}
+              minYmd={resendDayStart || ""}
               placeholder={t("pickDate")}
               clearLabel={t("clearDate")}
-              onValueChange={(iso) => setResendDayEnd(iso || "")}
+              monthLabels={calendarI18n?.monthLabels}
+              weekdaysShort={calendarI18n?.weekdaysShort}
               className={dayEndDisabled ? "bank-resend-day-end-field--muted" : ""}
+              onValueChange={(iso) => setResendDayEnd(iso || "")}
             />
             <div className="bank-resend-field bank-resend-field--full">
               <label className="bank-resend-field__label" htmlFor="bank_resend_frequency">{t("frequency")}</label>

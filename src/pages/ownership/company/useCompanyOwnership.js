@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+import { useOptionalAuthSession } from "../../../context/AuthSessionContext.jsx";
+import { getLoginIdentifier, isGroupLogin } from "../../../utils/company/loginScope.js";
 import { getApiMessage, isApiConflict, isApiSuccess, ownershipSubsidiariesInGroup, rebuildGroupIds } from "../shared/ownershipHelpers.js";
 import { formatOwnershipSavedAt } from "../shared/ownershipMonthHelpers.js";
 import {
@@ -13,6 +15,7 @@ import {
   mapOwnerApiRows,
   accountsFromOwnerRows,
   mergeEditorAccounts,
+  mergeServerRowsPreservingDrafts,
   rowsToSavePayload,
   allocationRowsForSave,
 } from "../shared/ownershipRowHelpers.js";
@@ -31,6 +34,9 @@ export function useCompanyOwnership(shell) {
     setHistoryBanner,
     lang,
   } = shell;
+
+  const auth = useOptionalAuthSession();
+  const sessionMe = auth?.me ?? null;
 
   const viewOnlyMode = readOnlyMode;
   const adminLocked = readOnlyMode || isHistoricalView;
@@ -149,8 +155,16 @@ export function useCompanyOwnership(shell) {
     if (groupFilter !== null) return;
     const independent = allCompanies.filter((c) => !c.group_id);
     if (independent.length > 0 || allGroupIds.length === 0) return;
+    // Group login: prefer the logged-in group (Phase 7 Group-only default).
+    if (isGroupLogin(sessionMe)) {
+      const loginG = getLoginIdentifier(sessionMe);
+      if (loginG && allGroupIds.includes(loginG)) {
+        setGroupFilter(loginG);
+        return;
+      }
+    }
     setGroupFilter(allGroupIds[0]);
-  }, [groupFilter, allCompanies, allGroupIds]);
+  }, [groupFilter, allCompanies, allGroupIds, sessionMe]);
 
   // After ungroup empties a group, groupFilter may point at a removed group id → blank list
   useEffect(() => {
@@ -159,7 +173,7 @@ export function useCompanyOwnership(shell) {
   }, [groupFilter, allGroupIds]);
 
   const loadCompanyState = useCallback(
-    async (cid, { force = false } = {}) => {
+    async (cid, { force = false, preserveDrafts = false } = {}) => {
       if (!force) {
         let cached = null;
         setCompanyStates((prev) => {
@@ -167,6 +181,14 @@ export function useCompanyOwnership(shell) {
           return prev;
         });
         if (cached) return cached;
+      }
+
+      let draftRows = null;
+      if (preserveDrafts) {
+        setCompanyStates((prev) => {
+          draftRows = prev[cid]?.rows || null;
+          return prev;
+        });
       }
 
       setLoadingCompanyId(cid);
@@ -195,7 +217,10 @@ export function useCompanyOwnership(shell) {
             is_main_owner: 0,
           });
         }
-        const rows = mapOwnerApiRows(oRes.status === "success" ? oRes.data : []);
+        let rows = mapOwnerApiRows(oRes.status === "success" ? oRes.data : []);
+        if (preserveDrafts && draftRows) {
+          rows = mergeServerRowsPreservingDrafts(draftRows, rows);
+        }
         const stateAccounts = mergeEditorAccounts(accounts, rows);
         const meta = oRes.meta || {};
         if (isHistoricalView) {
@@ -320,7 +345,7 @@ export function useCompanyOwnership(shell) {
         const json = await res.json();
         if (isApiSuccess(json)) {
           showToast(getApiMessage(json, "Partner linked successfully"), "success");
-          await loadCompanyState(cid, { force: true });
+          await loadCompanyState(cid, { force: true, preserveDrafts: true });
           return true;
         }
         if (isApiConflict(json)) {

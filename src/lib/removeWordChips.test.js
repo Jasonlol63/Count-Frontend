@@ -31,3 +31,16 @@ test("parses legacy semicolon values and serializes as uppercase commas", () => 
   assert.equal(serializeRemoveWordChips(parseRemoveWordChips("sad;aa;aaa")), "SAD,AA,AAA");
   assert.deepEqual(parseRemoveWordChips("sad, aa; aaa"), ["SAD", "AA", "AAA"]);
 });
+
+test("strips Excel leading/trailing apostrophes from chips", () => {
+  assert.deepEqual(parseRemoveWordChips("'XX123,'XX1234"), ["XX123", "XX1234"]);
+  assert.deepEqual(parseRemoveWordChips("'FREE'"), ["FREE"]);
+  assert.equal(serializeRemoveWordChips(parseRemoveWordChips("'XX123,'XX1234")), "XX123,XX1234");
+});
+
+test("preserves leading = for exact-token mode", () => {
+  assert.deepEqual(parseRemoveWordChips("=XX123,=XX1234"), ["=XX123", "=XX1234"]);
+  assert.deepEqual(parseRemoveWordChips("='XX123"), ["=XX123"]);
+  assert.equal(serializeRemoveWordChips(parseRemoveWordChips("=xx123,FREE")), "=XX123,FREE");
+  assert.deepEqual(parseRemoveWordChips("NET - WIN - API="), ["NET - WIN - API="]);
+});

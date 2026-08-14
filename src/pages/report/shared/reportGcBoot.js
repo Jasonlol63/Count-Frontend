@@ -1,6 +1,8 @@
 import { canUseGroupOnlyMode, isCompanyLogin } from "../../../utils/company/loginScope.js";
 import { peekCompanySessionFlags } from "../../../utils/company/companySessionFlagsCache.js";
 import {
+  excludeGroupLabelsFromCompanyPicker,
+  filterCompaniesWithDisplayId,
   independentCompaniesForPicker,
   isDashboardGroupOnlyMode,
   pickDefaultCompanyForGroup,
@@ -42,15 +44,22 @@ function rowHasReportGambling(row) {
 }
 
 /**
- * Report: closing group → independent companies only (e.g. ABC).
- * Grouped subsidiaries such as C168 must not remain active.
+ * Report: closing group → prefer Games/reportable subsidiary (never leave Bank-only as active Customer Report scope).
+ * Falls back to independent companies, then any portfolio subsidiary.
  */
 export function resolveReportCompanyWhenClosingGroup(_me, companies, currentCompanyId, groupIds = null) {
   const list = companies ?? [];
   const gids = groupIds?.length ? groupIds : sortedUniqueGroupIds(list);
-  const independents = independentCompaniesForPicker(list, gids);
+  const subsidiaries = excludeGroupLabelsFromCompanyPicker(
+    filterCompaniesWithDisplayId(list),
+    gids,
+  );
   const reportable =
-    independents.find((row) => rowHasReportGambling(row)) ?? independents[0] ?? null;
+    subsidiaries.find((row) => rowHasReportGambling(row)) ??
+    independentCompaniesForPicker(list, gids).find((row) => rowHasReportGambling(row)) ??
+    subsidiaries[0] ??
+    independentCompaniesForPicker(list, gids)[0] ??
+    null;
   if (reportable) return reportable;
   return resolveCompanyWhenClosingGroup(list, currentCompanyId, gids);
 }

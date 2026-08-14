@@ -16,10 +16,6 @@ export function DashboardCalendarPopup({ i18n, periodPresets, dateFrom, classNam
             className="transaction-calendar-preset"
             data-period-key={key}
             aria-pressed="false"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.selectQuickRange?.(key);
-            }}
           >
             {label}
           </button>
@@ -30,10 +26,7 @@ export function DashboardCalendarPopup({ i18n, periodPresets, dateFrom, classNam
           <button
             type="button"
             className="calendar-nav-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.changeMonth?.(-1);
-            }}
+            data-drp-nav-delta="-1"
           >
             <i className="fas fa-chevron-left" />
           </button>
@@ -48,10 +41,7 @@ export function DashboardCalendarPopup({ i18n, periodPresets, dateFrom, classNam
           <button
             type="button"
             className="calendar-nav-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.changeMonth?.(1);
-            }}
+            data-drp-nav-delta="1"
           >
             <i className="fas fa-chevron-right" />
           </button>

@@ -4,10 +4,11 @@ import {
   createMainRowFromEntry,
   createSubRowFromTemplate,
   applyMainTemplateToRowModel,
-  isSummarySubRow,
 } from "./summaryRowData.js";
 import { findMainRowForTemplate, findMainRowForSubTemplatePure } from "./summaryTemplateMatching.js";
 import { fetchSummaryTemplates } from "../lib/summaryApi.js";
+import { fetchGroupProcessIdByCode } from "../../datacapture/lib/dataCaptureApi.js";
+import { isGroupPayrollProcessId } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
 import { normalizeSummaryIdProductText } from "../lib/summaryIdProductUtils.js";
 import { restoreRateValuesOnRows } from "../lib/summaryRefreshRestore.js";
 import {
@@ -128,9 +129,8 @@ function rowHasTemplate(rows, mainId, templates) {
 export function buildInitialSummaryRows(tableData) {
   if (!tableData) return [];
   const { entries } = buildColumnAEntries(tableData);
-  const rows = entries
-    .filter((e) => e.idProduct?.trim())
-    .map((entry, index) => createMainRowFromEntry(entry, index));
+  // Keep empty-Id money footers from buildColumnAEntries (do not filter them out).
+  const rows = entries.map((entry, index) => createMainRowFromEntry(entry, index));
   return reconcileRowIndexes(rows, tableData);
 }
 
@@ -151,32 +151,61 @@ export async function populateSummaryRowsPure({
   const { idProducts } = buildColumnAEntries(tableData);
   let rows = buildInitialSummaryRows(tableData);
 
-  if (processId == null || !idProducts.length) {
+  const code = String(processCode || "").trim().toUpperCase();
+  let effectiveProcessId =
+    processId != null && Number(processId) > 0 ? Number(processId) : null;
+
+  // Pure Group SALARY/etc.: session only has processCode — resolve numeric id before templates.
+  if (effectiveProcessId == null && isGroupPayrollProcessId(code) && captureScope) {
+    try {
+      effectiveProcessId = await fetchGroupProcessIdByCode(captureScope, code);
+    } catch {
+      /* PHP templates handler can still resolve via processCode */
+    }
+  }
+
+  if (!idProducts.length || (effectiveProcessId == null && !code && processId == null)) {
     return rows;
   }
 
-  const fetchTemplates =
-    typeof loadTemplates === "function"
-      ? loadTemplates
-      : () =>
-          fetchSummaryTemplates({
-            captureScope,
-            companyId,
-            idProducts,
-            processId,
-            captureId,
-          });
+  const templateProcessId = effectiveProcessId ?? processId;
+  // Pure/empty group may have processCode only (no process table row). Skip templates
+  // rather than surfacing "Process ID is required" on Summary submit/refresh.
+  const numericTemplateProcessId =
+    templateProcessId != null && Number(templateProcessId) > 0
+      ? Number(templateProcessId)
+      : null;
+  if (numericTemplateProcessId == null && !code) {
+    return rows;
+  }
 
   let templates = {};
   let subsByParent = null;
   try {
+    const fetchTemplates =
+      typeof loadTemplates === "function"
+        ? () =>
+            loadTemplates({
+              processId: numericTemplateProcessId,
+              processCode: code,
+            })
+        : () =>
+            fetchSummaryTemplates({
+              captureScope,
+              companyId,
+              idProducts,
+              processId: numericTemplateProcessId,
+              processCode: code,
+              captureId,
+            });
     const loaded = await fetchTemplates();
     templates = loaded?.templates && typeof loaded.templates === "object" ? loaded.templates : {};
-    subsByParent =
-      loaded?.subsByParent && typeof loaded.subsByParent === "object" ? loaded.subsByParent : null;
-  } catch (error) {
-    console.warn("Summary templates unavailable — showing Id Product rows only", error);
-    return rows;
+    subsByParent = loaded?.subsByParent ?? null;
+  } catch {
+    if (numericTemplateProcessId == null && code) {
+      return rows;
+    }
+    throw new Error("Failed to load templates");
   }
 
   const suppressed = freshFromCapture ? new Set() : loadSuppressedRowKeys();
@@ -256,15 +285,15 @@ export async function populateSummaryRowsPure({
 
   rows = rows
     .filter((row) => {
-      if (isSummarySubRow(row)) {
+      if (row.productType === "sub") {
         if (isParentRowSuppressed(row, rows, suppressed)) return false;
         if (isRowSuppressed(row, suppressed)) return false;
       }
       return true;
     })
     .map((row) => {
-      if (!isSummarySubRow(row) && isRowSuppressed(row, suppressed)) {
-        return clearRowEditableFields(row, { asMainSkeleton: true });
+      if (row.productType === "main" && isRowSuppressed(row, suppressed)) {
+        return clearRowEditableFields(row);
       }
       return row;
     });

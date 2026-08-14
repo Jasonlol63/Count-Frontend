@@ -103,7 +103,7 @@ export default function DescriptionPickerModal({
                       placeholder={t("enterNewDescriptionName")}
                       value={newDescName}
                       disabled={ro}
-                      onChange={(e) => setNewDescName(e.target.value.toUpperCase())}
+                      onChange={(e) => setNewDescName(e.target.value)}
                       style={{ textTransform: "uppercase" }}
                       required
                     />
@@ -121,7 +121,7 @@ export default function DescriptionPickerModal({
                   className="description-search-input"
                   placeholder={t("searchDescriptions")}
                   value={search}
-                  onChange={(e) => setSearch(e.target.value.toUpperCase())}
+                  onChange={(e) => setSearch(e.target.value)}
                   style={{ textTransform: "uppercase" }}
                 />
               </div>

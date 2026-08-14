@@ -166,7 +166,8 @@ export default function PaymentHistoryExportPdfModal({
     if (!open) return undefined;
     const accountId = scope?.accountDbId;
     const companyId = scope?.companyId;
-    if (!accountId || !companyId) {
+    const groupId = scope?.groupId;
+    if (!accountId || (!companyId && !groupId)) {
       setCurrencies([]);
       setIsAllSelected(true);
       setSelectedCurrencies([]);
@@ -177,7 +178,7 @@ export default function PaymentHistoryExportPdfModal({
     abortRef.current = controller;
     setLoadingCurrencies(true);
     setError("");
-    void fetchPaymentHistoryExportCurrencies(accountId, companyId, controller.signal)
+    void fetchPaymentHistoryExportCurrencies(accountId, companyId, groupId, controller.signal)
       .then((list) => {
         if (controller.signal.aborted) return;
         const defaults = resolveExportCurrenciesDefault(scope?.currency, list);
@@ -196,7 +197,7 @@ export default function PaymentHistoryExportPdfModal({
         if (!controller.signal.aborted) setLoadingCurrencies(false);
       });
     return () => controller.abort();
-  }, [open, scope?.accountDbId, scope?.companyId, scope?.currency, m.exportPdfLoadCurrenciesFailed]);
+  }, [open, scope?.accountDbId, scope?.companyId, scope?.groupId, scope?.currency, m.exportPdfLoadCurrenciesFailed]);
 
   const handleRangeChange = useCallback((fromYmd, toYmd) => {
     setDateFromYmd(fromYmd || "");
@@ -232,7 +233,7 @@ export default function PaymentHistoryExportPdfModal({
       setError(m.pleaseSelectCurrency);
       return;
     }
-    if (!accountId || !scope?.companyId) {
+    if (!accountId || (!scope?.companyId && !scope?.groupId)) {
       setError(m.exportPdfMissingAccount);
       return;
     }
@@ -250,6 +251,7 @@ export default function PaymentHistoryExportPdfModal({
           const rows = await fetchMemberReportHistory({
             accountId,
             companyId: scope.companyId,
+            groupId: scope.groupId,
             dateFrom,
             dateTo,
             currency,

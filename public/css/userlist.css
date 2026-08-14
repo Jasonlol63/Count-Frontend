@@ -5,7 +5,6 @@ body.user-page {
     padding: 0;
     min-height: 100vh;
     height: 100vh;
-    /* 添加这行 */
     background-color: #e9f1ff;
     background-image:
         radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 48%),
@@ -14,10 +13,13 @@ body.user-page {
         radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%),
         linear-gradient(145deg, #97BFFC 0%, #AECFFA 40%, #f9fbff 100%);
     background-blend-mode: screen, screen, multiply, screen, normal;
+    background-size: 100vw 100vh;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
     color: #334155;
     overflow-x: hidden;
     overflow-y: auto;
-    /* 允许整页纵向滚动 */
+    position: relative;
 }
 
 /* 非 Show All：允许整页纵向滚动 */
@@ -71,7 +73,7 @@ body.user-page:not(.user-page--show-all) .action-buttons-container .user-gc-inli
 }
 
 body.user-page:not(.user-page--show-all) .user-table-wrapper {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     width: 100%;
     min-height: 0;
     display: flex;
@@ -98,6 +100,129 @@ body.ec-auth-shell.user-page .user-list-table .user-cards {
 /* 工具栏字号 / 药丸内边距（User 页，覆盖小屏 list-badge-scale 缩放） */
 body.ec-auth-shell.user-page .action-buttons .btn {
     font-size: 1.4rem !important;
+}
+
+/*
+ * Admin / Acc：顶栏按键 / chip / GC / 搜索条 / Status 直接无动画（对齐 Acc 静态观感）。
+ * dashboard .btn 的 transition:all + hover translateY / ::after sweep 会造成刷新与切换闪烁。
+ */
+body.user-page .action-buttons .btn,
+body.user-page .action-buttons .btn-add,
+body.user-page .action-buttons .btn-delete,
+body.user-page .user-toolbar-actions-right .btn,
+body.user-page .user-toolbar-actions-right .btn-add,
+body.user-page .user-toolbar-actions-right .btn-delete,
+body.user-page .user-filter-chip,
+body.user-page .user-filter-chip__dot,
+body.user-page .user-gc-segment,
+body.user-page .search-container.userlist-search-bar,
+body.user-page .search-container.userlist-search-bar .userlist-search-input,
+body.user-page .search-container.userlist-search-bar .search-input,
+body.user-page .search-container.userlist-search-bar .userlist-search-input.search-input,
+body.user-page .role-badge,
+body.user-page .status-active,
+body.user-page .status-inactive,
+body.user-page .user-list-row .role-badge,
+body.user-page .user-list-table .user-edit-btn,
+body.account-page .action-buttons .btn,
+body.account-page .action-buttons .btn-add,
+body.account-page .action-buttons .btn-delete,
+body.account-page .action-buttons .btn-currency-setting,
+body.account-page .user-toolbar-actions-right .btn,
+body.account-page .user-toolbar-actions-right .btn-add,
+body.account-page .user-toolbar-actions-right .btn-delete,
+body.account-page .user-toolbar-actions-right .btn-currency-setting,
+body.account-page .user-filter-chip,
+body.account-page .user-filter-chip__dot,
+body.account-page .user-gc-segment,
+body.account-page .search-container.userlist-search-bar,
+body.account-page .search-container.userlist-search-bar .userlist-search-input,
+body.account-page .search-container.userlist-search-bar .search-input,
+body.account-page .search-container.userlist-search-bar .userlist-search-input.search-input,
+body.account-page .account-role-badge,
+body.account-page .account-list-row .account-edit-btn {
+    transition: none !important;
+    animation: none !important;
+}
+
+body.user-page .action-buttons .btn:hover,
+body.user-page .action-buttons .btn:active,
+body.user-page .action-buttons .btn-add:hover,
+body.user-page .action-buttons .btn-add:active,
+body.user-page .action-buttons .btn-delete:hover,
+body.user-page .action-buttons .btn-delete:active,
+body.user-page .user-toolbar-actions-right .btn:hover,
+body.user-page .user-toolbar-actions-right .btn:active,
+body.user-page .btn-add:hover,
+body.user-page .btn-add:active,
+body.user-page .btn-delete:hover,
+body.user-page .btn-delete:active,
+body.user-page .user-gc-segment:not(:disabled):active,
+body.user-page .user-filter-chip:hover,
+body.account-page .action-buttons .btn:hover,
+body.account-page .action-buttons .btn:active,
+body.account-page .action-buttons .btn-add:hover,
+body.account-page .action-buttons .btn-add:active,
+body.account-page .action-buttons .btn-delete:hover,
+body.account-page .action-buttons .btn-delete:active,
+body.account-page .action-buttons .btn-currency-setting:hover,
+body.account-page .action-buttons .btn-currency-setting:active,
+body.account-page .user-toolbar-actions-right .btn:hover,
+body.account-page .user-toolbar-actions-right .btn:active,
+body.account-page .btn-add:hover,
+body.account-page .btn-add:active,
+body.account-page .btn-delete:hover,
+body.account-page .btn-delete:active,
+body.account-page .btn-currency-setting:hover,
+body.account-page .btn-currency-setting:active,
+body.account-page .user-gc-segment:not(:disabled):active,
+body.account-page .user-filter-chip:hover {
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Status badge: restore the Process-page hover "pop" / press animation so all
+   three list pages (Process, User List, Account) feel identical when a status
+   badge is clickable. Higher specificity than the generic .status-clickable
+   rule below, so no !important needed. */
+body.user-page .status-clickable,
+body.account-page .status-clickable {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+body.user-page .status-clickable:hover,
+body.account-page .status-clickable:hover {
+    opacity: 0.8;
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+body.user-page .status-clickable:active,
+body.account-page .status-clickable:active {
+    transform: scale(0.95);
+}
+
+body.user-page .action-buttons .btn::after,
+body.user-page .action-buttons .btn:hover::after,
+body.user-page .btn-add::after,
+body.user-page .btn-add:hover::after,
+body.user-page .btn-delete::after,
+body.user-page .btn-delete:hover::after,
+body.user-page .btn:hover::after,
+body.account-page .action-buttons .btn::after,
+body.account-page .action-buttons .btn:hover::after,
+body.account-page .btn-add::after,
+body.account-page .btn-add:hover::after,
+body.account-page .btn-delete::after,
+body.account-page .btn-delete:hover::after,
+body.account-page .btn-currency-setting::after,
+body.account-page .btn-currency-setting:hover::after,
+body.account-page .btn:hover::after {
+    content: none !important;
+    display: none !important;
+    transition: none !important;
+    transform: none !important;
+    animation: none !important;
 }
 
 body.ec-auth-shell.user-page .user-gc-segment {
@@ -140,7 +265,6 @@ body.user-page:not(.user-page--show-all) .user-list-table .user-list-table-heade
 @media (max-width: 1200px) {
     body.ec-auth-shell.user-page .container {
         padding-left: var(--layout-main-offset);
-        transition: padding-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 }
 
@@ -175,7 +299,7 @@ body.user-page:not(.user-page--show-all) .user-list-table .user-list-table-heade
  * 表头与数据行共用 grid 变量；完整显示 Action / Last Login / Created By 等标题
  */
 .user-list-table {
-    --list-table-min-width: 980px;
+    --list-table-min-width: 1040px;
     --user-list-row-min-height: 30px;
     --user-list-pill-height: 20px;
     --user-list-grid-cols:
@@ -183,7 +307,7 @@ body.user-page:not(.user-page--show-all) .user-list-table .user-list-table-heade
         minmax(120px, 1.5fr)
         minmax(120px, 1.5fr)
         minmax(130px, 1.2fr)
-        minmax(84px, 0.7fr)
+        minmax(140px, 0.7fr)
         minmax(72px, 0.55fr)
         minmax(131px, 1fr)
         minmax(96px, 1.2fr)
@@ -193,7 +317,7 @@ body.user-page:not(.user-page--show-all) .user-list-table .user-list-table-heade
         minmax(120px, 1.5fr)
         minmax(120px, 1.5fr)
         minmax(130px, 1.2fr)
-        minmax(84px, 0.7fr)
+        minmax(140px, 0.7fr)
         minmax(72px, 0.55fr)
         minmax(131px, 1fr)
         minmax(96px, 1.2fr)
@@ -208,7 +332,7 @@ body.lang-zh.user-page .user-list-table {
         minmax(120px, 1.5fr)
         minmax(120px, 1.5fr)
         minmax(130px, 1.2fr)
-        minmax(84px, 0.7fr)
+        minmax(140px, 0.7fr)
         minmax(72px, 0.55fr)
         minmax(131px, 1fr)
         minmax(96px, 1.2fr)
@@ -218,7 +342,7 @@ body.lang-zh.user-page .user-list-table {
         minmax(120px, 1.5fr)
         minmax(120px, 1.5fr)
         minmax(130px, 1.2fr)
-        minmax(84px, 0.7fr)
+        minmax(140px, 0.7fr)
         minmax(72px, 0.55fr)
         minmax(131px, 1fr)
         minmax(96px, 1.2fr)
@@ -287,6 +411,14 @@ body.user-page .user-list-table .user-card.user-list-row {
 .user-list-table .user-list-row .card-item {
     padding: 0 !important;
     box-sizing: border-box;
+}
+
+/* 通用列内容防溢出：任何屏宽下都优先省略号收窄，避免文字溢出格外挤压/覆盖到相邻列（对齐 Bank Process 写法） */
+.user-list-table .user-list-row .card-item:not(.card-item--action):not(:has(.role-badge)) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .user-list-table .user-list-table-header .header-sortable {
@@ -434,15 +566,7 @@ body.ec-auth-shell.user-page .user-list-table .user-list-row .card-item--action 
     transform: none;
 }
 
-.user-list-table .user-list-row .card-item:has(.role-badge) {
-    overflow: visible;
-    text-overflow: clip;
-    flex-shrink: 0;
-    min-width: min-content;
-}
-
 .user-list-table .user-list-row .role-badge {
-    flex-shrink: 0;
     white-space: nowrap;
 }
 
@@ -485,15 +609,59 @@ body.user-page.user-page--show-all .user-cards {
     overflow: hidden;
 }
 
-/* User List / Account List 工具条整块：白实底（与主区白底一致） */
+/* User List / Account List 工具条整块：与 Acc accountCSS 同款（无描边，仅阴影） */
 body.user-page .action-buttons-container,
 body.account-page .action-buttons-container {
-    background: var(--color-surface, #ffffff);
-    border: 1px solid var(--color-border, #e5e7eb);
-    box-shadow: var(--shadow-card, 0 2px 8px rgba(0, 0, 0, 0.1));
+    margin-top: clamp(12px, 1.04vw, 20px);
+    background-color: #ffffff;
+    border: none !important;
+    outline: none;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    align-self: stretch;
+    min-height: 0;
+}
+
+/* Acc standard toolbar stretch for Admin User List */
+body.user-page .action-buttons-container {
+    flex: 0 0 auto;
+}
+
+body.user-page .action-buttons {
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+body.account-page .action-buttons {
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+body.user-page .user-toolbar-primary {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+}
+
+body.user-page .user-toolbar-primary .search-container.userlist-search-bar {
+    width: clamp(150px, 17vw, 240px);
+    max-width: clamp(150px, 17vw, 240px);
 }
 
 /* 与 Games Process List：panel 底无额外 margin，表头 margin-top 12px */
@@ -651,7 +819,7 @@ body.ec-auth-shell .user-gc-segment {
     cursor: pointer;
     white-space: nowrap;
     line-height: 1.25;
-    transition: background 0.12s ease, color 0.12s ease, transform 0.1s ease, opacity 0.12s ease;
+    transition: none;
     display: flex;
     justify-content: center;
 }
@@ -660,6 +828,11 @@ body.user-page .user-gc-segment:not(:disabled):active,
 body.account-page .user-gc-segment:not(:disabled):active,
 body.process-page .user-gc-segment:not(:disabled):active {
     transform: scale(0.97);
+}
+
+/* Admin：GC 段按下不缩放 */
+body.user-page .user-gc-segment:not(:disabled):active {
+    transform: none;
 }
 
 body.user-page .user-gc-segment.is-on.is-pending,
@@ -993,6 +1166,12 @@ body.datacapture-summary-page .btn:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+/* Admin：覆盖上方共用 hover 上浮 */
+body.user-page .btn:hover,
+body.user-page .btn:active {
+    transform: none;
+}
+
 .user-page .btn:active,
 .account-page .btn:active,
 body.datacapture-page .btn:active,
@@ -1046,6 +1225,11 @@ body.datacapture-summary-page .btn-add:hover {
     background: var(--btn-add-gradient-hover);
     box-shadow: var(--shadow-btn-add-page-hover);
     transform: translateY(-1px);
+}
+
+body.user-page .btn-add:hover,
+body.user-page .btn-add:active {
+    transform: none;
 }
 
 /* Account List 顶栏：币种设置与 Add / Delete 同高、同字号与内边距 */
@@ -1132,6 +1316,11 @@ body.datacapture-summary-page .btn-delete:hover {
     background: var(--btn-delete-gradient-hover);
     box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
     transform: translateY(-1px);
+}
+
+body.user-page .btn-delete:hover,
+body.user-page .btn-delete:active {
+    transform: none;
 }
 
 .user-page .btn-delete.active {
@@ -1264,18 +1453,19 @@ body.datacapture-summary-page .btn-cancel:hover {
 
 .status-clickable {
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: none;
+    animation: none;
     user-select: none;
 }
 
 .status-clickable:hover {
     opacity: 0.8;
-    transform: scale(1.05);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transform: none;
+    box-shadow: none;
 }
 
 .status-clickable:active {
-    transform: scale(0.95);
+    transform: none;
 }
 
 .role-admin {
@@ -1365,6 +1555,10 @@ body.datacapture-summary-page .btn-cancel:hover {
     margin: 0 !important;
     border-radius: 0 !important;
     box-sizing: border-box;
+    /* Large Acc/Process grids: skip global premiumEntrance + transition:all jank */
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
 }
 
 /* Modal content: fills the full modal area */
@@ -2930,6 +3124,25 @@ body.ec-auth-shell.process-page .search-container.userlist-search-bar .userlist-
     color: #0f172a;
     line-height: 1.2;
     text-transform: uppercase;
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Admin：搜索壳本身也不过渡（切回时勿淡入/变形） */
+body.user-page .search-container.userlist-search-bar {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Admin：整页 container 禁止 entrance 淡入（global-13inch premiumEntrance） */
+body.user-page .container {
+    animation: none !important;
+}
+
+body.user-page .search-container.userlist-search-bar .userlist-search-input:focus,
+body.user-page .search-container.userlist-search-bar .userlist-search-input:focus-visible,
+body.user-page .search-container.userlist-search-bar .search-input:focus {
+    transition: none !important;
 }
 
 body.user-page .search-container.userlist-search-bar .userlist-search-input::placeholder,
@@ -3009,11 +3222,7 @@ body.process-page .user-filter-chip {
     font-weight: var(--font-weight-semibold);
     color: #475569;
     line-height: 1.2;
-    transition:
-        border-color 0.15s ease,
-        box-shadow 0.15s ease,
-        color 0.15s ease,
-        background-color 0.15s ease;
+    transition: none;
 }
 
 body.user-page .user-filter-chip:hover,
@@ -3049,7 +3258,7 @@ body.process-page .user-filter-chip__dot {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s ease;
+    transition: none;
 }
 
 body.user-page .user-filter-chip.is-selected .user-filter-chip__dot,
@@ -3404,24 +3613,33 @@ body.user-page:not(.user-page--show-all) .user-list-table .user-list-row {
     flex: 0 0 auto;
     width: 100%;
     height: auto;
-    min-height: var(--user-list-row-min-height, 30px);
+    min-height: 0;
     box-sizing: border-box;
     align-items: center;
 }
 
-body.user-page:not(.user-page--show-all) .user-list-row .card-item,
-body.ec-auth-shell.user-page:not(.user-page--show-all) .user-list-row .card-item {
+/* 含 Show All：单元格密度与 Acc 分页模式一致 */
+body.user-page .user-list-row .card-item,
+body.ec-auth-shell.user-page .user-list-row .card-item {
     font-size: 1.4rem !important;
     font-weight: bold !important;
     line-height: 1.3 !important;
     letter-spacing: 0 !important;
 }
 
-/* 末页不足一页：保持与 Account 一致的最小行高，避免数据上下密度不一致 */
+body.user-page.user-page--show-all .user-list-table .user-list-row,
+body.ec-auth-shell.user-page.user-page--show-all .user-card.user-list-row {
+    padding: 0 22px !important;
+    min-height: var(--user-list-row-min-height, 30px) !important;
+    flex: 0 0 auto !important;
+    height: auto !important;
+}
+
+/* 末页不足一页：与 Acc 一致用 min-height:0，行高由内容/paged-fill 决定 */
 body.user-page:not(.user-page--show-all) .user-list-table .user-cards:not(.user-cards--paged-fill) .user-list-row,
 body.ec-auth-shell.user-page:not(.user-page--show-all) .user-list-table .user-cards:not(.user-cards--paged-fill) .user-list-row {
     flex: 0 0 auto;
-    min-height: var(--user-list-row-min-height, 30px) !important;
+    min-height: 0 !important;
     height: auto;
 }
 
@@ -3430,8 +3648,9 @@ body.ec-auth-shell.user-page:not(.user-page--show-all) .user-list-table .user-ca
     display: none !important;
 }
 
-body.user-page:not(.user-page--show-all) .user-list-row .role-badge,
-body.ec-auth-shell.user-page:not(.user-page--show-all) .user-list-row .role-badge {
+/* Role 徽章：含 Show All，与 Acc 分页药丸同高 */
+body.user-page .user-list-row .role-badge,
+body.ec-auth-shell.user-page .user-list-row .role-badge {
     box-sizing: border-box;
     height: var(--user-list-pill-height, 20px);
     padding: 0 8px !important;
@@ -3440,17 +3659,11 @@ body.ec-auth-shell.user-page:not(.user-page--show-all) .user-list-row .role-badg
     font-weight: 700 !important;
     letter-spacing: 0.02em !important;
     border-radius: 6px !important;
-    flex-shrink: 0;
     white-space: nowrap;
-    min-width: max-content !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
     border-width: 1px !important;
-}
-
-body.user-page:not(.user-page--show-all) .user-list-row .card-item:has(.role-badge) {
-    overflow: visible;
-    text-overflow: clip;
-    flex-shrink: 0;
-    min-width: min-content;
 }
 
 /* 非 Show All：行高随内容；勿用 flex-grow 撑满半屏 */
@@ -3490,8 +3703,8 @@ body.user-page:not(.user-page--show-all) .user-card.show-card {
 }
 
 .user-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transform: translateY(-1px);
+    box-shadow: none;
+    transform: none;
 }
 
 .card-item {
@@ -3813,6 +4026,32 @@ body.user-page .pagination-container {
     padding: var(--user-modal-access-grid-pad-y, 4px) 0;
 }
 
+/* Row-windowed Acc/Process lists — scroll container is not itself a CSS grid */
+#userModal .account-grid.account-grid--virtual {
+    display: block !important;
+    position: relative;
+    grid-template-columns: none !important;
+    grid-auto-rows: auto;
+    contain: content;
+}
+
+#userModal .account-grid-virtual-spacer {
+    position: relative;
+    width: 100%;
+}
+
+#userModal .account-grid-virtual-row {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: repeat(var(--user-modal-access-grid-cols), minmax(0, 1fr));
+    gap: var(--user-modal-access-card-gap, 5px);
+    align-content: start;
+}
+
 #userModal .user-modal-select-card {
     display: flex;
     flex-direction: column;
@@ -3846,17 +4085,18 @@ body.user-page .pagination-container {
     transition: none;
 }
 
-#userModal .user-modal-select-card:hover:not(:has(input[type="checkbox"]:disabled)) {
+#userModal .user-modal-select-card:hover:not(.is-disabled) {
     background-color: #e8eef5 !important;
     border-color: #94a3b8 !important;
 }
 
-#userModal .user-modal-select-card:has(input[type="checkbox"]:checked) {
+/* Class-based selected state — avoid :has(:checked) which is costly on Select All/Clear All. */
+#userModal .user-modal-select-card.is-selected {
     background-color: var(--account-select-card-bg-checked);
     border: 1.5px solid var(--account-select-card-border-checked);
 }
 
-#userModal .user-modal-select-card:has(input[type="checkbox"]:checked):hover {
+#userModal .user-modal-select-card.is-selected:hover {
     background-color: #f8fbff !important;
     border-color: var(--account-select-card-border-checked) !important;
 }
@@ -3895,12 +4135,12 @@ body.user-page .pagination-container {
     letter-spacing: 0;
 }
 
-#userModal .user-modal-select-card:has(input[type="checkbox"]:checked) .account-label,
-#userModal .user-modal-select-card:has(input[type="checkbox"]:checked) .account-label.account-label--process {
+#userModal .user-modal-select-card.is-selected .account-label,
+#userModal .user-modal-select-card.is-selected .account-label.account-label--process {
     color: var(--account-select-label-checked);
 }
 
-#userModal .user-modal-select-card:has(input[type="checkbox"]:checked) .account-label-desc {
+#userModal .user-modal-select-card.is-selected .account-label-desc {
     color: var(--account-select-desc-checked);
 }
 
@@ -3919,7 +4159,7 @@ body.user-page .pagination-container {
     pointer-events: none;
 }
 
-#userModal .user-modal-select-card:has(input[type="checkbox"]:disabled) {
+#userModal .user-modal-select-card.is-disabled {
     cursor: not-allowed;
     opacity: 0.55;
 }
@@ -3929,7 +4169,7 @@ body.user-page .pagination-container {
     font-weight: var(--font-weight-bold);
 }
 
-#userModal .user-modal-select-card:has(input[type="checkbox"]:focus-visible) {
+#userModal .user-modal-select-card:focus-within {
     outline: 2px solid #0d60ff;
     outline-offset: 2px;
 }

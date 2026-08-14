@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { isTypeAheadKey } from "../../../components/typeAheadMatch.js";
 import { useListboxKeyboard } from "../../../components/useListboxKeyboard.js";
 
 /**
@@ -37,7 +38,7 @@ export default function ProcessSelect({
 
   const displayProcesses = [selectAllSeed, ...filteredProcesses];
 
-  const { highlightIdx, setHighlightIdx, listRef, handleListKeyDown, highlightClass } = useListboxKeyboard({
+  const { setHighlightIdx, listRef, handleListKeyDown, handleButtonKeyDown, highlightClass } = useListboxKeyboard({
     open: isOpen,
     itemCount: displayProcesses.length,
     resetToken: searchTerm,
@@ -80,9 +81,18 @@ export default function ProcessSelect({
     return String(process.process_name);
   };
 
+  const openMenu = useCallback((seed = "") => {
+    setSearchTerm(seed);
+    setIsOpen(true);
+  }, []);
+
   const handleToggle = () => {
-    setIsOpen(!isOpen);
-    setSearchTerm("");
+    if (isOpen) {
+      setIsOpen(false);
+      setSearchTerm("");
+      return;
+    }
+    openMenu("");
   };
 
   const handleSelect = (process) => {
@@ -105,12 +115,32 @@ export default function ProcessSelect({
     return p.description ? `${name} (${p.description})` : name || placeholder;
   };
 
-  const handleKeyDown = (e) => {
+  const selectByIndex = (idx) => {
+    const row = displayProcesses[idx];
+    if (row) handleSelect(row);
+  };
+
+  const handleSearchKeyDown = (e) => {
     if (!isOpen) return;
     handleListKeyDown(e, {
       len: displayProcesses.length,
-      onSelectIndex: (idx) => handleSelect(displayProcesses[idx]),
+      onSelectIndex: selectByIndex,
       onClose: () => setIsOpen(false),
+    });
+  };
+
+  const onButtonKeyDown = (e) => {
+    if (!isOpen && isTypeAheadKey(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      openMenu(e.key);
+      return;
+    }
+    handleButtonKeyDown(e, {
+      isOpen,
+      onToggleOpen: () => openMenu(""),
+      onClose: () => setIsOpen(false),
+      len: displayProcesses.length,
+      onSelectIndex: selectByIndex,
     });
   };
 
@@ -119,7 +149,10 @@ export default function ProcessSelect({
       <button
         type="button"
         className={`custom-select-button ${isOpen ? "open" : ""}`}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
         onClick={handleToggle}
+        onKeyDown={onButtonKeyDown}
         aria-labelledby={ariaLabelledBy || undefined}
       >
         {getDisplayText(selectedValue)}
@@ -134,9 +167,10 @@ export default function ProcessSelect({
               autoComplete="off"
               value={searchTerm}
               onChange={(e) => {
-                setSearchTerm(e.target.value.toUpperCase());
+                setSearchTerm(e.target.value);
               }}
-              onKeyDown={handleKeyDown}
+              style={{ textTransform: "uppercase" }}
+              onKeyDown={handleSearchKeyDown}
               ref={searchInputRef}
             />
           </div>

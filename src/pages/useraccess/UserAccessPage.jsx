@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SimpleSelect from "../../components/SimpleSelect.jsx";
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { useAuthSession } from "../../context/AuthSessionContext.jsx";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
+import { useRealtimeDomain } from "../../lib/realtime/useRealtimeDomain.js";
+import { REALTIME_DOMAINS } from "../../lib/realtime/realtimeEvents.js";
 
 import { getVisiblePermissionKeys } from "../userlist/userListLogic.js";
 
@@ -43,44 +45,49 @@ export default function UserAccessPage() {
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState("");
 
+  const loadAccessData = useCallback(async ({ silent = false } = {}) => {
+    if (!me) return;
+    try {
+      const companyId = Number(me.company_id || 0);
+
+      const usersRes = await fetch(buildApiUrl("api/useraccess/useraccess_api.php"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get_all_users" }),
+      });
+      const usersJson = await usersRes.json();
+      const list = Array.isArray(usersJson?.data) ? usersJson.data : [];
+
+      const [accRes, procRes] = await Promise.all([
+        fetch(buildApiUrl(`api/accounts/accountlistapi.php?company_id=${companyId}&showAll=1`), { credentials: "include" }),
+        fetch(buildApiUrl(`api/processes/processlist_api.php?company_id=${companyId}&showAll=1`), { credentials: "include" }),
+      ]);
+      const accJson = await accRes.json();
+      const procJson = await procRes.json();
+
+      setUsers(list);
+      setAccounts(Array.isArray(accJson?.data?.accounts) ? accJson.data.accounts : []);
+      setProcesses(Array.isArray(procJson?.data) ? procJson.data : []);
+    } catch {
+      if (!silent) setNotice("Failed to load user access data");
+    } finally {
+      setLoading(false);
+    }
+  }, [me]);
+
   useEffect(() => {
     if (!sessionReady || !me) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const companyId = Number(me.company_id || 0);
+    void loadAccessData();
+  }, [sessionReady, me, loadAccessData]);
 
-        const usersRes = await fetch(buildApiUrl("api/useraccess/useraccess_api.php"), {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "get_all_users" }),
-        });
-        const usersJson = await usersRes.json();
-        const list = Array.isArray(usersJson?.data) ? usersJson.data : [];
-
-        const [accRes, procRes] = await Promise.all([
-          fetch(buildApiUrl(`api/accounts/accountlistapi.php?company_id=${companyId}&showAll=1`), { credentials: "include" }),
-          fetch(buildApiUrl(`api/processes/processlist_api.php?company_id=${companyId}&showAll=1`), { credentials: "include" }),
-        ]);
-        const accJson = await accRes.json();
-        const procJson = await procRes.json();
-
-        if (!cancelled) {
-          setUsers(list);
-          setAccounts(Array.isArray(accJson?.data?.accounts) ? accJson.data.accounts : []);
-          setProcesses(Array.isArray(procJson?.data) ? procJson.data : []);
-        }
-      } catch {
-        if (!cancelled) setNotice("Failed to load user access data");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionReady, me, navigate]);
+  useRealtimeDomain(
+    [REALTIME_DOMAINS.USERS, REALTIME_DOMAINS.ACCOUNTS, REALTIME_DOMAINS.PROCESSES],
+    () => {
+      void loadAccessData({ silent: true });
+    },
+    { enabled: sessionReady && Boolean(me) },
+  );
 
   const templateUser = useMemo(
     () => users.find((u) => String(u.id) === String(templateUserId)) || null,
