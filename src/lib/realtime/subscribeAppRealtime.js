@@ -1,4 +1,3 @@
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { dispatchRealtimeInvalidate } from "./realtimeEvents.js";
 
 /**
@@ -57,27 +56,9 @@ export function subscribeAppRealtime({ getScopeParams, onError } = {}) {
     }, delayMs);
   };
 
-  const fetchTicketOnce = async (scope) => {
-    const params = new URLSearchParams();
-    if (scope.companyId != null && scope.companyId !== "") {
-      params.set("company_id", String(scope.companyId));
-    }
-    if (scope.viewGroup) params.set("view_group", String(scope.viewGroup));
-    if (scope.groupId) params.set("group_id", String(scope.groupId));
-    if (scope.groupAggregate) params.set("group_aggregate", "1");
-    if (scope.subsidiaryAccountsOnly) params.set("subsidiary_accounts_only", "1");
-
-    const qs = params.toString();
-    const res = await fetch(buildApiUrl(`api/realtime/ticket_api.php${qs ? `?${qs}` : ""}`), {
-      credentials: "include",
-      cache: "no-cache",
-      headers: { "Cache-Control": "no-cache" },
-    });
-    try {
-      return await res.json();
-    } catch {
-      return { success: false, message: `ticket http ${res.status}` };
-    }
+  const fetchTicketOnce = async () => {
+    // Spring Boot has no PHP `api/realtime/ticket_api.php` / SSE ticket.
+    return { success: true, data: { enabled: false } };
   };
 
   const fetchTicket = async () => {
@@ -122,19 +103,10 @@ export function subscribeAppRealtime({ getScopeParams, onError } = {}) {
       if (closed || gen !== connectGen) return;
       const data = ticketRes?.data;
       if (!ticketRes?.success || !data?.enabled || !data?.ticket) {
-        const denyMsg = String(ticketRes?.message || ticketRes?.error || "enabled=false");
         if (!warnedDisabled) {
           warnedDisabled = true;
-          console.warn("[app-realtime] ticket disabled or failed:", denyMsg);
+          console.warn("[app-realtime] Spring realtime is not available; live sync disabled.");
         }
-        // Scope/permission deny is sticky for this filter — back off hard (no Network 5xx storm).
-        const accessDenied = /无权|无权限|缺少公司|缺少 group|无效的 group|Group Ledger/i.test(
-          denyMsg
-        );
-        attempt += 1;
-        scheduleReconnect(
-          accessDenied ? Math.min(120_000, 30_000 * attempt) : Math.min(60_000, 5_000 * attempt)
-        );
         return;
       }
       warnedDisabled = false;

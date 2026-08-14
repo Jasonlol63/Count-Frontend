@@ -1068,9 +1068,9 @@ export default function AuthenticatedLayout() {
       if (pageKey !== "dashboard") {
         prefetchRouteModule(spaPath("dashboard"));
       }
-      void import("../pages/dashboard/dashboardRoutePrefetch.js").then(({ warmDashboardRouteCache }) => {
-        warmDashboardRouteCache({ me });
-      });
+      /* Dashboard bootstrap has no Spring endpoint yet (still PHP-only) — do not eager-warm
+       * it from other pages; skipping avoids firing dead PHP calls off the Account/etc. pages.
+       * Re-enable once dashboardRoutePrefetch.js is migrated to Spring. */
     }
 
     const processListSpaPath =
@@ -1094,16 +1094,11 @@ export default function AuthenticatedLayout() {
       });
     };
 
-    const runProcessListWarm = () => {
-      if (!me?.company_id) return;
-      void import("../pages/processlist/processRoutePrefetch.js").then((mod) => {
-        if (me.company_has_bank && !me.company_has_gambling) {
-          mod.warmBankProcessListRouteCache(me.company_id);
-        } else {
-          mod.warmProcessListRouteCache(me.company_id);
-        }
-      });
-    };
+    /* processRoutePrefetch.js still calls PHP `processlist_api.php` / `get_company_currencies_api.php` /
+     * `user_currency_order_api.php` under the hood (not yet Spring-migrated) — do not eager-warm it from
+     * other pages (e.g. Account) so those dead PHP calls don't fire off-page. Re-enable once
+     * processRoutePrefetch.js is migrated to Spring. */
+    const runProcessListWarm = () => {};
 
     // Eager Acc→Process: prefetch Process chunk + warm list as soon as Acc is open (not only idle).
     if (pathnameIs("account-list", path) || pathnameIs("add-account", path)) {

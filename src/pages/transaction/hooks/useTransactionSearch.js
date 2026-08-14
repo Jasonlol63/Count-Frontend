@@ -1071,7 +1071,7 @@ export function useTransactionSearch({
             ...scopeParams,
             transactionType: TYPE_SEARCH_LIST_FORM_TYPE,
           });
-          if (typeAccountIds.length === 0) {
+          if (Array.isArray(typeAccountIds) && typeAccountIds.length === 0) {
             const fallbackCode = entryFocusCurrencyFallback || "MYR";
             flushSync(() => {
               setTypeSearchActive(true);
@@ -1124,6 +1124,8 @@ export function useTransactionSearch({
         } else {
           payload = await fetchTypeTransactionSearch({
             ...scopeParams,
+            dateFrom: queryDateFrom,
+            dateTo: queryDateTo,
             transactionType: normalizedType,
             currencyCodes,
           });
@@ -1210,7 +1212,7 @@ export function useTransactionSearch({
         flushSync(() => {
           setTypeSearchActive(true);
           setTypeSearchFormType(TYPE_SEARCH_LIST_FORM_TYPE);
-          setTypeSearchAccountIds(typeAccountIds);
+          setTypeSearchAccountIds(Array.isArray(typeAccountIds) ? typeAccountIds : []);
           setRawSearchData(cleaned);
           if (didApplyTypeSearchEntryClear) {
             bootCurrencyDefaultRef.current = false;

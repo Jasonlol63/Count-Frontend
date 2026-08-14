@@ -1,8 +1,9 @@
-import { assetUrl, buildApiUrl } from "../../../utils/core/apiUrl.js";
+import { assetUrl } from "../../../utils/core/apiUrl.js";
+import { fetchAvailableCurrencies } from "../../../utils/api/currencyApi.js";
+import { getHistory } from "./transactionApi.js";
 import pdfBrandLogoUrl from "../../../assets/images/count_brandlogo.png?url";
 import { formatDmyFromYmd } from "../../maintenance/shared/maintenanceDateHelpers.js";
 import { computeTableTotals, formatPaymentHistoryMoney } from "../../member/memberPageHelpers.js";
-import { parseJsonResponse } from "../../member/memberWinLossApi.js";
 import { formatMemberRowDescription, getMemberText } from "../../../translateFile/pages/memberTranslate.js";
 
 function escapeHtml(value) {
@@ -230,26 +231,20 @@ function pdfRemarkText(row) {
 export async function fetchPaymentHistoryExportCurrencies(accountId, companyId, groupId, signal) {
   const id = Number(accountId) || 0;
   const cid = Number(companyId) || 0;
-  const gid = String(groupId || "").trim().toUpperCase();
-  if (!id || (!cid && !gid)) return [];
-  const params = new URLSearchParams({
-    action: "get_account_currencies",
-    account_id: String(id),
-    ...(gid ? { group_id: gid } : { company_id: String(cid) }),
-  });
-  const res = await fetch(
-    buildApiUrl(`api/accounts/account_currency_api.php?${params}`),
-    { credentials: "include", cache: "no-store", signal },
-  );
-  const json = await parseJsonResponse(await res.text());
-  if (!json?.success || !Array.isArray(json.data)) return [];
-  return json.data
-    .map((row) =>
-      String(row.currency_code || row.code || "")
-        .trim()
-        .toUpperCase(),
-    )
-    .filter(Boolean);
+  if (!id || cid <= 0) return [];
+  try {
+    const rows = await fetchAvailableCurrencies({ tenantId: cid, accountId: id }, signal);
+    const linked = rows
+      .filter((row) => row.is_linked)
+      .map((row) => String(row.code || "").trim().toUpperCase())
+      .filter(Boolean);
+    if (linked.length) return linked;
+    return rows
+      .map((row) => String(row.code || "").trim().toUpperCase())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -261,30 +256,22 @@ export async function fetchPaymentHistoryExportCurrencies(accountId, companyId, 
 export async function fetchMemberReportHistory({ accountId, companyId, groupId, dateFrom, dateTo, currency, signal }) {
   const id = Number(accountId) || 0;
   const cid = Number(companyId) || 0;
-  const gid = String(groupId || "").trim().toUpperCase();
-  if (!id || (!cid && !gid)) {
+  if (!id || cid <= 0) {
     throw new Error("Account or company is missing");
   }
-  const params = new URLSearchParams({
-    account_id: String(id),
-    date_from: String(dateFrom),
-    date_to: String(dateTo),
-    ...(gid ? { group_id: gid } : { company_id: String(cid) }),
-    currency: String(currency || "")
-      .trim()
-      .toUpperCase(),
-    member_view: "1",
-  });
-  const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params}&_t=${Date.now()}`), {
-    credentials: "include",
-    cache: "no-store",
+  const json = await getHistory({
+    companyId: cid,
+    groupId,
+    accountId: id,
+    dateFrom,
+    dateTo,
+    currency,
     signal,
   });
-  const json = await parseJsonResponse(await res.text());
   if (!json?.success) {
     throw new Error(json?.error || json?.message || "History request failed");
   }
-  return Array.isArray(json.data?.history) ? json.data.history : [];
+  return Array.isArray(json.data) ? json.data : [];
 }
 
 export function resolveExportCurrencyDefault(scopeCurrency, currencies) {

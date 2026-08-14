@@ -1,4 +1,13 @@
+import { fetchAccountListByTenantId } from "../../account/accountListApi.js";
+import { fetchCurrencyListByTenantId, normalizeCurrencyRow } from "../../../utils/api/currencyApi.js";
+import { getCachedOwnerCompanies } from "../../../utils/company/sharedCompanyFilter.js";
+import {
+  persistCurrencyDisplayOrder,
+  readCurrencyDisplayOrder,
+} from "../../../utils/company/currencyDisplayOrder.js";
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+import { deriveCategoryList, normalizeTransactionAccountOption } from "./transactionAccountHelpers.js";
+import { resolveGroupEntityRowFromSnap } from "./transactionScope.js";
 import { buildSpringSearchRequest, normalizeSpringSearchToGrid } from "./transactionSearchNormalize.js";
 import { buildSpringHistoryRequest, normalizeSpringHistoryResponse } from "./transactionHistoryNormalize.js";
 import { buildSpringSubmitRequest, normalizeSpringSubmitResponse, isSpringSubmitType } from "./transactionSubmitNormalize.js";
@@ -87,131 +96,80 @@ async function postSpringJson(path, body, signal) {
   return safeJson(res);
 }
 
+/** UI company pill id, or Group tenant id from owner-companies cache. */
+function resolveTransactionSpringTenantId({ companyId, groupId } = {}) {
+  const cid = companyId != null && companyId !== "" ? Number(companyId) : 0;
+  if (Number.isFinite(cid) && cid > 0) return cid;
+  const row = resolveGroupEntityRowFromSnap(getCachedOwnerCompanies() || [], groupId);
+  const id = Number(row?.id ?? row?.tenant_id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function currencyOrderStorageKey({ companyId, groupId } = {}) {
+  const cid = companyId != null && companyId !== "" ? Number(companyId) : 0;
+  if (Number.isFinite(cid) && cid > 0) return cid;
+  const gid = groupId != null ? String(groupId).trim().toUpperCase() : "";
+  return gid ? `g:${gid}` : null;
+}
+
 export async function getCategories() {
-  const res = await fetch(buildApiUrl("api/transactions/get_categories_api.php"), { credentials: "include" });
-  return safeJson(res);
+  return { success: true, data: deriveCategoryList() };
 }
 
-function appendViewGroup(params, viewGroup) {
-  const vg = viewGroup != null ? String(viewGroup).trim().toUpperCase() : "";
-  if (vg) params.set("view_group", vg);
+export async function getAccounts({ companyId, groupId, role, status = "active", signal } = {}) {
+  const tenantId = resolveTransactionSpringTenantId({ companyId, groupId });
+  if (!tenantId) {
+    return { success: true, data: [] };
+  }
+  const rows = await fetchAccountListByTenantId(tenantId, signal);
+  const wantStatus = String(status || "active").trim().toLowerCase();
+  const wantRole = role ? String(role).trim().toUpperCase() : "";
+  const data = rows
+    .map((row) => normalizeTransactionAccountOption(row))
+    .filter(Boolean)
+    .filter((row) => {
+      if (wantStatus && String(row.status || "").toLowerCase() !== wantStatus) return false;
+      if (wantRole && String(row.role || "").toUpperCase() !== wantRole) return false;
+      return true;
+    });
+  return { success: true, data };
 }
 
-/** Append company_id / view_group / group_id (same rules as transactionScopeApiParams). */
-function appendTransactionScope(
-  target,
-  { companyId, viewGroup, groupId, groupAggregate, subsidiaryAccountsOnly },
-  kind = "params",
-) {
+export async function getCompanyCurrencies({ companyId, groupId, signal } = {}) {
+  const tenantId = resolveTransactionSpringTenantId({ companyId, groupId });
+  if (!tenantId) {
+    return { success: true, data: [] };
+  }
+  const rows = await fetchCurrencyListByTenantId(tenantId, signal);
+  const data = rows
+    .map((row) => normalizeCurrencyRow(row))
+    .filter((row) => Number.isFinite(row.id) && row.id > 0 && String(row.code || "").trim());
+  return { success: true, data };
+}
+
+export async function getUserCurrencyOrder({ companyId, groupId } = {}) {
+  const orderKey = currencyOrderStorageKey({ companyId, groupId });
+  const order = orderKey ? readCurrencyDisplayOrder(orderKey) : null;
   const cid = companyId != null && companyId !== "" ? Number(companyId) : 0;
-  if (Number.isFinite(cid) && cid > 0) {
-    if (kind === "form") target.append("company_id", String(cid));
-    else target.set("company_id", String(cid));
-  }
-  const vg = viewGroup != null ? String(viewGroup).trim().toUpperCase() : "";
-  if (vg) {
-    if (kind === "form") target.append("view_group", vg);
-    else target.set("view_group", vg);
-  }
   const gid = groupId != null ? String(groupId).trim().toUpperCase() : "";
-  if (gid) {
-    if (kind === "form") target.append("group_id", gid);
-    else target.set("group_id", gid);
-  }
-  if (groupAggregate) {
-    if (kind === "form") target.append("group_aggregate", "1");
-    else target.set("group_aggregate", "1");
-  }
-  if (subsidiaryAccountsOnly) {
-    if (kind === "form") target.append("subsidiary_accounts_only", "1");
-    else target.set("subsidiary_accounts_only", "1");
-  }
+  return {
+    success: true,
+    data: {
+      order: Array.isArray(order) && order.length ? order : null,
+      company_id: Number.isFinite(cid) && cid > 0 ? cid : null,
+      group_id: gid || null,
+    },
+  };
 }
 
-export async function getAccounts({ companyId, viewGroup, groupId, role, status = "active", currency, signal } = {}) {
-  const params = new URLSearchParams();
-  appendTransactionScope(params, { companyId, viewGroup, groupId });
-  if (role) params.set("role", role);
-  if (status) params.set("status", status);
-  if (currency) params.set("currency", currency);
-  const res = await fetch(buildApiUrl(`api/transactions/get_accounts_api.php?${params.toString()}`), {
-    credentials: "include",
-    signal,
-  });
-  return safeJson(res);
-}
-
-export async function getCompanyCurrencies({
-  companyId,
-  viewGroup,
-  groupId,
-  groupAggregate,
-  subsidiaryAccountsOnly,
-  signal,
-} = {}) {
-  const params = new URLSearchParams();
-  appendTransactionScope(params, {
-    companyId,
-    viewGroup,
-    groupId,
-    groupAggregate,
-    subsidiaryAccountsOnly,
-  });
-  const cid = companyId != null && companyId !== "" ? Number(companyId) : 0;
-  const useScopeCurrencyApi =
-    (groupAggregate && !(Number.isFinite(cid) && cid > 0) && (viewGroup || groupId)) ||
-    (Number.isFinite(cid) && cid > 0 && subsidiaryAccountsOnly);
-  const path = useScopeCurrencyApi
-    ? "api/transactions/get_scope_account_currencies_api.php"
-    : "api/transactions/get_company_currencies_api.php";
-  const res = await fetch(buildApiUrl(`${path}?${params.toString()}`), {
-    credentials: "include",
-    signal,
-  });
-  return safeJson(res);
-}
-
-export async function getUserCurrencyOrder({ companyId, groupId, signal } = {}) {
-  const params = new URLSearchParams({ _t: String(Date.now()) });
-  const cid = companyId != null && companyId !== "" ? Number(companyId) : 0;
-  if (Number.isFinite(cid) && cid > 0) params.set("company_id", String(cid));
-  const gid = groupId != null ? String(groupId).trim().toUpperCase() : "";
-  if (gid && !(Number.isFinite(cid) && cid > 0)) params.set("group_id", gid);
-  const res = await fetch(
-    buildApiUrl(`api/transactions/user_currency_order_api.php?${params.toString()}`),
-    { credentials: "include", signal },
-  );
-  return safeJson(res);
-}
-
-/** Same contract as legacy JS: POST JSON `{ order: string[] }` (see api/transactions/user_currency_order_api.php). */
+/** Pill drag order — Spring has no user-level currency order API; persist in localStorage. */
 export async function saveUserCurrencyOrder(order, { companyId, groupId } = {}) {
-  const codes = Array.isArray(order) ? order.map((c) => String(c || "").trim()).filter(Boolean) : [];
-  const body = { order: codes };
-  const cid = companyId != null && companyId !== "" ? Number(companyId) : 0;
-  if (Number.isFinite(cid) && cid > 0) {
-    body.company_id = cid;
-  } else {
-    const gid = groupId != null ? String(groupId).trim().toUpperCase() : "";
-    if (gid) body.group_id = gid;
-  }
-  const res = await fetch(buildApiUrl("api/transactions/user_currency_order_api.php"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    credentials: "include",
-  });
-  return safeJson(res);
-}
-
-function appendTxSearchWlDebugToPath(pathWithQuery) {
-  if (typeof window === "undefined") return pathWithQuery;
-  const wl =
-    new URLSearchParams(window.location.search || "").get("tx_debug_wl") === "1" ||
-    window.DEBUG_TRANSACTION_WL_TOTAL === true;
-  if (!wl) return pathWithQuery;
-  const sep = pathWithQuery.includes("?") ? "&" : "?";
-  return `${pathWithQuery}${sep}debug_wl_total=1`;
+  const codes = Array.isArray(order)
+    ? [...new Set(order.map((c) => String(c || "").trim().toUpperCase()).filter(Boolean))]
+    : [];
+  const orderKey = currencyOrderStorageKey({ companyId, groupId });
+  if (orderKey && codes.length) persistCurrencyDisplayOrder(orderKey, codes);
+  return { success: true, data: { order: codes } };
 }
 
 function logTxSearchResponse(body) {
@@ -241,333 +199,128 @@ function logTxSearchResponse(body) {
   }
 }
 
-/** All-time account ids that ever had the given form transaction type (PM-aligned). */
-export async function fetchTypeAccountSearch({
-  companyId,
-  viewGroup,
-  groupId,
-  groupAggregate,
-  subsidiaryAccountsOnly,
-  transactionType,
-  signal,
-} = {}) {
-  const params = new URLSearchParams();
-  appendTransactionScope(params, {
-    companyId,
-    viewGroup,
-    groupId,
-    groupAggregate,
-    subsidiaryAccountsOnly,
-  });
-  params.set("transaction_type", String(transactionType || "").toUpperCase().trim());
-
-  const res = await fetch(buildApiUrl(`api/transactions/type_account_search_api.php?${params.toString()}`), {
-    credentials: "include",
-    cache: "no-cache",
-    headers: { "Cache-Control": "no-cache" },
-    signal,
-  });
-  const body = await safeJson(res);
-  if (!body?.success) {
-    throw new Error(body?.message || body?.error || "Type account search failed");
-  }
-  const ids = body?.data?.account_ids;
-  return Array.isArray(ids) ? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0) : [];
+/**
+ * Spring has no type-account index. `null` = skip ID filter (use period /search).
+ * Empty array would mean "no matching accounts".
+ */
+export async function fetchTypeAccountSearch() {
+  return null;
 }
 
-/** Type search: one grid row per approved transaction (all history, PM-aligned). */
+/** Fall back to period /search grid — Spring has no all-time type_transaction_search. */
 export async function fetchTypeTransactionSearch({
   companyId,
-  viewGroup,
   groupId,
-  groupAggregate,
-  subsidiaryAccountsOnly,
-  transactionType,
+  dateFrom,
+  dateTo,
   currencyCodes,
   signal,
 } = {}) {
-  const params = new URLSearchParams();
-  appendTransactionScope(params, {
+  const result = await searchTransactions({
     companyId,
-    viewGroup,
     groupId,
-    groupAggregate,
-    subsidiaryAccountsOnly,
-  });
-  params.set("transaction_type", String(transactionType || "").toUpperCase().trim());
-  if (Array.isArray(currencyCodes) && currencyCodes.length > 0) {
-    params.set("currency", currencyCodes.join(","));
-  }
-
-  const res = await fetch(buildApiUrl(`api/transactions/type_transaction_search_api.php?${params.toString()}`), {
-    credentials: "include",
-    cache: "no-cache",
-    headers: { "Cache-Control": "no-cache" },
+    dateFrom,
+    dateTo,
+    currencyCodes,
+    hideZeroBalance: false,
     signal,
   });
-  const body = await safeJson(res);
-  if (!body?.success) {
-    throw new Error(body?.message || body?.error || "Type transaction search failed");
+  if (!result?.success) {
+    throw new Error(result?.message || "Type transaction search failed");
   }
-  return body?.data ?? null;
+  return result.data ?? null;
 }
 
 export async function searchTransactions({
   companyId,
-  viewGroup,
   groupId,
-  groupAggregate,
-  subsidiaryAccountsOnly,
   dateFrom,
   dateTo,
-  showInactive,
-  showCaptureOnly,
   hideZeroBalance,
   currencyCodes,
   categories,
-  typeSearch,
-  typeAccountIds,
-  typeSearchFormType,
-  signal,
-  skipCache = false,
-} = {}) {
-  // Spring /api/transaction/search covers single-tenant scope (incl. the aggregate
-  // fan-out below, which calls this once per company id). Pure Group ledger (no
-  // company_id) and Type Search have no Spring equivalent yet — those stay on PHP.
-  const springTenantId = Number(companyId);
-  if (Number.isFinite(springTenantId) && springTenantId > 0 && !typeSearch) {
-    const request = buildSpringSearchRequest({
-      companyId: springTenantId,
-      dateFrom,
-      dateTo,
-      currencyCodes,
-      categories,
-      showAllZeroBalance: !hideZeroBalance,
-    });
-    const json = await postSpringJson("api/transaction/search", request, signal);
-    logTxSearchResponse(json);
-    if (!isSpringOk(json)) {
-      return { success: false, message: json?.message || "Transaction search failed", data: null };
-    }
-    return { success: true, message: json.message || "", data: normalizeSpringSearchToGrid(json.data) };
-  }
-
-  const params = new URLSearchParams();
-  appendTransactionScope(params, {
-    companyId,
-    viewGroup,
-    groupId,
-    groupAggregate,
-    subsidiaryAccountsOnly,
-  });
-  params.set("date_from", String(dateFrom || ""));
-  params.set("date_to", String(dateTo || ""));
-  params.set("show_inactive", showInactive ? "1" : "0");
-  params.set("show_capture_only", showCaptureOnly ? "1" : "0");
-  params.set("hide_zero_balance", hideZeroBalance ? "1" : "0");
-  if (skipCache) {
-    params.set("skip_cache", "1");
-  }
-  if (typeSearch) {
-    params.set("type_search", "1");
-    const ids = Array.isArray(typeAccountIds)
-      ? typeAccountIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
-      : [];
-    if (ids.length > 0) {
-      params.set("type_account_ids", ids.join(","));
-    }
-  }
-  const formType = String(typeSearchFormType || "").toUpperCase().trim();
-  if (formType) {
-    params.set("type_search_form_type", formType);
-  }
-  if (Array.isArray(currencyCodes) && currencyCodes.length > 0) params.set("currency", currencyCodes.join(","));
-  if (Array.isArray(categories) && categories.length > 0) params.set("category", categories.join(","));
-
-  const base = `api/transactions/search_api.php?${params.toString()}`;
-  const withDebug = appendTxSearchWlDebugToPath(base);
-  const url = buildApiUrl(withDebug);
-
-  const res = await fetch(url, {
-    credentials: "include",
-    cache: "no-cache",
-    headers: { "Cache-Control": "no-cache" },
-    signal,
-  });
-  const body = await safeJson(res);
-  logTxSearchResponse(body);
-  return body;
-}
-
-/** Short-lived SSE ticket for Transaction Payment live sync. */
-export async function fetchRealtimeTicket({
-  companyId,
-  viewGroup,
-  groupId,
-  groupAggregate,
-  subsidiaryAccountsOnly,
   signal,
 } = {}) {
-  const params = new URLSearchParams();
-  appendTransactionScope(params, {
-    companyId,
-    viewGroup,
-    groupId,
-    groupAggregate,
-    subsidiaryAccountsOnly,
+  const springTenantId = resolveTransactionSpringTenantId({ companyId, groupId });
+  if (!springTenantId) {
+    return { success: false, message: "tenantIdRequired", data: null };
+  }
+  const request = buildSpringSearchRequest({
+    companyId: springTenantId,
+    dateFrom,
+    dateTo,
+    currencyCodes,
+    categories,
+    showAllZeroBalance: !hideZeroBalance,
   });
-  const res = await fetch(buildApiUrl(`api/transactions/realtime_ticket_api.php?${params}`), {
-    credentials: "include",
-    cache: "no-cache",
-    headers: { "Cache-Control": "no-cache" },
-    signal,
-  });
-  return safeJson(res);
+  const json = await postSpringJson("api/transaction/search", request, signal);
+  logTxSearchResponse(json);
+  if (!isSpringOk(json)) {
+    return { success: false, message: json?.message || "Transaction search failed", data: null };
+  }
+  return { success: true, message: json.message || "", data: normalizeSpringSearchToGrid(json.data) };
 }
 
-export async function submitTransaction({
-  companyId,
-  viewGroup,
-  groupId,
-  groupAggregate,
-  payload,
-  clientRequestId,
-}) {
-  // Spring /api/transaction/submit covers PAYMENT/CLAIM/CLEAR/CONTRA/ADJUSTMENT/PROFIT
-  // (incl. legacy WIN/LOSE-shaped PROFIT payloads — see transactionSubmitNormalize.js).
-  // RATE stays on PHP: Spring's submit has no Platform Fee / PT-Fee equivalent yet.
-  const springTenantId = Number(companyId);
+/** Spring has no SSE ticket API. */
+export async function fetchRealtimeTicket() {
+  return { success: true, data: { enabled: false } };
+}
+
+export async function submitTransaction({ companyId, groupId, payload }) {
+  const springTenantId = resolveTransactionSpringTenantId({ companyId, groupId });
   const springType = String(payload?.transaction_type || "").toUpperCase().trim();
-  if (Number.isFinite(springTenantId) && springTenantId > 0 && springType !== "RATE" && isSpringSubmitType(springType)) {
-    try {
-      const request = buildSpringSubmitRequest({ companyId: springTenantId, payload });
-      const json = await postSpringJson("api/transaction/submit", request);
-      return normalizeSpringSubmitResponse(json);
-    } catch (e) {
-      return { success: false, message: e?.message || "submitFailed", data: null };
-    }
+  if (!springTenantId) {
+    return { success: false, message: "tenantIdRequired", data: null };
   }
-
-  const fd = new FormData();
-  appendTransactionScope(fd, { companyId, viewGroup, groupId, groupAggregate }, "form");
-  if (clientRequestId) fd.append("client_request_id", clientRequestId);
-  Object.entries(payload || {}).forEach(([k, v]) => {
-    if (v === undefined || v === null) return;
-    fd.append(k, String(v));
-  });
-  const res = await fetch(buildApiUrl("api/transactions/submit_api.php"), {
-    method: "POST",
-    body: fd,
-    credentials: "include",
-  });
-  return safeJson(res);
+  if (!isSpringSubmitType(springType)) {
+    return { success: false, message: "unsupportedSpringSubmitType", data: null };
+  }
+  try {
+    const request = buildSpringSubmitRequest({ companyId: springTenantId, payload });
+    const json = await postSpringJson("api/transaction/submit", request);
+    return normalizeSpringSubmitResponse(json);
+  } catch (e) {
+    return { success: false, message: e?.message || "submitFailed", data: null };
+  }
 }
 
 export async function getHistory({
   companyId,
-  viewGroup,
   groupId,
-  groupAggregate,
-  subsidiaryAccountsOnly,
   accountId,
   dateFrom,
   dateTo,
   currency,
-  virtualCompanyCode,
-  pureTypeSearch,
   signal,
 } = {}) {
-  // Spring /api/transaction/history needs a real tenant + account id and has no Group
-  // ledger / virtual-company / pure-type-search concept — those cases stay on PHP.
-  const springTenantId = Number(companyId);
+  const springTenantId = resolveTransactionSpringTenantId({ companyId, groupId });
   const springAccountId = Number(accountId);
-  if (
-    Number.isFinite(springTenantId) &&
-    springTenantId > 0 &&
-    Number.isFinite(springAccountId) &&
-    springAccountId > 0 &&
-    !virtualCompanyCode &&
-    !pureTypeSearch
-  ) {
-    const request = buildSpringHistoryRequest({
-      companyId: springTenantId,
-      accountId: springAccountId,
-      dateFrom,
-      dateTo,
-      currency,
-    });
-    const json = await postSpringJson("api/transaction/history", request, signal);
-    return normalizeSpringHistoryResponse(json);
+  if (!springTenantId || !Number.isFinite(springAccountId) || springAccountId <= 0) {
+    return { success: false, message: "tenantIdRequired", data: [] };
   }
-
-  const params = new URLSearchParams();
-  appendTransactionScope(params, {
-    companyId,
-    viewGroup,
-    groupId,
-    groupAggregate,
-    subsidiaryAccountsOnly,
+  const request = buildSpringHistoryRequest({
+    companyId: springTenantId,
+    accountId: springAccountId,
+    dateFrom,
+    dateTo,
+    currency,
   });
-  const numericAccountId = Number(accountId);
-  if (Number.isFinite(numericAccountId) && numericAccountId > 0) {
-    params.set("account_id", String(numericAccountId));
-  }
-  if (dateFrom) params.set("date_from", String(dateFrom));
-  if (dateTo) params.set("date_to", String(dateTo));
-  if (currency) params.set("currency", String(currency));
-  if (virtualCompanyCode) params.set("virtual_company_code", String(virtualCompanyCode));
-  const pureType = String(pureTypeSearch || "").toUpperCase().trim();
-  if (pureType) params.set("pure_type_search", pureType);
-
-  const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params.toString()}&_t=${Date.now()}`), {
-    credentials: "include",
-    cache: "no-cache",
-    headers: { "Cache-Control": "no-cache" },
-    signal,
-  });
-  const body = await safeJson(res);
-  /** PHP returns { data: { account, date_range, history: Row[] } }; normalize to rows + meta for React. */
-  if (
-    body?.success &&
-    body.data &&
-    typeof body.data === "object" &&
-    !Array.isArray(body.data) &&
-    Array.isArray(body.data.history)
-  ) {
-    return {
-      ...body,
-      data: body.data.history,
-      account: body.data.account,
-      date_range: body.data.date_range,
-    };
-  }
-  return body;
+  const json = await postSpringJson("api/transaction/history", request, signal);
+  return normalizeSpringHistoryResponse(json);
 }
 
-export async function loadContraInbox({ companyId, viewGroup, groupId, groupAggregate, signal } = {}) {
-  const params = new URLSearchParams();
-  appendTransactionScope(params, { companyId, viewGroup, groupId, groupAggregate });
-  const res = await fetch(buildApiUrl(`api/transactions/contra_inbox_api.php?${params.toString()}`), {
-    credentials: "include",
-    cache: "no-cache",
-    signal,
-  });
-  return safeJson(res);
+/**
+ * CONTRA submit is immediately APPROVED on Spring — there is no pending inbox API.
+ */
+export async function loadContraInbox() {
+  return { success: true, data: [] };
 }
 
-export async function approveContra({ transactionId, companyId, viewGroup, groupId, groupAggregate }) {
-  const fd = new FormData();
-  fd.append("transaction_id", String(transactionId));
-  appendTransactionScope(fd, { companyId, viewGroup, groupId, groupAggregate }, "form");
-  const res = await fetch(buildApiUrl("api/transactions/contra_approve_api.php"), { method: "POST", body: fd, credentials: "include" });
-  return safeJson(res);
+export async function approveContra() {
+  return { success: false, message: "Contra approval is not available", data: null };
 }
 
-export async function rejectContra({ transactionId, companyId, viewGroup, groupId, groupAggregate }) {
-  const fd = new FormData();
-  fd.append("transaction_id", String(transactionId));
-  appendTransactionScope(fd, { companyId, viewGroup, groupId, groupAggregate }, "form");
-  const res = await fetch(buildApiUrl("api/transactions/contra_reject_api.php"), { method: "POST", body: fd, credentials: "include" });
-  return safeJson(res);
+export async function rejectContra() {
+  return { success: false, message: "Contra rejection is not available", data: null };
 }
 

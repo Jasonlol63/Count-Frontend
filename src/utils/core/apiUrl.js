@@ -5,9 +5,96 @@ import {
   spaPath,
 } from "../routing/pageRoutes.js";
 
+/**
+ * Build absolute API URL. Non-auth modules may still rewrite legacy PHP paths to Spring.
+ * Auth/login/logout/session: call `utils/auth/authApi.js` directly — do not use PHP session paths.
+ */
 export function buildApiUrl(pathAndQuery) {
   const base = window.location.origin + getSiteBasePath();
-  return new URL(pathAndQuery, base).href;
+  const raw = String(pathAndQuery || "").replace(/^\//, "");
+
+  const rewritten = (() => {
+    if (raw.startsWith("api/transactions/get_owner_companies_api.php")) {
+      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+      return `auth/tenant-accessible${q}`;
+    }
+    if (raw.startsWith("api/subscription/auto_renew_api.php")) {
+      return "api/auto-renew/list";
+    }
+    if (raw.startsWith("api/ownership/get_companies_api.php")) {
+      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+      return `auth/tenant-accessible${q}`;
+    }
+    if (raw.startsWith("api/ownership/get_group_earnings_api.php")) {
+      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+      return `auth/tenant-accessible${q}`;
+    }
+    if (raw.startsWith("api/ownership/get_owners_api.php")) {
+      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
+      const companyId = params.get("company_id");
+      const month = params.get("month");
+      const newParams = new URLSearchParams();
+      if (companyId) newParams.set("tenant_id", companyId);
+      if (month) newParams.set("month", month);
+      return `api/ownership/list?${newParams.toString()}`;
+    }
+    if (raw.startsWith("api/ownership/get_group_owners_api.php")) {
+      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
+      const groupId = params.get("group_id");
+      const month = params.get("month");
+      const newParams = new URLSearchParams();
+      if (groupId) newParams.set("tenant_id", groupId);
+      if (month) newParams.set("month", month);
+      return `api/ownership/list?${newParams.toString()}`;
+    }
+    if (raw.startsWith("api/ownership/get_available_accounts_api.php")) {
+      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
+      const companyId = params.get("company_id");
+      return `api/ownership/available-accounts?tenant_id=${companyId || ""}`;
+    }
+    if (raw.startsWith("api/ownership/get_group_available_accounts_api.php")) {
+      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
+      const groupId = params.get("group_id");
+      return `api/ownership/available-accounts?tenant_id=${groupId || ""}`;
+    }
+    if (raw.startsWith("api/announcements/announcement_list_api.php")) {
+      return "api/announcement/listAnnouncement";
+    }
+    if (raw.startsWith("api/announcements/announcement_create_api.php")) {
+      return "api/announcement/addAnnouncementContent";
+    }
+    if (raw.startsWith("api/announcements/announcement_update_api.php")) {
+      return "api/announcement/updateAnnouncement";
+    }
+    if (raw.startsWith("api/announcements/announcement_delete_api.php")) {
+      return "api/announcement/deleteAnnouncement";
+    }
+    if (raw.startsWith("api/announcements/announcement_get_dashboard_api.php")) {
+      return "api/announcement/getDashboardAnnouncements";
+    }
+    if (raw.startsWith("api/maintenance/list_api.php")) {
+      return "api/announcement/listMaintenance";
+    }
+    if (raw.startsWith("api/maintenance/create_api.php")) {
+      return "api/announcement/addMaintenanceContent";
+    }
+    if (raw.startsWith("api/maintenance/update_api.php")) {
+      return "api/announcement/updateMaintenance";
+    }
+    if (raw.startsWith("api/maintenance/delete_api.php")) {
+      return "api/announcement/deleteMaintenance";
+    }
+    if (raw.startsWith("api/maintenance/get_public_api.php")) {
+      return "api/announcement/getMaintenanceInLogin";
+    }
+    return raw;
+  })();
+
+  return new URL(rewritten, base).href;
 }
 
 /**
