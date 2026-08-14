@@ -1823,6 +1823,10 @@ export function useBankProcessListPage() {
   const submitForm = async (e) => {
     e.preventDefault();
     if (guardWrite()) return;
+    if (editMode && ["official", "e_invoice", "block"].includes(String(form.issue_flag || ""))) {
+      notify(t("errEditLockedByStatus"), "danger");
+      return;
+    }
     const rawFreq = bankProcessFrequencyNormalized(form.day_start_frequency);
     const isOnceSubmit = rawFreq === "once";
     const isWeekSubmit = rawFreq === "week";
@@ -1965,6 +1969,10 @@ export function useBankProcessListPage() {
   const saveRemarkModal = async () => {
     if (guardWrite()) return;
     if (!remarkRow) return;
+    if (["official", "e_invoice", "block"].includes(String(remarkRow.issue_flag || ""))) {
+      notify(t("errEditLockedByStatus"), "danger");
+      return;
+    }
     const tid = resolveBankProcessListTenantId(companyId);
     if (!tid) return notify(t("missingCompanyContext"), "danger");
     try {

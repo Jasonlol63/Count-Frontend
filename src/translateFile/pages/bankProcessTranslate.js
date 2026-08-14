@@ -243,6 +243,7 @@ export const BANK_PROCESS_I18N = {
     errResendOnlyActive: "Only Active processes can use Resend",
     errResendBlockedStatus: "Processes with Official, E-Invoice, or Block status cannot use Resend",
     errResendSuccessDone: "Done: this process can appear in Accounting Due again.",
+    errEditLockedByStatus: "Processes with Official, E-Invoice, or Block status cannot be edited. Change its status first.",
     errPostLoginRequired: "Please log in first",
     errPostSelectProcess: "Please select at least one process",
     errPostNoProcessesFound: "No process found to post (only active or Accounting Due items in current company)",
@@ -505,6 +506,7 @@ export const BANK_PROCESS_I18N = {
     errResendOnlyActive: "仅状态为启用的流程可使用重发",
     errResendBlockedStatus: "官方、电子发票、封锁状态的流程不可使用重发",
     errResendSuccessDone: "完成：该流程可再次出现在待入账中。",
+    errEditLockedByStatus: "官方、电子发票、封锁状态的流程不可编辑，请先变更其状态。",
     errPostLoginRequired: "请先登录",
     errPostSelectProcess: "请至少选择一个流程",
     errPostNoProcessesFound: "未找到可入账的流程（仅处理当前公司下启用或待入账中的流程）",
@@ -629,6 +631,9 @@ function translateDynamicApiMessage(lang, message) {
   }
   if (/failed\s+to\s+update\s+status\s+option/i.test(raw)) {
     return getBankProcessText(lang, "statusUpdateFailed");
+  }
+  if (/cannot\s+be\s+edited/i.test(raw) || raw.includes("不可编辑")) {
+    return getBankProcessText(lang, "errEditLockedByStatus");
   }
 
   return null;

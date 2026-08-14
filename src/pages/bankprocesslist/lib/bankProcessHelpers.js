@@ -323,6 +323,7 @@ export function bankProcessListRowToEditForm(row, accounts = []) {
       frequency === "1st_of_every_month" && !!row.day_end_monthly_cap_enabled,
     day_start_frequency: frequency,
     status: row.status || "active",
+    issue_flag: row.issue_flag || "",
     remark: row.remark || "",
     sop: row.sop || "",
     ...buildBankDtsFormFields(row),
