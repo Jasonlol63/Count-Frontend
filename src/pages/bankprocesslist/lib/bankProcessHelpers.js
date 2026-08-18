@@ -1,8 +1,8 @@
 import { MoneyDecimal } from "../../../utils/money/moneyDecimal.js";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { resolveCompanyCategoryFlags } from "../../../utils/company/companyCategoryFlags.js";
 import { formatDmyDash, parseDdMmYyyyToYmd, parseYmd } from "../../../utils/date/dateUtils.js";
 import { notifyTransactionListInvalidated } from "../../transaction/lib/transactionPaymentLogic.js";
+import { formatSpringDateTimeToDmy } from "../../maintenance/shared/maintenanceDateHelpers.js";
 
 /** Auto page size bounds (actual count from useAutoListPageSize). */
 export const PAGE_SIZE_MIN = 4;
@@ -133,19 +133,82 @@ export function formatBankWithTypeDisplay(bank, type) {
 
 export const BANK_GRID_TEMPLATE_COLUMNS_WITH_SELECT = `${BANK_GRID_TEMPLATE_COLUMNS} minmax(0,0.36fr)`;
 
+/** company.id in the picker === tenant.id in the backend (same shape as resolveAccountListTenantId). */
+export function resolveBankProcessListTenantId(tenantId) {
+  const tid = tenantId != null ? Number(tenantId) : Number.NaN;
+  return Number.isFinite(tid) && tid > 0 ? tid : null;
+}
+
+/** UI frequency ← Spring `BankProcess.Frequency` enum name (inverse of `toSpringBankProcessFrequency`). */
+export function fromSpringBankProcessFrequency(springFrequency) {
+  const s = String(springFrequency || "").trim().toUpperCase();
+  if (s === "MONTHLY") return "monthly";
+  if (s === "ONCE") return "once";
+  if (s === "DAY") return "day";
+  if (s === "WEEK") return "week";
+  return "1st_of_every_month";
+}
+
+function moneyFieldToString(value) {
+  return value != null ? String(value) : "";
+}
+
+/**
+ * Spring `BankProcessDTO` → legacy flat table/edit-form row.
+ * `dto.status` (root string) is fed through the existing `normalizeBankProcessStatus`/
+ * `normalizeBankIssueFlag` string-matching helpers unchanged — the Spring enum names
+ * (`OFFICIAL`, `E_INVOICE`, `BLOCK`, `WAITING`, `ACTIVE`, `INACTIVE`) already split
+ * correctly through them (verified: e.g. "OFFICIAL" → status "active" + issue_flag
+ * "official", matching what `deriveBankProcessUiStatus` expects).
+ */
+export function normalizeBankProcessListItem(dto) {
+  if (!dto || typeof dto !== "object") return null;
+  const bp = dto.bankProcess || {};
+  const cardOwner = String(bp.cardOwner ?? dto.cardOwner ?? "").trim();
+  const statusSource = dto.status ?? bp.status;
+
+  return {
+    id: dto.id ?? bp.id,
+    card_lower: cardOwner,
+    supplier: cardOwner,
+    name: cardOwner,
+    country: String(dto.countryCode || "").trim(),
+    bank: String(dto.bankName || "").trim(),
+    type: String(bp.cardOwnerType ?? dto.cardOwnerType ?? "").trim(),
+    contract: bp.contract || "",
+    insurance: moneyFieldToString(bp.insurancePrice),
+    customer: String(dto.customerAccountName || dto.customerAccountCode || "").trim(),
+    card_merchant_name: String(dto.supplierAccountName || dto.supplierAccountCode || "").trim(),
+    card_merchant_account_id: dto.supplierAccountCode ?? "",
+    cost: moneyFieldToString(bp.supplierPrice),
+    price: moneyFieldToString(bp.customerPrice),
+    profit: moneyFieldToString(bp.companyPrice),
+    day_start: bp.dayStart || "",
+    date: bp.dayStart || "",
+    day_end: bp.dayEnd || "",
+    day_end_monthly_cap_enabled: !!bp.dayEndMonthlyCapEnabled,
+    day_start_frequency: fromSpringBankProcessFrequency(bp.frequency),
+    status: normalizeBankProcessStatus(statusSource),
+    issue_flag: normalizeBankIssueFlag(statusSource),
+    sop: bp.sop || "",
+    remark: bp.remark || "",
+    card_merchant_id: bp.supplierAccountId ?? null,
+    customer_id: bp.customerAccountId ?? null,
+    profit_account_id: bp.companyAccountId ?? null,
+    shares: Array.isArray(dto.shares) ? dto.shares : [],
+    dts_created: formatSpringDateTimeToDmy(bp.createdAt),
+    dts_modified: formatSpringDateTimeToDmy(bp.updatedAt),
+    created_by: bp.createdBy || "",
+    modified_by: bp.updatedBy || "",
+    // Spring BankProcessDTO carries no submitted-transaction flag; delete is still
+    // server-gated to INACTIVE rows, this only affects the client checkbox hint.
+    has_transactions: false,
+  };
+}
+
 export function normalizeRows(data) {
   if (!Array.isArray(data)) return [];
-  return data.map((row) => {
-    const normalizedType = String(row?.type || row?.types || "").trim();
-    const normalizedStatus = normalizeBankProcessStatus(row?.status);
-    const normalizedIssueFlag = normalizeBankIssueFlag(row?.issue_flag);
-    return {
-      ...row,
-      type: normalizedType,
-      status: normalizedStatus,
-      issue_flag: normalizedIssueFlag,
-    };
-  });
+  return data.map(normalizeBankProcessListItem).filter(Boolean);
 }
 
 export function normalizeBankIssueFlag(v) {
@@ -394,58 +457,86 @@ export function isBankResendScheduleLockedToday(row, dayStartRaw) {
   return !!row.resend_today_day_start_locked;
 }
 
+/**
+ * Client-side duplicate hint only — the Accounting Due inbox only ever contains
+ * unsettled rows (accounting-due-frequency-rules.md: "Accounting Due 只返回尚未结算的账期"),
+ * so there is no "already posted today" case to filter out here; the backend is the
+ * authoritative check on submit (`isBankResendDayStartBackendErrorMessage`).
+ */
 export function isResendDayStartDuplicateInAccountingDue(rows, processId, dayStartRaw) {
   const ymd = normalizeBankResendDayStartYmd(dayStartRaw);
   if (!ymd || !processId) return false;
   const pid = Number(processId);
   if (!Number.isFinite(pid) || pid <= 0) return false;
   return (Array.isArray(rows) ? rows : []).some((r) => {
-    if (Number(r?.id) !== pid || r?.already_posted_today) return false;
-    const billStart = normalizeBankResendDayStartYmd(r?.billing_period_start);
-    if (billStart === ymd) return true;
-    if (r?.is_resend_monthly_reopen) {
-      const bm = normalizeBankResendDayStartYmd(r?.monthly_billing_month);
-      if (bm === ymd) return true;
-    }
-    const weeklyStart = normalizeBankResendDayStartYmd(r?.weekly_billing_start || r?.monthly_billing_month);
-    if (r?.is_weekly && weeklyStart === ymd) return true;
-    const dayYmd = normalizeBankResendDayStartYmd(r?.daily_billing_start || r?.monthly_billing_month);
-    if (r?.is_daily && !r?.is_daily_consolidated && dayYmd === ymd) return true;
-    return false;
+    if (Number(r?.id) !== pid) return false;
+    const anchor = normalizeBankResendDayStartYmd(r?.billing_period_start || r?.posted_date);
+    return anchor === ymd;
   });
 }
 
-export async function checkBankResendLockFromBackend(processId, dayStartRaw) {
-  const dayStartYmd = normalizeBankResendDayStartYmd(dayStartRaw);
-  if (!processId || !dayStartYmd) {
-    return { locked: false, duplicateOpenAnchor: false };
+/**
+ * Spring has no same-day resend lock pre-check endpoint (Phase 1 gap, see
+ * accounting-due-frequency-rules.md §Resend "尚未实现：Post 同日锁"). The local
+ * checks (`isBankResendScheduleLockedToday`, `isResendDayStartDuplicateInAccountingDue`)
+ * plus the server's authoritative rejection on submit are the real guard now.
+ */
+export async function checkBankResendLockFromBackend() {
+  return { locked: false, duplicateOpenAnchor: false };
+}
+
+const BANK_COUNTRY_CHIPS_STORAGE_PREFIX = "bankProcessCountryChips:";
+
+function bankCountryChipsStorageKey(tenantId) {
+  const tid = Number(tenantId);
+  return Number.isFinite(tid) && tid > 0 ? `${BANK_COUNTRY_CHIPS_STORAGE_PREFIX}${tid}` : null;
+}
+
+/**
+ * Country/bank dropdown "selected chips" curation (which subset of the tenant's full
+ * catalog shows in the Add Process form) — local UI preference only, Spring has no
+ * persistence endpoint for it (frontend-springboot-migration.md §10.3: "Spring catalog =
+ * tenant 全量"; the old PHP `save_selected_countries`/`save_selected_banks` are dropped
+ * outright, not migrated). Persisted per tenant in localStorage instead.
+ */
+export function readBankCountryChipSelection(tenantId) {
+  const key = bankCountryChipsStorageKey(tenantId);
+  if (!key || typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      selectedCountries: Array.isArray(parsed?.selectedCountries) ? parsed.selectedCountries : [],
+      selectedBanksByCountry:
+        parsed?.selectedBanksByCountry && typeof parsed.selectedBanksByCountry === "object"
+          ? parsed.selectedBanksByCountry
+          : {},
+    };
+  } catch {
+    return null;
   }
-  const res = await fetch(buildApiUrl("api/bankprocess_maintenance/resend_accounting_due_api.php"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({
-      bank_process_id: processId,
-      mode: "check_daystart_lock",
-      day_start: dayStartYmd,
-    }),
-  });
-  const json = await res.json();
-  if (!res.ok || !json?.success) {
-    throw new Error(json?.message || "Check failed");
+}
+
+export function persistBankCountryChipSelection(tenantId, { selectedCountries, selectedBanksByCountry } = {}) {
+  const key = bankCountryChipsStorageKey(tenantId);
+  if (!key || typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        selectedCountries: selectedCountries || [],
+        selectedBanksByCountry: selectedBanksByCountry || {},
+      }),
+    );
+  } catch {
+    /* storage unavailable */
   }
-  const data = json.data || {};
-  return {
-    locked: !!data.locked,
-    duplicateOpenAnchor: !!data.duplicate_open_anchor,
-  };
 }
 
 export function notifyTransactionDataChanged(sourceTag) {
   notifyTransactionListInvalidated(sourceTag || "bank-process-list-react");
 }
-
-const bankCategoryCompanyCache = new Map();
 
 /** When session company matches, skip domain API for bank-only vs games routing. */
 export function resolveBankOnlyCategoryHint(sessionMe, companyNumericId) {
@@ -459,7 +550,7 @@ export function resolveBankOnlyCategoryHint(sessionMe, companyNumericId) {
 /**
  * Sync bank-only decision for Process route swaps.
  * Prefer owner-companies row / session-flag cache; then session hint for current company.
- * @returns {boolean|null} null when unknown (caller may fall back to domain API)
+ * @returns {boolean|null} null when unknown
  */
 export function resolveIsBankOnlyCompany(companyRow, sessionMe = null) {
   const flags = resolveCompanyCategoryFlags(companyRow);
@@ -467,34 +558,16 @@ export function resolveIsBankOnlyCompany(companyRow, sessionMe = null) {
   return resolveBankOnlyCategoryHint(sessionMe, companyRow?.id);
 }
 
-/** Local flags first; domain API only when category is still unknown. */
-export async function resolveIsBankOnlyCompanyAsync(companyRow, sessionMe, buildApiUrl) {
+/**
+ * Local flags only — no PHP `domain_api.php` fallback (frontend-springboot-migration.md
+ * §9.8/§10.2: "不再用 PHP domain_api.php"). When the category is genuinely unknown
+ * (no owner-companies row, no session flag cache hit — rare, e.g. a brand-new company
+ * before the snapshot populates), default to non-bank-only, matching the old PHP
+ * fallback's own catch-and-default-false behavior.
+ */
+export async function resolveIsBankOnlyCompanyAsync(companyRow, sessionMe) {
   const local = resolveIsBankOnlyCompany(companyRow, sessionMe);
-  if (local !== null) return local;
-  if (!companyRow?.company_id) return false;
-  return isBankCategoryCompany(companyRow.company_id, buildApiUrl);
-}
-
-export async function isBankCategoryCompany(companyCode, buildApiUrl) {
-  const cacheKey = String(companyCode || "").trim().toUpperCase();
-  if (!cacheKey) return false;
-  if (bankCategoryCompanyCache.has(cacheKey)) return bankCategoryCompanyCache.get(cacheKey);
-  try {
-    const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ action: "get_company_permissions", company_id: companyCode }),
-    });
-    const json = await res.json();
-    const permissions = Array.isArray(json?.data?.permissions) ? json.data.permissions : [];
-    const normalized = permissions.map((p) => String(p || "").toLowerCase());
-    const isBankOnly = normalized.includes("bank") && !normalized.includes("games") && !normalized.includes("gambling");
-    bankCategoryCompanyCache.set(cacheKey, isBankOnly);
-    return isBankOnly;
-  } catch {
-    return false;
-  }
+  return local !== null ? local : false;
 }
 
 export function profitSharingTotalFromString(s) {
@@ -626,6 +699,50 @@ export function buildBankDtsFormFields(d) {
     created_by: String(d.created_by || ""),
     dts_modified_display: displayModifiedDate,
     dts_modified_user_display: displayModifiedBy,
+  };
+}
+
+/**
+ * Edit-open local backfill — no Spring get-by-id (see frontend-springboot-migration.md
+ * §10.3.2). Builds the Edit Process form directly from the already-loaded,
+ * `normalizeRows`'d list row; `row.shares[]` (`{accountId, amount}`) is resolved against
+ * the currently loaded `accounts` list to rebuild the `"CODE - 100.00, ..."` display string.
+ */
+export function bankProcessListRowToEditForm(row, accounts = []) {
+  if (!row) return null;
+  const shareLabels = (Array.isArray(row.shares) ? row.shares : [])
+    .map((s) => {
+      const acc = accounts.find((a) => Number(a.id) === Number(s?.accountId));
+      const label = acc?.account_id || acc?.name || "";
+      if (!label) return null;
+      return `${label} - ${formatBankMoneyFixed2(String(s?.amount ?? "0"))}`;
+    })
+    .filter(Boolean);
+
+  return {
+    ...EMPTY_BANK_FORM,
+    id: String(row.id ?? ""),
+    country: row.country || "",
+    bank: row.bank || "",
+    type: row.type || "",
+    name: row.name || row.card_lower || row.supplier || "",
+    card_merchant_id: row.card_merchant_id != null ? String(row.card_merchant_id) : "",
+    customer_id: row.customer_id != null ? String(row.customer_id) : "",
+    profit_account_id: row.profit_account_id != null ? String(row.profit_account_id) : "",
+    contract: row.contract || "",
+    insurance: row.insurance || "",
+    cost: row.cost || "",
+    price: row.price || "",
+    profit: row.profit || "",
+    profit_sharing: shareLabels.join(", "),
+    day_start: row.day_start || "",
+    day_end: row.day_end || "",
+    day_end_monthly_cap_enabled: !!row.day_end_monthly_cap_enabled,
+    day_start_frequency: bankProcessFrequencyNormalized(row.day_start_frequency),
+    status: row.status || "active",
+    remark: row.remark || "",
+    sop: row.sop || "",
+    ...buildBankDtsFormFields(row),
   };
 }
 
@@ -793,26 +910,19 @@ export const contractBillingEndYmdForBankForm = (startYmd, termMonths, frequency
   return subtractOneDayFromYmd(exclusiveCal) || null;
 };
 
-/** Matches legacy processlist.js / bank_process_list.js Accounting Due row period_types. */
+/**
+ * Spring `AccountingDueDTO.periodType` (raw enum string, e.g. "MONTHLY", "WEEKLY",
+ * "FULL_MONTH", "RESEND_CONSOLIDATED") — used verbatim as the `periodType` field in
+ * post/skip/resend request payloads, so this must stay the exact Spring casing (no
+ * lowercasing/renaming — the old PHP-era snake_case vocabulary is gone).
+ */
 export function accountingDuePeriodType(r) {
-  if (r.is_once_one_off) return "once_one_off";
-  if (r.is_weekly) return "weekly";
-  if (r.is_daily && r.is_daily_consolidated) return "daily_consolidated";
-  if (r.is_daily) return "daily";
-  if (r.is_manual_inactive) return "manual_inactive";
-  if (r.is_resend_consolidated_range) return "resend_consolidated_range";
-  if (r.is_resend_monthly_reopen) return "resend_monthly_reopen";
-  if (r.is_partial_first_month) return "partial_first_month";
-  if (r.is_day_end_tail) return "day_end_tail";
-  return "monthly";
+  return String(r?.period_type || "").trim().toUpperCase();
 }
 
-/** Accounting Due 入账/删除时传给后端的 billing_months[] 锚点。 */
+/** Accounting Due 入账/删除/Resend payload 用的 posted date 锚点（= Spring `postedDate`）。 */
 export function accountingDueBillingMonth(r) {
-  if (r.is_daily || r.is_daily_consolidated) {
-    return String(r.monthly_billing_month || r.daily_billing_start || "").trim();
-  }
-  return String(r.weekly_billing_start || r.monthly_billing_month || "").trim();
+  return String(r?.posted_date || "").trim();
 }
 
 /** Accounting Due 表格行唯一键（同 process 多账期可并列展示）。 */
@@ -820,6 +930,51 @@ export function accountingDueRowKey(r) {
   const id = Number(r?.id);
   if (!Number.isFinite(id) || id <= 0) return "";
   return `${id}|${accountingDuePeriodType(r)}|${accountingDueBillingMonth(r)}`;
+}
+
+/**
+ * Spring `BankProcessDTO.shares`-style money field passthrough → `AccountingDueDTO`.
+ * `dto.postedDate` doubles as `billing_period_start`/`billing_period_end` when the
+ * backend omits an explicit billing window (accounting-due-frequency-rules.md confirms
+ * billingStart === postedDate for every period type except 1st-of-month partial/tail
+ * ranges, which always send an explicit billingStart/billingEnd).
+ */
+export function normalizeAccountingDueRow(dto) {
+  if (!dto || typeof dto !== "object") return null;
+  const postedDate = dto.postedDate || dto.billingStart || "";
+  const statusSource = dto.status;
+  return {
+    id: dto.bankProcessId,
+    bank_process_id: dto.bankProcessId,
+    posted_date: postedDate,
+    period_type: String(dto.periodType || "").trim().toUpperCase(),
+    billing_period_start: dto.billingStart || postedDate,
+    billing_period_end: dto.billingEnd || postedDate,
+    country: dto.countryCode || "",
+    bank: dto.bankName || "",
+    card_owner: dto.cardOwner || "",
+    supplier: dto.cardOwner || "",
+    name: dto.cardOwner || "",
+    type: dto.cardOwnerType || "",
+    frequency: fromSpringBankProcessFrequency(dto.frequency),
+    display_frequency: fromSpringBankProcessFrequency(dto.frequency),
+    day_start: dto.dayStart || "",
+    date: dto.dayStart || "",
+    day_end: dto.dayEnd || "",
+    contract: dto.contract || "",
+    status: normalizeBankProcessStatus(statusSource),
+    issue_flag: normalizeBankIssueFlag(statusSource),
+    card_merchant_name: dto.supplierAccountName || dto.supplierAccountCode || "",
+    cost: moneyFieldToString(dto.supplierPrice),
+    customer: dto.customerAccountName || dto.customerAccountCode || "",
+    price: moneyFieldToString(dto.customerPrice),
+    profit: moneyFieldToString(dto.companyPrice),
+  };
+}
+
+export function normalizeAccountingDueRows(data) {
+  if (!Array.isArray(data)) return [];
+  return data.map(normalizeAccountingDueRow).filter(Boolean);
 }
 
 /** Accounting Due 表格日期：统一 DD-MM-YYYY（与 Start Date 列一致）。 */

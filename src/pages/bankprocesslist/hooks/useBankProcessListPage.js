@@ -81,7 +81,33 @@ import {
   isBankResendScheduleLockedToday,
   isResendDayStartDuplicateInAccountingDue,
   normalizeBankResendDayStartYmd,
+  resolveBankProcessListTenantId,
+  bankProcessListRowToEditForm,
+  readBankCountryChipSelection,
+  persistBankCountryChipSelection,
 } from "../lib/bankProcessHelpers.js";
+import {
+  fetchBankProcessListByTenantId,
+  addBankProcess,
+  buildAddBankProcessRequest,
+  updateBankProcess,
+  buildUpdateBankProcessRequest,
+  deleteBankProcess,
+  updateBankProcessRemark,
+  fetchAccountingDueInbox,
+  postAccountingDue,
+  skipAccountingDue,
+  resendBankProcess,
+  buildResendBankProcessRequest,
+} from "../bankProcessListApi.js";
+import {
+  fetchBankCountriesByTenantId,
+  fetchBankOptionsByCountryId,
+  insertBankCountry,
+  insertBankOption,
+  deleteBankCountry,
+  deleteBankOption,
+} from "../bankCountryOptionApi.js";
 import {
   dedupeCompanyRowsForSwitcher,
   filterProcessPageCompanyButtons,
@@ -92,6 +118,19 @@ import {
   warmBankProcessListRouteCache,
   warmProcessListRouteCache,
 } from "../../processlist/processRoutePrefetch.js";
+import {
+  fetchAccountListByTenantId,
+  fetchAvailableCurrencies,
+  createTenantCurrency,
+  deleteTenantCurrency,
+  createAccountUser,
+  updateAccountUser,
+  buildAccountCreateRequest,
+  buildAccountUpdateRequest,
+  accountRowToEditForm,
+  tenantIdsToPickerCompanyIds,
+} from "../../account/accountListApi.js";
+import { fetchCurrencyListByTenantId, normalizeCurrencyRow } from "../../../utils/api/currencyApi.js";
 
 function resolveBankProcessListCacheKey(companyId, search) {
   return `company:${Number(companyId)}|${String(search || "").trim()}`;
@@ -313,6 +352,9 @@ export function useBankProcessListPage() {
   const bankDatePickerInitRef = useRef(false);
   const listRegionRef = useRef(null);
   const contractSyncKeysRef = useRef({ day_start: "", contract: "", frequency: "" });
+  /** `{ [code]: id }` — Spring catalog rows keyed by code/name, for delete/insert calls. */
+  const countriesCatalogRef = useRef(new Map());
+  const banksCatalogRef = useRef(new Map());
 
   const seedContractSyncKeys = useCallback((f) => {
     contractSyncKeysRef.current = {
@@ -419,37 +461,22 @@ export function useBankProcessListPage() {
     });
   }, []);
 
+  // Company multi-select is no longer refreshed from a server "available companies"
+  // fetch (Spring has none) — callers set accountModalSelectedCompanyIds directly, from
+  // the account's own tenant_ids on edit or [companyId] on add.
   const loadAccountModalSelectionMeta = useCallback(
     async (accountId, isEdit) => {
+      if (!companyId) return;
       try {
-        const currencyParams = new URLSearchParams({ action: "get_available_currencies" });
-        if (accountId) currencyParams.set("account_id", String(accountId));
-        if (companyId) currencyParams.set("company_id", String(companyId));
-        const companyUrl = accountId
-          ? `api/accounts/account_company_api.php?action=get_available_companies&account_id=${accountId}`
-          : "api/accounts/account_company_api.php?action=get_available_companies";
-        const [curRes, compRes] = await Promise.all([
-          fetch(buildApiUrl(`api/accounts/account_currency_api.php?${currencyParams.toString()}`), { credentials: "include" }),
-          fetch(buildApiUrl(companyUrl), { credentials: "include" }),
-        ]);
-        const curJ = await curRes.json();
-        const compJ = await compRes.json();
-        if (curJ.success && Array.isArray(curJ.data)) {
-          setAccountModalCurrencies(
-            curJ.data.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked }))
-          );
-          if (isEdit) {
-            const ids = curJ.data.filter((c) => c.is_linked).map((c) => Number(c.id));
-            setAccountModalSelectedCurrencyIds(ids);
-            setAccountModalInitialCurrencyIds(ids);
-          } else {
-            setAccountModalSelectedCurrencyIds(pickDefaultAddCurrencyIds(curJ.data));
-            setAccountModalInitialCurrencyIds([]);
-          }
-        }
-        if (compJ.success && Array.isArray(compJ.data)) {
-          const linked = compJ.data.filter((c) => c.is_linked).map((c) => Number(c.id));
-          setAccountModalSelectedCompanyIds(linked.length ? linked : companyId ? [Number(companyId)] : []);
+        const rows = await fetchAvailableCurrencies(companyId, accountId);
+        setAccountModalCurrencies(rows.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked })));
+        if (isEdit) {
+          const ids = rows.filter((c) => c.is_linked).map((c) => Number(c.id));
+          setAccountModalSelectedCurrencyIds(ids);
+          setAccountModalInitialCurrencyIds(ids);
+        } else {
+          setAccountModalSelectedCurrencyIds(pickDefaultAddCurrencyIds(rows));
+          setAccountModalInitialCurrencyIds([]);
         }
       } catch {
         /* silent */
@@ -485,27 +512,6 @@ export function useBankProcessListPage() {
     setAccountModalIsEditMode(false);
   }, []);
 
-  const fetchAccountDetailJson = useCallback(async (accountId) => {
-    const url = new URL(buildApiUrl("api/accounts/getaccount_api.php"));
-    url.searchParams.set("id", String(accountId));
-    if (companyId) url.searchParams.set("company_id", String(companyId));
-    url.searchParams.set("_", String(Date.now()));
-    const res = await fetch(url.toString(), {
-      credentials: "include",
-      cache: "no-store",
-      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
-    });
-    const text = await res.text();
-    if (!text.trim()) {
-      return { success: false, error: `Empty response (${res.status})` };
-    }
-    try {
-      return JSON.parse(text);
-    } catch {
-      return { success: false, error: "Invalid JSON from server" };
-    }
-  }, [companyId]);
-
   const createAccountModalCurrency = async (e) => {
     if (e?.preventDefault) e.preventDefault();
     const code = toUpper(accountModalCurrencyInput).trim();
@@ -513,80 +519,48 @@ export function useBankProcessListPage() {
     const targetCompany = accountModalSelectedCompanyIds[0] || companyId;
     if (!targetCompany) return notify(t("pleaseSelectCompanyFirst"), "danger");
     try {
-      const res = await fetch(buildApiUrl("api/accounts/create_currency_api.php"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, company_id: targetCompany }),
-        credentials: "include",
-      });
-      const json = await res.json();
-      if (!json.success || !json.data) return notify(apiMsg(json, "failedCreateCurrency"), "danger");
-      const newId = Number(json.data.id);
-      if (!Number.isFinite(newId) || newId <= 0) {
-        // Avoid appending currency_id=0; refresh currency pills only (do not reset selection).
-        const accountId = accountModalIsEditMode && accountModalForm.id ? accountModalForm.id : null;
-        const currencyParams = new URLSearchParams({ action: "get_available_currencies" });
-        if (accountId) currencyParams.set("account_id", String(accountId));
-        if (targetCompany) currencyParams.set("company_id", String(targetCompany));
-        const curRes = await fetch(
-          buildApiUrl(`api/accounts/account_currency_api.php?${currencyParams}`),
-          { credentials: "include" },
-        );
-        const curJ = await curRes.json();
-        if (curJ.success && Array.isArray(curJ.data)) {
-          setAccountModalCurrencies(
-            curJ.data.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked })),
-          );
-        }
-      } else {
+      const created = await createTenantCurrency({ code, tenantId: targetCompany });
+      const newId = Number(created?.id);
+      if (Number.isFinite(newId) && newId > 0) {
         setAccountModalCurrencies((prev) => [
           ...prev,
-          { id: newId, code: json.data.code, is_linked: false },
+          { id: newId, code: created.code ?? code, is_linked: false },
         ]);
+      } else {
+        const rows = await fetchAvailableCurrencies(targetCompany, accountModalIsEditMode && accountModalForm.id ? accountModalForm.id : null);
+        setAccountModalCurrencies(rows.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked })));
       }
       setAccountModalCurrencyInput("");
       notify(t("currencyCreated", { code }), "success");
-    } catch {
-      notify(t("failedCreateCurrency"), "danger");
+    } catch (err) {
+      notify(apiMsg({ message: err?.message }, "failedCreateCurrency"), "danger");
     }
   };
 
   const removeAccountModalCurrency = async (cid) => {
-    try {
-      const res = await fetch(buildApiUrl("api/accounts/delete_currency_api.php"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: cid }),
-        credentials: "include",
+    // Spring delete has no `force` override, unlike the old PHP endpoint.
+    const { success, message } = await deleteTenantCurrency({ id: cid, tenantId: companyId });
+    if (!success) return notify(apiMsg({ message }, "failedDeleteCurrency"), "danger");
+    const removed = accountModalCurrencies.find((c) => Number(c.id) === Number(cid));
+    setAccountModalCurrencies((prev) => prev.filter((c) => Number(c.id) !== Number(cid)));
+    setAccountModalSelectedCurrencyIds((prev) => prev.filter((x) => Number(x) !== Number(cid)));
+    if (removed?.code && companyId) {
+      const code = String(removed.code).trim();
+      const countryId = countriesCatalogRef.current.get(toUpper(code));
+      setCountriesList((prev) => prev.filter((c) => String(c).trim().toUpperCase() !== toUpper(code)));
+      setSelectedCountryChips((prev) => {
+        const next = prev.filter((c) => String(c).trim().toUpperCase() !== toUpper(code));
+        void persistSelectedCountries(next);
+        return next;
       });
-      const json = await res.json();
-      if (!json.success) return notify(apiMsg(json, "failedDeleteCurrency"), "danger");
-      const removed = accountModalCurrencies.find((c) => Number(c.id) === Number(cid));
-      setAccountModalCurrencies((prev) => prev.filter((c) => Number(c.id) !== Number(cid)));
-      setAccountModalSelectedCurrencyIds((prev) => prev.filter((x) => Number(x) !== Number(cid)));
-      if (removed?.code && companyId) {
-        const code = String(removed.code).trim();
-        setCountriesList((prev) => prev.filter((c) => String(c).trim().toUpperCase() !== toUpper(code)));
-        setSelectedCountryChips((prev) => {
-          const next = prev.filter((c) => String(c).trim().toUpperCase() !== toUpper(code));
-          void persistSelectedCountries(next);
-          return next;
-        });
+      if (countryId) {
         try {
-          const fd = new FormData();
-          fd.append("company_id", String(companyId));
-          fd.append("country", code);
-          await fetch(buildApiUrl("api/processes/processlist_api.php?action=remove_country"), {
-            method: "POST",
-            body: fd,
-            credentials: "include",
-          });
+          await deleteBankCountry(companyId, countryId);
+          countriesCatalogRef.current.delete(toUpper(code));
         } catch {
           /* country list already updated in UI */
         }
       }
-    } catch {
-      notify(t("failedDeleteCurrency"), "danger");
     }
   };
 
@@ -602,95 +576,35 @@ export function useBankProcessListPage() {
       return notify(t("alertAmountNegative"), "danger");
     }
 
-    const fd = new FormData();
-    Object.entries(accountModalForm).forEach(([k, v]) => {
-      if (k === "alert_amount") {
-        fd.append(k, alertAmount);
-        return;
-      }
-      const raw = v ?? "";
-      const out =
-        k === "account_id" || k === "name" || k === "remark" ? toUpper(raw) : raw;
-      fd.append(k, out);
-    });
+    // Spring create/update take currencyIds/tenantIds directly — no separate
+    // add_company/add_currency/remove_currency follow-up calls needed.
+    const submitFields = {
+      ...accountModalForm,
+      account_id: toUpper(accountModalForm.account_id),
+      name: toUpper(accountModalForm.name),
+      remark: toUpper(accountModalForm.remark),
+      alert_amount: alertAmount,
+    };
     if (accountModalForm.payment_alert === "0") {
-      fd.set("alert_type", "");
-      fd.set("alert_start_date", "");
-      fd.set("alert_amount", "");
+      submitFields.alert_type = "";
+      submitFields.alert_start_date = "";
+      submitFields.alert_amount = "";
     }
-    if (accountModalSelectedCompanyIds.length) fd.set("company_ids", JSON.stringify(accountModalSelectedCompanyIds));
-    if (!isEdit) {
-      if (companyId) fd.set("company_id", String(companyId));
-      if (accountModalSelectedCurrencyIds.length) fd.set("currency_ids", JSON.stringify(accountModalSelectedCurrencyIds));
-    }
+    const tenantIds = accountModalSelectedCompanyIds.map(Number).filter((n) => Number.isFinite(n) && n > 0);
 
     try {
-      const endpoint = isEdit ? "api/accounts/update_api.php" : "api/accounts/addaccountapi.php";
-      const res = await fetch(buildApiUrl(endpoint), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!json.success) return notify(apiMsg(json, "saveFailed"), "danger");
-
-      const savedAccountId = isEdit ? Number(accountModalForm.id) : Number(json?.data?.id);
-
-      if (!isEdit && json?.data?.id && accountModalSelectedCompanyIds.length) {
-        await Promise.all(
-          accountModalSelectedCompanyIds.map((cid) =>
-            fetch(buildApiUrl("api/accounts/account_company_api.php?action=add_company"), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ account_id: json.data.id, company_id: cid }),
-              credentials: "include",
-            })
-          )
-        );
+      let saved;
+      if (isEdit) {
+        const request = buildAccountUpdateRequest(submitFields, companyId, accountModalSelectedCurrencyIds, tenantIds);
+        saved = await updateAccountUser(request);
+      } else {
+        const request = buildAccountCreateRequest(submitFields, companyId, accountModalSelectedCurrencyIds, tenantIds);
+        saved = await createAccountUser(request);
       }
-      if (!isEdit && json?.data?.id && accountModalSelectedCurrencyIds.length) {
-        await Promise.all(
-          accountModalSelectedCurrencyIds.map((cur) =>
-            fetch(buildApiUrl("api/accounts/account_currency_api.php?action=add_currency"), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ account_id: json.data.id, currency_id: cur }),
-              credentials: "include",
-            })
-          )
-        );
-      }
-
-      if (isEdit && savedAccountId) {
-        const before = new Set(accountModalInitialCurrencyIds.map(Number));
-        const after = new Set(accountModalSelectedCurrencyIds.map(Number));
-        const toAdd = [...after].filter((id) => !before.has(id));
-        const toRemove = [...before].filter((id) => !after.has(id));
-        for (const cid of toAdd) {
-          const currencyRes = await fetch(buildApiUrl("api/accounts/account_currency_api.php?action=add_currency"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ account_id: savedAccountId, currency_id: Number(cid) }),
-            credentials: "include",
-          });
-          const currencyJson = await currencyRes.json();
-          if (!currencyRes.ok || !currencyJson.success) return notify(apiMsg(currencyJson, "saveFailed"), "danger");
-        }
-        for (const cid of toRemove) {
-          const currencyRes = await fetch(buildApiUrl("api/accounts/account_currency_api.php?action=remove_currency"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ account_id: savedAccountId, currency_id: Number(cid) }),
-            credentials: "include",
-          });
-          const currencyJson = await currencyRes.json();
-          if (!currencyRes.ok || !currencyJson.success) return notify(apiMsg(currencyJson, "saveFailed"), "danger");
-        }
-        setAccountModalInitialCurrencyIds([...after]);
-      }
-
       notify(isEdit ? tAccount("accountSavedSuccessfully") : t("accountAddedSuccessfully"), "success");
-      await handleAccountModalSuccess?.(
-        isEdit ? { id: accountModalForm.id, account_id: accountModalForm.account_id } : json.data
-      );
-    } catch {
-      notify(t("saveFailed"), "danger");
+      await handleAccountModalSuccess?.(saved);
+    } catch (err) {
+      notify(apiMsg({ message: err?.message }, "saveFailed"), "danger");
     }
   };
 
@@ -969,13 +883,8 @@ export function useBankProcessListPage() {
     if (!companyId || loading) return;
     (async () => {
       try {
-        const url = new URL(buildApiUrl("api/accounts/accountlistapi.php"));
-        url.searchParams.set("company_id", String(companyId));
-        url.searchParams.set("roles", BANK_PICK_ACCOUNT_ROLES.join(","));
-        const res = await fetch(url.toString(), { credentials: "include" });
-        const json = await res.json();
-        const list = filterBankPickAccounts(Array.isArray(json?.data?.accounts) ? json.data.accounts : []);
-        setAccounts(list);
+        const accountRows = await fetchAccountListByTenantId(companyId);
+        setAccounts(filterBankPickAccounts(accountRows));
       } catch { setAccounts([]); }
     })();
   }, [companyId, loading]);
@@ -984,22 +893,11 @@ export function useBankProcessListPage() {
     const cid = Number(targetCompanyId ?? companyId);
     if (!Number.isFinite(cid) || cid <= 0) return;
     try {
-      const curQs = new URLSearchParams({
-        company_id: String(cid),
-        subsidiary_accounts_only: "1",
-      });
-      const [curRes, ordJson] = await Promise.all([
-        fetch(buildApiUrl(`api/transactions/get_company_currencies_api.php?${curQs}`), {
-          credentials: "include",
-        }),
+      const [currencyRows, ordJson] = await Promise.all([
+        fetchCurrencyListByTenantId(cid),
         getUserCurrencyOrder({ companyId: cid }).catch(() => null),
       ]);
-      const curJson = await curRes.json();
-      if (!curRes.ok || !curJson.success || !Array.isArray(curJson.data)) {
-        setCurrencyListOrdered([]);
-        return;
-      }
-      const codes = curJson.data.map((r) => String(r.code || "").toUpperCase()).filter(Boolean);
+      const codes = currencyRows.map((r) => normalizeCurrencyRow(r).code).filter(Boolean);
       const savedOrder = resolveSavedCurrencyOrder(cid, ordJson?.data?.order);
       const ordered = mergeCurrencyCodesWithSavedOrder(codes, savedOrder);
       persistCurrencyDisplayOrder(cid, ordered);
@@ -1030,44 +928,17 @@ export function useBankProcessListPage() {
     let cancelled = false;
     (async () => {
       try {
-        const base = buildApiUrl("api/processes/processlist_api.php");
-        const cid = encodeURIComponent(String(companyId));
-        const [countriesRes, selectedCountriesRes, selectedBanksRes] = await Promise.all([
-          fetch(`${base}?action=get_countries&company_id=${cid}`, { credentials: "include" }),
-          fetch(`${base}?action=get_selected_countries&company_id=${cid}`, { credentials: "include" }),
-          fetch(`${base}?action=get_selected_banks&company_id=${cid}`, { credentials: "include" }),
-        ]);
-        const [countriesJson, selectedCountriesJson, selectedBanksJson] = await Promise.all([
-          countriesRes.json(),
-          selectedCountriesRes.json(),
-          selectedBanksRes.json(),
-        ]);
+        const countries = await fetchBankCountriesByTenantId(companyId);
         if (cancelled) return;
-        if (countriesJson.success && Array.isArray(countriesJson.data)) {
-          setCountriesList(countriesJson.data);
-        }
-        if (selectedCountriesJson.success && Array.isArray(selectedCountriesJson.data)) {
-          const list = selectedCountriesJson.data
-            .map((c) => String(c || "").trim().toUpperCase())
-            .filter(Boolean);
-          setSelectedCountryChips([...new Set(list)]);
-        }
-        if (
-          selectedBanksJson.success
-          && selectedBanksJson.data
-          && typeof selectedBanksJson.data === "object"
-          && !Array.isArray(selectedBanksJson.data)
-        ) {
-          const map = {};
-          for (const [countryKey, banks] of Object.entries(selectedBanksJson.data)) {
-            const country = String(countryKey || "").trim();
-            if (!country) continue;
-            map[country] = Array.isArray(banks)
-              ? banks.map((b) => String(b || "").trim()).filter(Boolean)
-              : [];
-          }
-          setSelectedBanksByCountry(map);
-        }
+        const codeMap = new Map(countries.map((c) => [c.code, c.id]));
+        countriesCatalogRef.current = codeMap;
+        const codes = [...codeMap.keys()].sort();
+        setCountriesList(codes);
+
+        const stored = readBankCountryChipSelection(companyId);
+        const storedCountries = (stored?.selectedCountries || []).filter((c) => codeMap.has(c));
+        setSelectedCountryChips(storedCountries.length ? storedCountries : codes);
+        setSelectedBanksByCountry(stored?.selectedBanksByCountry || {});
       } catch {
         /* ignore */
       }
@@ -1082,14 +953,20 @@ export function useBankProcessListPage() {
     }
     let cancelled = false;
     (async () => {
-      const url = new URL(buildApiUrl("api/processes/processlist_api.php"));
-      url.searchParams.set("action", "get_banks_by_country");
-      url.searchParams.set("company_id", String(companyId));
-      url.searchParams.set("country", String(form.country));
-      const res = await fetch(url.toString(), { credentials: "include" });
-      const json = await res.json();
-      if (cancelled) return;
-      if (json.success && Array.isArray(json.data)) setBanksList(json.data);
+      try {
+        const countryId = countriesCatalogRef.current.get(String(form.country).trim().toUpperCase());
+        if (!countryId) {
+          setBanksList([]);
+          return;
+        }
+        const banks = await fetchBankOptionsByCountryId(companyId, countryId);
+        if (cancelled) return;
+        const nameMap = new Map(banks.map((b) => [b.name, b.id]));
+        banksCatalogRef.current = nameMap;
+        setBanksList([...nameMap.keys()].sort());
+      } catch {
+        if (!cancelled) setBanksList([]);
+      }
     })();
     return () => { cancelled = true; };
   }, [modalOpen, companyId, form.country]);
@@ -1405,19 +1282,12 @@ export function useBankProcessListPage() {
     const fetchGen = ++accountingInboxFetchGenRef.current;
     if (!silent) setAccountingLoading(true);
     try {
-      const url = new URL(buildApiUrl("api/processes/process_accounting_inbox_api.php"));
-      url.searchParams.set("company_id", String(cid));
-      if (restoreDismissed) {
-        url.searchParams.set("restore_dismissed", "1");
-      }
-      const res = await fetch(url.toString(), { credentials: "include", cache: "no-cache" });
-      const json = await res.json();
+      const list = await fetchAccountingDueInbox(cid, undefined, { restoreSkipped: restoreDismissed });
       if (fetchGen !== accountingInboxFetchGenRef.current) return;
       if (Number(companyIdRef.current) !== cid) return;
-      const list = Array.isArray(json?.data) ? json.data : [];
       setAccountingRows(list);
       if (!silent) {
-        setAccountingSelected(new Set(list.filter((x) => !x.already_posted_today).map((x) => accountingDueRowKey(x)).filter(Boolean)));
+        setAccountingSelected(new Set(list.map((x) => accountingDueRowKey(x)).filter(Boolean)));
         setAccountingDeleteSelected(new Set());
       } else {
         const rowKeys = new Set(list.map((x) => accountingDueRowKey(x)).filter(Boolean));
@@ -1677,35 +1547,19 @@ export function useBankProcessListPage() {
 
   const persistSelectedCountries = async (countries) => {
     if (!companyId) return;
-    const fd = new FormData();
-    fd.append("company_id", String(companyId));
-    for (const c of countries) fd.append("countries[]", c);
-    try {
-      await fetch(buildApiUrl("api/processes/processlist_api.php?action=save_selected_countries"), {
-        method: "POST",
-        body: fd,
-        credentials: "include",
-      });
-      void refreshAccountModalCurrenciesIfOpen();
-    } catch {
-      /* ignore */
-    }
+    persistBankCountryChipSelection(companyId, {
+      selectedCountries: countries,
+      selectedBanksByCountry,
+    });
+    void refreshAccountModalCurrenciesIfOpen();
   };
 
   const persistSelectedBanksByCountry = async (map) => {
     if (!companyId) return;
-    const fd = new FormData();
-    fd.append("company_id", String(companyId));
-    fd.append("selected", JSON.stringify(map || {}));
-    try {
-      await fetch(buildApiUrl("api/processes/processlist_api.php?action=save_selected_banks"), {
-        method: "POST",
-        body: fd,
-        credentials: "include",
-      });
-    } catch {
-      /* ignore */
-    }
+    persistBankCountryChipSelection(companyId, {
+      selectedCountries: selectedCountryChips,
+      selectedBanksByCountry: map,
+    });
   };
 
   const submitNewCountry = async (e) => {
@@ -1725,19 +1579,13 @@ export function useBankProcessListPage() {
       return;
     }
     try {
-      const fd = new FormData(); fd.append("company_id", String(companyId)); fd.append("country", name);
-      const res = await fetch(buildApiUrl("api/processes/processlist_api.php?action=add_country"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "addCountryFailed"), "danger");
-      setCountriesList((prev) => [...new Set([...prev, name])].sort());
-      if (json.data?.id && json.data?.code) {
-        mergeAccountModalCurrency(json.data);
-      } else {
-        void refreshAccountModalCurrenciesIfOpen();
-      }
+      const created = await insertBankCountry(companyId, name);
+      countriesCatalogRef.current.set(created.code, created.id);
+      setCountriesList((prev) => [...new Set([...prev, created.code])].sort());
+      mergeAccountModalCurrency({ id: created.id, code: created.code });
       setNewCountryName("");
       notify(t("countryAdded"));
-    } catch { notify(t("addCountryFailed"), "danger"); }
+    } catch (err) { notify(apiMsg({ message: err?.message }, "addCountryFailed"), "danger"); }
   };
 
   const submitNewBank = async (e) => {
@@ -1756,25 +1604,25 @@ export function useBankProcessListPage() {
       notify(t("bankAlreadyExists", { bank: name }), "warning");
       return;
     }
+    const countryId = countriesCatalogRef.current.get(String(form.country).trim().toUpperCase());
+    if (!countryId) return;
     try {
-      const fd = new FormData(); fd.append("company_id", String(companyId)); fd.append("country", String(form.country)); fd.append("banks[]", name);
-      const res = await fetch(buildApiUrl("api/processes/processlist_api.php?action=save_country_banks"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "addBankFailed"), "danger");
-      setBanksList((prev) => [...new Set([...prev, name])].sort());
+      const created = await insertBankOption(companyId, countryId, name);
+      banksCatalogRef.current.set(created.name, created.id);
+      setBanksList((prev) => [...new Set([...prev, created.name])].sort());
       setNewBankName("");
       notify(t("bankAdded"));
-    } catch { notify(t("addBankFailed"), "danger"); }
+    } catch (err) { notify(apiMsg({ message: err?.message }, "addBankFailed"), "danger"); }
   };
 
   const removeAvailableCountry = async (countryName) => {
     const country = String(countryName || "").trim();
     if (!country || !companyId) return;
+    const countryId = countriesCatalogRef.current.get(country);
+    if (!countryId) return;
     try {
-      const fd = new FormData(); fd.append("company_id", String(companyId)); fd.append("country", country);
-      const res = await fetch(buildApiUrl("api/processes/processlist_api.php?action=remove_country"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "removeCountryFailed"), "danger");
+      await deleteBankCountry(companyId, countryId);
+      countriesCatalogRef.current.delete(country);
       setCountriesList((prev) => prev.filter((c) => c !== country));
       setSelectedCountryChips((prev) => {
         const next = prev.filter((c) => c !== country);
@@ -1782,28 +1630,22 @@ export function useBankProcessListPage() {
         return next;
       });
       setForm((f) => (f.country === country ? { ...f, country: "", bank: "" } : f));
-      if (json.data?.currency_deleted) {
-        removeAccountModalCurrencyByCode(country);
-      } else {
-        void refreshAccountModalCurrenciesIfOpen();
-      }
-      if (json.data?.currency_blocked) {
-        notify(t("currencyInUseKeepInAccountList", { code: toUpper(country) }), "warning");
-      } else {
-        notify(t("countryRemoved"));
-      }
-    } catch { notify(t("removeCountryFailed"), "danger"); }
+      removeAccountModalCurrencyByCode(country);
+      void refreshAccountModalCurrenciesIfOpen();
+      notify(t("countryRemoved"));
+    } catch (err) { notify(apiMsg({ message: err?.message }, "removeCountryFailed"), "danger"); }
   };
 
   const removeAvailableBank = async (bankName) => {
     const bank = String(bankName || "").trim();
     const country = String(form.country || "").trim();
     if (!bank || !country || !companyId) return;
+    const countryId = countriesCatalogRef.current.get(country);
+    const bankOptionId = banksCatalogRef.current.get(bank);
+    if (!countryId || !bankOptionId) return;
     try {
-      const fd = new FormData(); fd.append("company_id", String(companyId)); fd.append("country", country); fd.append("bank", bank);
-      const res = await fetch(buildApiUrl("api/processes/processlist_api.php?action=remove_bank"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "removeBankFailed"), "danger");
+      await deleteBankOption(companyId, bankOptionId, countryId);
+      banksCatalogRef.current.delete(bank);
       setBanksList((prev) => prev.filter((b) => b !== bank));
       setSelectedBankChips((prev) => prev.filter((b) => b !== bank));
       setSelectedBanksByCountry((prev) => {
@@ -1846,12 +1688,8 @@ export function useBankProcessListPage() {
   const handleAccountModalSuccess = async (data) => {
     const newId = data?.id != null ? String(data.id) : "";
     const newAccountId = String(data?.account_id || "").trim();
-    const url = new URL(buildApiUrl("api/accounts/accountlistapi.php"));
-    url.searchParams.set("company_id", String(companyId));
-    url.searchParams.set("roles", BANK_PICK_ACCOUNT_ROLES.join(","));
-    const listRes = await fetch(url.toString(), { credentials: "include" });
-    const listJson = await listRes.json();
-    const list = filterBankPickAccounts(Array.isArray(listJson?.data?.accounts) ? listJson.data.accounts : []);
+    const accountRows = await fetchAccountListByTenantId(companyId).catch(() => []);
+    const list = filterBankPickAccounts(accountRows);
     setAccounts(list);
     const pickable = newId && list.some((a) => Number(a.id) === Number(newId));
     if (pickable && accountPlusTarget === "card_merchant_id") {
@@ -1878,6 +1716,8 @@ export function useBankProcessListPage() {
     closeAccountModal();
   };
 
+  // Roles list: no Spring endpoint (dead in PHP too, see src/pages/account/README.md) —
+  // getAccountModalOrderedRoles([]) already falls back to the full static ROLE_PRIORITY list.
   const openAddAccountForField = async (target) => {
     setAccountPlusTarget(target);
     if (!companyId) return notify(t("missingCompanyContext"), "danger");
@@ -1886,31 +1726,19 @@ export function useBankProcessListPage() {
     const existingPickable = existingId && isPickableAccountId(existingId);
 
     try {
-      const editRes = await fetch(buildApiUrl("api/editdata/editdata_api.php"), { credentials: "include" });
-      const editJson = await editRes.json();
-      setRolesList(Array.isArray(editJson?.data?.roles) ? editJson.data.roles : []);
-
       if (existingPickable) {
-        const accJson = await fetchAccountDetailJson(existingId);
-        if (!accJson.success || !accJson.data) {
-          notify(accJson.error || accJson.message || tAccount("failedToLoadAccount"), "danger");
+        const row = accounts.find((a) => Number(a.id) === Number(existingId));
+        if (!row) {
+          notify(tAccount("failedToLoadAccount"), "danger");
           return;
         }
-        const d = accJson.data;
+        const editForm = accountRowToEditForm(row);
         setAccountModalIsEditMode(true);
-        setAccountModalForm({
-          id: d.id,
-          account_id: toUpper(d.account_id),
-          name: toUpper(d.name),
-          role: d.role || "",
-          password: d.password || "",
-          remark: toUpper(d.remark),
-          payment_alert: String(d.payment_alert == 1 ? "1" : "0"),
-          alert_type: d.alert_type || d.alert_day || "",
-          alert_start_date: d.alert_start_date || d.alert_specific_date || "",
-          alert_amount: d.alert_amount || "",
-        });
+        setAccountModalForm(editForm);
         setAccountModalCurrencyInput("");
+        setAccountModalSelectedCompanyIds(
+          row.tenant_ids?.length ? tenantIdsToPickerCompanyIds(row.tenant_ids) : [Number(companyId)],
+        );
         await loadAccountModalSelectionMeta(existingId, true);
       } else {
         if (existingId) clearFormFieldForPlusTarget(target);
@@ -1920,49 +1748,23 @@ export function useBankProcessListPage() {
 
       setAddAccountModalOpen(true);
     } catch {
-      setRolesList([]);
       notify(tAccount("errorLoadingAccount"), "danger");
     }
   };
 
+  // No Spring get-by-id (frontend-springboot-migration.md §10.3.2) — build the Edit form
+  // directly from the already-loaded, normalized list row.
   const openEdit = async (rowId) => {
-    try {
-      const url = new URL(buildApiUrl("api/processes/processlist_api.php"));
-      url.searchParams.set("action", "get_process");
-      url.searchParams.set("id", String(rowId));
-      url.searchParams.set("permission", "Bank");
-      const res = await fetch(url.toString(), { credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success || !json.data) return notify(apiMsg(json, "failedLoadBankProcess"), "danger");
-      const d = json.data;
-      const nextForm = {
-        id: String(d.id || ""),
-        country: d.country || "", bank: d.bank || "", type: d.type || "", name: d.name || "",
-        card_merchant_id: d.card_merchant_id ? String(d.card_merchant_id) : "",
-        customer_id: d.customer_id ? String(d.customer_id) : "",
-        profit_account_id: d.profit_account_id ? String(d.profit_account_id) : "",
-        contract: d.contract || "",
-        insurance: d.insurance ?? "",
-        cost: d.cost != null && d.cost !== "" ? formatBankMoneyFixed2(d.cost) : "",
-        price: d.price != null && d.price !== "" ? formatBankMoneyFixed2(d.price) : "",
-        profit: d.profit != null && d.profit !== "" ? formatBankMoneyFixed2(d.profit) : "",
-        profit_sharing: formatProfitSharingStringFixed2(d.profit_sharing || ""),
-        day_start: d.day_start ? String(d.day_start).slice(0, 10) : "",
-        day_end: d.day_end ? String(d.day_end).slice(0, 10) : "",
-        day_end_monthly_cap_enabled:
-          bankProcessFrequencyNormalized(d.day_start_frequency) === "1st_of_every_month" &&
-          (d.day_end_monthly_cap_enabled === 1 ||
-            d.day_end_monthly_cap_enabled === true ||
-            String(d.day_end_monthly_cap_enabled) === "1"),
-        day_start_frequency: bankProcessFrequencyNormalized(d.day_start_frequency),
-        status: d.status || "active", remark: d.remark || "", sop: d.sop || "",
-        ...buildBankDtsFormFields(d),
-      };
-      seedContractSyncKeys(nextForm);
-      setEditMode(true);
-      setForm(nextForm);
-      setModalOpen(true);
-    } catch { notify(t("failedLoadBankProcess"), "danger"); }
+    const row = rowsRef.current.find((r) => Number(r.id) === Number(rowId));
+    if (!row) {
+      notify(t("failedLoadBankProcess"), "danger");
+      return;
+    }
+    const nextForm = bankProcessListRowToEditForm(row, accounts);
+    seedContractSyncKeys(nextForm);
+    setEditMode(true);
+    setForm(nextForm);
+    setModalOpen(true);
   };
 
   const submitForm = async (e) => {
@@ -2000,79 +1802,63 @@ export function useBankProcessListPage() {
         return;
       }
     }
-    let normalizedFreq;
-    if (isOnceSubmit) normalizedFreq = "once";
-    else if (rawFreq === "week") normalizedFreq = "week";
-    else if (rawFreq === "day") normalizedFreq = "day";
-    else if (rawFreq === "monthly") normalizedFreq = "monthly";
-    else normalizedFreq = "1st_of_every_month";
-    const moneyNormalized = {
+    // buildBankProcessMutableWriteFields (bankProcessListApi.js) already blanks
+    // day_end/contract/insurance for once/week/day frequencies — no manual field
+    // stripping needed here, unlike the old FormData-building code.
+    const submitFormValues = {
       ...form,
       name: toUpper(form.name),
-      cost: formatBankMoneyFixed2(form.cost),
-      price: formatBankMoneyFixed2(form.price),
+      day_end_monthly_cap_enabled: dayEndMonthlyCapEnabled,
       profit: calcBankNetProfitDisplay(form.cost, form.price, form.profit_sharing),
-      profit_sharing: formatProfitSharingStringFixed2(form.profit_sharing),
     };
-    const fd = new FormData();
-    Object.entries(moneyNormalized).forEach(([k, v]) => {
-      if (k === "id" && !editMode) return;
-      if (k === "day_end_monthly_cap_enabled") return;
-      if (k === "day_start_frequency") {
-        fd.append(k, normalizedFreq);
-        return;
-      }
-      if (isOnceSubmit && (k === "day_end" || k === "contract" || k === "insurance")) {
-        fd.append(k, "");
-        return;
-      }
-      if (isWeekSubmit && (k === "day_end" || k === "contract")) {
-        fd.append(k, "");
-        return;
-      }
-      if (isDaySubmit && (k === "day_end" || k === "contract")) {
-        fd.append(k, "");
-        return;
-      }
-      fd.append(k, v ?? "");
-    });
-    if (editMode) {
-      fd.append("day_end_monthly_cap_enabled", dayEndMonthlyCapEnabled ? "1" : "0");
-    }
-    if (companyId) fd.append("company_id", String(companyId));
-    fd.append("permission", "Bank");
     try {
-      const endpoint = editMode ? "api/processes/processlist_api.php?action=update_process" : "api/processes/addprocess_api.php";
-      const res = await fetch(buildApiUrl(endpoint), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "saveFailed"), "danger");
+      if (editMode) {
+        const request = buildUpdateBankProcessRequest({ form: submitFormValues, tenantId: companyId, accounts });
+        await updateBankProcess(request);
+      } else {
+        const countryId = countriesCatalogRef.current.get(String(form.country).trim().toUpperCase());
+        const bankOptionId = banksCatalogRef.current.get(String(form.bank).trim().toUpperCase());
+        if (!countryId || !bankOptionId) {
+          notify(t("selectCountry"), "danger");
+          return;
+        }
+        const request = buildAddBankProcessRequest({
+          form: submitFormValues,
+          tenantId: companyId,
+          countryId,
+          bankOptionId,
+          accounts,
+        });
+        await addBankProcess(request);
+      }
       notify(editMode ? t("bankProcessUpdated") : t("bankProcessAdded"));
       notifyTransactionDataChanged("bank-process-list-react");
       setModalOpen(false);
       void fetchRows();
       void loadAccountingInbox({ silent: true });
-    } catch { notify(t("saveFailed"), "danger"); }
+    } catch (err) { notify(apiMsg({ message: err?.message }, "saveFailed"), "danger"); }
   };
+
+  const accountingDuePostItem = (r) => ({
+    bankProcessId: Number(r.bank_process_id ?? r.id),
+    postedDate: r.posted_date,
+    periodType: accountingDuePeriodType(r),
+    billingStart: r.billing_period_start,
+    billingEnd: r.billing_period_end,
+  });
 
   const postAccountingToTransaction = async () => {
     if (guardWrite()) return;
-    const selected = accountingRows.filter((r) => accountingSelected.has(accountingDueRowKey(r)) && !r.already_posted_today);
+    const selected = accountingRows.filter((r) => accountingSelected.has(accountingDueRowKey(r)));
     if (selected.length === 0) return notify(t("needOneDueItem"), "warning");
     try {
-      const fd = new FormData();
-      selected.forEach((r) => {
-        fd.append("ids[]", r.id); fd.append("period_types[]", accountingDuePeriodType(r)); fd.append("billing_months[]", accountingDueBillingMonth(r));
-      });
-      fd.append("allow_future_monthly", "1");
-      const res = await fetch(buildApiUrl("api/processes/process_post_to_transaction_api.php"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "transactionPostFailed"), "danger");
-      notify(apiMsg(json, "postedToTransaction"));
+      await postAccountingDue(selected.map(accountingDuePostItem));
+      notify(t("postedToTransaction"));
       notifyTransactionDataChanged("bank-process-list-react");
       setAccountingOpen(false);
       setAccountingSelected(new Set());
       loadAccountingInbox(); fetchRows();
-    } catch { notify(t("transactionPostFailed"), "danger"); }
+    } catch (err) { notify(apiMsg({ message: err?.message }, "transactionPostFailed"), "danger"); }
   };
 
   const dismissAccountingRows = async () => {
@@ -2080,34 +1866,25 @@ export function useBankProcessListPage() {
     const selected = accountingRows.filter((r) => accountingDeleteSelected.has(accountingDueRowKey(r)));
     if (selected.length === 0) return notify(t("tickDeleteRows"), "warning");
     try {
-      const fd = new FormData();
-      selected.forEach((r) => {
-        fd.append("ids[]", r.id); fd.append("period_types[]", accountingDuePeriodType(r)); fd.append("billing_months[]", accountingDueBillingMonth(r));
-      });
-      const res = await fetch(buildApiUrl("api/processes/dismiss_accounting_due_api.php"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "deleteDueFailed"), "danger");
-      notify(apiMsg(json, "removedFromDue"));
+      await skipAccountingDue(selected.map(accountingDuePostItem));
+      notify(t("removedFromDue"));
       await loadAccountingInbox();
       await fetchRows();
       if (resendModalOpen) void refreshResendConfirmLock();
       notifyTransactionDataChanged("bank-process-list-react");
-    } catch { notify(t("deleteDueFailed"), "danger"); }
+    } catch (err) { notify(apiMsg({ message: err?.message }, "deleteDueFailed"), "danger"); }
   };
 
   const saveRemarkModal = async () => {
     if (guardWrite()) return;
     if (!remarkRow) return;
     try {
-      const fd = new FormData(); fd.append("id", String(remarkRow.id)); fd.append("remark", remarkDraft);
-      const res = await fetch(buildApiUrl("api/processes/update_bank_remark_api.php"), { method: "POST", body: fd, credentials: "include" });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "remarkUpdateFailed"), "danger");
+      await updateBankProcessRemark({ id: remarkRow.id, tenantId: companyId, remark: remarkDraft });
       setRows((prev) => prev.map((r) => (Number(r.id) === Number(remarkRow.id) ? { ...r, remark: remarkDraft } : r)));
       notifyTransactionDataChanged("bank-process-list-react");
       notify(t("remarkUpdated"));
       setRemarkModalOpen(false); setRemarkRow(null);
-    } catch { notify(t("remarkUpdateFailed"), "danger"); }
+    } catch (err) { notify(apiMsg({ message: err?.message }, "remarkUpdateFailed"), "danger"); }
   };
 
   const resendAccountingDue = async () => {
@@ -2127,36 +1904,27 @@ export function useBankProcessListPage() {
     const fq = bankProcessFrequencyNormalized(resendFrequency);
     const omitDayEnd = fq === "once" || fq === "week" || fq === "day" || fq === "monthly";
     const dayEndTrim = omitDayEnd ? "" : String(resendDayEnd || "").trim();
-    const normalizedResendFrequency =
-      fq === "once" ? "once"
-        : (fq === "monthly" ? "monthly"
-          : (fq === "week" ? "week"
-            : (fq === "day" ? "day" : "1st_of_every_month")));
     try {
-      const res = await fetch(buildApiUrl("api/bankprocess_maintenance/resend_accounting_due_api.php"), {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({
-          bank_process_id: Number(resendTarget.id),
-          day_start: normalizeBankResendDayStartYmd(resendDayStart) || null,
-          day_end: omitDayEnd ? null : (normalizeBankResendDayStartYmd(dayEndTrim) || null),
-          day_start_frequency: normalizedResendFrequency,
-        }),
+      const request = buildResendBankProcessRequest({
+        tenantId: companyId,
+        bankProcessId: resendTarget.id,
+        dayStart: normalizeBankResendDayStartYmd(resendDayStart) || null,
+        dayEnd: omitDayEnd ? null : (normalizeBankResendDayStartYmd(dayEndTrim) || null),
+        frequency: fq,
       });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        const rawMsg = json.message || json.error || "";
-        const msg = apiMsg(json, "resendFailed");
-        if (isBankResendDayStartBackendErrorMessage(rawMsg) || isBankResendDayStartBackendErrorMessage(msg)) {
-          setResendInlineError(msg);
-        }
-        return notify(msg, "danger");
-      }
-      notify(apiMsg(json, "resendSuccessful"));
+      await resendBankProcess(request);
+      notify(t("resendSuccessful"));
       notifyTransactionDataChanged("bank-process-list-react");
       void loadAccountingInbox({ silent: true });
       void fetchRows();
       setResendModalOpen(false); setResendTarget(null);
-    } catch { notify(t("resendFailed"), "danger"); }
+    } catch (err) {
+      const msg = apiMsg({ message: err?.message }, "resendFailed");
+      if (isBankResendDayStartBackendErrorMessage(err?.message || "") || isBankResendDayStartBackendErrorMessage(msg)) {
+        setResendInlineError(msg);
+      }
+      notify(msg, "danger");
+    }
   };
 
   const deleteSelected = () => {
@@ -2172,14 +1940,21 @@ export function useBankProcessListPage() {
     }
     setDeleteSubmitting(true);
     try {
-      const res = await fetch(buildApiUrl("api/processes/delete_processes_api.php"), {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({ ids: Array.from(selectedIds), permission: "Bank" }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) return notify(apiMsg(json, "deleteFailed"), "danger");
-      const n = json?.data?.deleted ?? selectedIds.size;
-      notify(n === 1 ? t("processDeletedOne") : t("processDeletedMany", { count: n }), "success");
+      let deleted = 0;
+      let lastErrorMessage = null;
+      for (const id of selectedIds) {
+        try {
+          await deleteBankProcess({ id, tenantId: companyId });
+          deleted += 1;
+        } catch (err) {
+          lastErrorMessage = err?.message;
+        }
+      }
+      if (deleted === 0) {
+        notify(apiMsg({ message: lastErrorMessage }, "deleteFailed"), "danger");
+        return;
+      }
+      notify(deleted === 1 ? t("processDeletedOne") : t("processDeletedMany", { count: deleted }), "success");
       notifyTransactionDataChanged("bank-process-list-react");
       setDeleteConfirmOpen(false);
       setSelectedIds(new Set());
@@ -2703,7 +2478,6 @@ export function useBankProcessListPage() {
     loadAccountModalSelectionMeta,
     resetAccountModalToAdd,
     closeAccountModal,
-    fetchAccountDetailJson,
     createAccountModalCurrency,
     removeAccountModalCurrency,
     submitAccountModal,

@@ -608,7 +608,7 @@ export default function BankprocessMaintenancePage() {
   const onConfirmDelete = async () => {
     setIsDeleteModalOpen(false);
     try {
-      const result = await deleteBankprocessData(selectedIds);
+      const result = await deleteBankprocessData(selectedIds, companyId);
       notifyTransactionListInvalidated("bankprocess_maintenance_delete");
       notify(t("successfullyDeletedBankProcessN", { n: selectedIds.length }), "success");
       setSelectedIds([]);

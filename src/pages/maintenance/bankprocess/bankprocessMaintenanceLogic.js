@@ -1,6 +1,7 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { dedupeCurrencyRowsByCode } from "../../transaction/lib/transactionPaymentLogic.js";
-import { formatDmyFromDate } from "../shared/maintenanceDateHelpers.js";
+import { fetchCurrencyListByTenantId, normalizeCurrencyRow } from "../../../utils/api/currencyApi.js";
+import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
+import { formatDmyFromDate, formatSpringDateTimeToDmy } from "../shared/maintenanceDateHelpers.js";
 
 export function formatDmy(d) {
   return formatDmyFromDate(d);
@@ -83,21 +84,41 @@ export function toggleBankprocessMaintenanceBatchSelection(selectedIds, rows, cl
   return prev.filter((id) => !batchIds.includes(id));
 }
 
+function resolveBankprocessTenantId(companyId) {
+  const tid = Number(companyId);
+  return Number.isFinite(tid) && tid > 0 ? tid : null;
+}
+
+/** Bank Process Maintenance has no Group ledger — `companyId` (the UI pill id) is always the tenant. */
 export async function fetchCompanyCurrencies(companyId) {
-  const params = new URLSearchParams();
-  if (companyId) {
-    params.set("company_id", String(companyId));
-    // Company ledger: exclude group-scope rows that share company_id (same code, different id).
-    params.set("subsidiary_accounts_only", "1");
-  }
-  const qs = params.toString();
-  const url = buildApiUrl(
-    `api/transactions/get_company_currencies_api.php${qs ? `?${qs}` : ""}`,
-  );
-  const response = await fetch(url, { credentials: "include" });
-  const data = await response.json();
-  if (!data.success) return [];
-  return dedupeCurrencyRowsByCode(data.data || []);
+  const tenantId = resolveBankprocessTenantId(companyId);
+  if (!tenantId) return [];
+  const rows = await fetchCurrencyListByTenantId(tenantId);
+  return rows
+    .map((row) => normalizeCurrencyRow(row))
+    .filter((row) => Number.isFinite(row.id) && row.id > 0 && String(row.code || "").trim());
+}
+
+/** Spring `MaintenanceBankProcessDTO` row → legacy grid row shape used by the table components. */
+function normalizeBankprocessRow(row) {
+  return {
+    transaction_id: Number(row?.id) || 0,
+    transaction_type: row?.transactionType ?? null,
+    dts_created: formatSpringDateTimeToDmy(row?.createdAt),
+    account: row?.toAccountCode ?? "",
+    from_account: row?.fromAccountCode ?? "",
+    amount: row?.amount ?? 0,
+    currency: row?.currencyCode ?? "",
+    description: row?.description ?? "",
+    remark: row?.remark ?? "",
+    created_by: row?.createdBy ?? "",
+    is_deleted: row?.deleted === true,
+    deleted_by: row?.deletedBy ?? "",
+    dts_deleted: formatSpringDateTimeToDmy(row?.deletedAt),
+    source_bank_process_id: Number(row?.bankProcessId) || 0,
+    period_type: row?.periodType ?? "monthly",
+    date: row?.transactionDate ?? "",
+  };
 }
 
 export async function searchBankprocessData({
@@ -109,33 +130,42 @@ export async function searchBankprocessData({
   query,
   signal,
 }) {
-  const params = new URLSearchParams({
-    date_from: dateFrom,
-    date_to: dateTo,
-  });
-  if (companyId) params.set("company_id", String(companyId));
-  const codes = Array.isArray(currencyCodes) ? currencyCodes.filter(Boolean) : [];
-  if (!allCurrencies && codes.length) {
-    params.set("currency", codes.join(","));
-  }
-  if (query?.trim()) params.set("q", query.trim().toUpperCase());
+  const tenantId = resolveBankprocessTenantId(companyId);
+  if (!tenantId) return [];
 
-  const response = await fetch(buildApiUrl(`api/bankprocess_maintenance/search_api.php?${params.toString()}`), {
+  const codes = Array.isArray(currencyCodes) ? currencyCodes.filter(Boolean) : [];
+  const request = {
+    tenantId,
+    dateFrom,
+    dateTo,
+    currencyCodes: allCurrencies ? [] : codes,
+    q: query?.trim() ? query.trim().toUpperCase() : null,
+  };
+
+  const response = await fetch(buildApiUrl("api/maintenance/bankprocess-maintenance/list"), {
+    method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
     signal,
   });
   const result = await response.json();
   if (!result.success) {
     throw new Error(result.message || "Search failed");
   }
-  return Array.isArray(result.data) ? result.data : [];
+  return (Array.isArray(result.data) ? result.data : []).map(normalizeBankprocessRow);
 }
 
-export async function deleteBankprocessData(transactionIds) {
-  const response = await fetch(buildApiUrl("api/bankprocess_maintenance/delete_api.php"), {
+export async function deleteBankprocessData(transactionIds, companyId) {
+  const tenantId = resolveBankprocessTenantId(companyId);
+  if (!tenantId) {
+    throw new Error("tenantIdRequired");
+  }
+  const response = await fetch(buildApiUrl("api/maintenance/bankprocess-maintenance/delete"), {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ transaction_ids: transactionIds }),
+    body: JSON.stringify({ tenantId, transactionIds }),
   });
   const result = await response.json();
   if (!result.success) {
@@ -145,10 +175,9 @@ export async function deleteBankprocessData(transactionIds) {
 }
 
 export async function updateSessionCompany(companyId) {
-  const res = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`));
-  const result = await res.json();
-  if (!result.success) {
-    throw new Error(result.error || "Switch company failed");
+  const json = await syncCompanySessionApi(companyId);
+  if (!json?.success) {
+    throw new Error(json?.message || "Switch company failed");
   }
-  return result.data;
+  return json.data;
 }

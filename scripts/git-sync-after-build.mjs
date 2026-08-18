@@ -7,7 +7,18 @@ import { execSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const scriptsDir = dirname(fileURLToPath(import.meta.url));
+const projectRoot = resolve(scriptsDir, "..");
+
+let repoRoot = projectRoot;
+try {
+  repoRoot = execSync("git rev-parse --show-toplevel", { cwd: projectRoot, encoding: "utf8" }).trim();
+} catch {
+  repoRoot = resolve(projectRoot, "..");
+}
+
+const isSubdir = resolve(projectRoot) !== resolve(repoRoot);
+const gitPrefix = isSubdir ? "frontend/" : "";
 
 function run(cmd, { allowFail = false } = {}) {
   try {
@@ -61,12 +72,12 @@ function stageChangedUnder(relPath) {
 /** dist/css mirrors public/css — only stage pairs whose public source changed. */
 function stageCssMirrorsFromPublic() {
   const publicChanged = gitLines(
-    `git diff --name-only --ignore-cr-at-eol -- frontend/public/css`,
+    `git diff --name-only --ignore-cr-at-eol -- ${gitPrefix}public/css`,
   );
   const pairs = [];
   for (const pub of publicChanged) {
     pairs.push(pub);
-    pairs.push(pub.replace("/public/css/", "/dist/css/"));
+    pairs.push(pub.replace("public/css/", "dist/css/"));
   }
   stagePaths(pairs);
 }
@@ -77,15 +88,15 @@ if (!isGitRepo()) {
 }
 
 console.log("[git-sync-after-build] restore dist/assets + index.html churn…");
-run("git restore frontend/dist/assets frontend/dist/index.html", { allowFail: true });
-run("git clean -fd frontend/dist/assets", { allowFail: true });
+run(`git restore ${gitPrefix}dist/assets ${gitPrefix}dist/index.html`, { allowFail: true });
+run(`git clean -fd ${gitPrefix}dist/assets`, { allowFail: true });
 
-run("node frontend/scripts/patch-index-sidebar-css.mjs", { allowFail: true });
+run(`node ${gitPrefix}scripts/patch-index-sidebar-css.mjs`, { allowFail: true });
 
 console.log("[git-sync-after-build] stage changed files only…");
-stageChangedUnder("frontend/src");
-stageChangedUnder("frontend/public");
+stageChangedUnder(gitPrefix + "src");
+stageChangedUnder(gitPrefix + "public");
 stageCssMirrorsFromPublic();
-stageChangedUnder("frontend/dist/index.html");
+stageChangedUnder(gitPrefix + "dist/index.html");
 
 console.log("[git-sync-after-build] done — dist/assets not staged (hash bundles)");

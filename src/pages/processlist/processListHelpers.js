@@ -44,6 +44,80 @@ export function normalizeRows(data) {
   return Array.isArray(data) ? data : [];
 }
 
+/** `process_day.dayOfWeek` contract: 1=Mon … 7=Sun. */
+export const PROCESS_WEEKDAY_OPTIONS = [
+  { id: 1, day_name: "MON" },
+  { id: 2, day_name: "TUE" },
+  { id: 3, day_name: "WED" },
+  { id: 4, day_name: "THU" },
+  { id: 5, day_name: "FRI" },
+  { id: 6, day_name: "SAT" },
+  { id: 7, day_name: "SUN" },
+];
+
+function dayOfWeekName(dayOfWeek) {
+  return PROCESS_WEEKDAY_OPTIONS.find((d) => d.id === Number(dayOfWeek))?.day_name || "";
+}
+
+/** Spring `Process.Status` is 2-value only (no WAITING — that's Bank Process). */
+export function normalizeProcessStatusKey(v) {
+  return String(v || "").trim().toUpperCase() === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+}
+
+/** company.id in the picker === tenant.id in the backend. */
+export function resolveProcessListActiveTenantId(tenantId) {
+  const tid = tenantId != null ? Number(tenantId) : Number.NaN;
+  return Number.isFinite(tid) && tid > 0 ? tid : null;
+}
+
+/**
+ * Spring `ProcessDTO` → legacy flat table row.
+ * Drops `category === 'BANK'` rows (Bank Process lives on its own list page).
+ */
+export function normalizeProcessListItem(dto) {
+  if (!dto || typeof dto !== "object") return null;
+  const process = dto.process || {};
+  if (String(process.category || "").trim().toUpperCase() === "BANK") return null;
+
+  const descriptions = Array.isArray(dto.processDescriptions) ? dto.processDescriptions : [];
+  const days = Array.isArray(dto.processDays) ? dto.processDays : [];
+  const dayUse = [...days]
+    .map((d) => Number(d?.dayOfWeek))
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 7)
+    .sort((a, b) => a - b)
+    .map(dayOfWeekName)
+    .filter(Boolean)
+    .join(",");
+
+  return {
+    id: dto.id ?? process.id,
+    process_name: String(process.code || ""),
+    description: descriptions.map((d) => d?.name).filter(Boolean).join(", "),
+    process_descriptions: descriptions,
+    process_days: days,
+    day_use: dayUse,
+    currency: String(dto.currencyCode || "").trim().toUpperCase(),
+    currency_id: process.currencyId ?? null,
+    status: normalizeProcessStatusKey(process.status).toLowerCase(),
+    remove_word: process.removeWord ?? "",
+    replace_word_from: process.replaceWordFrom ?? "",
+    replace_word_to: process.replaceWordTo ?? "",
+    remark: process.remark ?? "",
+    created_by: process.createdBy ?? "",
+    modified_by: process.updatedBy ?? "",
+    dts_created: process.createdAt ?? "",
+    dts_modified: process.updatedAt ?? "",
+    // Spring ProcessDTO carries no submitted-transaction flag; delete is still
+    // server-gated to INACTIVE rows, this only affects the client checkbox hint.
+    has_transactions: false,
+  };
+}
+
+export function normalizeProcessListRows(data) {
+  if (!Array.isArray(data)) return [];
+  return data.map(normalizeProcessListItem).filter(Boolean);
+}
+
 /** Drop all cached process-list slices for one company (after add/edit/delete). */
 export function invalidateProcessListCompanyCache(cacheRef, companyId) {
   const cid = Number(companyId);
@@ -264,6 +338,26 @@ export function sortProcessTableRows(rows, sortColumn, sortDirection) {
   return copy;
 }
 
+/**
+ * Client-side search + status filter — Spring `/api/process/process-list` has no
+ * search/status query params, it always returns the full tenant row set.
+ */
+export function applyProcessListFilters(rows, { search = "", showActive = false, showInactive = false, showAll = false } = {}) {
+  let out = Array.isArray(rows) ? rows : [];
+  const q = String(search || "").trim().toUpperCase();
+  if (q) {
+    out = out.filter((r) => {
+      const hay = [r.process_name, r.description, r.currency, r.remark]
+        .map((v) => String(v || "").toUpperCase())
+        .join(" ");
+      return hay.includes(q);
+    });
+  }
+  if (showAll || (showActive && showInactive)) return out;
+  if (showInactive) return out.filter((r) => String(r.status || "").toLowerCase() === "inactive");
+  return out.filter((r) => String(r.status || "").toLowerCase() === "active");
+}
+
 /** Same ordering as js/processlist.js after fetch (Games). */
 export function sortProcessRows(rows) {
   return sortProcessTableRows(rows, "processId", "asc");
@@ -283,44 +377,31 @@ export function emptyCopyFromSyncFields() {
   };
 }
 
-/** Map addprocess_api.php copy_from payload into partial add-form state. */
-export function buildCopyFromFormPatch(data, { currencies = [], descriptions = [] } = {}) {
+/**
+ * Copy From: adapt an already-loaded, `normalizeProcessListItem`'d list row into a partial
+ * add-form patch — no network call (Spring has no `copy_from` endpoint).
+ */
+export function buildCopyFromFormPatch(row, { currencies = [] } = {}) {
   const patch = emptyCopyFromSyncFields();
-  if (!data || typeof data !== "object") return patch;
+  if (!row || typeof row !== "object") return patch;
 
-  let currencyId =
-    data.currency_id != null && data.currency_id !== "" ? String(data.currency_id) : "";
-  if (currencyId) {
-    const exists = currencies.some((c) => String(c.id) === currencyId);
-    if (!exists) currencyId = "";
-  }
-  if (!currencyId && data.currency_code) {
-    const code = String(data.currency_code).toUpperCase();
-    const match = currencies.find((c) => String(c.code || "").toUpperCase() === code);
-    if (match) currencyId = String(match.id);
-  }
+  let currencyId = row.currency_id != null && row.currency_id !== "" ? String(row.currency_id) : "";
+  if (currencyId && !currencies.some((c) => String(c.id) === currencyId)) currencyId = "";
   patch.currency_id = currencyId;
-  patch.currency_warning = data.currency_warning || null;
 
-  if (data.remove_word) {
-    patch.remove_word = serializeRemoveWordChips(parseRemoveWordChips(data.remove_word));
+  if (row.remove_word) {
+    patch.remove_word = serializeRemoveWordChips(parseRemoveWordChips(row.remove_word));
   }
-  if (data.replace_word_from) patch.replace_word_from = String(data.replace_word_from);
-  if (data.replace_word_to) patch.replace_word_to = String(data.replace_word_to);
-  if (data.remark) patch.remark = parseRemarkForForm(data.remark);
-  if (data.day_use) {
-    patch.day_use = String(data.day_use)
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean);
-  }
-  if (data.description_name) {
-    const name = String(data.description_name).trim();
-    if (name) {
-      const fromApi = descriptions.find((d) => String(d.name) === name);
-      patch.selected_descriptions = [{ id: fromApi?.id ?? name, name }];
-    }
-  }
+  if (row.replace_word_from) patch.replace_word_from = String(row.replace_word_from);
+  if (row.replace_word_to) patch.replace_word_to = String(row.replace_word_to);
+  if (row.remark) patch.remark = parseRemarkForForm(row.remark);
+
+  patch.day_use = dayUseIdsFromListRow(row);
+
+  const descriptions = Array.isArray(row.process_descriptions) ? row.process_descriptions : [];
+  patch.selected_descriptions = descriptions
+    .filter((d) => d?.id != null)
+    .map((d) => ({ id: d.id, name: d.name }));
 
   return patch;
 }
@@ -335,6 +416,12 @@ export function parseRemarkForForm(remarks) {
     /* plain text */
   }
   return String(remarks);
+}
+
+/** `process_days[].dayOfWeek` (1=Mon…7=Sun) → checkbox id strings (`ProcessFormModal` compares by id). */
+export function dayUseIdsFromListRow(row) {
+  const days = Array.isArray(row?.process_days) ? row.process_days : [];
+  return days.map((d) => String(d?.dayOfWeek)).filter(Boolean);
 }
 
 export function buildEditDescriptionSelection(p, descriptionsList) {

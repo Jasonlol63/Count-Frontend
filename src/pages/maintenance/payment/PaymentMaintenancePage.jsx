@@ -352,7 +352,7 @@ export default function PaymentMaintenancePage() {
             companyId: null,
             me: u,
           });
-          const currList = await fetchCompanyCurrencies(null, bootScope);
+          const currList = await fetchCompanyCurrencies(null, bootScope, rows);
           if (cancelled) return;
           setCurrencies(orderPaymentMaintenanceCurrencies(currList, bootScope));
           setSelectedCurrency(pickPaymentMaintenanceCurrency(currList, bootScope));
@@ -374,7 +374,7 @@ export default function PaymentMaintenancePage() {
             me: u,
           });
 
-          const currList = await fetchCompanyCurrencies(null, bootScope);
+          const currList = await fetchCompanyCurrencies(null, bootScope, rows);
           setCurrencies(orderPaymentMaintenanceCurrencies(currList, bootScope));
           setSelectedCurrency(pickPaymentMaintenanceCurrency(currList, bootScope));
 
@@ -436,7 +436,7 @@ export default function PaymentMaintenancePage() {
     const scope = paymentScope;
     (async () => {
       try {
-        const currList = await fetchCompanyCurrencies(null, scope);
+        const currList = await fetchCompanyCurrencies(null, scope, companies);
         if (cancelled) return;
         setCurrencies(orderPaymentMaintenanceCurrencies(currList, scope));
         setSelectedCurrency(pickPaymentMaintenanceCurrency(currList, scope));
@@ -488,6 +488,7 @@ export default function PaymentMaintenancePage() {
           companyId: effectiveScope.scopeCompanyId,
           currency: overrides.currency ?? selectedCurrency,
           scope: effectiveScope,
+          companies,
           signal: controller.signal,
         });
         if (seq !== searchSeqRef.current) return;
@@ -563,13 +564,13 @@ export default function PaymentMaintenancePage() {
    * currency fetch returns, skip applying state (stale results are dropped, not shown).
    */
   const reloadScopeMeta = useCallback(async (scope, seq, seqRef) => {
-    const currList = await fetchCompanyCurrencies(null, scope);
+    const currList = await fetchCompanyCurrencies(null, scope, companies);
     if (seqRef && seq !== seqRef.current) return null;
     setCurrencies(orderPaymentMaintenanceCurrencies(currList, scope));
     const nextCurrency = pickPaymentMaintenanceCurrency(currList, scope);
     setSelectedCurrency(nextCurrency);
     return nextCurrency;
-  }, []);
+  }, [companies]);
 
   /** Local drag reorder — scoped to this company/group, never written to Dashboard's shared order. */
   const handleCurrencyDropOn = useCallback(
@@ -751,7 +752,7 @@ export default function PaymentMaintenancePage() {
   const handleConfirmDelete = async () => {
     setIsDeleteModalOpen(false);
     try {
-      await deletePaymentRecords(selectedIds, paymentScope);
+      await deletePaymentRecords(selectedIds, paymentScope, paymentData, companies);
       notifyTransactionListInvalidated("payment_maintenance_delete");
       notify(t("successfullyDeletedN", { n: selectedIds.length }), "success");
       performSearch({ scope: paymentScope });

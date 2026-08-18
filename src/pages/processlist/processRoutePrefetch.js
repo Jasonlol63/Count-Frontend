@@ -1,7 +1,17 @@
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { mergeCurrencyCodesWithSavedOrder } from "../../utils/company/currencyDisplayOrder.js";
-import { normalizeRows as normalizeGamesProcessRows, processListCacheHasEntry, processListCacheHasRows } from "./processListHelpers.js";
-import { normalizeRows as normalizeBankProcessRows } from "../bankprocesslist/lib/bankProcessHelpers.js";
+import { processListCacheHasEntry, processListCacheHasRows } from "./processListHelpers.js";
+import { fetchProcessListByTenantId, fetchProcessFormMeta } from "./processListApi.js";
+import { fetchBankProcessListByTenantId } from "../bankprocesslist/bankProcessListApi.js";
+import { fetchCurrencyListByTenantId, normalizeCurrencyRow } from "../../utils/api/currencyApi.js";
+import { getUserCurrencyOrder } from "../transaction/lib/transactionApi.js";
+
+/** Currency pill codes + saved drag order (order is localStorage-only, no Spring API). */
+async function resolveOrderedCurrencyCodes(tenantId, signal) {
+  const rows = await fetchCurrencyListByTenantId(tenantId, signal);
+  const codes = rows.map((r) => normalizeCurrencyRow(r).code).filter(Boolean);
+  const ordJson = await getUserCurrencyOrder({ companyId: tenantId }).catch(() => null);
+  return mergeCurrencyCodesWithSavedOrder(codes, ordJson?.data?.order);
+}
 
 const processListRouteWarmCache = new Map();
 const processListRouteWarmInflight = new Map();
@@ -73,64 +83,23 @@ export async function resolveProcessListRouteCache(companyId, opts = {}) {
   return fetchGamesProcessListSlice(cid, opts);
 }
 
-/** Games process list row + currency pill payload (company switch cache / hover warm). */
-export async function fetchGamesProcessListSlice(
-  companyId,
-  { search = "", showActive = false, showInactive = false, showAll = false, signal } = {},
-) {
+/**
+ * Games process list row + currency pill payload (company switch cache / hover warm).
+ * Spring list has no server-side search/status filtering (client applies it) — `search`/
+ * `showActive`/`showInactive`/`showAll` are accepted only to preserve the caller's cache-key
+ * shape, they no longer change what's fetched.
+ */
+export async function fetchGamesProcessListSlice(companyId, { signal } = {}) {
   const cid = Number(companyId);
   if (!Number.isFinite(cid) || cid <= 0) {
     return { rows: null, currencyCodes: null };
   }
 
-  const listUrl = new URL(buildApiUrl("api/processes/processlist_api.php"));
-  listUrl.searchParams.set("permission", "Games");
-  listUrl.searchParams.set("company_id", String(cid));
-  const q = String(search || "").trim();
-  if (q) listUrl.searchParams.set("search", q);
-  if (showActive) listUrl.searchParams.set("showActive", "1");
-  if (showInactive) listUrl.searchParams.set("showInactive", "1");
-  if (showAll) listUrl.searchParams.set("showAll", "1");
-
-  const curQs = new URLSearchParams({
-    company_id: String(cid),
-    subsidiary_accounts_only: "1",
-  });
-  const curUrl = buildApiUrl(`api/transactions/get_company_currencies_api.php?${curQs}`);
-  const ordUrl = buildApiUrl(
-    `api/transactions/user_currency_order_api.php?company_id=${cid}&_t=${Date.now()}`,
-  );
-
   try {
-    const fetchOpts = { credentials: "include", signal };
-    const [listRes, curRes, ordRes] = await Promise.all([
-      fetch(listUrl.toString(), fetchOpts),
-      fetch(curUrl, fetchOpts),
-      fetch(ordUrl, fetchOpts).catch(() => null),
+    const [rows, currencyCodes] = await Promise.all([
+      fetchProcessListByTenantId(cid, signal).catch(() => null),
+      resolveOrderedCurrencyCodes(cid, signal).catch(() => null),
     ]);
-    const listJson = await listRes.json();
-    const curJson = await curRes.json();
-
-    const rows =
-      listRes.ok && listJson?.success && Array.isArray(listJson.data)
-        ? normalizeGamesProcessRows(listJson.data)
-        : null;
-
-    let currencyCodes = null;
-    if (curRes.ok && curJson?.success && Array.isArray(curJson.data)) {
-      const codes = curJson.data.map((r) => String(r.code || "").toUpperCase()).filter(Boolean);
-      let savedOrder = null;
-      if (ordRes) {
-        try {
-          const ordJson = await ordRes.json();
-          savedOrder = ordJson?.data?.order;
-        } catch {
-          /* optional order */
-        }
-      }
-      currencyCodes = mergeCurrencyCodesWithSavedOrder(codes, savedOrder);
-    }
-
     return { rows, currencyCodes };
   } catch (err) {
     if (err?.name === "AbortError") throw err;
@@ -193,58 +162,16 @@ export async function resolveBankProcessListRouteCache(companyId, opts = {}) {
   return prefetchBankProcessListPayload(cid, opts);
 }
 
-/** Warm Bank Process List data before route swap (Games → Bank). */
-export async function prefetchBankProcessListPayload(companyId, { search = "", signal } = {}) {
+/** Warm Bank Process List data before route swap (Games → Bank). `search` no longer filters server-side. */
+export async function prefetchBankProcessListPayload(companyId, { signal } = {}) {
   const cid = Number(companyId);
   if (!cid) return { rows: null, currencyCodes: null };
 
-  const listUrl = new URL(buildApiUrl("api/processes/processlist_api.php"));
-  listUrl.searchParams.set("permission", "Bank");
-  listUrl.searchParams.set("company_id", String(cid));
-  listUrl.searchParams.set("showAll", "1");
-  const q = String(search || "").trim();
-  if (q) listUrl.searchParams.set("search", q);
-
-  const curQs = new URLSearchParams({
-    company_id: String(cid),
-    subsidiary_accounts_only: "1",
-  });
-  const curUrl = buildApiUrl(`api/transactions/get_company_currencies_api.php?${curQs}`);
-  const ordUrl = buildApiUrl(
-    `api/transactions/user_currency_order_api.php?company_id=${cid}&_t=${Date.now()}`,
-  );
-
   try {
-    const fetchOpts = { credentials: "include", signal };
-    const [listRes, curRes, ordRes] = await Promise.all([
-      fetch(listUrl.toString(), fetchOpts),
-      fetch(curUrl, fetchOpts),
-      fetch(ordUrl, fetchOpts).catch(() => null),
+    const [rows, currencyCodes] = await Promise.all([
+      fetchBankProcessListByTenantId(cid, signal).catch(() => null),
+      resolveOrderedCurrencyCodes(cid, signal).catch(() => null),
     ]);
-    if (signal?.aborted) return { rows: null, currencyCodes: null };
-    const listJson = await listRes.json();
-    const curJson = await curRes.json();
-
-    const rows =
-      listRes.ok && listJson?.success && Array.isArray(listJson.data)
-        ? normalizeBankProcessRows(listJson.data)
-        : null;
-
-    let currencyCodes = null;
-    if (curRes.ok && curJson?.success && Array.isArray(curJson.data)) {
-      const codes = curJson.data.map((r) => String(r.code || "").toUpperCase()).filter(Boolean);
-      let savedOrder = null;
-      if (ordRes) {
-        try {
-          const ordJson = await ordRes.json();
-          savedOrder = ordJson?.data?.order;
-        } catch {
-          /* optional order */
-        }
-      }
-      currencyCodes = mergeCurrencyCodesWithSavedOrder(codes, savedOrder);
-    }
-
     return { rows, currencyCodes };
   } catch (err) {
     if (err?.name === "AbortError" || signal?.aborted) {
@@ -259,25 +186,17 @@ export async function prefetchGamesProcessListPayload(companyId) {
   const cid = Number(companyId);
   if (!cid) return { rows: null, meta: null, currencyCodes: null };
 
-  const metaUrl = new URL(buildApiUrl("api/processes/addprocess_api.php"));
-  metaUrl.searchParams.set("company_id", String(cid));
-
   try {
-    const [slice, metaRes] = await Promise.all([
+    const [slice, meta] = await Promise.all([
       fetchGamesProcessListSlice(cid),
-      fetch(metaUrl.toString(), { credentials: "include" }),
+      fetchProcessFormMeta(cid).catch(() => null),
     ]);
-    const metaJson = await metaRes.json();
-    const metaData = metaJson?.data || metaJson || {};
 
-    const meta = {
-      currencies: Array.isArray(metaData.currencies) ? metaData.currencies : [],
-      descriptions: Array.isArray(metaData.descriptions) ? metaData.descriptions : [],
-      days: Array.isArray(metaData.days) ? metaData.days : [],
-      existingProcesses: Array.isArray(metaData.existingProcesses) ? metaData.existingProcesses : [],
+    return {
+      rows: slice.rows,
+      meta: meta || { currencies: [], descriptions: [], days: [], existingProcesses: [] },
+      currencyCodes: slice.currencyCodes,
     };
-
-    return { rows: slice.rows, meta, currencyCodes: slice.currencyCodes };
   } catch {
     return { rows: null, meta: null, currencyCodes: null };
   }

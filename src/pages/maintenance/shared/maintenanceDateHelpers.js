@@ -37,3 +37,13 @@ export function formatDmyFromDate(d) {
 export function buildMaintenancePeriodPresets(m) {
   return MAINTENANCE_QUICK_RANGE_KEYS.map((key) => ({ key, label: m[key] || key }));
 }
+
+/** Spring `LocalDateTime` JSON ("yyyy-MM-ddTHH:mm:ss[.SSSSSS]") → legacy `dd/mm/yyyy HH:mm:ss` display. */
+export function formatSpringDateTimeToDmy(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
+  if (!match) return raw;
+  const [, y, mo, d, h, mi, s] = match;
+  return `${d}/${mo}/${y} ${h}:${mi}:${s}`;
+}

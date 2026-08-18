@@ -1,30 +1,32 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { fetchReportScopeCurrencies } from "../../report/shared/reportCompanyApi.js";
+import { fetchCurrencyListByTenantId, normalizeCurrencyRow } from "../../../utils/api/currencyApi.js";
+import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
+import { formatSpringDateTimeToDmy } from "../shared/maintenanceDateHelpers.js";
 import { paymentMaintenanceScopeApiParams } from "./paymentMaintenanceScope.js";
+import { resolveGroupEntityRowFromSnap } from "../../report/shared/reportScope.js";
 import {
   mergeCurrencyCodesWithSavedOrder,
   resolvePaymentMaintenanceCurrencyOrder,
 } from "../../../utils/company/currencyDisplayOrder.js";
 
-function appendPaymentScopeToParams(params, scope) {
-  const {
-    companyId,
-    viewGroup,
-    groupId,
-    reportScope,
-    groupOnly,
-    groupAggregate,
-    subsidiaryAccountsOnly,
-  } = paymentMaintenanceScopeApiParams(scope);
-  if (companyId) params.append("company_id", String(companyId));
-  const vg = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
-  if (vg) params.append("view_group", vg);
-  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
-  if (gid) params.append("group_id", gid);
-  if (reportScope) params.append("report_scope", reportScope);
-  if (groupOnly) params.append("group_only", "1");
-  if (groupAggregate) params.append("group_aggregate", "1");
-  if (subsidiaryAccountsOnly) params.append("subsidiary_accounts_only", "1");
+/**
+ * Group entity + subsidiary company share one Spring tenant row; "aggregate" (Groups All / Group All) spans several.
+ * Pure Group-ledger view (no subsidiary drill-down) resolves `scope.scopeCompanyId` to 0 — the actual tenant is the
+ * group's own entity company row (company_id === group code), so it must be looked up from `companies`.
+ */
+function resolvePaymentMaintenanceTenantIds({ companyId, scope, companies } = {}) {
+  if (scope?.mode === "aggregate") {
+    const ids = Array.isArray(scope.mergeCompanyIds) ? scope.mergeCompanyIds : [];
+    return ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+  }
+  const tid = Number(companyId ?? scope?.scopeCompanyId);
+  if (Number.isFinite(tid) && tid > 0) return [tid];
+  if (scope?.mode === "group" && scope.selectedGroup && Array.isArray(companies)) {
+    const row = resolveGroupEntityRowFromSnap(companies, scope.selectedGroup);
+    const id = Number(row?.id);
+    if (Number.isFinite(id) && id > 0) return [id];
+  }
+  return [];
 }
 
 /** Default currency pill for group vs subsidiary company scope. */
@@ -37,10 +39,29 @@ export function pickPaymentMaintenanceCurrency(currList, scope) {
   return hasMYR ? "MYR" : currList[0]?.code || null;
 }
 
-/** Currencies for active group ledger vs subsidiary company (no cross-scope bleed). */
-export async function fetchCompanyCurrencies(_companyId, scope = null) {
-  if (!scope) return [];
-  return fetchReportScopeCurrencies(scope);
+/** Currencies for active group ledger vs subsidiary company (no cross-scope bleed); unions across aggregate scope. */
+export async function fetchCompanyCurrencies(_companyId, scope = null, companies = []) {
+  const tenantIds = resolvePaymentMaintenanceTenantIds({ scope, companies });
+  if (tenantIds.length === 0) return [];
+
+  if (tenantIds.length === 1) {
+    const rows = await fetchCurrencyListByTenantId(tenantIds[0]);
+    return rows
+      .map((row) => normalizeCurrencyRow(row))
+      .filter((row) => Number.isFinite(row.id) && row.id > 0 && String(row.code || "").trim());
+  }
+
+  const perTenant = await Promise.all(
+    tenantIds.map((tenantId) => fetchCurrencyListByTenantId(tenantId).catch(() => [])),
+  );
+  const byCode = new Map();
+  for (const row of perTenant.flat()) {
+    const normalized = normalizeCurrencyRow(row);
+    if (!Number.isFinite(normalized.id) || normalized.id <= 0) continue;
+    const code = String(normalized.code || "").trim().toUpperCase();
+    if (code && !byCode.has(code)) byCode.set(code, normalized);
+  }
+  return [...byCode.values()];
 }
 
 /** Storage key for currency order: numeric company id, or `g:GROUPCODE` for pure Group ledger. */
@@ -70,6 +91,59 @@ export function orderPaymentMaintenanceCurrencies(currList, scope) {
   return orderedCodes.map((code) => byCode.get(code)).filter(Boolean);
 }
 
+/** Spring `MaintenancePaymentDTO` row → legacy grid row shape used by the table components. */
+function normalizePaymentRow(row, tenantId) {
+  return {
+    transaction_id: Number(row?.id) || 0,
+    transaction_type: row?.transactionType ?? null,
+    dts_created: formatSpringDateTimeToDmy(row?.createdAt),
+    account: row?.toAccountCode ?? "",
+    from_account: row?.fromAccountCode ?? "",
+    amount: row?.amount ?? 0,
+    currency: row?.currencyCode ?? "",
+    description: row?.description ?? "",
+    remark: row?.remark ? String(row.remark).toUpperCase() : row?.remark,
+    created_by: row?.createdBy ?? "",
+    is_deleted: row?.deleted === true,
+    deleted_by: row?.deletedBy ?? "",
+    dts_deleted: formatSpringDateTimeToDmy(row?.deletedAt),
+    _tenant_id: tenantId,
+    _created_at_raw: String(row?.createdAt ?? ""),
+  };
+}
+
+/** Global sort across (possibly several, aggregate-merged) tenants: createdAt desc, id desc. */
+function sortPaymentMaintenanceRows(rows) {
+  return [...rows].sort((a, b) => {
+    const cmp = String(b._created_at_raw || "").localeCompare(String(a._created_at_raw || ""));
+    if (cmp !== 0) return cmp;
+    return Number(b.transaction_id || 0) - Number(a.transaction_id || 0);
+  });
+}
+
+async function fetchPaymentMaintenancePage({ tenantId, dateFrom, dateTo, transactionType, currencyCodes, q, signal }) {
+  const request = {
+    tenantId,
+    dateFrom,
+    dateTo,
+    transactionType: transactionType || null,
+    currencyCodes: Array.isArray(currencyCodes) ? currencyCodes : [],
+    q,
+  };
+  const response = await fetch(buildApiUrl("api/maintenance/payment-maintenance/list"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    signal,
+  });
+  const data = await response.json();
+  if (!data.success) {
+    throw new Error(data.message || "Search failed");
+  }
+  return Array.isArray(data.data) ? data.data : [];
+}
+
 /**
  * Search payment data
  * @param {object} opts
@@ -83,78 +157,81 @@ export async function searchPaymentData({
   companyId,
   currency,
   scope,
+  companies,
   signal,
 }) {
-  const params = new URLSearchParams();
-  params.append("date_from", dateFrom);
-  params.append("date_to", dateTo);
-  if (transactionType) params.append("transaction_type", transactionType);
-  if (query?.trim()) params.set("q", query.trim().toUpperCase());
-  if (companyId && scope?.mode !== "group") {
-    params.append("company_id", String(companyId));
-  }
-  appendPaymentScopeToParams(params, scope);
-  if (currency) params.append("currency", currency);
-  
-  const url = buildApiUrl(`api/payment_maintenance/search_api.php?${params.toString()}`);
-  const response = await fetch(url, { credentials: "include", signal });
-  const data = await response.json();
-  
-  if (!data.success) {
-    throw new Error(data.message || 'Search failed');
-  }
-  
-  const merged = mergeProfitRows(data.data || []);
-  return sortAndNormalizePaymentRows(merged);
+  const tenantIds = resolvePaymentMaintenanceTenantIds({ companyId, scope, companies });
+  if (tenantIds.length === 0) return [];
+
+  const q = query?.trim() ? query.trim().toUpperCase() : null;
+  const currencyCodes = currency ? [String(currency).toUpperCase()] : [];
+
+  const perTenant = await Promise.all(
+    tenantIds.map((tenantId) =>
+      fetchPaymentMaintenancePage({ tenantId, dateFrom, dateTo, transactionType, currencyCodes, q, signal }).then(
+        (rows) => rows.map((row) => normalizePaymentRow(row, tenantId)),
+      ),
+    ),
+  );
+
+  return sortPaymentMaintenanceRows(perTenant.flat());
 }
 
 /**
- * Delete payment records
+ * Delete payment records — groups selected ids by originating tenant (relevant only in aggregate scope).
+ * @param {number[]} transactionIds
+ * @param {object} scope
+ * @param {Array<object>} rows currently-loaded rows (carry `_tenant_id` from the search response)
+ * @param {Array<object>} companies owner companies snapshot — fallback group-entity lookup only
  */
-export async function deletePaymentRecords(transactionIds, scope = null) {
-  const payload = { transaction_ids: transactionIds };
-  const {
-    companyId,
-    viewGroup,
-    groupId,
-    reportScope,
-    groupOnly,
-    groupAggregate,
-    subsidiaryAccountsOnly,
-  } = paymentMaintenanceScopeApiParams(scope);
-  if (companyId) payload.company_id = companyId;
-  if (viewGroup) payload.view_group = viewGroup;
-  if (groupId) payload.group_id = groupId;
-  if (reportScope) payload.report_scope = reportScope;
-  if (groupOnly) payload.group_only = "1";
-  if (groupAggregate) payload.group_aggregate = "1";
-  if (subsidiaryAccountsOnly) payload.subsidiary_accounts_only = "1";
-
-  const response = await fetch(buildApiUrl("api/payment_maintenance/delete_api.php"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(payload),
-  });
-  const data = await response.json();
-  if (!data.success) {
-    throw new Error(data.message || 'Delete failed');
+export async function deletePaymentRecords(transactionIds, scope = null, rows = [], companies = []) {
+  const ids = Array.isArray(transactionIds)
+    ? transactionIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+    : [];
+  if (ids.length === 0) {
+    throw new Error("Please select at least one record");
   }
-  return data;
+
+  const rowById = new Map((Array.isArray(rows) ? rows : []).map((r) => [Number(r.transaction_id), r]));
+  const fallbackTenantId = resolvePaymentMaintenanceTenantIds({ scope, companies })[0] ?? null;
+
+  const idsByTenant = new Map();
+  for (const id of ids) {
+    const tenantId = Number(rowById.get(id)?._tenant_id) || fallbackTenantId;
+    if (!tenantId) continue;
+    if (!idsByTenant.has(tenantId)) idsByTenant.set(tenantId, []);
+    idsByTenant.get(tenantId).push(id);
+  }
+  if (idsByTenant.size === 0) {
+    throw new Error("tenantIdRequired");
+  }
+
+  let lastResult = null;
+  for (const [tenantId, tenantTransactionIds] of idsByTenant) {
+    const response = await fetch(buildApiUrl("api/maintenance/payment-maintenance/delete"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ tenantId, transactionIds: tenantTransactionIds }),
+    });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || "Delete failed");
+    }
+    lastResult = data;
+  }
+  return lastResult;
 }
 
 /**
  * Update session company
  */
 export async function updateSessionCompany(companyId) {
-  const response = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`), {
-    credentials: "include",
-  });
-  const result = await response.json();
-  if (!result.success) {
-    throw new Error(result.error || 'Failed to update session company');
+  const json = await syncCompanySessionApi(companyId);
+  if (!json?.success) {
+    throw new Error(json?.message || "Failed to update session company");
   }
-  return result.data;
+  return json.data;
 }
 
 /**
@@ -164,53 +241,6 @@ export function stripBankProcessDescriptionPrefix(text) {
   const s = String(text || '');
   const m = s.match(/^\s*process:\s*(.*)$/i);
   return m ? m[1].trim() : s;
-}
-
-/**
- * Merge profit rows for display
- */
-function mergeProfitRows(data) {
-  if (!Array.isArray(data) || data.length === 0) return data || [];
-  const type = (row) => (row.transaction_type || '').toUpperCase();
-  const acc = (row) => (row.account || '').toString().toUpperCase();
-  const isProfitRow = (row) => (type(row) === 'WIN' || type(row) === 'LOSE') && acc(row).startsWith('PROFIT');
-  const isWinLoseRow = (row) => type(row) === 'WIN' || type(row) === 'LOSE';
-  const key = (row) => [row.dts_created, String(row.amount || ''), (row.currency || '').toUpperCase()].join('\t');
-  
-  const profitByKey = {};
-  data.forEach(row => {
-    if (!isProfitRow(row)) return;
-    const k = key(row);
-    if (!profitByKey[k]) profitByKey[k] = [];
-    profitByKey[k].push(row.account || 'PROFIT');
-  });
-
-  return data.filter(row => {
-    if (isProfitRow(row)) return false;
-    if (isWinLoseRow(row)) {
-      const k = key(row);
-      const fromCandidates = profitByKey[k];
-      if (fromCandidates && fromCandidates.length > 0) {
-        row.from_account = fromCandidates[0];
-        const desc = (row.description || '').trim();
-        if (!desc || desc === '-' || desc === 'PROFIT' || desc.toUpperCase() === 'WIN' || desc.toUpperCase() === 'LOSE') {
-          const toAccountLabel = row.account || '';
-          row.description = toAccountLabel ? `PROFIT FROM ${toAccountLabel}` : 'PROFIT';
-        }
-        fromCandidates.shift();
-      }
-    }
-    return true;
-  });
-}
-
-function parseMaintenanceSortTime(row) {
-  const created = String(row?.dts_created || "").trim();
-  const createdMatch = created.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}:\d{2})$/);
-  if (!createdMatch) return 0;
-  const iso = `${createdMatch[3]}-${createdMatch[2]}-${createdMatch[1]}T${createdMatch[4]}`;
-  const ts = Date.parse(iso);
-  return Number.isFinite(ts) ? ts : 0;
 }
 
 /** Virtual rollup rows from the API use transaction_id 0; they are not real DB rows. */
@@ -227,21 +257,6 @@ export function getPaymentMaintenanceRowRenderKey(row, index) {
     return `t-${row.transaction_id}`;
   }
   return `v-${index}-${String(row.dts_created ?? "")}-${String(row.amount ?? "")}-${String(row.description ?? "").slice(0, 48)}`;
-}
-
-function sortAndNormalizePaymentRows(data) {
-  if (!Array.isArray(data)) return [];
-  return [...data]
-    .sort((a, b) => {
-      const cmp = parseMaintenanceSortTime(b) - parseMaintenanceSortTime(a);
-      if (cmp !== 0) return cmp;
-      return Number(b?.transaction_id || 0) - Number(a?.transaction_id || 0);
-    })
-    .map((row) => ({
-      ...row,
-      // Keep behavior aligned with legacy payment_maintenance.js display.
-      remark: row?.remark ? String(row.remark).toUpperCase() : row?.remark,
-    }));
 }
 
 /**

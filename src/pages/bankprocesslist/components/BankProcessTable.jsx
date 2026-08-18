@@ -1,5 +1,5 @@
 import React from "react";
-import { assetUrl, buildApiUrl } from "../../../utils/core/apiUrl.js";
+import { assetUrl } from "../../../utils/core/apiUrl.js";
 import {
   canShowBankResend,
   normalizeBankProcessStatus,
@@ -68,6 +68,7 @@ function renderBankContract(value, dayStart, dayEnd, lang) {
 
 export default function BankProcessTable({
   tableLoading,
+  tenantId,
   showAll,
   showSelectColumn,
   pageRows,
@@ -271,10 +272,10 @@ export default function BankProcessTable({
                   <div className={cellClass("status", "bank-status-cell")}>
                     <BankProcessStatusControl
                       row={r}
+                      tenantId={tenantId}
                       openMenuUp={pageRows.length > 0 && i >= pageRows.length - STATUS_MENU_UP_LAST_ROWS}
                       lang={lang}
                       notify={notify}
-                      buildApiUrl={buildApiUrl}
                       t={t}
                       onUpdated={(target, opts) => onBankStatusUpdated?.(r, target, opts)}
                     />

@@ -5,6 +5,7 @@ import { MoneyDecimal } from "../../utils/money/moneyDecimal.js";
 import {
   bankProcessFrequencyNormalized,
   normalizeRows,
+  normalizeAccountingDueRows,
   parseProfitSharingToRows,
   resolveBankProcessListTenantId,
 } from "./lib/bankProcessHelpers.js";
@@ -213,7 +214,7 @@ export async function fetchAccountingDueInbox(tenantId, signal, { asOf, restoreS
   if (!res.ok || !isApiSuccess(json)) {
     throw new Error(json?.message || "failedToLoadAccountingDue");
   }
-  return Array.isArray(json.data) ? json.data : [];
+  return normalizeAccountingDueRows(json.data);
 }
 
 /**

@@ -5,9 +5,21 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const indexPath = resolve(repoRoot, "frontend/dist/index.html");
+const scriptsDir = dirname(fileURLToPath(import.meta.url));
+const projectRoot = resolve(scriptsDir, "..");
+
+let repoRoot = projectRoot;
+try {
+  repoRoot = execSync("git rev-parse --show-toplevel", { cwd: projectRoot, encoding: "utf8" }).trim();
+} catch {
+  repoRoot = resolve(projectRoot, "..");
+}
+
+const isSubdir = resolve(projectRoot) !== resolve(repoRoot);
+const gitPrefix = isSubdir ? "frontend/" : "";
+const indexPath = resolve(repoRoot, `${gitPrefix}dist/index.html`);
 const SCROLLBAR_HREF = "/frontend/dist/css/dashboard-scrollbar.css?v=20260714-announcement-card-v5";
 const SIDEBAR_LINK =
   '<link rel="stylesheet" href="/frontend/dist/css/sidebar.css?v=20260812-sidebar-user-name-left" />';

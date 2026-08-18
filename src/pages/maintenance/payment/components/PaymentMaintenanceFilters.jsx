@@ -45,12 +45,13 @@ export default function PaymentMaintenanceFilters({
   const periodPresets = useMemo(() => buildMaintenancePeriodPresets(m), [m]);
   const transactionTypeOptions = useMemo(
     () => [
-      { value: "CONTRA", label: "CONTRA" },
       { value: "PAYMENT", label: "PAYMENT" },
-      { value: "RECEIVE", label: "RECEIVE" },
       { value: "CLAIM", label: "CLAIM" },
-      { value: "ADJUSTMENT", label: "ADJUSTMENT" },
+      { value: "CLEAR", label: "CLEAR" },
+      { value: "CONTRA", label: "CONTRA" },
       { value: "RATE", label: "RATE" },
+      { value: "ADJUSTMENT", label: "ADJUSTMENT" },
+      { value: "PROFIT", label: "PROFIT" },
     ],
     [],
   );

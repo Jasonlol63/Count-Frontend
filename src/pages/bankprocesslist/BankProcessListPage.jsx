@@ -191,7 +191,6 @@ export default function BankProcessListPage() {
     loadAccountModalSelectionMeta,
     resetAccountModalToAdd,
     closeAccountModal,
-    fetchAccountDetailJson,
     createAccountModalCurrency,
     removeAccountModalCurrency,
     submitAccountModal,
@@ -647,6 +646,7 @@ export default function BankProcessListPage() {
         >
           <BankProcessTable
             tableLoading={tableLoading}
+            tenantId={companyId}
             showAll={showAll}
             showSelectColumn={showAll || showActive || showInactive || showOfficial || showEInvoice || showBlock || hasDeletableRows}
             pageRows={pageRows}
