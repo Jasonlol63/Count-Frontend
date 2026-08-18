@@ -39,11 +39,8 @@ import "../../../../public/css/maintenance_unified_filters.css";
 import "../../../../public/css/date-range-picker.css";
 import "../../../../public/css/maintenance_notifications.css";
 import { fetchAccounts, fetchCustomerReport } from "./customerReportApi.js";
-import {
-  fetchCompanyPermissions,
-  fetchReportScopeCurrencies,
-  isBankOnlyCategoryCompany,
-} from "../shared/reportCompanyApi.js";
+import { fetchReportScopeCurrencies } from "../shared/reportCompanyApi.js";
+import { companyMatchesBankOnlyPillScope } from "../../../utils/company/companyCategoryFlags.js";
 import { formatYmd } from "../../../utils/date/dateUtils.js";
 import { getReportText, REPORT_I18N } from "../../../translateFile/pages/reportTranslate.js";
 import CustomerReportFilters from "./CustomerReportFilters.jsx";
@@ -309,17 +306,12 @@ export default function CustomerReportPage() {
     });
   }, [companies, companyId, me]);
 
-  const checkBankOnly = useCallback(async (compId) => {
+  const checkBankOnly = useCallback((compId) => {
     if (!compId) return;
-    try {
-      const comp = companies.find(c => Number(c.id) === Number(compId));
-      const perms = await fetchCompanyPermissions(comp?.company_id || "");
-      if (isBankOnlyCategoryCompany(perms)) {
-        // Bank-only companies use Bank Process UI, not Games process-list.
-        navigate(spaPath("bank-process-list"), { replace: true });
-      }
-    } catch (err) {
-      console.error("Bank only check error:", err);
+    const comp = companies.find((c) => Number(c.id) === Number(compId));
+    if (comp && companyMatchesBankOnlyPillScope(comp)) {
+      // Bank-only companies use Bank Process UI, not Games process-list.
+      navigate(spaPath("bank-process-list"), { replace: true });
     }
   }, [companies, navigate]);
 

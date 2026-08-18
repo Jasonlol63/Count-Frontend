@@ -39,8 +39,7 @@ function toOptionalMoney(raw) {
   const s = String(raw ?? "").trim();
   if (!s) return null;
   try {
-    const plain = MoneyDecimal.requireNormalAmount(s, "Amount");
-    const n = Number(plain);
+    const n = MoneyDecimal.toDecimal(s).toNumber();
     return Number.isFinite(n) ? n : null;
   } catch {
     return null;
@@ -78,7 +77,7 @@ function buildBankProcessMutableWriteFields({ form, accounts = [] }) {
   let companyPrice = toOptionalMoney(form?.profit);
   if (companyPrice == null && buy != null && sell != null) {
     try {
-      companyPrice = Number(MoneyDecimal.toPlainAmount(String(sell - buy)));
+      companyPrice = MoneyDecimal.sub(sell, buy).toNumber();
     } catch {
       companyPrice = null;
     }
