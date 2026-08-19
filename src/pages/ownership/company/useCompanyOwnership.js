@@ -14,6 +14,7 @@ import {
   validateOwnershipRowsForSave,
   mapOwnerApiRows,
   accountsFromOwnerRows,
+  mapAvailableAccountsForPicker,
   mergeEditorAccounts,
   mergeServerRowsPreservingDrafts,
   rowsToSavePayload,
@@ -206,7 +207,7 @@ export function useCompanyOwnership(shell) {
             credentials: "include",
           }).then((r) => r.json()),
         ]);
-        const accounts = aRes.status === "success" ? aRes.data : [];
+        const accounts = mapAvailableAccountsForPicker(aRes.status === "success" ? aRes.data : []);
         if (compGid && !accounts.some((a) => String(a.id) === `G_${compGid}`)) {
           accounts.push({
             id: `G_${compGid}`,

@@ -12,6 +12,7 @@ import {
   validateOwnershipRowsForSave,
   mapOwnerApiRows,
   accountsFromOwnerRows,
+  mapAvailableAccountsForPicker,
   mergeEditorAccounts,
   mergeServerRowsPreservingDrafts,
   rowsToSavePayload,
@@ -145,7 +146,7 @@ export function useGroupEarnings(shell) {
         if (preserveDrafts && draftRows) {
           rows = mergeServerRowsPreservingDrafts(draftRows, rows);
         }
-        const pickerAccounts = aRes.status === "success" ? aRes.data : [];
+        const pickerAccounts = mapAvailableAccountsForPicker(aRes.status === "success" ? aRes.data : []);
         const stateAccounts = mergeEditorAccounts(pickerAccounts, rows);
         const nextState = { accounts: stateAccounts, rows };
         setGeStates((prev) => ({

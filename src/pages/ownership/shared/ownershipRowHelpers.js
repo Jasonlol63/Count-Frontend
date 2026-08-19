@@ -2,11 +2,10 @@
 
 export function isExternalPartnerRow(row) {
   if (!row) return false;
-  if (row.is_external_partner === true || row.is_external_partner === 1 || row.is_external_partner === "1") {
-    return true;
-  }
-  // company_ownership owner-type rows (not native main owner) are linked partners
-  return String(row.role || "").toUpperCase() === "OWNER";
+  // Trust Spring's own is_external_partner flag only. `role` is not a reliable
+  // signal here: on picker accounts "OWNER" just means "owner-type account"
+  // (e.g. the tenant's own main-owner account), not "linked external partner".
+  return row.is_external_partner === true || row.is_external_partner === 1 || row.is_external_partner === "1";
 }
 
 export function allocationRowsForSave(rows) {
@@ -45,8 +44,7 @@ export function mapOwnerApiRows(data) {
       user_raw_id: o.user_raw_id || null,
       ownership_id,
       clientRowId: ownership_id ? `own-${ownership_id}` : `api-${o.account_id}-${index}`,
-      is_external_partner:
-        parseInt(o.is_external_partner, 10) === 1 || String(o.role || "").toUpperCase() === "OWNER",
+      is_external_partner: parseInt(o.is_external_partner, 10) === 1,
       read_only: o.read_only !== null ? parseInt(o.read_only, 10) : 1,
     };
   });
@@ -62,6 +60,28 @@ export function accountsFromOwnerRows(rows) {
     is_external_partner: isExternalPartnerRow(r),
     is_main_owner: 0,
   }));
+}
+
+/**
+ * Normalize `available-accounts` API rows for the picker: Spring returns
+ * account_id/owner_type (no is_main_owner), while accountsForRowPicker /
+ * OwnAccountSelect expect id/type/is_main_owner. Without this, every option's
+ * id is undefined and selecting it silently resets to empty.
+ */
+export function mapAvailableAccountsForPicker(data) {
+  return (Array.isArray(data) ? data : []).map((a) => {
+    const type = String(a.type || a.owner_type || "").toLowerCase();
+    const isMainOwner =
+      a.is_main_owner !== undefined && a.is_main_owner !== null
+        ? parseInt(a.is_main_owner, 10) === 1
+        : type === "owner" && a.partner_tenant_id == null;
+    return {
+      ...a,
+      id: a.id ?? a.account_id,
+      type,
+      is_main_owner: isMainOwner ? 1 : 0,
+    };
+  });
 }
 
 /** Merge picker accounts with persisted row accounts so linked partners display correctly. */
