@@ -111,6 +111,10 @@ export function SummaryProvider({ children, initialRows = [] }) {
           templateId: row.templateId,
           formulaVariant: row.formulaVariant,
           productType: row.productType || "main",
+          idProduct: row.idProduct,
+          parentIdProduct: row.parentIdProduct,
+          accountId: row.accountId,
+          subOrder: row.subOrder,
         });
       }
     }

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { fetchSummaryFormCatalog } from "../lib/summaryApi.js";
+import {
+  fetchAccountListByTenantId,
+  fetchAvailableCurrencies,
+  filterAccountListRows,
+} from "../../account/accountListApi.js";
+import { fetchCaptureCurrenciesByTenantId } from "../../datacapture/lib/dataCaptureSpringApi.js";
+import { resolveDataCaptureEffectiveTenantId } from "../../datacapture/lib/dataCaptureTenant.js";
 import {
   addSelectedDescriptionToForm,
   applyCalculatorToForm,
@@ -16,49 +21,10 @@ import {
   rowToEditFormulaForm,
 } from "../formula/editFormulaFormState.js";
 import { applyFormulaSaveToRows } from "../formula/summaryFormulaSaveTarget.js";
-import { saveSummaryTemplatePure } from "../formula/summarySaveTemplatePure.js";
-import {
-  resequenceSubOrdersInRows,
-  syncSubOrderTemplates,
-} from "../table/summarySubOrderResequence.js";
+import { saveAddFormulaSpring, saveUpdateFormulaSpring } from "../formula/summarySaveTemplatePure.js";
+import { resequenceSubOrdersInRows } from "../table/summarySubOrderResequence.js";
 import { pushSummaryNotification } from "../lib/summaryNotify.js";
 import { removeSuppressedRow } from "../lib/summarySuppressedRows.js";
-import {
-  applyTenantLedgerToParams,
-  LEDGER_GROUP,
-  resolvePageLedgerScope,
-} from "../../../utils/company/tenantLedgerParams.js";
-
-function resolveEditFormulaLedgerScope(captureScope, companyId) {
-  const groupId = String(captureScope?.groupId || "")
-    .trim()
-    .toUpperCase();
-  const isGroupLedger =
-    captureScope?.mode === "group" &&
-    (captureScope?.resolveCompanyViaGroupId || Number(captureScope?.scopeCompanyId ?? 0) <= 0);
-
-  if (isGroupLedger && groupId) {
-    return { ledger: LEDGER_GROUP, groupId, companyId: null };
-  }
-
-  return resolvePageLedgerScope({
-    groupOnly: false,
-    selectedGroup: groupId || null,
-    companyId: companyId != null && Number(companyId) > 0 ? Number(companyId) : null,
-  });
-}
-
-function normalizeAccountCurrencyRow(c) {
-  const id = c?.currency_id ?? c?.id;
-  const code = c?.currency_code ?? c?.code;
-  return {
-    id,
-    code,
-    currency_id: id,
-    currency_code: code,
-    is_linked: c?.is_linked != null ? !!c.is_linked : true,
-  };
-}
 
 function pickDefaultAccountCurrency(list, preferredCurrencyId = null) {
   if (!Array.isArray(list) || !list.length) return null;
@@ -78,40 +44,32 @@ function pickDefaultAccountCurrency(list, preferredCurrencyId = null) {
   return pool[0];
 }
 
+/** POST /api/currency/available?tenant_id=&account_id= — linked currencies for the account. */
 async function fetchAccountCurrencies(accountId, captureScope, companyId) {
   if (!accountId) return [];
-  const ledger = resolveEditFormulaLedgerScope(captureScope, companyId);
-  const ownedParams = new URLSearchParams({ action: "get_account_currencies" });
-  ownedParams.set("account_id", String(accountId));
-  applyTenantLedgerToParams(ownedParams, ledger);
-  const ownedRes = await fetch(
-    buildApiUrl(`api/accounts/account_currency_api.php?${ownedParams.toString()}`),
-    { credentials: "include" }
-  );
-  const ownedJson = await ownedRes.json();
-  if (ownedJson.success && Array.isArray(ownedJson.data) && ownedJson.data.length > 0) {
-    return ownedJson.data.map(normalizeAccountCurrencyRow);
-  }
+  const tenantId = resolveDataCaptureEffectiveTenantId(captureScope, companyId);
+  if (!tenantId) return [];
+  const rows = await fetchAvailableCurrencies(tenantId, accountId);
+  return rows
+    .filter((c) => c.is_linked === true)
+    .map((c) => ({
+      id: c.id,
+      code: c.code,
+      currency_id: c.id,
+      currency_code: c.code,
+      is_linked: true,
+    }));
+}
 
-  // Group ledger: account may exist without account_currency rows (old AP / new acc).
-  // Fall back to scope currencies so Edit Formula Currency is selectable.
-  const availParams = new URLSearchParams({ action: "get_available_currencies" });
-  availParams.set("account_id", String(accountId));
-  applyTenantLedgerToParams(availParams, ledger);
-  const availRes = await fetch(
-    buildApiUrl(`api/accounts/account_currency_api.php?${availParams.toString()}`),
-    { credentials: "include" }
-  );
-  const availJson = await availRes.json();
-  if (availJson.success && Array.isArray(availJson.data)) {
-    return availJson.data.map((c) =>
-      normalizeAccountCurrencyRow({
-        ...c,
-        is_linked: c?.is_linked != null ? !!c.is_linked : false,
-      }),
-    );
-  }
-  return [];
+/** POST /api/account/list?tenant_id= (active only) + POST /api/currency/list?tenant_id= — Add/Edit Formula dropdown data. */
+async function fetchEditFormulaCatalog(captureScope, companyId) {
+  const tenantId = resolveDataCaptureEffectiveTenantId(captureScope, companyId);
+  if (!tenantId) return { accounts: [], currencies: [] };
+  const [accountsRaw, currencies] = await Promise.all([
+    fetchAccountListByTenantId(tenantId),
+    fetchCaptureCurrenciesByTenantId(tenantId),
+  ]);
+  return { accounts: filterAccountListRows(accountsRaw), currencies };
 }
 
 /**
@@ -211,7 +169,7 @@ export function useSummaryEditFormulaPure({
     async (newAccountId) => {
       if (!open || !captureScope) return;
       try {
-        const catalog = await fetchSummaryFormCatalog(captureScope);
+        const catalog = await fetchEditFormulaCatalog(captureScope, companyId);
         const next = catalog.accounts || [];
         setAccounts(next);
         if (!newAccountId) return;
@@ -225,7 +183,7 @@ export function useSummaryEditFormulaPure({
         console.error("Account list refresh after create failed:", e);
       }
     },
-    [open, captureScope, loadCurrenciesForAccount]
+    [open, captureScope, companyId, loadCurrenciesForAccount]
   );
 
   const closeEditFormula = useCallback(() => {
@@ -280,7 +238,7 @@ export function useSummaryEditFormulaPure({
     let alive = true;
     void (async () => {
       try {
-        const catalog = await fetchSummaryFormCatalog(captureScope);
+        const catalog = await fetchEditFormulaCatalog(captureScope, companyId);
         if (!alive) return;
         setAccounts(catalog.accounts || []);
         if (!anchorRef.current?.accountId) {
@@ -294,7 +252,7 @@ export function useSummaryEditFormulaPure({
     return () => {
       alive = false;
     };
-  }, [open, sessionKey, captureScope]);
+  }, [open, sessionKey, captureScope, companyId]);
 
   const handleCalculatorPress = useCallback((payload) => {
     setForm((prev) => {
@@ -390,7 +348,8 @@ export function useSummaryEditFormulaPure({
       if (!isEmptyNewSub) {
         try {
           const rowToSave = nextRows.find((r) => r.key === targetRow.key) || targetRow;
-          const tpl = await saveSummaryTemplatePure(rowToSave, {
+          const saveFn = mode === "new" ? saveAddFormulaSpring : saveUpdateFormulaSpring;
+          const tpl = await saveFn(rowToSave, {
             captureScope,
             companyId,
             processId,
@@ -404,24 +363,17 @@ export function useSummaryEditFormulaPure({
             );
             return;
           }
-          if (tpl.templateId || tpl.templateKey || tpl.formulaVariant != null) {
+          if (tpl.templateId || tpl.formulaVariant != null) {
             nextRows = nextRows.map((r) =>
               r.key === targetRow.key
                 ? {
                     ...r,
                     templateId: tpl.templateId ?? r.templateId,
-                    templateKey: tpl.templateKey ?? r.templateKey,
                     formulaVariant: tpl.formulaVariant ?? r.formulaVariant,
                   }
                 : r
             );
             replaceRows(nextRows);
-          }
-          if (targetRow.productType === "sub" || applied.action === "insertSub") {
-            const parentId = targetRow.parentIdProduct || anchor.idProduct;
-            await syncSubOrderTemplates(nextRows, parentId, (row) =>
-              saveSummaryTemplatePure(row, { captureScope, companyId, processId, processCode })
-            );
           }
         } catch (e) {
           console.warn("Template save failed:", e);

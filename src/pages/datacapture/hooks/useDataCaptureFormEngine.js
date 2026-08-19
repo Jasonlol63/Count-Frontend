@@ -2,12 +2,14 @@ import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useR
 import {
   buildDateOptions,
   displayTextFromProcessRow,
-  fetchAddProcessFormData,
   fetchGroupCaptureCurrencies,
-  fetchProcessDetail,
-  fetchProcessesByDay,
   getLocalDateString,
 } from "../lib/dataCaptureApi.js";
+import {
+  fetchCaptureCurrenciesByTenantId,
+  postGameCaptureForm,
+} from "../lib/dataCaptureSpringApi.js";
+import { resolveDataCaptureTenantId } from "../lib/dataCaptureTenant.js";
 import {
   readGroupOnlyProcessPrefs,
   saveGroupOnlyProcessPrefs,
@@ -219,6 +221,8 @@ export function useDataCaptureFormEngine(
   companyIdRef.current = companyId;
   const captureScopeRef = useRef(captureScope);
   captureScopeRef.current = captureScope;
+  const captureDateRef = useRef(captureDate);
+  captureDateRef.current = captureDate;
 
   const applyCompanyOnlyFieldsRef = useRef(applyCompanyOnlyFields);
   applyCompanyOnlyFieldsRef.current = applyCompanyOnlyFields;
@@ -267,9 +271,22 @@ export function useDataCaptureFormEngine(
     const cid = companyIdRef.current;
     const scope = captureScopeRef.current;
     if (!cid || !scope) return;
-    const result = await fetchProcessesByDay(dateStr, scope);
-    if (!result.success) return;
-    const rows = Array.isArray(result.data) ? result.data : [];
+    const tenantId = resolveDataCaptureTenantId(scope);
+    let rows = [];
+    if (tenantId) {
+      try {
+        const json = await postGameCaptureForm({ tenantId, captureDate: dateStr });
+        const list = Array.isArray(json?.data?.processes) ? json.data.processes : [];
+        rows = list.map((p) => ({
+          id: p.id,
+          process_id: p.processId,
+          process_display: p.processDisplay,
+          description_name: p.descriptionName ?? null,
+        }));
+      } catch (err) {
+        console.warn("Failed to load games process list", err);
+      }
+    }
     setProcessRows(rows);
     const restoring = getDataCaptureState().isRestoring === true;
     if (!preserveSelection && !restoring) {
@@ -293,14 +310,10 @@ export function useDataCaptureFormEngine(
     const cid = companyIdRef.current;
     const scope = captureScopeRef.current;
     if (!cid || !scope) return;
-    const result = await fetchAddProcessFormData(scope);
-    if (!result.success) return;
-    const list = Array.isArray(result.currencies) ? result.currencies : [];
-    const norm = list.map((c) => ({
-      id: String(c.id),
-      code: String(c.code || "").trim().toUpperCase(),
-    }));
-    setCurrencies(norm);
+    const tenantId = resolveDataCaptureTenantId(scope);
+    if (!tenantId) return;
+    const list = await fetchCaptureCurrenciesByTenantId(tenantId);
+    setCurrencies(list);
   }, []);
 
   const loadGroupOnlyCurrencies = useCallback(async () => {
@@ -447,23 +460,43 @@ export function useDataCaptureFormEngine(
     setProcessOpen(false);
     setProcessFilter("");
     setRemoveWord("");
-    const cid = companyIdRef.current;
-    const res = await fetchProcessDetail(row.id, cid);
-    if (res.success && res.data) {
-      applyProcessDetailToFields(
-        res.data,
-        {
-          setCurrencyId,
-          setRemoveWord,
-          setReplaceFrom,
-          setReplaceTo,
-          setRemark,
-          setDescriptionDisplay,
-          setSelectedDescriptions,
-        },
-        currenciesRef.current,
-        applyCompanyOnlyFieldsRef.current
-      );
+    const scope = captureScopeRef.current;
+    const tenantId = resolveDataCaptureTenantId(scope);
+    if (tenantId && row.id) {
+      try {
+        const json = await postGameCaptureForm({
+          tenantId,
+          captureDate: captureDateRef.current,
+          processPk: row.id,
+        });
+        const sp = json?.data?.selectedProcess;
+        if (sp) {
+          applyProcessDetailToFields(
+            {
+              remove_word: sp.removeWord,
+              replace_word_from: sp.replaceWordFrom,
+              replace_word_to: sp.replaceWordTo,
+              description_names: sp.descriptionNames,
+              remarks: sp.remark,
+              currency_id: sp.currencyId,
+              currency_code: sp.currencyCode,
+            },
+            {
+              setCurrencyId,
+              setRemoveWord,
+              setReplaceFrom,
+              setReplaceTo,
+              setRemark,
+              setDescriptionDisplay,
+              setSelectedDescriptions,
+            },
+            currenciesRef.current,
+            applyCompanyOnlyFieldsRef.current
+          );
+        }
+      } catch (err) {
+        console.warn("Failed to load process detail", err);
+      }
     }
     scheduleRecomputeSubmitState();
   }, [setSelectedDescriptions]);

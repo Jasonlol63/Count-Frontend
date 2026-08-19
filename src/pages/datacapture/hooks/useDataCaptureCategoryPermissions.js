@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { dataCaptureQueryKeys, fetchCompanyPermissionsForDataCapture } from "../lib/dataCaptureApi.js";
-import { callDataCaptureRuntime } from "../lib/dataCaptureRuntime.js";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { dataCaptureQueryKeys } from "../lib/dataCaptureApi.js";
+import { fetchTenantCategoryPermissions } from "../lib/dataCaptureSpringApi.js";
 
-const DEFAULT_PERMISSIONS = ["Games", "Bank", "Loan", "Rate", "Money"];
+const DEFAULT_PERMISSIONS = ["Games", "Bank"];
 
 function normalizePermissions(result) {
   const raw =
@@ -13,55 +13,48 @@ function normalizePermissions(result) {
   return raw;
 }
 
+function pickPermission(permissions) {
+  if (!permissions?.length) return null;
+  if (permissions.includes("Games")) return "Games";
+  if (permissions.includes("Bank")) return "Bank";
+  return permissions[0];
+}
+
 /**
- * Category pills (Games / Loan / Rate / Money). Same API + localStorage keys as legacy `loadPermissionButtons`.
+ * Games vs Bank process-loading mode for this tenant, from Spring `/auth/switch-tenant`
+ * tenant flags. No user-facing switcher — auto-picked (Games preferred, else Bank).
+ * See ../CATEGORY_REMOVED.md.
  */
-export function useDataCaptureCategoryPermissions(companyCode) {
-  const queryClient = useQueryClient();
+export function useDataCaptureCategoryPermissions(tenantId) {
   const [selectedPermission, setSelectedPermission] = useState(null);
 
   const query = useQuery({
-    queryKey: dataCaptureQueryKeys.permissions(companyCode),
-    queryFn: async () => {
-      const result = await fetchCompanyPermissionsForDataCapture(companyCode);
-      return normalizePermissions(result);
-    },
-    enabled: Boolean(companyCode),
+    queryKey: dataCaptureQueryKeys.permissions(tenantId),
+    queryFn: async () => normalizePermissions(await fetchTenantCategoryPermissions(tenantId)),
+    enabled: Boolean(tenantId),
     placeholderData: (previousData) => previousData,
   });
 
   const permissions = query.data;
 
   useEffect(() => {
-    if (!companyCode) {
+    if (!tenantId) {
       setSelectedPermission(null);
       return;
     }
-    if (!permissions?.length) return;
-    const saved = localStorage.getItem(`selectedPermission_${companyCode}`);
-    const pick = saved && permissions.includes(saved) ? saved : permissions[0];
+    const pick = pickPermission(permissions);
     setSelectedPermission(pick);
-  }, [companyCode, permissions]);
-
-  const selectPermission = useCallback(
-    (permission) => {
-      setSelectedPermission(permission);
-      if (companyCode) {
-        localStorage.setItem(`selectedPermission_${companyCode}`, permission);
+    if (pick) {
+      try {
+        localStorage.setItem(`selectedPermission_${tenantId}`, pick);
+      } catch {
+        /* ignore */
       }
-      void callDataCaptureRuntime("reloadProcesses");
-      void queryClient.invalidateQueries({
-        queryKey: [...dataCaptureQueryKeys.root(), "processesByDay"],
-      });
-    },
-    [companyCode, queryClient],
-  );
+    }
+  }, [tenantId, permissions]);
 
   return {
-    permissions: permissions ?? [],
     selectedPermission,
-    selectPermission,
-    showPermissionFilter: (permissions ?? []).length > 1,
     permissionsLoading: query.isLoading,
   };
 }

@@ -2,7 +2,7 @@
  * Payroll table drafts — shared via server for both group buckets (AP/IG, scope_type=group)
  * and company payroll buckets (e.g. company:5 for C168 / bank-only, scope_type=company).
  */
-import { resolveDataCaptureGridDimensions } from "../grid/dataCaptureGridMeta.js";
+import { GROUP_ONLY_GRID_COLS, resolveDataCaptureGridDimensions } from "../grid/dataCaptureGridMeta.js";
 import {
   isGroupPayrollDraftProcessId,
   selectedProcessFromGroupOnlySession,
@@ -15,10 +15,86 @@ import {
   fetchGroupCaptureDraft,
   saveGroupCaptureDraft,
 } from "./dataCaptureGroupDraftApi.js";
+import { getBankCaptureDraft, saveBankCaptureDraft } from "./dataCaptureSpringApi.js";
 import {
   isGroupPayrollCaptureSession,
   payrollDraftBucketIsCompany,
 } from "../../../utils/company/c168CaptureChannel.js";
+
+function tenantIdFromCompanyBucket(bucketId) {
+  const m = /^company:(\d+)$/i.exec(String(bucketId || "").trim());
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * `snapshotToGrid` trusts `tableData.colCount` over the fixed grid width when rebuilding
+ * the grid; the Spring `data_capture_draft` row only reports the filled-cell bounding box
+ * (e.g. 2 data columns), which would shrink the table below its fixed 11-column width. Force
+ * it back up to the grid's real column count (colCount = data cols + 1 row-label column).
+ */
+function normalizeBankDraftTableData(tableData) {
+  if (!tableData || typeof tableData !== "object") return tableData;
+  const { rows: minRowCount } = resolveDataCaptureGridDimensions(true);
+  const minColCount = GROUP_ONLY_GRID_COLS + 1;
+  const patch = {};
+  if ((tableData.colCount || 0) < minColCount) patch.colCount = minColCount;
+  if ((tableData.rowCount || 0) < minRowCount) patch.rowCount = minRowCount;
+  return Object.keys(patch).length ? { ...tableData, ...patch } : tableData;
+}
+
+/**
+ * C168 / bank-only company payroll buckets ("company:{tenantId}") persist drafts via the
+ * Spring `data_capture_draft` table (`POST /api/datacapture/bank/draft/save|get`), not the
+ * PHP `group_capture_draft_api.php` used by true AP/IG group buckets.
+ */
+function bankDraftBackend(bucketId) {
+  const tenantId = tenantIdFromCompanyBucket(bucketId);
+  return {
+    async fetch(_scope, _bucketId, processKey, currencyId) {
+      if (!tenantId) return null;
+      try {
+        const result = await getBankCaptureDraft({ tenantId, processCode: processKey, currencyId });
+        return result?.tableData
+          ? { tableData: normalizeBankDraftTableData(result.tableData), captureType: "1.Text" }
+          : null;
+      } catch {
+        return null;
+      }
+    },
+    async save(_scope, _bucketId, processKey, currencyId, payload) {
+      if (!tenantId) return false;
+      try {
+        await saveBankCaptureDraft({
+          tenantId,
+          processCode: processKey,
+          currencyId,
+          tableData: payload?.tableData ?? null,
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    async clear(_scope, _bucketId, processKey, currencyId) {
+      if (!tenantId) return false;
+      try {
+        await saveBankCaptureDraft({ tenantId, processCode: processKey, currencyId, tableData: null });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
+function resolveDraftBackend(bucketId) {
+  if (payrollDraftBucketIsCompany(bucketId)) return bankDraftBackend(bucketId);
+  return {
+    fetch: fetchGroupCaptureDraft,
+    save: saveGroupCaptureDraft,
+    clear: clearGroupCaptureDraft,
+  };
+}
 
 export const GROUP_ONLY_TABLE_DRAFTS_KEY = "dc_group_only_table_drafts";
 
@@ -143,7 +219,7 @@ function scheduleServerDraftSave(bucketId, processKey, currencyId, payload, capt
     key,
     setTimeout(() => {
       serverSaveTimers.delete(key);
-      void saveGroupCaptureDraft(captureScope, g, p, c, payload);
+      void resolveDraftBackend(g).save(captureScope, g, p, c, payload);
     }, SERVER_SAVE_DEBOUNCE_MS),
   );
 }
@@ -162,12 +238,13 @@ export async function flushGroupOnlyTableDraftToServer(
   const c = normalizeGroupOnlyDraftCurrencyId(currencyId);
   if (!g || !p || !c) return false;
   cancelScheduledServerSave(g, p, c);
+  const backend = resolveDraftBackend(g);
   if (!payload?.tableData || !tableSnapshotHasData(payload.tableData)) {
     if (!draftAllowsServerSync(g, options)) return true;
-    return clearGroupCaptureDraft(captureScope, g, p, c);
+    return backend.clear(captureScope, g, p, c);
   }
   if (!draftAllowsServerSync(g, options)) return true;
-  return saveGroupCaptureDraft(captureScope, g, p, c, payload);
+  return backend.save(captureScope, g, p, c, payload);
 }
 
 function scopeFromGroupId(groupId) {
@@ -213,8 +290,9 @@ export async function fetchGroupOnlyTableDraft(
     return readGroupOnlyTableDraft(g, p, c);
   }
 
-  const scope = captureScope || scopeFromGroupId(g);
-  const serverDraft = scope ? await fetchGroupCaptureDraft(scope, g, p, c) : null;
+  const isCompany = payrollDraftBucketIsCompany(g);
+  const scope = isCompany ? captureScope : captureScope || scopeFromGroupId(g);
+  const serverDraft = isCompany || scope ? await resolveDraftBackend(g).fetch(scope, g, p, c) : null;
   if (serverDraft?.tableData) {
     writeLocalDraft(g, p, c, serverDraft);
     return serverDraft;
@@ -235,9 +313,10 @@ export async function clearGroupOnlyTableDraft(bucketId, processKey, currencyId,
 
   if (!draftAllowsServerSync(g, options)) return;
 
+  const isCompany = payrollDraftBucketIsCompany(g);
   const scope = options.captureScope || scopeFromGroupId(g);
-  if (scope) {
-    await clearGroupCaptureDraft(scope, g, p, c);
+  if (scope || isCompany) {
+    await resolveDraftBackend(g).clear(scope, g, p, c);
   }
 }
 

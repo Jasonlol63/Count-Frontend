@@ -46,7 +46,7 @@ import { clearSummaryFormulaContext, bindSummaryFormulaContext } from "./lib/sum
 import { useSummaryOverlays } from "./hooks/useSummaryOverlays.js";
 
 import { fetchSummaryAccountList } from "./lib/summaryApi.js";
-import { saveSummaryTemplatePure } from "./formula/summarySaveTemplatePure.js";
+import { saveUpdateFormulaSpring } from "./formula/summarySaveTemplatePure.js";
 import { recalculateRowAmounts } from "./table/summaryRowAmount.js";
 import { useRealtimeDomain } from "../../lib/realtime/useRealtimeDomain.js";
 import { REALTIME_DOMAINS } from "../../lib/realtime/realtimeEvents.js";
@@ -525,10 +525,11 @@ function DataCaptureSummaryPureInner() {
       const merged = recalculateRowAmounts({ ...row, ...patch }, globalRateInput);
       if (!merged.accountId || !merged.account?.trim()) return;
       try {
-        const tpl = await saveSummaryTemplatePure(merged, {
+        const tpl = await saveUpdateFormulaSpring(merged, {
           captureScope,
           companyId: effectiveCompanyId,
           processId: capture.processId,
+          processCode: capture.processCode,
         });
         if (!tpl.success) {
           pushSummaryNotification("Error", tpl.message || "Template save failed.", "error");
@@ -542,7 +543,7 @@ function DataCaptureSummaryPureInner() {
         );
       }
     },
-    [updateRow, globalRateInput, captureScope, effectiveCompanyId, capture.processId]
+    [updateRow, globalRateInput, captureScope, effectiveCompanyId, capture.processId, capture.processCode]
   );
 
 

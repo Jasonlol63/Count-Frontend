@@ -2,10 +2,11 @@ import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { getDataCaptureWeekdayLabels } from "../../../translateFile/pages/dataCaptureTranslate.js";
 import { dataCaptureScopeApiParams, dataCaptureScopeCacheKey } from "./dataCaptureScope.js";
 
-/** Data Capture submissions + process picker (canonical). Legacy: api/processes/submitted_processes_api.php */
+/**
+ * True AP/IG group ledger only (unmigrated, see docs/datacapture-spring-api.md §4) —
+ * `get_group_process_id` resolves the numeric process id for group payroll codes.
+ */
 const DATA_CAPTURE_SUBMISSIONS_API = "api/datacapture/submissions_api.php";
-/** Form catalog + descriptions for capture page. Legacy: api/processes/addprocess_api.php */
-const DATA_CAPTURE_CATALOG_API = "api/datacapture/catalog_api.php";
 
 /** One option per currency code (subsidiary + group rows can share company_id). */
 export function dedupeCaptureCurrenciesByCode(rows) {
@@ -118,40 +119,10 @@ export function appendDataCaptureScopeParams(params, scope) {
   if (groupOnly) params.set("group_only", "1");
 }
 
-function withScope(url, scope) {
-  if (!scope) return url;
-  const sep = url.includes("?") ? "&" : "?";
-  const params = new URLSearchParams();
-  appendDataCaptureScopeParams(params, scope);
-  const qs = params.toString();
-  return qs ? `${url}${sep}${qs}` : url;
-}
-
-function withCompany(url, companyId) {
-  const cid = Number(companyId);
-  if (!Number.isFinite(cid) || cid <= 0) return url;
-  const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}company_id=${encodeURIComponent(String(cid))}`;
-}
-
-/** Same as legacy loadFormData: GET api/datacapture/catalog_api.php */
-export async function fetchAddProcessFormData(scopeOrCompanyId) {
-  const scope =
-    scopeOrCompanyId != null && typeof scopeOrCompanyId === "object"
-      ? scopeOrCompanyId
-      : scopeOrCompanyId
-        ? { mode: "company", scopeCompanyId: Number(scopeOrCompanyId) }
-        : null;
-  let url = buildApiUrl(DATA_CAPTURE_CATALOG_API);
-  url = scope ? withScope(url, scope) : url;
-  if (!scope && scopeOrCompanyId) url = withCompany(url, scopeOrCompanyId);
-  const response = await fetch(url, { credentials: "include" });
-  return response.json();
-}
-
 /**
  * Group Data Capture: currencies from group ledger scope only (same as Dashboard group-only filter).
  * Uses account_currency on group KPI accounts — not subsidiary company currency rows.
+ * True AP/IG group ledger only (unmigrated, see docs/datacapture-spring-api.md §4).
  */
 export async function fetchGroupCaptureCurrencies(viewGroup) {
   const gid = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
@@ -182,94 +153,9 @@ export async function fetchGroupCaptureCurrencies(viewGroup) {
 }
 
 /**
- * @deprecated Group capture should use fetchGroupCaptureCurrencies. Kept for legacy callers.
- * Merge currencies from multiple company rows (dedupe by code).
+ * Resolve numeric process.id for group payroll codes (SALARY/COMMISSION/BONUS/PROFIT) under scoped company.
+ * True AP/IG group ledger only (unmigrated, see docs/datacapture-spring-api.md §4).
  */
-export async function fetchCurrenciesForCompanyIds(
-  companyIds,
-  preferredCompanyId = null,
-  viewGroup = null,
-) {
-  const ids = [...new Set((companyIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0))];
-  if (!ids.length) return [];
-
-  const vg = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
-
-  const rows = (
-    await Promise.all(
-      ids.map(async (cid) => {
-        try {
-          const params = new URLSearchParams({ company_id: String(cid) });
-          if (vg) {
-            params.set("view_group", vg);
-            params.set("group_id", vg);
-          }
-          const response = await fetch(
-            buildApiUrl(
-              `api/transactions/get_company_currencies_api.php?${params.toString()}`,
-            ),
-            { credentials: "include" },
-          );
-          const json = await response.json();
-          if (!response.ok || !json.success || !Array.isArray(json.data)) return [];
-          return json.data.map((r) => ({
-            id: String(r.id),
-            code: String(r.code || "").trim().toUpperCase(),
-            companyId: cid,
-          }));
-        } catch {
-          return [];
-        }
-      }),
-    )
-  ).flat();
-
-  const byCode = new Map();
-  const pref = preferredCompanyId != null ? Number(preferredCompanyId) : null;
-
-  for (const row of rows) {
-    const code = row.code;
-    if (!code) continue;
-    const existing = byCode.get(code);
-    if (!existing) {
-      byCode.set(code, row);
-      continue;
-    }
-    if (pref != null && Number(row.companyId) === pref) {
-      byCode.set(code, row);
-    }
-  }
-
-  return Array.from(byCode.values())
-    .map(({ id, code }) => ({ id, code }))
-    .sort((a, b) => a.code.localeCompare(b.code));
-}
-
-/** Same as legacy loadProcessesByDate */
-export async function fetchProcessesByDay(selectedDate, scope) {
-  const params = new URLSearchParams({
-    action: "get_processes_by_day",
-    date: selectedDate,
-  });
-  appendDataCaptureScopeParams(params, scope);
-  const url = buildApiUrl(`${DATA_CAPTURE_SUBMISSIONS_API}?${params.toString()}`);
-  const response = await fetch(url, { credentials: "include" });
-  return response.json();
-}
-
-/** Same as legacy loadProcessData */
-export async function fetchProcessDetail(processId, scope) {
-  const params = new URLSearchParams({
-    action: "get_process",
-    id: String(processId),
-  });
-  appendDataCaptureScopeParams(params, scope);
-  const url = buildApiUrl(`api/processes/processlist_api.php?${params.toString()}`);
-  const response = await fetch(url, { credentials: "include" });
-  return response.json();
-}
-
-/** Resolve numeric process.id for group payroll codes (SALARY/COMMISSION/BONUS/PROFIT) under scoped company. */
 export async function fetchGroupProcessIdByCode(scope, processCode, currencyId = null) {
   const params = new URLSearchParams({
     action: "get_group_process_id",
@@ -298,47 +184,20 @@ export async function fetchGroupProcessIdByCode(scope, processCode, currencyId =
   return id;
 }
 
-/** Same as legacy `loadSubmittedProcesses`: GET get_submissions_by_capture_date */
-export async function fetchSubmissionsByCaptureDate(captureDate, scope, permissionCategory = "") {
-  const params = new URLSearchParams({
-    action: "get_submissions_by_capture_date",
-    capture_date: captureDate,
-  });
-  const permission = String(permissionCategory || "").trim();
-  if (permission) {
-    params.set("permission", permission);
-  }
-  appendDataCaptureScopeParams(params, scope);
-  const url = buildApiUrl(`${DATA_CAPTURE_SUBMISSIONS_API}?${params.toString()}`);
-  const response = await fetch(url, { credentials: "include" });
-  return response.json();
-}
-
-/** Same as legacy `loadPermissionButtons`: POST domain_api get_company_permissions */
-export async function fetchCompanyPermissionsForDataCapture(companyCode) {
-  const response = await fetch(buildApiUrl("api/domain/domain_api.php"), {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "get_company_permissions", company_id: companyCode }),
-  });
-  return response.json();
-}
-
 /** Matches `renderSubmittedProcesses` date/time formatting in `js/datacapture.js`. */
 export function formatSubmittedProcessDateTime(process) {
   let formattedDate = "";
   let formattedTime = "";
 
-  if (process.created_at) {
-    const createdObj = new Date(process.created_at);
+  if (process.createAt) {
+    const createdObj = new Date(process.createAt);
     const day = String(createdObj.getDate()).padStart(2, "0");
     const month = String(createdObj.getMonth() + 1).padStart(2, "0");
     const year = createdObj.getFullYear();
     formattedDate = `${day}/${month}/${year}`;
     formattedTime = `${String(createdObj.getHours()).padStart(2, "0")}:${String(createdObj.getMinutes()).padStart(2, "0")}:${String(createdObj.getSeconds()).padStart(2, "0")}`;
   } else {
-    const logicalDateStr = process.capture_date || process.date_submitted;
+    const logicalDateStr = process.captureDate;
     if (logicalDateStr) {
       const parts = logicalDateStr.split("-");
       if (parts.length === 3) {
@@ -375,58 +234,6 @@ export function formatGroupSubmittedProcessLabel(process) {
     return `${code}(${seq})`;
   }
   return code;
-}
-
-/** GET catalog_api.php — returns `descriptions` at top level (and under `data`). */
-export async function fetchDescriptionCatalog(scopeOrCompanyId) {
-  const scope =
-    scopeOrCompanyId != null && typeof scopeOrCompanyId === "object"
-      ? scopeOrCompanyId
-      : scopeOrCompanyId
-        ? { mode: "company", scopeCompanyId: Number(scopeOrCompanyId) }
-        : null;
-  let url = buildApiUrl(DATA_CAPTURE_CATALOG_API);
-  url = scope ? withScope(url, scope) : withCompany(url, scopeOrCompanyId);
-  const response = await fetch(url, { credentials: "include" });
-  return response.json();
-}
-
-/** POST action=add_description — same fields as legacy `addDescriptionForm` handler. */
-export async function postAddDescription(scopeOrCompanyId, descriptionName) {
-  const formData = new FormData();
-  formData.append("action", "add_description");
-  formData.append("description_name", descriptionName);
-  const scope =
-    scopeOrCompanyId != null && typeof scopeOrCompanyId === "object"
-      ? scopeOrCompanyId
-      : null;
-  if (scope) {
-    const { companyId, groupId, reportScope } = dataCaptureScopeApiParams(scope);
-    if (companyId) formData.append("company_id", String(companyId));
-    if (groupId) formData.append("group_id", String(groupId));
-    if (reportScope) formData.append("report_scope", reportScope);
-  } else if (scopeOrCompanyId) {
-    formData.append("company_id", String(scopeOrCompanyId));
-  }
-  const response = await fetch(buildApiUrl(DATA_CAPTURE_CATALOG_API), {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-  return response.json();
-}
-
-/** POST action=delete_description — matches legacy `deleteDescription` body. */
-export async function postDeleteDescription(descriptionId) {
-  const formData = new FormData();
-  formData.append("action", "delete_description");
-  formData.append("description_id", String(descriptionId));
-  const response = await fetch(buildApiUrl(DATA_CAPTURE_CATALOG_API), {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-  return response.json();
 }
 
 export { appendDataCaptureScopeParams as appendScopeParams };

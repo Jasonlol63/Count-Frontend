@@ -64,22 +64,3 @@ export function resequenceAllSubOrders(rows) {
   }
   return next;
 }
-
-/** Persist resequenced sub_order values to backend (legacy post-save group sync). */
-export async function syncSubOrderTemplates(rows, parentIdProduct, saveTemplateFn) {
-  if (!saveTemplateFn || !parentIdProduct) return;
-  const parentNorm = normalizeSummaryIdProductText(parentIdProduct);
-  const subs = rows.filter(
-    (r) =>
-      r.productType === "sub" &&
-      normalizeSummaryIdProductText(r.parentIdProduct || "") === parentNorm &&
-      r.account?.trim()
-  );
-  for (const row of subs) {
-    try {
-      await saveTemplateFn(row);
-    } catch (e) {
-      console.warn("Failed to sync sub_order for row", row.key, e);
-    }
-  }
-}

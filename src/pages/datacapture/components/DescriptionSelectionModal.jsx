@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ProcessModalPortal, { processModalBackdropStyle } from "../../../components/ProcessModalPortal.jsx";
-import { fetchDescriptionCatalog, postAddDescription, postDeleteDescription } from "../lib/dataCaptureApi.js";
+import {
+  fetchCaptureDescriptionCatalog,
+  postCaptureDescription,
+  postCaptureDescriptionDelete,
+} from "../lib/dataCaptureSpringApi.js";
 import { pushDataCaptureNotification } from "../lib/dataCaptureNotify.js";
 import { translateDataCaptureMessage } from "../../../translateFile/pages/dataCaptureTranslate.js";
 
@@ -19,7 +23,7 @@ export default function DescriptionSelectionModal({
   t,
   open,
   onClose,
-  companyId,
+  tenantId,
   onConfirm,
   initialSelected = [],
   onDescriptionsChange,
@@ -37,12 +41,12 @@ export default function DescriptionSelectionModal({
   );
 
   const loadCatalog = useCallback(async () => {
-    if (!companyId) {
+    if (!tenantId) {
       setCatalog([]);
       return;
     }
     try {
-      const result = await fetchDescriptionCatalog(companyId);
+      const result = await fetchCaptureDescriptionCatalog(tenantId);
       if (!result.success) {
         notify(result.error || "Failed to load descriptions");
         setCatalog([]);
@@ -53,7 +57,7 @@ export default function DescriptionSelectionModal({
       notify("Failed to load descriptions");
       setCatalog([]);
     }
-  }, [companyId, notify]);
+  }, [tenantId, notify]);
 
   useEffect(() => {
     if (!open) return;
@@ -91,18 +95,10 @@ export default function DescriptionSelectionModal({
     async (e) => {
       e.preventDefault();
       const trimmed = newName.trim().toUpperCase();
-      if (!trimmed || !companyId) return;
+      if (!trimmed || !tenantId) return;
       try {
-        const result = await postAddDescription(companyId, trimmed);
-        const dup =
-          result.duplicate === true ||
-          result.data?.duplicate === true ||
-          String(result.error || "").includes("already exists");
-        if (!result.success) {
-          notify(dup ? "Description name already exists" : result.error || "Failed to add description");
-          return;
-        }
-        const newId = result.data?.description_id ?? result.description_id;
+        const result = await postCaptureDescription(tenantId, trimmed);
+        const newId = result.data?.id;
         if (newId != null) {
           setCatalog((prev) => {
             if (prev.some((p) => String(p.id) === String(newId))) return prev;
@@ -114,25 +110,21 @@ export default function DescriptionSelectionModal({
         setPendingNames((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
         setNewName("");
         notify("Description added successfully!", "success");
-      } catch {
-        notify("Failed to add description");
+      } catch (err) {
+        notify(err?.duplicate ? "Description name already exists" : err?.message || "Failed to add description");
       }
     },
-    [companyId, newName, loadCatalog, notify],
+    [tenantId, newName, loadCatalog, notify],
   );
 
   const handleDelete = useCallback(
     async (id, name) => {
-      if (!id) return;
+      if (!id || !tenantId) return;
       if (!window.confirm(t("deleteDescriptionConfirm", { name }))) {
         return;
       }
       try {
-        const result = await postDeleteDescription(id);
-        if (!result.success) {
-          notify(result.error || "Failed to delete description");
-          return;
-        }
+        await postCaptureDescriptionDelete(tenantId, id);
         setCatalog((prev) => prev.filter((d) => String(d.id) !== String(id)));
         setPendingNames((prev) => {
           const next = prev.filter((n) => n !== name);
@@ -140,11 +132,11 @@ export default function DescriptionSelectionModal({
           return next;
         });
         notify("Description deleted successfully", "success");
-      } catch {
-        notify("Failed to delete description");
+      } catch (err) {
+        notify(err?.message || "Failed to delete description");
       }
     },
-    [t, notify, onDescriptionsChange],
+    [t, tenantId, notify, onDescriptionsChange],
   );
 
   const handleConfirm = useCallback(() => {

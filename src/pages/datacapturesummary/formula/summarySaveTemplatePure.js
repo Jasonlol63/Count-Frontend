@@ -1,16 +1,7 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { appendDataCaptureScopeParams } from "../../datacapture/lib/dataCaptureApi.js";
-import {
-  calculateBaseProcessedAmount,
-  roundProcessedAmountTo2Decimals,
-} from "../table/summaryRowAmount.js";
+import { resolveDataCaptureEffectiveTenantId } from "../../datacapture/lib/dataCaptureTenant.js";
 
-function buildTemplateUrl(captureScope) {
-  const params = new URLSearchParams({ action: "save_template" });
-  appendDataCaptureScopeParams(params, captureScope);
-  return buildApiUrl(`api/datacapture_summary/summary_templates_api.php?${params.toString()}`);
-}
-
+/** Client-side dedupe key for a row (unrelated to the Spring `id`). */
 export function buildTemplateKey(row) {
   if (row.templateKey) return row.templateKey;
   if (row.templateId != null) return `tid_${row.templateId}`;
@@ -24,79 +15,172 @@ export function buildTemplateKey(row) {
   return null;
 }
 
-export function buildTemplatePayloadFromRow(row, { processId, processCode, companyId } = {}) {
-  const productType = row.productType === "sub" ? "sub" : "main";
-  const formulaDisplay = row.formulaDisplay || "";
-  const isFormulaEmpty = !formulaDisplay.trim() || formulaDisplay === "Formula";
-  const sourceColumns = isFormulaEmpty ? "" : row.sourceColumns || "";
-
-  return {
-    product_type: productType,
-    id_product: productType === "sub" ? row.subIdProduct || row.idProduct : row.idProduct,
-    parent_id_product: productType === "sub" ? row.parentIdProduct || row.idProduct : null,
-    id_product_main: row.idProduct || null,
-    id_product_sub: productType === "sub" ? row.subIdProduct || null : null,
-    description: row.originalDescription || "",
-    account_id: row.accountId,
-    account_display: row.account || "",
-    currency_id: row.currencyId,
-    currency_display: row.currency || "",
-    source_columns: sourceColumns,
-    formula_operators: row.formulaOperators || row.formula || "",
-    source_percent: String(row.sourcePercent || "1").trim() || "1",
-    enable_source_percent: row.enableSourcePercent ? 1 : 0,
-    input_method: row.inputMethod || null,
-    enable_input_method: row.enableInputMethod ? 1 : 0,
-    batch_selection: row.selectChecked ? 1 : 0,
-    formula_display: formulaDisplay,
-    last_source_value: formulaDisplay,
-    last_processed_amount: roundProcessedAmountTo2Decimals(calculateBaseProcessedAmount(row)),
-    template_key: buildTemplateKey(row),
-    template_id: row.templateId ?? null,
-    formula_variant: row.formulaVariant ?? null,
-    process_id: processId ?? null,
-    process_code: processId ? null : (processCode ? String(processCode).trim().toUpperCase() : null),
-    row_index: row.rowIndex ?? null,
-    sub_order: productType === "sub" ? row.subOrder ?? null : null,
-    ...(companyId != null && Number(companyId) > 0 ? { company_id: Number(companyId) } : {}),
-  };
+function resolveFormulaTenantId(captureScope, companyId) {
+  return resolveDataCaptureEffectiveTenantId(captureScope, companyId);
 }
 
-/** POST save_template — returns API json. */
-export async function saveSummaryTemplatePure(row, { captureScope, companyId, processId, processCode } = {}) {
+function resolveFormulaProcessCode(processId, processCode) {
+  return processId ? null : (processCode ? String(processCode).trim().toUpperCase() : null);
+}
+
+function validateFormulaRow(row) {
   const hasAccount = row.accountId != null && String(row.accountId).trim() !== "";
   const hasCurrency = row.currencyId != null && String(row.currencyId).trim() !== "";
   const hasFormula =
     (row.formulaOperators != null && String(row.formulaOperators).trim() !== "") ||
     (row.formulaDisplay != null && String(row.formulaDisplay).trim() !== "");
 
-  if (hasAccount && !hasCurrency) {
-    return { success: false, message: "Currency is required." };
-  }
-  if (hasAccount && row.productType === "sub" && !hasFormula) {
+  if (!hasAccount) return { success: false, message: "Account is required." };
+  if (!hasCurrency) return { success: false, message: "Currency is required." };
+  if (row.productType === "sub" && !hasFormula) {
     return { success: false, message: "Formula is required for sub rows." };
   }
-  if (!hasAccount) {
-    return { success: false, message: "Account is required." };
-  }
+  return null;
+}
 
-  const payload = buildTemplatePayloadFromRow(row, { processId, processCode, companyId });
-  const url = buildTemplateUrl(captureScope);
-  const response = await fetch(url, {
+async function postFormulaEndpoint(path, body) {
+  const res = await fetch(buildApiUrl(path), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
-  const result = await response.json();
-  if (!result?.success) {
-    return { success: false, message: result?.message || result?.error || "Template save failed" };
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.success) {
+    return { success: false, message: json?.message || `HTTP ${res.status}` };
   }
+  return { success: true, data: json.data };
+}
 
+/**
+ * POST /api/datacapture-summary/formula/save — MAIN if the id product has no
+ * account_id'd MAIN yet, else inserts a SUB.
+ */
+export async function saveAddFormulaSpring(row, { captureScope, companyId, processId, processCode } = {}) {
+  const invalid = validateFormulaRow(row);
+  if (invalid) return invalid;
+
+  const tenantId = resolveFormulaTenantId(captureScope, companyId);
+  if (!tenantId) return { success: false, message: "tenantId is required" };
+
+  const formulaDisplay = row.formulaDisplay || "";
+  const isFormulaEmpty = !formulaDisplay.trim() || formulaDisplay === "Formula";
+  const isSub = row.productType === "sub";
+  const formula = row.formulaOperators || row.formula || "";
+
+  const body = {
+    tenantId,
+    processId: processId ?? null,
+    processCode: resolveFormulaProcessCode(processId, processCode),
+    idProduct: isSub ? row.subIdProduct || row.idProduct : row.idProduct,
+    accountId: row.accountId,
+    currencyId: row.currencyId,
+    description: row.originalDescription || "",
+    sourceColumns: isFormulaEmpty ? "" : row.sourceColumns || "",
+    formula,
+    formulaOperators: formula,
+    sourcePercent: String(row.sourcePercent || "1").trim() || "1",
+    enableSourcePercent: !!row.enableSourcePercent,
+    enableInputMethod: !!row.enableInputMethod,
+    rowIndex: row.rowIndex ?? null,
+  };
+
+  const result = await postFormulaEndpoint("api/datacapture-summary/formula/save", body);
+  if (!result.success) return { success: false, message: result.message };
+  const data = result.data || {};
   return {
     success: true,
-    templateId: result.template_id ?? result.data?.template_id ?? null,
-    templateKey: result.template_key ?? result.data?.template_key ?? null,
-    formulaVariant: result.formula_variant ?? result.data?.formula_variant ?? null,
+    templateId: data.id ?? null,
+    productType: data.productType ? String(data.productType).toLowerCase() : null,
+    subOrder: data.subOrder ?? null,
+    formulaVariant: data.formulaVariant ?? null,
+  };
+}
+
+/**
+ * POST /api/datacapture-summary/formula/update — located by `id` when known,
+ * else (Bank rows with no numeric process/template id) by business key.
+ */
+export async function saveUpdateFormulaSpring(row, { captureScope, companyId, processId, processCode } = {}) {
+  const invalid = validateFormulaRow(row);
+  if (invalid) return invalid;
+
+  const tenantId = resolveFormulaTenantId(captureScope, companyId);
+  if (!tenantId) return { success: false, message: "tenantId is required" };
+
+  const isSub = row.productType === "sub";
+  const formula = row.formulaOperators || row.formula || "";
+
+  const body = {
+    tenantId,
+    accountId: row.accountId,
+    currencyId: row.currencyId,
+    formula,
+    formulaOperators: formula,
+    sourcePercent: String(row.sourcePercent || "1").trim() || "1",
+    enableSourcePercent: !!row.enableSourcePercent,
+    description: row.originalDescription || "",
+  };
+
+  // Backend always resolves `process` first (even when `id` is given — see
+  // DataCaptureSummaryServiceImpl.updateFormula), so processId/processCode must go on every
+  // request, not only the id-less (Bank business-key) branch below.
+  body.processId = processId ?? null;
+  body.processCode = resolveFormulaProcessCode(processId, processCode);
+
+  if (row.templateId != null) {
+    body.id = row.templateId;
+  } else {
+    body.productType = isSub ? "SUB" : "MAIN";
+    body.idProduct = isSub ? row.subIdProduct || row.idProduct : row.idProduct;
+    if (isSub) {
+      body.parentIdProduct = row.parentIdProduct || row.idProduct;
+      body.subOrder = row.subOrder ?? null;
+    }
+  }
+
+  const result = await postFormulaEndpoint("api/datacapture-summary/formula/update", body);
+  if (!result.success) return { success: false, message: result.message };
+  return { success: true };
+}
+
+/**
+ * POST /api/datacapture-summary/formula/delete — hard delete, no sub_order
+ * resequencing. `items` are `{templateId, productType, idProduct, parentIdProduct, accountId, subOrder}`.
+ */
+export async function deleteFormulasSpring(items, { captureScope, companyId, processId, processCode } = {}) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return { success: true, deletedCount: 0, deletedIds: [] };
+
+  const tenantId = resolveFormulaTenantId(captureScope, companyId);
+  if (!tenantId) return { success: false, message: "tenantId is required" };
+
+  const body = {
+    tenantId,
+    processId: processId ?? null,
+    processCode: resolveFormulaProcessCode(processId, processCode),
+    items: list.map((tpl) => {
+      if (tpl.templateId != null) return { id: tpl.templateId };
+      const isSub = tpl.productType === "sub";
+      const entry = {
+        productType: isSub ? "SUB" : "MAIN",
+        idProduct: tpl.idProduct,
+        accountId: tpl.accountId,
+      };
+      if (isSub) {
+        entry.parentIdProduct = tpl.parentIdProduct || tpl.idProduct;
+        entry.subOrder = tpl.subOrder ?? null;
+      }
+      return entry;
+    }),
+  };
+
+  const result = await postFormulaEndpoint("api/datacapture-summary/formula/delete", body);
+  if (!result.success) return { success: false, message: result.message };
+  const data = result.data || {};
+  return {
+    success: true,
+    deletedCount: data.deletedCount ?? 0,
+    deletedIds: Array.isArray(data.deletedIds) ? data.deletedIds : [],
   };
 }

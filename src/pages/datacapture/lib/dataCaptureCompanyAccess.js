@@ -1,6 +1,6 @@
 import { spaPath } from "../../../utils/routing/pageRoutes.js";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { fetchCompanyPermissionsForDataCapture } from "./dataCaptureApi.js";
+import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
+import { fetchTenantCategoryPermissions } from "./dataCaptureSpringApi.js";
 import { canUseGroupOnlyMode } from "../../../utils/company/loginScope.js";
 import {
   isBankOnlySessionUser,
@@ -60,26 +60,8 @@ export function syncDataAllowsDataCaptureAccess(syncData) {
   return syncDataIsBankOnlyPayrollCompany(syncData);
 }
 
-export async function fetchCompanyHasGamesCategory(companyCode) {
-  if (!companyCode) return false;
-  try {
-    const result = await fetchCompanyPermissionsForDataCapture(companyCode);
-    const perms =
-      result.success && result.data && Array.isArray(result.data.permissions)
-        ? result.data.permissions
-        : [];
-    return permissionsIncludeGames(perms);
-  } catch {
-    return false;
-  }
-}
-
 export async function syncDataCaptureCompanySession(companyId) {
-  const response = await fetch(
-    buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`),
-    { credentials: "include" }
-  );
-  return response.json();
+  return syncCompanySessionApi(companyId);
 }
 
 /** @returns {Promise<boolean>} true when company may use Data Capture */
@@ -108,17 +90,15 @@ export async function resolveCompanyGamesAccess({
     /* fall through to permissions API */
   }
 
-  if (await fetchCompanyHasGamesCategory(companyCode)) return true;
-
   try {
-    const result = await fetchCompanyPermissionsForDataCapture(companyCode);
+    const result = await fetchTenantCategoryPermissions(numericId);
     const perms =
       result.success && result.data && Array.isArray(result.data.permissions)
         ? result.data.permissions
         : [];
-    const hasBank = perms.includes("Bank");
     const hasGames = permissionsIncludeGames(perms);
-    return hasBank && !hasGames;
+    if (hasGames) return true;
+    return perms.includes("Bank");
   } catch {
     return false;
   }

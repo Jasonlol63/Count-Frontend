@@ -8,6 +8,13 @@ import {
   resolvePageLedgerScope,
 } from "../../../utils/company/tenantLedgerParams.js";
 import {
+  buildAccountCreateRequest,
+  createAccountUser,
+  createTenantCurrency,
+  deleteTenantCurrency,
+  fetchAvailableCurrencies,
+} from "../../account/accountListApi.js";
+import {
   DEFAULT_FORM,
   getAccountModalOrderedRoles,
   normalizeAlertAmount,
@@ -77,7 +84,16 @@ function purgeLegacySummaryAddAccountModal() {
   }
 }
 
-/** Summary Add Account — shared AccountModal; supports company and group capture scope. */
+/**
+ * Summary Add Account — shared AccountModal; supports company and group capture scope.
+ *
+ * Company scope (the common case: Games/Bank company, incl. C168/bank-only) is fully
+ * Spring (`accountListApi.js` — same `/api/account/*` + `/api/currency/*` the Account List
+ * page uses). True AP/IG group ledger scope (`groupOnlyAccountMode`) has no resolvable
+ * numeric tenant id here and stays on the legacy `api/accounts/*` PHP endpoints, matching
+ * the same documented boundary as the rest of the group-ledger capture path (see
+ * docs/datacapture-spring-api.md §4) — not part of this migration pass.
+ */
 export function useSummaryAddAccount({
   companyId,
   captureScope = null,
@@ -101,7 +117,7 @@ export function useSummaryAddAccount({
   ledgerCtxRef.current = ledgerCtx;
 
   const [open, setOpen] = useState(false);
-  const [roles, setRoles] = useState([]);
+  const [roles] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [currencies, setCurrencies] = useState([]);
   const [form, setForm] = useState({ ...DEFAULT_FORM, payment_alert: "0" });
@@ -136,6 +152,8 @@ export function useSummaryAddAccount({
   );
 
   const modalPickerCompanies = ledgerCtx.groupOnlyAccountMode ? groupPickerCompanies : companyButtons;
+  // No roles endpoint (Account List page doesn't call one either — DB-未建 role 时的
+  // fallback list in getAccountModalOrderedRoles([]) already covers the full role set).
   const orderedRoles = useMemo(() => getAccountModalOrderedRoles(roles), [roles]);
 
   useEffect(() => {
@@ -156,68 +174,43 @@ export function useSummaryAddAccount({
     };
   }, [ledgerCtx.groupOnlyAccountMode, ledgerCtx.companyId]);
 
-  const loadRoles = useCallback(async () => {
+  /** New account has nothing linked yet — currency catalog only, no per-account lookup needed. */
+  const loadSelectionMeta = useCallback(async () => {
     const ctx = ledgerCtxRef.current;
+
+    if (ctx.groupOnlyAccountMode) {
+      // True AP/IG group ledger — unmigrated, see docs/datacapture-spring-api.md §4.
+      const currencyParams = new URLSearchParams({ action: "get_available_currencies" });
+      applyTenantLedgerToParams(currencyParams, ctx.pageLedgerScope);
+      try {
+        const curRes = await fetch(
+          buildApiUrl(`api/accounts/account_currency_api.php?${currencyParams.toString()}`),
+          { credentials: "include" },
+        );
+        const curJ = await curRes.json();
+        if (curJ.success && Array.isArray(curJ.data)) {
+          setCurrencies(curJ.data.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked })));
+          setSelectedCurrencyIds(pickDefaultAddCurrencyIds(curJ.data));
+        }
+      } catch {
+        /* optional */
+      }
+      return;
+    }
+
+    if (!ctx.companyId) {
+      setCurrencies([]);
+      setSelectedCurrencyIds([]);
+      return;
+    }
     try {
-      const url = new URL(buildApiUrl("api/editdata/editdata_api.php"));
-      const gid = ctx.selectedGroup ? String(ctx.selectedGroup).trim().toUpperCase() : null;
-      const numericCid = ctx.companyId != null ? Number(ctx.companyId) : null;
-      const groupOnlyFetch = Boolean(gid && (!Number.isFinite(numericCid) || numericCid <= 0));
-      if (gid) url.searchParams.set("group_id", gid);
-      if (groupOnlyFetch) {
-        url.searchParams.set("group_only", "1");
-      } else if (Number.isFinite(numericCid) && numericCid > 0) {
-        url.searchParams.set("company_id", String(numericCid));
-      }
-      const res = await fetch(url.toString(), { credentials: "include" });
-      const json = await res.json();
-      if (json?.success && Array.isArray(json?.data?.roles)) {
-        setRoles(json.data.roles);
-      }
+      const rows = await fetchAvailableCurrencies(ctx.companyId, null);
+      setCurrencies(rows.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked })));
+      setSelectedCurrencyIds(pickDefaultAddCurrencyIds(rows));
     } catch {
-      /* optional */
+      setCurrencies([]);
     }
   }, []);
-
-  const loadSelectionMeta = useCallback(async (accountId) => {
-    const ctx = ledgerCtxRef.current;
-    const currencyParams = new URLSearchParams({ action: "get_available_currencies" });
-    if (accountId) currencyParams.set("account_id", String(accountId));
-    applyTenantLedgerToParams(currencyParams, ctx.pageLedgerScope);
-
-    const companyUrl = accountId
-      ? `api/accounts/account_company_api.php?action=get_available_companies&account_id=${accountId}`
-      : "api/accounts/account_company_api.php?action=get_available_companies";
-
-    const [curRes, compRes] = await Promise.all([
-      fetch(buildApiUrl(`api/accounts/account_currency_api.php?${currencyParams.toString()}`), {
-        credentials: "include",
-      }),
-      fetch(buildApiUrl(companyUrl), { credentials: "include" }),
-    ]);
-    const curJ = await curRes.json();
-    const compJ = await compRes.json();
-
-    if (curJ.success && Array.isArray(curJ.data)) {
-      setCurrencies(curJ.data.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked })));
-      setSelectedCurrencyIds(pickDefaultAddCurrencyIds(curJ.data));
-    }
-    if (compJ.success && Array.isArray(compJ.data)) {
-      const linked = compJ.data.filter((c) => c.is_linked).map((c) => Number(c.id));
-      if (ctx.groupOnlyAccountMode) {
-        const defaultGroupEntity =
-          groupPickerCompanies.find(
-            (c) => String(c.group_id || c.company_id || "") === String(ctx.selectedGroup || ""),
-          ) ||
-          groupPickerCompanies[0] ||
-          null;
-        setSelectedCompanyIds(defaultGroupEntity?.id ? [String(defaultGroupEntity.id)] : []);
-      } else {
-        const cid = ctx.companyId;
-        setSelectedCompanyIds(linked.length ? linked : cid ? [Number(cid)] : []);
-      }
-    }
-  }, [groupPickerCompanies]);
 
   const resetToAdd = useCallback(() => {
     const ctx = ledgerCtxRef.current;
@@ -248,16 +241,15 @@ export function useSummaryAddAccount({
     openingRef.current = true;
     purgeLegacySummaryAddAccountModal();
     try {
-      await loadRoles();
       resetToAdd();
-      await loadSelectionMeta(null);
+      await loadSelectionMeta();
       setOpen(true);
     } catch {
       emitNotify(t("errorLoadingAccount"), "danger");
     } finally {
       openingRef.current = false;
     }
-  }, [emitNotify, loadRoles, loadSelectionMeta, resetToAdd, t]);
+  }, [emitNotify, loadSelectionMeta, resetToAdd, t]);
 
   useLayoutEffect(() => {
     purgeLegacySummaryAddAccountModal();
@@ -269,56 +261,85 @@ export function useSummaryAddAccount({
       const code = toUpper(currencyInput).trim();
       if (!code) return;
       const ctx = ledgerCtxRef.current;
-      const payload = { code };
-      if (ctx.pageLedgerScope?.groupId) payload.group_id = ctx.pageLedgerScope.groupId;
-      if (ctx.pageLedgerScope?.ledger === LEDGER_GROUP) {
+
+      if (ctx.groupOnlyAccountMode) {
+        // True AP/IG group ledger — unmigrated, see docs/datacapture-spring-api.md §4.
+        const payload = { code };
+        if (ctx.pageLedgerScope?.groupId) payload.group_id = ctx.pageLedgerScope.groupId;
         payload.group_only = true;
-      } else if (ctx.pageLedgerScope?.companyId) {
-        payload.company_id = ctx.pageLedgerScope.companyId;
-      } else {
-        const targetCompany = selectedCompanyIds[0] || ctx.companyId;
-        if (!targetCompany) {
-          emitNotify(t("pleaseSelectCompanyFirst"), "danger");
-          return;
+        try {
+          const res = await fetch(buildApiUrl("api/accounts/create_currency_api.php"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            credentials: "include",
+          });
+          const json = await res.json();
+          if (!json.success || !json.data) {
+            emitNotify(apiMsg(json, "createFailed"), "danger");
+            return;
+          }
+          const newId = Number(json.data.id);
+          if (Number.isFinite(newId) && newId > 0) {
+            setCurrencies((prev) => [...prev, { id: newId, code: json.data.code, is_linked: false }]);
+          }
+          setCurrencyInput("");
+        } catch {
+          emitNotify(t("createFailed"), "danger");
         }
-        payload.company_id = targetCompany;
+        return;
+      }
+
+      if (!ctx.companyId) {
+        emitNotify(t("pleaseSelectCompanyFirst"), "danger");
+        return;
       }
       try {
-        const res = await fetch(buildApiUrl("api/accounts/create_currency_api.php"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          credentials: "include",
-        });
-        const json = await res.json();
-        if (!json.success || !json.data) {
-          emitNotify(apiMsg(json, "createFailed"), "danger");
-          return;
-        }
-        const newId = Number(json.data.id);
+        const created = await createTenantCurrency({ code, tenantId: ctx.companyId });
+        const newId = Number(created?.id);
         if (Number.isFinite(newId) && newId > 0) {
-          setCurrencies((prev) => [...prev, { id: newId, code: json.data.code, is_linked: false }]);
+          setCurrencies((prev) => [...prev, { id: newId, code: created.code, is_linked: false }]);
         }
         setCurrencyInput("");
-      } catch {
-        emitNotify(t("createFailed"), "danger");
+      } catch (err) {
+        emitNotify(apiMsg({ message: err?.message }, "createFailed"), "danger");
       }
     },
-    [apiMsg, currencyInput, emitNotify, selectedCompanyIds, t],
+    [apiMsg, currencyInput, emitNotify, t],
   );
 
   const removeCurrency = useCallback(
     async (cid) => {
+      const ctx = ledgerCtxRef.current;
+
+      if (ctx.groupOnlyAccountMode) {
+        // True AP/IG group ledger — unmigrated, see docs/datacapture-spring-api.md §4.
+        try {
+          const res = await fetch(buildApiUrl("api/accounts/delete_currency_api.php"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: cid }),
+            credentials: "include",
+          });
+          const json = await res.json();
+          if (!json.success) {
+            emitNotify(apiMsg(json, "failedDeleteCurrency"), "danger");
+            return;
+          }
+        } catch {
+          emitNotify(t("failedDeleteCurrency"), "danger");
+          return;
+        }
+        setCurrencies((prev) => prev.filter((c) => Number(c.id) !== Number(cid)));
+        setSelectedCurrencyIds((prev) => prev.filter((x) => Number(x) !== Number(cid)));
+        return;
+      }
+
+      if (!ctx.companyId) return;
       try {
-        const res = await fetch(buildApiUrl("api/accounts/delete_currency_api.php"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: cid }),
-          credentials: "include",
-        });
-        const json = await res.json();
-        if (!json.success) {
-          emitNotify(apiMsg(json, "failedDeleteCurrency"), "danger");
+        const result = await deleteTenantCurrency({ id: cid, tenantId: ctx.companyId });
+        if (!result.success) {
+          emitNotify(apiMsg(result.json, "failedDeleteCurrency"), "danger");
           return;
         }
         setCurrencies((prev) => prev.filter((c) => Number(c.id) !== Number(cid)));
@@ -334,81 +355,85 @@ export function useSummaryAddAccount({
     async (e) => {
       e.preventDefault();
       const ctx = ledgerCtxRef.current;
-      const alertAmount = normalizeAlertAmount(form.alert_amount);
       if (form.payment_alert === "1" && (!form.alert_type || !form.alert_start_date)) {
         emitNotify(t("paymentAlertRequiredFields"), "danger");
         return;
       }
 
-      const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => {
-        if (k === "alert_amount") {
-          fd.append(k, alertAmount);
-          return;
+      if (ctx.groupOnlyAccountMode) {
+        // True AP/IG group ledger — unmigrated, see docs/datacapture-spring-api.md §4.
+        const alertAmount = normalizeAlertAmount(form.alert_amount);
+        const fd = new FormData();
+        Object.entries(form).forEach(([k, v]) => {
+          if (k === "alert_amount") {
+            fd.append(k, alertAmount);
+            return;
+          }
+          const raw = v ?? "";
+          const out = k === "account_id" || k === "name" || k === "remark" ? toUpper(raw) : raw;
+          fd.append(k, out);
+        });
+        if (form.payment_alert === "0") {
+          fd.set("alert_type", "");
+          fd.set("alert_start_date", "");
+          fd.set("alert_amount", "");
         }
-        const raw = v ?? "";
-        // Align with AccountListPage: CSS text-transform is visual-only; normalize before POST.
-        const out =
-          k === "account_id" || k === "name" || k === "remark" ? toUpper(raw) : raw;
-        fd.append(k, out);
-      });
-      if (form.payment_alert === "0") {
-        fd.set("alert_type", "");
-        fd.set("alert_start_date", "");
-        fd.set("alert_amount", "");
+        applyTenantLedgerToParams(fd, ctx.pageLedgerScope);
+        if (selectedCurrencyIds.length) {
+          fd.set("currency_ids", JSON.stringify(selectedCurrencyIds));
+        }
+        try {
+          const res = await fetch(buildApiUrl("api/accounts/addaccountapi.php"), {
+            method: "POST",
+            body: fd,
+            credentials: "include",
+          });
+          const json = await res.json();
+          if (!json.success) {
+            emitNotify(apiMsg(json, "saveFailed"), "danger");
+            return;
+          }
+          const newAccountId = json?.data?.id;
+          if (newAccountId && selectedCurrencyIds.length) {
+            await Promise.all(
+              selectedCurrencyIds.map((cur) =>
+                fetch(buildApiUrl("api/accounts/account_currency_api.php?action=add_currency"), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ account_id: newAccountId, currency_id: cur }),
+                  credentials: "include",
+                }),
+              ),
+            );
+          }
+          closeAddAccount();
+          const accountCode = String(form.account_id || "").trim().toUpperCase();
+          emitNotify(
+            accountCode
+              ? t("accountAddedToFormulaList", { accountId: accountCode })
+              : t("accountSavedSuccessfully"),
+            "success",
+          );
+          if (typeof onAccountCreated === "function") {
+            await onAccountCreated(newAccountId);
+          }
+        } catch {
+          emitNotify(t("saveFailed"), "danger");
+        }
+        return;
       }
-      if (!ctx.groupOnlyAccountMode && selectedCompanyIds.length) {
-        fd.set("company_ids", JSON.stringify(selectedCompanyIds));
+
+      const tenantIds = selectedCompanyIds.map(Number).filter((id) => Number.isFinite(id) && id > 0);
+      if (!ctx.companyId || !tenantIds.length) {
+        emitNotify(t("pleaseSelectCompanyFirst"), "danger");
+        return;
       }
-      if (!ctx.groupOnlyAccountMode && ctx.companyId) {
-        fd.set("company_id", String(ctx.companyId));
-      }
-      applyTenantLedgerToParams(fd, ctx.pageLedgerScope);
-      if (selectedCurrencyIds.length) {
-        fd.set("currency_ids", JSON.stringify(selectedCurrencyIds));
-      }
+      const currencyIds = selectedCurrencyIds.map(Number).filter((id) => Number.isFinite(id) && id > 0);
 
       try {
-        const res = await fetch(buildApiUrl("api/accounts/addaccountapi.php"), {
-          method: "POST",
-          body: fd,
-          credentials: "include",
-        });
-        const json = await res.json();
-        if (!json.success) {
-          emitNotify(apiMsg(json, "saveFailed"), "danger");
-          return;
-        }
-
-        const newAccountId = json?.data?.id;
-
-        if (newAccountId && !ctx.groupOnlyAccountMode && selectedCompanyIds.length) {
-          await Promise.all(
-            selectedCompanyIds.map((cid) =>
-              fetch(buildApiUrl("api/accounts/account_company_api.php?action=add_company"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ account_id: newAccountId, company_id: cid }),
-                credentials: "include",
-              }),
-            ),
-          );
-        }
-        if (newAccountId && selectedCurrencyIds.length) {
-          await Promise.all(
-            selectedCurrencyIds.map((cur) =>
-              fetch(buildApiUrl("api/accounts/account_currency_api.php?action=add_currency"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ account_id: newAccountId, currency_id: cur }),
-                credentials: "include",
-              }),
-            ),
-          );
-        }
-
+        const request = buildAccountCreateRequest(form, ctx.companyId, currencyIds, tenantIds);
+        const created = await createAccountUser(request);
         closeAddAccount();
-
         const accountCode = String(form.account_id || "").trim().toUpperCase();
         emitNotify(
           accountCode
@@ -416,12 +441,11 @@ export function useSummaryAddAccount({
             : t("accountSavedSuccessfully"),
           "success",
         );
-
         if (typeof onAccountCreated === "function") {
-          await onAccountCreated(newAccountId);
+          await onAccountCreated(created?.id ?? null);
         }
-      } catch {
-        emitNotify(t("saveFailed"), "danger");
+      } catch (err) {
+        emitNotify(apiMsg({ message: err?.message }, "saveFailed"), "danger");
       }
     },
     [apiMsg, closeAddAccount, emitNotify, form, onAccountCreated, selectedCompanyIds, selectedCurrencyIds, t],

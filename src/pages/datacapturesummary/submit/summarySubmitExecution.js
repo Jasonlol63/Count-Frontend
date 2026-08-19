@@ -3,10 +3,33 @@ import {
   isPureGroupCaptureScope,
   normalizeGroupCaptureScope,
 } from "../../datacapture/lib/dataCaptureScope.js";
+import { resolveDataCaptureEffectiveTenantId } from "../../datacapture/lib/dataCaptureTenant.js";
 import { isGroupLedgerCapture } from "../../../utils/company/c168CaptureChannel.js";
-import { submitSummaryPayload } from "../lib/summaryApi.js";
+import { submitSummaryPayload, submitSummaryToSpring } from "../lib/summaryApi.js";
+import { truncateProcessedAmountTo6Decimals } from "../table/summaryRowAmount.js";
 import { SUMMARY_SUBMIT_MAX_ROWS_PER_BATCH } from "./summarySubmitTotalPure.js";
 import { pushSummaryNotification } from "../lib/summaryNotify.js";
+
+/** Bank category channel always uses these fixed process codes (see useDataCaptureFormEngine BANK_PROCESSES). */
+const BANK_PROCESS_CODES = new Set(["PROFIT", "SALARY", "COMMISSION", "BONUS"]);
+
+function resolveSubmitCategory(processCode) {
+  return BANK_PROCESS_CODES.has(String(processCode || "").trim().toUpperCase()) ? "BANK" : "GAME";
+}
+
+function toSpringLine(row) {
+  return {
+    productType: row.productType === "sub" ? "SUB" : "MAIN",
+    idProduct: row.idProduct,
+    accountId: row.accountId,
+    currencyId: row.currencyId != null ? Number(row.currencyId) : null,
+    sourcePercent: String(row.sourcePercent ?? "1"),
+    enableSourcePercent: !!row.enableSourcePercent,
+    formula: row.formula || row.formulaOperators || "",
+    processedAmount: truncateProcessedAmountTo6Decimals(row.processedAmount),
+    rateValue: row.rateValue || null,
+  };
+}
 
 function buildSummarySubmitPayload(processData, summaryRows) {
   if (!processData) return null;
@@ -202,11 +225,12 @@ function verifySubmitPayload(submitData) {
 }
 
 /**
- * React-owned summary submit execution (batching).
+ * True AP/IG group ledger submit — batched PHP path (unmigrated; tenant/process
+ * resolution here still depends on the PHP-only `get_group_process_id`).
  * Waits for real backend write success — no immediateAck false-success path.
  * submitRequestId is session-scoped (retry-safe); cleared only after success.
  */
-export async function executeSummarySubmit({
+async function executeLegacyGroupLedgerSubmit({
   captureScope,
   companyId,
   parsedProcessData,
@@ -377,4 +401,92 @@ export async function executeSummarySubmit({
   await new Promise((resolve) => window.setTimeout(resolve, BATCH_SUCCESS_REDIRECT_MS));
   onSuccess?.({ mode: "batched", captureId: finalCaptureId, failedProblemRows });
   return { ok: true, mode: "batched", captureId: finalCaptureId, failedProblemRows };
+}
+
+/**
+ * Games / Bank company-scope submit (incl. C168 / bank-only payroll) — Spring,
+ * one atomic transaction, no batching. See docs/datacapture-spring-api.md §2.8.
+ */
+async function executeSpringSubmit({ captureScope, companyId, parsedProcessData, summaryRows, onProgress, onSuccess }) {
+  const tenantId = resolveDataCaptureEffectiveTenantId(captureScope, companyId);
+  if (!tenantId) {
+    return { ok: false, message: "tenantId is required" };
+  }
+
+  const rawProcess = parsedProcessData.process;
+  const numericProcess =
+    rawProcess != null && rawProcess !== "" && Number.isFinite(Number(rawProcess))
+      ? Number(rawProcess)
+      : null;
+  const processCode = String(
+    parsedProcessData.processCode ||
+      parsedProcessData.process_code ||
+      (numericProcess == null ? rawProcess : "") ||
+      "",
+  )
+    .trim()
+    .toUpperCase();
+
+  const payload = {
+    tenantId,
+    category: resolveSubmitCategory(processCode),
+    processId: numericProcess,
+    processCode: numericProcess != null ? null : processCode || null,
+    captureDate: parsedProcessData.date,
+    currencyId: parsedProcessData.currency != null ? Number(parsedProcessData.currency) : null,
+    remark: parsedProcessData.remark || "",
+    removeWord: parsedProcessData.removeWord || "",
+    replaceWordFrom: parsedProcessData.replaceWordFrom || "",
+    replaceWordTo: parsedProcessData.replaceWordTo || "",
+    lines: summaryRows.map(toSpringLine),
+  };
+
+  onProgress?.({ batchNumber: 1, totalBatches: 1 });
+
+  let json;
+  try {
+    json = await submitSummaryToSpring(payload);
+  } catch (err) {
+    return { ok: false, message: err?.message || "Submission failed" };
+  }
+
+  const captureId = json?.data?.captureId ?? null;
+  if (!captureId) {
+    return { ok: false, message: "Submission did not return a capture ID." };
+  }
+
+  notify(
+    "Success",
+    `All data submitted successfully! Capture ID: ${captureId}, total ${summaryRows.length} rows`,
+    "success"
+  );
+  onSuccess?.({ mode: "spring", captureId });
+  return { ok: true, mode: "spring", captureId };
+}
+
+/**
+ * React-owned summary submit execution. Games/Bank company scope (incl.
+ * C168 / bank-only payroll) submits via Spring in one shot; true AP/IG group
+ * ledger scope stays on the legacy batched PHP path (doc §4).
+ */
+export async function executeSummarySubmit({
+  captureScope,
+  companyId,
+  parsedProcessData,
+  summaryRows,
+  onProgress,
+  onSuccess,
+}) {
+  const effectiveScope = normalizeGroupCaptureScope(captureScope, parsedProcessData);
+  if (isGroupLedgerCapture(effectiveScope, parsedProcessData)) {
+    return executeLegacyGroupLedgerSubmit({
+      captureScope,
+      companyId,
+      parsedProcessData,
+      summaryRows,
+      onProgress,
+      onSuccess,
+    });
+  }
+  return executeSpringSubmit({ captureScope, companyId, parsedProcessData, summaryRows, onProgress, onSuccess });
 }

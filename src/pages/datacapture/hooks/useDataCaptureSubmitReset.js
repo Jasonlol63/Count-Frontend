@@ -26,7 +26,9 @@ import {
   isSubmitReady,
   validateDataCaptureForm,
 } from "../lib/dataCaptureFormRules.js";
-import { fetchProcessDetail, fetchGroupProcessIdByCode } from "../lib/dataCaptureApi.js";
+import { fetchGroupProcessIdByCode } from "../lib/dataCaptureApi.js";
+import { postGameCaptureForm } from "../lib/dataCaptureSpringApi.js";
+import { resolveDataCaptureTenantId } from "../lib/dataCaptureTenant.js";
 import {
   dataCaptureScopeLedgerCompanyId,
   isPureGroupCaptureScope,
@@ -189,8 +191,10 @@ export function useDataCaptureSubmitReset({
           processData.processCode ||
           String(processData.process || "").toUpperCase();
         processData.processCode = String(code).trim().toUpperCase();
-        // Pure / empty group: fixed payroll codes only — no process table row.
-        if (!isPureGroupCaptureScope(captureScope, processData)) {
+        // True AP/IG group ledger scope only — `get_group_process_id` is unmigrated PHP.
+        // C168 / bank-only company payroll (incl. plain Bank-category company scope) resolves
+        // processId server-side from processCode at Summary Submit time (Spring), so skip here.
+        if (captureScope?.mode === "group" && !isPureGroupCaptureScope(captureScope, processData)) {
           let numericId;
           try {
             numericId = await fetchGroupProcessIdByCode(captureScope, code, form.currencyId);
@@ -368,12 +372,25 @@ export function useDataCaptureSubmitReset({
 
       const pid = processData.process != null ? String(processData.process) : "";
       if (pid && captureScope && !restoringGroupLedger && !isGroupOnlyProcessId(pid)) {
-        const res = await fetchProcessDetail(pid, captureScope);
-        if (res.success && res.data) {
-          await callDataCaptureRuntime("syncRestoreForm", {
-            ...processData,
-            currency: processData.currency || res.data.currency_id,
-          });
+        const tenantId = resolveDataCaptureTenantId(captureScope);
+        const numericPid = Number(pid);
+        if (tenantId && Number.isFinite(numericPid) && numericPid > 0 && processData.date) {
+          try {
+            const res = await postGameCaptureForm({
+              tenantId,
+              captureDate: processData.date,
+              processPk: numericPid,
+            });
+            const selected = res?.data?.selectedProcess;
+            if (selected) {
+              await callDataCaptureRuntime("syncRestoreForm", {
+                ...processData,
+                currency: processData.currency || selected.currencyId,
+              });
+            }
+          } catch {
+            /* restore currency fallback is best-effort; keep the already-restored session as-is */
+          }
         }
       }
 

@@ -1,14 +1,14 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { appendDataCaptureScopeParams } from "../../datacapture/lib/dataCaptureApi.js";
+import { fetchAccountListByTenantId, filterAccountListRows } from "../../account/accountListApi.js";
+import {
+  resolveDataCaptureEffectiveTenantId,
+  resolveDataCaptureTenantId,
+} from "../../datacapture/lib/dataCaptureTenant.js";
+import { isGroupPayrollProcessId } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
 
-/** Canonical Summary submit endpoint. Legacy: summary_api.php?action=submit */
+/** True AP/IG group-ledger submit only (unmigrated, see docs/datacapture-spring-api.md §4). */
 const SUMMARY_SUBMIT_API = "api/datacapture_summary/summary_submit_api.php";
-/** Templates CRUD. Legacy: summary_api.php?action=save_template|delete_template|templates */
-const SUMMARY_TEMPLATES_API = "api/datacapture_summary/summary_templates_api.php";
-/** Server row/formula state. Legacy: summary_api.php?action=get_summary_state|save_summary_state */
-const SUMMARY_STATE_API = "api/datacapture_summary/summary_state_api.php";
-/** Form catalog (currencies + accounts). Legacy: summary_api.php (default load) */
-const SUMMARY_CATALOG_API = "api/datacapture_summary/summary_catalog_api.php";
 
 function withCaptureScope(url, captureScope) {
   if (!captureScope) return url;
@@ -19,47 +19,12 @@ function withCaptureScope(url, captureScope) {
   return qs ? `${url}${sep}${qs}` : url;
 }
 
-function withCompany(url, companyId) {
-  const cid = Number(companyId);
-  if (!Number.isFinite(cid) || cid <= 0) return url;
-  const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}company_id=${encodeURIComponent(String(cid))}`;
-}
-
-async function parseJsonResponse(response) {
-  const json = await response.json();
-  if (!response.ok) {
-    throw new Error(json?.message || json?.error || `HTTP ${response.status}`);
-  }
-  return json;
-}
-
-/** Default load: currencies + accounts for Edit Formula / Add Account */
-export async function fetchSummaryFormCatalog(captureScope) {
-  const url = withCaptureScope(buildApiUrl(SUMMARY_CATALOG_API), captureScope);
-  const response = await fetch(url, { credentials: "include" });
-  const json = await parseJsonResponse(response);
-  if (!json.success) {
-    throw new Error(json.message || "Failed to load summary form data");
-  }
-  return {
-    currencies: Array.isArray(json.currencies) ? json.currencies : [],
-    accounts: Array.isArray(json.accounts) ? json.accounts : [],
-  };
-}
-
-/** GET ?action=get_summary_state */
-export async function fetchSummaryServerState({ captureScope, processId, processCode, signal }) {
-  const params = new URLSearchParams({ action: "get_summary_state" });
-  if (processId != null && processId !== "") params.set("process_id", String(processId));
-  if (processCode != null && processCode !== "") params.set("process_code", String(processCode));
-  appendDataCaptureScopeParams(params, captureScope);
-  const url = buildApiUrl(`${SUMMARY_STATE_API}?${params.toString()}`);
-  const response = await fetch(url, { credentials: "include", signal });
-  const json = await response.json();
-  if (json?.success === true && json.data && typeof json.data === "object") {
-    return json.data;
-  }
+/**
+ * `data_capture_summary_state` was deliberately never built (see docs/datacapture-spring-api.md
+ * §1.1) — unsubmitted draft state lives in front-end session/localStorage instead
+ * (`summaryRefreshStatePure.js` / `summaryStorage.js`). No Spring or PHP endpoint backs this.
+ */
+export async function fetchSummaryServerState() {
   return null;
 }
 
@@ -113,99 +78,102 @@ export async function submitSummaryPayload(captureScope, payload) {
   return json;
 }
 
-/** GET accounts list (same as legacy fetchSummaryAccountList). */
+/**
+ * POST /api/datacapture-summary/submit — Games/Bank company-scope final submit.
+ * One atomic transaction, no batching. Body: {@link DataCaptureSummarySubmitDTO}.
+ */
+export async function submitSummaryToSpring(payload) {
+  const res = await fetch(buildApiUrl("api/datacapture-summary/submit"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || `HTTP ${res.status}`);
+  }
+  return json;
+}
+
+/** POST /api/account/list?tenant_id= (active accounts only) — Summary table populate. */
 export async function fetchSummaryAccountList(captureScope) {
-  const json = await fetchSummaryFormCatalog(captureScope);
-  return Array.isArray(json.accounts) ? json.accounts : [];
+  const tenantId = resolveDataCaptureTenantId(captureScope);
+  if (!tenantId) return [];
+  const rows = await fetchAccountListByTenantId(tenantId);
+  return filterAccountListRows(rows);
 }
 
-/** POST ?action=templates — load maintenance templates for id products. */
-export async function fetchSummaryTemplates({
-  captureScope,
-  companyId,
-  idProducts,
-  processId,
-  processCode = "",
-  captureId = null,
-}) {
-  const params = new URLSearchParams({ action: "templates" });
-  const base = withCaptureScope(
-    withCompany(buildApiUrl(SUMMARY_TEMPLATES_API), companyId),
-    captureScope,
-  );
-  const url = base.includes("?") ? `${base}&${params}` : `${base}?${params}`;
-
+/** GAME → process.category = GAME; BONUS/COMMISSION/PROFIT/SALARY → BANK (same set as submit). */
+function resolveFormulaMaintenanceCategory(processCode) {
   const code = String(processCode || "").trim().toUpperCase();
-  const body = {
-    idProducts: [...new Set((idProducts || []).map((v) => String(v || "").trim()).filter(Boolean))],
-  };
-  if (processId != null && processId !== "" && Number(processId) > 0) {
-    body.processId = Number(processId);
-  } else if (processId != null && processId !== "" && !Number.isFinite(Number(processId))) {
-    // Pure Group may pass process code as processId ("SALARY").
-    body.processCode = String(processId).trim().toUpperCase();
-  }
-  if (code) body.processCode = code;
-  if (companyId != null && Number(companyId) > 0) {
-    body.company_id = Number(companyId);
-  }
-  if (captureId != null && !Number.isNaN(Number(captureId)) && Number(captureId) > 0) {
-    body.captureId = Number(captureId);
-  }
+  return code && isGroupPayrollProcessId(code) ? "bank" : "games";
+}
 
-  const response = await fetch(url, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = await parseJsonResponse(response);
-  if (!json.success) {
-    throw new Error(json.message || json.error || "Failed to load templates");
-  }
+/** Spring `MaintenanceFormulaDTO` row -> legacy-shaped template object read by summaryRowData.js / summaryTemplateMatching.js. */
+function toTemplateShape(row) {
   return {
-    templates: json.templates && typeof json.templates === "object" ? json.templates : {},
-    subsByParent:
-      json.subsByParent && typeof json.subsByParent === "object" ? json.subsByParent : null,
-    diagnostics: json.diagnostics ?? null,
+    id: row.id,
+    id_product: row.idProduct,
+    parent_id_product: row.parentIdProduct,
+    formula_variant: row.formulaVariant,
+    sub_order: row.subOrder,
+    account_id: row.accountId,
+    account_display: row.account,
+    currency_display: row.currency,
+    currency_code: row.currency,
+    description: row.description,
+    source_columns: row.sourceColumns,
+    formula: row.formula,
+    formula_operators: row.formulaOperators,
+    input_method: row.inputMethod,
+    source_percent: row.sourcePercent,
+    enable_source_percent: row.enableSourcePercent,
   };
 }
 
-/** POST ?action=delete_template — remove saved formula template (legacy deleteSelectedRows). */
-export async function deleteSummaryTemplate({
-  captureScope,
-  companyId,
-  processId,
-  templateKey,
-  productType = "main",
-  templateId = null,
-  formulaVariant = null,
-}) {
-  if (!templateKey) {
-    return { success: false, message: "Missing template key" };
+/** Group flat formula rows into { templates: {idProduct: MAIN}, subsByParent: {idProduct: [SUB, ...]} }. */
+function buildTemplatesFromFormulaRows(rows) {
+  const templates = {};
+  const subsByParent = {};
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const idProduct = String(row?.idProduct || "").trim();
+    if (!idProduct) continue;
+    const shaped = toTemplateShape(row);
+    if (String(row.productType || "").toUpperCase() === "SUB") {
+      const parentId = String(row.parentIdProduct || idProduct).trim();
+      if (!subsByParent[parentId]) subsByParent[parentId] = [];
+      subsByParent[parentId].push(shaped);
+    } else {
+      templates[idProduct] = shaped;
+    }
+  }
+  return { templates, subsByParent, diagnostics: null };
+}
+
+/**
+ * POST /api/maintenance/formula-maintenance/list — reused read-only for Summary populate
+ * (same `data_capture_formula` rows the Maintenance > Formula page lists, already joined to
+ * account/currency display text server-side).
+ */
+export async function fetchSummaryTemplates({ captureScope, companyId, processId, processCode = "" }) {
+  const tenantId = resolveDataCaptureEffectiveTenantId(captureScope, companyId);
+  const code = String(processCode || "").trim().toUpperCase();
+  const numericId = processId != null && Number(processId) > 0 ? Number(processId) : null;
+  const process = numericId != null ? String(numericId) : code;
+  if (!tenantId || !process) {
+    return { templates: {}, subsByParent: null, diagnostics: null };
   }
 
-  const url = withCaptureScope(
-    withCompany(buildApiUrl(`${SUMMARY_TEMPLATES_API}?action=delete_template`), companyId),
-    captureScope,
-  );
-
-  const body = {
-    template_key: templateKey,
-    product_type: productType,
-  };
-  if (companyId != null && Number(companyId) > 0) {
-    body.company_id = Number(companyId);
-  }
-  if (templateId != null && templateId !== "") body.template_id = templateId;
-  if (formulaVariant != null && formulaVariant !== "") body.formula_variant = formulaVariant;
-  if (processId != null && processId !== "") body.process_id = processId;
-
-  const response = await fetch(url, {
+  const res = await fetch(buildApiUrl("api/maintenance/formula-maintenance/list"), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ tenantId, process, category: resolveFormulaMaintenanceCategory(code) }),
   });
-  return parseJsonResponse(response);
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || `HTTP ${res.status}`);
+  }
+  return buildTemplatesFromFormulaRows(json.data);
 }

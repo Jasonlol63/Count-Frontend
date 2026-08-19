@@ -41,6 +41,7 @@ import "../../../public/css/remove-word-chip.css";
 import "../../../public/css/description-input.css";
 
 import { formatSubmittedProcessDateTime } from "./lib/dataCaptureApi.js";
+import { resolveDataCaptureEffectiveTenantId } from "./lib/dataCaptureTenant.js";
 import { readCaptureSessionMeta, shouldRestoreFromUrl, loadCaptureSession, captureSessionMatchesScope, loadActiveCaptureSession, readCaptureRestoreBoot } from "./lib/dataCaptureStorage.js";
 import { callDataCaptureRuntime, getDataCaptureState } from "./lib/dataCaptureRuntime.js";
 import {
@@ -341,8 +342,12 @@ function DataCapturePageContent() {
     return "";
   }, [isCompanySelected, currentCompanyRow, groupOnlyTable, selectedGroup, anchorCompanyRow, scopeCompanyId]);
 
-  const { permissions, selectedPermission, selectPermission, showPermissionFilter } =
-    useDataCaptureCategoryPermissions(companyCode);
+  const categoryTenantId = useMemo(
+    () => resolveDataCaptureEffectiveTenantId(captureScope, companyId),
+    [captureScope, companyId],
+  );
+
+  const { selectedPermission } = useDataCaptureCategoryPermissions(categoryTenantId);
 
   const form = useDataCaptureFormEngine(captureScope, {
     applyCompanyOnlyFields: showCompanyProcessUi,
@@ -375,7 +380,6 @@ function DataCapturePageContent() {
   const { submittedItems, submissionsError, refreshSubmitted } = useDataCaptureSubmittedList(
     captureScope,
     form.captureDate,
-    selectedPermission,
   );
 
   const topSectionRef = useRef(null);
@@ -1054,32 +1058,6 @@ function DataCapturePageContent() {
   return (
     <DataCaptureErrorBoundary>
       <div className="container">
-      <div className="dc-page-toolbar">
-
-        <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
-          <div
-            id="data-capture-permission-filter"
-            className="data-capture-company-filter data-capture-permission-filter-header"
-            style={{ display: showPermissionFilter ? "flex" : "none" }}
-          >
-            <span className="data-capture-company-label">{t("category")}</span>
-            <div id="data-capture-permission-buttons" className="data-capture-company-buttons">
-              {permissions.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={`data-capture-company-btn${selectedPermission === p ? " active" : ""}`.trim()}
-                  data-permission={p}
-                  onClick={() => selectPermission(p)}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {engineError ? (
         <div style={{ marginBottom: 12, color: "#b91c1c" }} role="alert">
           {engineError}
@@ -1369,7 +1347,7 @@ function DataCapturePageContent() {
                     key={
                       process.id != null
                         ? String(process.id)
-                        : `sub-${index}-${process.process_code}-${process.created_at || ""}-${process.submitted_by || ""}`
+                        : `sub-${index}-${process.processId}-${process.createAt || ""}-${process.createdBy || ""}`
                     }
                     className="submitted-item"
                   >
@@ -1377,11 +1355,11 @@ function DataCapturePageContent() {
                       <div className="detail-row">
                         <strong>
                           {captureScope?.mode === "group" || companyPayrollChannel
-                            ? process.process_code
-                            : `${process.process_code}${process.description_name ? ` (${process.description_name})` : ""}`}
+                            ? process.processId
+                            : process.processDisplay}
                         </strong>
                         <div className="submitted-meta">
-                          <span className="submitted-by">{process.submitted_by}</span>
+                          <span className="submitted-by">{process.createdBy}</span>
                           <span className="submitted-date">{formatSubmittedProcessDateTime(process)}</span>
                         </div>
                       </div>
@@ -1415,7 +1393,7 @@ function DataCapturePageContent() {
           t={t}
           open={descriptionModalOpen}
           onClose={closeDescriptionModal}
-          companyId={companyId}
+          tenantId={categoryTenantId}
           initialSelected={selectedDescriptions}
           onDescriptionsChange={handleDescriptionsChange}
           onConfirm={handleDescriptionsConfirmed}
