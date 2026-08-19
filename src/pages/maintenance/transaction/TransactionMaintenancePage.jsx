@@ -354,6 +354,7 @@ export default function TransactionMaintenancePage() {
           process: processFilter,
           category,
           scope: effectiveScope,
+          companies,
           signal: ac.signal,
           onProgress: quietRefresh
             ? undefined
@@ -448,6 +449,7 @@ export default function TransactionMaintenancePage() {
         process: processFilter,
         category,
         scope: pending.scope,
+        companies: pending.companies,
         signal: ac.signal,
         onProgress: (progressRows) => {
           if (seq !== maintenanceSeqRef.current) return;
@@ -696,7 +698,7 @@ export default function TransactionMaintenancePage() {
             selectedGroup: bootGroup,
             companyId: null,
           });
-          pendingBootSearchRef.current = { scope: bootScope, category: "Games" };
+          pendingBootSearchRef.current = { scope: bootScope, category: "Games", companies: filtered };
           try {
             const procList = bootScope ? await fetchProcesses(null, bootScope) : [];
             if (!cancelled) setProcesses(procList);
@@ -746,7 +748,7 @@ export default function TransactionMaintenancePage() {
             selectedGroup: bootGroup,
             companyId: initialCompanyId,
           });
-          pendingBootSearchRef.current = { scope: bootScope, category: "Games" };
+          pendingBootSearchRef.current = { scope: bootScope, category: "Games", companies: filtered };
           try {
             const procList = await fetchProcesses(initialCompanyId, bootScope);
             if (!cancelled) setProcesses(procList);

@@ -1,33 +1,20 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { formatDmy, parseDdMmYyyyToYmd, parseYmd } from "../../../utils/date/dateUtils.js";
+import {
+  fetchDomainCompanyPermissions,
+  isBankOnlyCategoryCompany,
+} from "../shared/maintenanceCompanyApi.js";
+import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
+import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
+import { resolveGroupEntityRowFromSnap } from "../../report/shared/reportScope.js";
+import { mapGroupPayrollProcesses } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
+import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
+import { formatSpringDateTimeToDmy } from "../shared/maintenanceDateHelpers.js";
 import {
   pickDefaultSubsidiaryForGroup,
   pickGroupAnchorCompany,
 } from "../../../utils/company/sharedCompanyFilter.js";
 import { notifyCompanySessionUpdated } from "../../../utils/company/companySessionEvents.js";
-import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
-import {
-  fetchDomainCompanyPermissions,
-  fetchMaintenanceProcesses,
-  isBankOnlyCategoryCompany,
-} from "../shared/maintenanceCompanyApi.js";
-import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
-import { mapGroupPayrollProcesses } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
-import {
-  transactionMaintenanceScopeApiParams,
-  transactionMaintenanceScopeCacheKey,
-  transactionMaintenanceUsesGroupProcesses,
-} from "./transactionMaintenanceScope.js";
-
-/** 宽日期兜底分片（游标分页下通常整段一次查完；仅超范围或失败再分片）。 */
-const MAINTENANCE_CHUNK_DAYS = 90;
-const MAINTENANCE_CHUNK_THRESHOLD_DAYS = 400;
-/** 首屏尽快出表；后续大批量游标拉取（后端 UNION 单查询，每页只扫 page_size 行）。 */
-const MAINTENANCE_FIRST_PAGE_SIZE = 800;
-const MAINTENANCE_PAGE_SIZES = [5000, 3500, 2000, 1000, 500];
-const MAINTENANCE_MAX_PAGES = 100;
-const MAINTENANCE_FETCH_RETRIES = 4;
-const MAINTENANCE_RETRY_BASE_MS = 400;
+import { transactionMaintenanceUsesGroupProcesses } from "./transactionMaintenanceScope.js";
 
 function isFetchAbortError(err, signal) {
   if (signal?.aborted) return true;
@@ -39,10 +26,6 @@ function rethrowIfAborted(err, signal) {
   if (!isFetchAbortError(err, signal)) return;
   if (err?.name === "AbortError") throw err;
   throw new DOMException("The operation was aborted.", "AbortError");
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isMaintenanceTransferError(err) {
@@ -57,14 +40,7 @@ function isMaintenanceTransferError(err) {
     msg.includes("quic") ||
     msg.includes("err_quic") ||
     msg.includes("incomplete") ||
-    msg.includes("unexpected end") ||
-    msg.includes("search failed (502)") ||
-    msg.includes("search failed (503)") ||
-    msg.includes("search failed (504)") ||
-    msg.includes("search failed (413)") ||
-    msg.includes("search failed (524)") ||
-    msg.includes("search failed (520)") ||
-    msg.includes("search failed (0)")
+    msg.includes("unexpected end")
   );
 }
 
@@ -94,31 +70,6 @@ export function mapProcessesForMaintenanceSelect(apiList) {
   });
 }
 
-function appendMaintenanceScopeToParams(params, scope) {
-  const {
-    companyId,
-    viewGroup,
-    groupId,
-    reportScope,
-    groupsAll,
-    groupAll,
-    groupOnly,
-    groupAggregate,
-  } = transactionMaintenanceScopeApiParams(scope);
-  if (companyId) params.append("company_id", String(companyId));
-  const vg = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
-  if (vg) params.append("view_group", vg);
-  const gid = groupId
-    ? String(groupId).trim().toUpperCase()
-    : vg;
-  if (gid) params.append("group_id", gid);
-  if (groupsAll) params.append("groups_all", "1");
-  if (groupAll) params.append("group_all", "1");
-  if (reportScope) params.append("report_scope", reportScope);
-  if (groupOnly) params.append("group_only", "1");
-  if (groupAggregate) params.append("group_aggregate", "1");
-}
-
 export async function fetchProcesses(companyId, scope = null) {
   const payrollChannel = Boolean(scope?.c168Channel || scope?.companyPayrollChannel);
   if (payrollChannel) {
@@ -134,25 +85,36 @@ export async function fetchProcesses(companyId, scope = null) {
     return mapProcessesForMaintenanceSelect(mapGroupPayrollProcesses(apiList));
   }
   const effectiveId = scope?.scopeCompanyId ?? companyId;
-  const rows = await fetchMaintenanceProcesses(effectiveId, {
-    credentials: true,
-  });
+  const tid = Number(effectiveId);
+  if (!Number.isFinite(tid) || tid <= 0) return [];
+  const rows = await fetchProcessListByTenantId(tid);
   return mapProcessesForMaintenanceSelect(rows);
 }
 
-/** Normalize category for maintenance_search_api (always Games after Category UI removal). */
-export function resolveTransactionMaintenanceCategory(permission, scope = null) {
-  const raw = String(permission ?? "").trim();
-  if (!raw) return "";
-  const lower = raw.toLowerCase();
-  if (lower === "loan" || lower === "rate" || lower === "money" || lower === "gambling") {
-    return "Games";
+/** "Bank" for C168 / bank-only payroll companies; "Games" otherwise — category is a required hard filter server-side. */
+function resolveTransactionMaintenanceCategory(scope) {
+  const payrollChannel = Boolean(scope?.c168Channel || scope?.companyPayrollChannel);
+  return payrollChannel ? "Bank" : "Games";
+}
+
+/**
+ * Numeric tenant id(s) for transaction maintenance list.
+ * Group entity + subsidiary company share one Spring tenant row; "aggregate" (Groups All / Group All) spans several;
+ * pure Group ledger (no subsidiary drill-down) resolves `scope.scopeCompanyId` to 0 and must be looked up by group id.
+ */
+function resolveTransactionMaintenanceTenantIds({ scope, companies } = {}) {
+  if (scope?.mode === "aggregate") {
+    const ids = Array.isArray(scope.mergeCompanyIds) ? scope.mergeCompanyIds : [];
+    return ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
   }
-  // Bank-only payroll subsidiaries (e.g. CX): Data Capture uses Games semantics, not Bank ledger.
-  if (lower === "bank" && (scope?.companyPayrollChannel || scope?.c168Channel)) {
-    return "Games";
+  const tid = Number(scope?.scopeCompanyId);
+  if (Number.isFinite(tid) && tid > 0) return [tid];
+  if (scope?.mode === "group" && scope.groupId && Array.isArray(companies)) {
+    const row = resolveGroupEntityRowFromSnap(companies, scope.groupId);
+    const id = Number(row?.id);
+    if (Number.isFinite(id) && id > 0) return [id];
   }
-  return raw;
+  return [];
 }
 
 /** Select All 误传占位文案时视为未选 Process。 */
@@ -178,7 +140,7 @@ function renumberMaintenanceRows(rows) {
   return rows;
 }
 
-/** Client-side text filter across visible columns (API is paginated — avoid post-filter in PHP). */
+/** Client-side text filter across visible columns (`q` is not sent to the backend — matches Spring's full-range single fetch). */
 export function filterTransactionMaintenanceRowsBySearch(rows, searchTerm) {
   const q = String(searchTerm || "").trim().toUpperCase();
   const list = Array.isArray(rows) ? rows : [];
@@ -187,7 +149,6 @@ export function filterTransactionMaintenanceRowsBySearch(rows, searchTerm) {
     "process",
     "id_product",
     "account",
-    "from_account",
     "description",
     "remark",
     "currency",
@@ -211,374 +172,55 @@ export function filterTransactionMaintenanceRowsBySearch(rows, searchTerm) {
   return renumberMaintenanceRows(filtered);
 }
 
-function finalizeMaintenanceRows(rows) {
-  const merged = [...rows];
-  merged.sort(compareMaintenanceRows);
-  return renumberMaintenanceRows(merged);
-}
-
-/** 两段均已按 compareMaintenanceRows 降序时 O(n) 归并。 */
-function mergeSortedMaintenanceRows(left, right) {
-  if (!left.length) return renumberMaintenanceRows([...right]);
-  if (!right.length) return renumberMaintenanceRows([...left]);
-  const out = [];
-  let i = 0;
-  let j = 0;
-  while (i < left.length && j < right.length) {
-    if (compareMaintenanceRows(left[i], right[j]) <= 0) {
-      out.push(left[i++]);
-    } else {
-      out.push(right[j++]);
-    }
-  }
-  while (i < left.length) out.push(left[i++]);
-  while (j < right.length) out.push(right[j++]);
-  return renumberMaintenanceRows(out);
-}
-
-/** 同日期段内分页结果可直接追加（API 已全局降序）。 */
-function appendMaintenancePageRows(existing, pageRows) {
-  if (!pageRows.length) return existing;
-  if (!existing.length) return renumberMaintenanceRows([...pageRows]);
-  return renumberMaintenanceRows(existing.concat(pageRows));
-}
-
-/**
- * Search transaction maintenance data.
- * Automatically: splits wide date ranges → paginates each slice → retries → splits again on failure.
- */
-export async function searchTransactionData({
-  dateFrom,
-  dateTo,
-  process,
-  category,
-  scope,
-  signal,
-  onFirstPage,
-  onProgress,
-}) {
-  const processFilter = normalizeMaintenanceProcessFilter(process);
-  const categoryFilter = resolveTransactionMaintenanceCategory(category, scope);
-  const emitProgress = (rows) => {
-    if (!rows.length) return;
-    const snapshot = renumberMaintenanceRows([...rows]);
-    if (typeof onProgress === "function") onProgress(snapshot);
-    else if (typeof onFirstPage === "function") onFirstPage(snapshot);
+/** Spring `MaintenanceTransactionDTO` row (one row per `data_capture_line`) → legacy grid row shape. */
+function normalizeSpringTransactionMaintenanceRow(row, tenantId) {
+  return {
+    transaction_id: Number(row?.id) || 0,
+    dts_created: formatSpringDateTimeToDmy(row?.dtsCreated),
+    process: row?.process ?? "",
+    id_product: row?.idProduct ?? "",
+    account: row?.account ?? "",
+    description: row?.description ?? "",
+    remark: row?.remark ?? "",
+    percent: row?.percent ?? "",
+    currency: row?.currency ?? "",
+    rate: row?.rate ?? "",
+    cr: row?.cr ?? 0,
+    dr: row?.dr ?? 0,
+    created_by: row?.createdBy ?? "",
+    is_deleted: row?.deleted === true,
+    deleted_by: row?.deletedBy ?? "",
+    dts_deleted: formatSpringDateTimeToDmy(row?.deletedAt),
+    _tenant_id: tenantId,
+    _dts_created_raw: String(row?.dtsCreated ?? ""),
   };
+}
 
-  const mergeCompanyIds =
-    scope?.mode === "aggregate" && Array.isArray(scope.mergeCompanyIds)
-      ? scope.mergeCompanyIds.filter((id) => Number(id) > 0)
-      : [];
+/** Global sort across (possibly several, aggregate-merged) tenants: dtsCreated desc, id desc — mirrors backend TC_ROW_ORDER. */
+function compareTransactionMaintenanceRows(a, b) {
+  const cmp = String(b._dts_created_raw || "").localeCompare(String(a._dts_created_raw || ""));
+  if (cmp !== 0) return cmp;
+  return Number(b.transaction_id || 0) - Number(a.transaction_id || 0);
+}
 
-  if (mergeCompanyIds.length > 0) {
-    let merged = [];
-    for (const scopedCompanyId of mergeCompanyIds) {
-      if (signal?.aborted) {
-        throw new DOMException("The operation was aborted.", "AbortError");
-      }
-      const subScope = {
-        ...scope,
-        mode: "company",
-        scopeCompanyId: Number(scopedCompanyId),
-        uiCompanyId: Number(scopedCompanyId),
-        mergeCompanyIds: [Number(scopedCompanyId)],
-        groupsAllMode: false,
-        groupAllMode: false,
-      };
-      const part = await fetchMaintenanceDateRangeResilient({
-        dateFrom,
-        dateTo,
-        process: processFilter,
-        category: categoryFilter,
-        scope: subScope,
-        signal,
-        onProgress:
-          typeof onProgress === "function"
-            ? (rows) => {
-                if (!rows.length) return;
-                merged = merged.length
-                  ? mergeSortedMaintenanceRows(merged, finalizeMaintenanceRows(rows))
-                  : finalizeMaintenanceRows(rows);
-                emitProgress(merged);
-              }
-            : undefined,
-      });
-      if (!part.length) continue;
-      merged = merged.length
-        ? mergeSortedMaintenanceRows(merged, finalizeMaintenanceRows(part))
-        : finalizeMaintenanceRows(part);
-      if (typeof onProgress === "function") emitProgress(merged);
-    }
-    return renumberMaintenanceRows(merged);
-  }
-
-  const merged = await fetchMaintenanceDateRangeResilient({
+async function fetchTransactionMaintenanceOnce({ tenantId, dateFrom, dateTo, process, category, signal }) {
+  const request = {
+    tenantId,
     dateFrom,
     dateTo,
-    process: processFilter,
-    category: categoryFilter,
-    scope,
-    signal,
-    onProgress: emitProgress,
-  });
-  return renumberMaintenanceRows(merged);
-}
-
-async function fetchMaintenanceDateRangeResilient({
-  dateFrom,
-  dateTo,
-  process,
-  category,
-  scope,
-  signal,
-  onProgress,
-}) {
-  const daySpan = maintenanceDateSpanDays(dateFrom, dateTo);
-  const ranges =
-    daySpan > MAINTENANCE_CHUNK_THRESHOLD_DAYS
-      ? splitMaintenanceDateRange(dateFrom, dateTo, MAINTENANCE_CHUNK_DAYS)
-      : [{ dateFrom, dateTo }];
-  const rangesNewestFirst = [...ranges].reverse();
-
-  if (rangesNewestFirst.length === 1) {
-    return fetchMaintenanceRangeWithSplit({
-      dateFrom: rangesNewestFirst[0].dateFrom,
-      dateTo: rangesNewestFirst[0].dateTo,
-      process,
-      category,
-      scope,
-      signal,
-      onProgress,
-    });
-  }
-
-  let merged = [];
-  for (const range of rangesNewestFirst) {
-    if (signal?.aborted) {
-      throw new DOMException("The operation was aborted.", "AbortError");
-    }
-    const part = await fetchMaintenanceRangeWithSplit({
-      dateFrom: range.dateFrom,
-      dateTo: range.dateTo,
-      process,
-      category,
-      scope,
-      signal,
-    });
-    if (!part.length) continue;
-    merged = merged.length
-      ? mergeSortedMaintenanceRows(merged, finalizeMaintenanceRows(part))
-      : finalizeMaintenanceRows(part);
-    if (typeof onProgress === "function") onProgress(merged);
-  }
-  return merged;
-}
-
-async function fetchMaintenanceRangeWithSplit(params) {
-  const { onProgress, ...rest } = params;
-  try {
-    return await fetchAllPagesForRange(rest, 0, onProgress);
-  } catch (err) {
-    rethrowIfAborted(err, params.signal);
-    if (!isMaintenanceTransferError(err)) throw err;
-
-    const daySpan = maintenanceDateSpanDays(params.dateFrom, params.dateTo);
-    if (daySpan <= 1) {
-      return fetchAllPagesForRange(rest, MAINTENANCE_PAGE_SIZES.length - 1, onProgress);
-    }
-
-    const [olderRange, newerRange] = splitMaintenanceDateRangeHalf(params.dateFrom, params.dateTo);
-    const newer = await fetchMaintenanceRangeWithSplit({
-      ...rest,
-      dateFrom: newerRange.dateFrom,
-      dateTo: newerRange.dateTo,
-      onProgress,
-    });
-    const older = await fetchMaintenanceRangeWithSplit({
-      ...rest,
-      dateFrom: olderRange.dateFrom,
-      dateTo: olderRange.dateTo,
-    });
-    if (!newer.length) return finalizeMaintenanceRows(older);
-    if (!older.length) return newer;
-    return mergeSortedMaintenanceRows(newer, finalizeMaintenanceRows(older));
-  }
-}
-
-function maintenancePageSizeForRequest(isFirstPage, pageSizeIndex) {
-  if (isFirstPage) return MAINTENANCE_FIRST_PAGE_SIZE;
-  return MAINTENANCE_PAGE_SIZES[Math.min(pageSizeIndex, MAINTENANCE_PAGE_SIZES.length - 1)];
-}
-
-async function fetchAllPagesForRange(params, pageSizeIndex, onProgress) {
-  const fetchBatch = async ({ cursor, page }) => {
-    const pageSize = maintenancePageSizeForRequest(page === 1 && !cursor, pageSizeIndex);
-    try {
-      return await fetchMaintenancePageWithRetries({
-        ...params,
-        cursor,
-        pageSize,
-        page: cursor ? 1 : page,
-      });
-    } catch (err) {
-      rethrowIfAborted(err, params.signal);
-      if (isMaintenanceTransferError(err) && pageSizeIndex < MAINTENANCE_PAGE_SIZES.length - 1) {
-        return fetchAllPagesForRange(params, pageSizeIndex + 1, onProgress);
-      }
-      throw err;
-    }
+    process: process || null,
+    category,
+    q: null,
   };
-
-  let all = [];
-  let cursor = null;
-  let currentPage = 1;
-  let loops = 0;
-
-  while (loops < MAINTENANCE_MAX_PAGES) {
-    if (params.signal?.aborted) {
-      throw new DOMException("The operation was aborted.", "AbortError");
-    }
-    const result = await fetchBatch({ cursor, page: currentPage });
-    if (result.data?.length) {
-      all = appendMaintenancePageRows(all, result.data);
-      if (typeof onProgress === "function") onProgress(all);
-    }
-    if (!result.pagination?.has_more) break;
-    const nextCursor = result.pagination?.next_cursor;
-    if (nextCursor) {
-      cursor = nextCursor;
-      currentPage = 1;
-    } else {
-      cursor = null;
-      currentPage += 1;
-    }
-    loops += 1;
-  }
-
-  return all;
-}
-
-async function fetchMaintenancePageWithRetries(params) {
-  let lastErr;
-  for (let attempt = 0; attempt < MAINTENANCE_FETCH_RETRIES; attempt += 1) {
-    try {
-      return await searchTransactionMaintenanceOnce(params);
-    } catch (err) {
-      lastErr = err;
-      rethrowIfAborted(err, params.signal);
-      if (!isMaintenanceTransferError(err)) throw err;
-      if (attempt < MAINTENANCE_FETCH_RETRIES - 1) {
-        await sleep(MAINTENANCE_RETRY_BASE_MS * (attempt + 1));
-      }
-    }
-  }
-  throw lastErr;
-}
-
-function splitMaintenanceDateRangeHalf(dateFrom, dateTo) {
-  const start = parseMaintenanceDmyDate(dateFrom);
-  const totalDays = maintenanceDateSpanDays(dateFrom, dateTo);
-  const mid = new Date(start);
-  mid.setDate(mid.getDate() + Math.floor(totalDays / 2) - 1);
-  const rightStart = new Date(mid);
-  rightStart.setDate(rightStart.getDate() + 1);
-  return [
-    { dateFrom, dateTo: formatDmy(mid) },
-    { dateFrom: formatDmy(rightStart), dateTo },
-  ];
-}
-
-function maintenanceDateSpanDays(dateFrom, dateTo) {
-  const start = parseMaintenanceDmyDate(dateFrom);
-  const end = parseMaintenanceDmyDate(dateTo);
-  if (!start || !end || start > end) return 0;
-  return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
-}
-
-function parseMaintenanceDmyDate(dmy) {
-  const ymd = parseDdMmYyyyToYmd(dmy);
-  return ymd ? parseYmd(ymd) : null;
-}
-
-function splitMaintenanceDateRange(dateFrom, dateTo, maxDays) {
-  const start = parseMaintenanceDmyDate(dateFrom);
-  const end = parseMaintenanceDmyDate(dateTo);
-  if (!start || !end || start > end) return [{ dateFrom, dateTo }];
-
-  const chunks = [];
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    const chunkEnd = new Date(cursor);
-    chunkEnd.setDate(chunkEnd.getDate() + maxDays - 1);
-    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
-    chunks.push({ dateFrom: formatDmy(cursor), dateTo: formatDmy(chunkEnd) });
-    cursor.setTime(chunkEnd.getTime());
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return chunks;
-}
-
-function parseMaintenanceDtsTimestamp(value) {
-  const raw = String(value ?? "").trim();
-  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
-  if (!m) return 0;
-  return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]).getTime();
-}
-
-function compareMaintenanceRows(a, b) {
-  const dateA = a.transaction_date ?? "";
-  const dateB = b.transaction_date ?? "";
-  if (dateA !== dateB) return dateB.localeCompare(dateA);
-
-  const tsA = parseMaintenanceDtsTimestamp(a.dts_created);
-  const tsB = parseMaintenanceDtsTimestamp(b.dts_created);
-  if (tsA !== tsB) return tsB - tsA;
-
-  const capA = Number(a.capture_id ?? 0);
-  const capB = Number(b.capture_id ?? 0);
-  if (capA !== capB) return capB - capA;
-
-  const detA = Number(a.capture_detail_id ?? 0);
-  const detB = Number(b.capture_detail_id ?? 0);
-  if (detA !== detB) return detB - detA;
-
-  return Number(b.transaction_id ?? 0) - Number(a.transaction_id ?? 0);
-}
-
-async function searchTransactionMaintenanceOnce({
-  dateFrom,
-  dateTo,
-  process,
-  category,
-  scope,
-  signal,
-  page = 1,
-  pageSize = MAINTENANCE_FIRST_PAGE_SIZE,
-  cursor = null,
-}) {
-  const params = new URLSearchParams();
-  params.append("date_from", dateFrom);
-  params.append("date_to", dateTo);
-  params.append("page_size", String(pageSize));
-  if (cursor) {
-    params.append("cursor", cursor);
-    params.append("page", "1");
-  } else {
-    params.append("page", String(page));
-  }
-  if (process) params.append("process", process);
-  appendMaintenanceScopeToParams(params, scope);
-  if (category) params.append("category", category);
-
-  const url = buildApiUrl(`api/transactions/maintenance_search_api.php?${params.toString()}`);
   let response;
   try {
-    response = await fetch(url, {
+    response = await fetch(buildApiUrl("api/maintenance/transaction-maintenance/list"), {
+      method: "POST",
       credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
       signal,
       cache: "no-store",
-      headers: { Accept: "application/json" },
     });
   } catch (err) {
     rethrowIfAborted(err, signal);
@@ -609,27 +251,61 @@ async function searchTransactionMaintenanceOnce({
     throw new Error(detail || `HTTP ${status}`);
   }
 
-  const rows = Array.isArray(data.data) ? data.data : [];
-  const pagination = data.pagination ?? {
-    page,
-    page_size: pageSize,
-    total: rows.length,
-    has_more: false,
-    next_cursor: null,
+  return Array.isArray(data.data) ? data.data : [];
+}
+
+/**
+ * Search transaction maintenance data — one Spring call per resolved tenant (aggregate scope loops + merges).
+ * @param {AbortSignal} [opts.signal]
+ * @param {(rows: object[]) => void} [opts.onProgress] fires once per completed tenant (aggregate scope), or once overall
+ */
+export async function searchTransactionData({
+  dateFrom,
+  dateTo,
+  process,
+  scope,
+  companies,
+  signal,
+  onFirstPage,
+  onProgress,
+}) {
+  const processFilter = normalizeMaintenanceProcessFilter(process);
+  const category = resolveTransactionMaintenanceCategory(scope);
+  const emitProgress = (rows) => {
+    if (typeof onProgress === "function") onProgress(rows);
+    else if (typeof onFirstPage === "function") onFirstPage(rows);
   };
 
-  return { data: rows, pagination };
+  const tenantIds = resolveTransactionMaintenanceTenantIds({ scope, companies });
+  if (tenantIds.length === 0) return [];
+
+  let merged = [];
+  for (const tenantId of tenantIds) {
+    if (signal?.aborted) {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
+    const rows = await fetchTransactionMaintenanceOnce({
+      tenantId,
+      dateFrom,
+      dateTo,
+      process: processFilter,
+      category,
+      signal,
+    });
+    const normalizedPart = rows.map((row) => normalizeSpringTransactionMaintenanceRow(row, tenantId));
+    if (!normalizedPart.length) continue;
+    merged = merged.concat(normalizedPart).sort(compareTransactionMaintenanceRows);
+    emitProgress(renumberMaintenanceRows([...merged]));
+  }
+  return renumberMaintenanceRows(merged);
 }
 
 export async function updateSessionCompany(companyId) {
-  const response = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`), {
-    credentials: "include",
-  });
-  const result = await response.json();
-  if (!result.success) {
-    throw new Error(result.error || 'Failed to update session company');
+  const json = await syncCompanySessionApi(companyId);
+  if (!json?.success) {
+    throw new Error(json?.message || "Failed to update session company");
   }
-  return result.data;
+  return json.data;
 }
 
 /** Group-only: sync anchor subsidiary + view_group before maintenance search APIs run. */
@@ -677,40 +353,4 @@ export function formatAmount(value) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-/** React Query 缓存：区分「加载完成」与「中途切换公司被中断的半成品」。 */
-export function packMaintenanceCache(rows, complete = false) {
-  return { rows: Array.isArray(rows) ? rows : [], complete: Boolean(complete) };
-}
-
-export function getMaintenanceCacheRows(data) {
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  return Array.isArray(data.rows) ? data.rows : [];
-}
-
-/** 仅 complete===true 视为可长期复用的完整结果；无缓存/数组旧缓存视为未完成。 */
-export function isMaintenanceCacheComplete(data) {
-  if (!data) return false;
-  if (Array.isArray(data)) return false;
-  return data.complete === true;
-}
-
-/** React Query queryKey（与 TransactionMaintenancePage 一致）。 */
-export function buildTransactionMaintenanceQueryKey({
-  scope,
-  dateFrom,
-  dateTo,
-  process,
-  category,
-}) {
-  return [
-    "transaction-maintenance",
-    transactionMaintenanceScopeCacheKey(scope),
-    dateFrom,
-    dateTo,
-    normalizeMaintenanceProcessFilter(process),
-    category || "",
-  ];
 }

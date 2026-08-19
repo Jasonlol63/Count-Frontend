@@ -629,11 +629,8 @@ export default function FormulaMaintenancePage() {
     if (!formulaMaintenanceScopeIsReady(effectiveScope) || effectiveProcess === null) return;
 
     const searchScopeKey = formulaMaintenanceScopeCacheKey(effectiveScope);
-    const searchCompanyId = Number(effectiveScope.scopeCompanyId);
-    const category = "Games";
     const effectiveSearchKey = JSON.stringify([
       searchScopeKey,
-      category,
       effectiveProcess === "" ? "__all__" : String(effectiveProcess),
     ]);
     const filtersChanged =
@@ -667,10 +664,9 @@ export default function FormulaMaintenancePage() {
 
     try {
       const data = await listFormulaTemplates({
-        companyId: searchCompanyId,
-        category,
         process: effectiveProcess === "" ? undefined : effectiveProcess,
         scope: effectiveScope,
+        companies,
       });
       if (!skipStaleGuard && seq !== searchSeqRef.current) return;
       if (!skipStaleGuard && searchScopeKey !== scopeKeyRef.current) return;
@@ -1022,8 +1018,8 @@ export default function FormulaMaintenancePage() {
     const idsToDelete = resolveSelectedIds();
     if (idsToDelete.length === 0) return;
     try {
-      const effectiveCompanyId = formulaMaintenanceEffectiveCompanyId(formulaScope, companyId);
-      await deleteFormulaTemplates(effectiveCompanyId, idsToDelete, formulaScope);
+      const tenantId = formulaMaintenanceEffectiveCompanyId(formulaScope, companyId);
+      await deleteFormulaTemplates({ tenantId, formulaIds: idsToDelete });
       removeFormulaRowsLocally(idsToDelete);
       setConfirmDelete(false);
       notify(t("successfullyDeletedN", { n: idsToDelete.length }), "success");
@@ -1036,23 +1032,21 @@ export default function FormulaMaintenancePage() {
   const handleSaveRow = async (id, editForm) => {
     if (guardWrite()) return;
     try {
-      const effectiveCompanyId = formulaMaintenanceEffectiveCompanyId(formulaScope, companyId);
-      const payload = {
-        template_id: id,
-        ...(effectiveCompanyId != null ? { company_id: effectiveCompanyId } : {}),
-        account_id: editForm.account_id,
-        source_columns: editForm.source_ref ?? "",
-        source_percent: editForm.source_percent ?? "",
-        input_method: editForm.input_method ?? "",
-        formula: editForm.formula ?? "",
-        description: editForm.description ?? "",
-      };
-      const serverData = await updateFormulaTemplate(payload, formulaScope);
+      const tenantId = formulaMaintenanceEffectiveCompanyId(formulaScope, companyId);
+      await updateFormulaTemplate({
+        tenantId,
+        id,
+        accountId: editForm.account_id,
+        sourcePercent: editForm.source_percent,
+        inputMethod: editForm.input_method,
+        formula: editForm.formula,
+        description: editForm.description,
+      });
       notify(t("updateSuccessful"), "success");
 
       const account = accounts.find((a) => formulaRowIdsMatch(a.id, editForm.account_id));
       const accountLabel = account?.display_text ?? "";
-      const patchOpts = { id, editForm, accountLabel, serverData };
+      const patchOpts = { id, editForm, accountLabel };
       const mergeRow = (row) => patchFormulaRowAfterSave(row, patchOpts);
 
       formulaDataFullRef.current = formulaDataFullRef.current.map(mergeRow);

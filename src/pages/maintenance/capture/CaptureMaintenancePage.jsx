@@ -440,6 +440,7 @@ export default function CaptureMaintenancePage() {
             process: selectedProcess,
             query,
             scope: effectiveScope,
+            companies,
           },
           { signal: ac.signal },
         );
@@ -643,19 +644,11 @@ export default function CaptureMaintenancePage() {
     if (guardWrite()) return;
     setShowDeleteModal(false);
     try {
-      const itemsToDelete = captureData
-        .filter(row => selectedIds.includes(row.capture_id))
-        .map(row => ({
-          capture_id: Number(row.capture_id),
-          process_id: row.process_id || row.process || null,
-          currency_id: row.currency_id ? Number(row.currency_id) : null
-        }));
-
       await deleteCaptureItems({
-        items: itemsToDelete,
-        dateFrom,
-        dateTo,
+        captureIds: selectedIds,
         scope: captureScope,
+        rows: captureData,
+        companies,
       });
 
       notifyTransactionListInvalidated("capture_maintenance_delete");
@@ -741,6 +734,7 @@ export default function CaptureMaintenancePage() {
         onClose={() => setShowDeleteModal(false)}
         onConfirm={confirmDeleteAction}
         count={selectedIds.length}
+        messageKey="deleteConfirmCaptureRecords"
         t={t}
       />
     </div>

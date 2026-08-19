@@ -50,6 +50,8 @@ export const MAINTENANCE_I18N = {
       "Are you sure you want to delete the selected {count} record(s)? This action cannot be undone.",
     deleteConfirmBankProcess:
       "Are you sure you want to delete the selected {count} bank process transaction(s)? This action cannot be undone.",
+    deleteConfirmCaptureRecords:
+      "Are you sure you want to delete the selected {count} capture record(s)? This will also delete every other Product submitted in the same batch. This action cannot be undone.",
     operationCompletedSuccess: "Operation completed successfully!",
     operationFailedRetry: "Operation failed. Please try again.",
     noDataFound: "No data found",
@@ -172,6 +174,7 @@ export const MAINTENANCE_I18N = {
     pleaseConfirmDeletionCheckbox: "请先勾选确认删除",
     deleteConfirmRecords: "确定要删除已选中的 {count} 条记录吗？此操作不可撤销。",
     deleteConfirmBankProcess: "确定要删除已选中的 {count} 笔银行流程交易吗？此操作不可撤销。",
+    deleteConfirmCaptureRecords: "确定要删除已选中的 {count} 条 Capture 记录吗？同一次提交下的其它所有 Product 也会一并删除。此操作不可撤销。",
     operationCompletedSuccess: "操作成功完成！",
     operationFailedRetry: "操作失败，请重试。",
     noDataFound: "暂无数据",

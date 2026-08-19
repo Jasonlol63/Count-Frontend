@@ -1,26 +1,23 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import {
-  fetchFormulaCompanyPermissionsRaw,
-  fetchMaintenanceProcesses,
-} from "../shared/maintenanceCompanyApi.js";
+import { fetchFormulaCompanyPermissionsRaw } from "../shared/maintenanceCompanyApi.js";
+import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
 import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
-import {
-  buildFormulaDisplayParenFromParts,
-  formatSourcePercent,
-  normalizeMaintenanceFormulaInput,
-} from "../../../shared/formula/index.js";
+import { resolveGroupEntityRowFromSnap } from "../../report/shared/reportScope.js";
+import { fetchAccountListByTenantId, filterAccountListRows } from "../../account/accountListApi.js";
+import { formatSourcePercent, normalizeMaintenanceFormulaInput } from "../../../shared/formula/index.js";
 import {
   GROUP_PAYROLL_PROCESS_CODES,
   mapGroupPayrollProcesses,
 } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
+import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
 import {
-  formulaMaintenanceScopeApiParams,
+  formulaMaintenanceEffectiveCompanyId,
   formulaMaintenanceUsesGroupProcesses,
 } from "./formulaMaintenanceScope.js";
 
 const FORMULA_PAYROLL_PROCESS_CODES = new Set(GROUP_PAYROLL_PROCESS_CODES);
 
-/** ProcessSelect expects process_name; domain report rows use process / display_text. */
+/** ProcessSelect expects process_name; domain report / Spring process-list rows both normalize to this shape. */
 export function mapProcessesForMaintenanceSelect(apiList, { groupPayrollShort = false } = {}) {
   return (Array.isArray(apiList) ? apiList : []).map((row) => {
     const processName = String(
@@ -37,40 +34,6 @@ export function mapProcessesForMaintenanceSelect(apiList, { groupPayrollShort = 
       description,
     };
   });
-}
-
-function appendFormulaScopeToParams(params, scope) {
-  const { companyId, viewGroup, groupId, reportScope, groupOnly, groupAggregate } =
-    formulaMaintenanceScopeApiParams(scope);
-  if (companyId) params.append("company_id", String(companyId));
-  const vg = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
-  if (vg) params.append("view_group", vg);
-  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
-  if (gid) params.append("group_id", gid);
-  if (reportScope) params.append("report_scope", reportScope);
-  if (groupOnly) params.append("group_only", "1");
-  if (groupAggregate) params.append("group_aggregate", "1");
-}
-
-function appendFormulaScopeToPayload(payload, scope, fallbackCompanyId = null) {
-  // Never send company_id: 0 — backend rejects it; group scope resolves from group_id (same as list GET).
-  if (payload.company_id != null && Number(payload.company_id) <= 0) {
-    delete payload.company_id;
-  }
-  const { companyId, viewGroup, groupId, reportScope, groupOnly, groupAggregate } =
-    formulaMaintenanceScopeApiParams(scope);
-  if (companyId) payload.company_id = companyId;
-  else if (reportScope === "group") delete payload.company_id;
-  else {
-    const resolved =
-      fallbackCompanyId != null && Number(fallbackCompanyId) > 0 ? Number(fallbackCompanyId) : null;
-    if (resolved) payload.company_id = resolved;
-  }
-  if (viewGroup) payload.view_group = viewGroup;
-  if (groupId) payload.group_id = groupId;
-  if (reportScope) payload.report_scope = reportScope;
-  if (groupOnly) payload.group_only = "1";
-  if (groupAggregate) payload.group_aggregate = "1";
 }
 
 export async function fetchCompanyPermissionsRaw(companyCode) {
@@ -95,7 +58,9 @@ export async function fetchProcesses(companyId, scope = null) {
     });
   }
   const effectiveId = scope?.scopeCompanyId ?? companyId;
-  const rows = await fetchMaintenanceProcesses(effectiveId, { credentials: "include" });
+  const tid = Number(effectiveId);
+  if (!Number.isFinite(tid) || tid <= 0) return [];
+  const rows = await fetchProcessListByTenantId(tid);
   let mapped = mapProcessesForMaintenanceSelect(rows, { groupPayrollShort: false });
   if (scope?.c168Channel) {
     mapped = mapped.filter((p) =>
@@ -105,46 +70,160 @@ export async function fetchProcesses(companyId, scope = null) {
   return mapped;
 }
 
+/** `CODE (Name)` display, matching `transactionAccountHelpers.js`'s account-picker text convention. */
+function normalizeFormulaAccountOption(row) {
+  const code = String(row?.account_id ?? "").trim();
+  const name = String(row?.name ?? "").trim();
+  if (!code && row?.id == null) return null;
+  return {
+    id: row?.id,
+    account_id: code,
+    display_text: name ? `${code} (${name})` : code,
+  };
+}
+
 export async function fetchAccounts(companyId, scope = null) {
-  const effectiveId = scope?.scopeCompanyId ?? companyId;
-  const params = new URLSearchParams();
-  if (effectiveId) params.append("company_id", String(effectiveId));
-  appendFormulaScopeToParams(params, scope);
-  params.append("status", "active");
-  const url = buildApiUrl(`api/transactions/get_accounts_api.php?${params.toString()}`);
-
-  const response = await fetch(url, { credentials: "include" });
-  const data = await response.json();
-  if (!data.success) throw new Error(data.error || "Failed to load accounts");
-  return data.data || [];
+  const tenantId = formulaMaintenanceEffectiveCompanyId(scope, companyId);
+  if (!tenantId) return [];
+  const rows = await fetchAccountListByTenantId(tenantId);
+  const active = filterAccountListRows(rows);
+  return active.map(normalizeFormulaAccountOption).filter(Boolean);
 }
 
-export async function listFormulaTemplates({ companyId, category, process, search, scope }) {
-  const params = new URLSearchParams();
-  // Scope params include company_id for group/company; avoid duplicating query keys.
-  appendFormulaScopeToParams(params, scope);
-  if (!scope && companyId) params.append("company_id", String(companyId));
-  if (category) params.append("category", category);
-  if (process != null && String(process).trim() !== "") {
-    params.append("process", String(process).trim());
+/** "Bank" for C168 / bank-only payroll companies; "Games" otherwise — category is a required hard filter server-side. */
+function resolveFormulaMaintenanceCategory(scope) {
+  const payrollChannel = Boolean(scope?.c168Channel || scope?.companyPayrollChannel);
+  return payrollChannel ? "Bank" : "Games";
+}
+
+/**
+ * Numeric tenant id(s) for formula maintenance list.
+ * Group entity + subsidiary company share one Spring tenant row; "aggregate" (Groups All / Group All) spans several;
+ * pure Group ledger (no subsidiary drill-down) resolves `scope.scopeCompanyId` to 0 and must be looked up by group id.
+ */
+function resolveFormulaMaintenanceTenantIds({ scope, companies } = {}) {
+  if (scope?.mode === "aggregate") {
+    const ids = Array.isArray(scope.mergeCompanyIds) ? scope.mergeCompanyIds : [];
+    return ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
   }
-  if (search) params.append("search", String(search).toUpperCase());
-  params.append("_t", Date.now());
-  const url = buildApiUrl(`api/formula_maintenance/list_api.php?${params.toString()}`);
-  const response = await fetch(url, { cache: "no-cache", credentials: "include" });
-  const data = await response.json();
-
-  if (!data.success) throw new Error(data.message || data.error || "Search failed");
-  const list = data.data && data.data.list ? data.data.list : data.data || [];
-  return list;
+  const tid = Number(scope?.scopeCompanyId);
+  if (Number.isFinite(tid) && tid > 0) return [tid];
+  if (scope?.mode === "group" && scope.groupId && Array.isArray(companies)) {
+    const row = resolveGroupEntityRowFromSnap(companies, scope.groupId);
+    const id = Number(row?.id);
+    if (Number.isFinite(id) && id > 0) return [id];
+  }
+  return [];
 }
 
-export async function updateFormulaTemplate(payload, scope = null) {
-  const normalizedFormula = normalizeMaintenanceFormulaInput(payload.formula);
-  const body = { ...payload, formula: normalizedFormula };
-  appendFormulaScopeToPayload(body, scope);
+/** MAIN row shows its own idProduct; SUB row shows the parent's (not a "parent / child" concatenation). */
+function resolveFormulaProductDisplay(row) {
+  const productType = String(row?.productType ?? "").trim().toUpperCase();
+  if (productType === "SUB") {
+    return row?.parentIdProduct ?? row?.idProduct ?? "";
+  }
+  return row?.idProduct ?? "";
+}
 
-  const response = await fetch(buildApiUrl("api/formula_maintenance/update_api.php"), {
+/** Spring `MaintenanceFormulaDTO` row → legacy grid row shape used by the table components. */
+function normalizeSpringFormulaMaintenanceRow(row) {
+  return {
+    id: row?.id,
+    process: row?.process ?? "",
+    account: row?.account ?? "",
+    account_id: row?.accountId ?? null,
+    currency: row?.currency ?? "",
+    source: formatSourcePercent(row?.sourcePercent),
+    product: resolveFormulaProductDisplay(row),
+    id_product: row?.idProduct ?? "",
+    parent_id_product: row?.parentIdProduct ?? "",
+    product_type: row?.productType ?? "",
+    input_method: row?.inputMethod ?? "",
+    formula: row?.formula ?? "",
+    description: row?.description ?? "",
+    _sub_order: Number(row?.subOrder ?? 0),
+    _formula_variant: Number(row?.formulaVariant ?? 0),
+  };
+}
+
+/** Mirrors backend SQL `ORDER BY id_product, product_type, sub_order, formula_variant, id`. */
+function compareFormulaMaintenanceRows(a, b) {
+  const ip = String(a.id_product ?? "").localeCompare(String(b.id_product ?? ""));
+  if (ip !== 0) return ip;
+  const pt = String(a.product_type ?? "").localeCompare(String(b.product_type ?? ""));
+  if (pt !== 0) return pt;
+  const so = Number(a._sub_order ?? 0) - Number(b._sub_order ?? 0);
+  if (so !== 0) return so;
+  const fv = Number(a._formula_variant ?? 0) - Number(b._formula_variant ?? 0);
+  if (fv !== 0) return fv;
+  return Number(a.id ?? 0) - Number(b.id ?? 0);
+}
+
+async function fetchFormulaMaintenancePage({ tenantId, process, category, signal }) {
+  const request = { tenantId, process: process || null, category, q: null };
+  const response = await fetch(buildApiUrl("api/maintenance/formula-maintenance/list"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    signal,
+  });
+  const data = await response.json();
+  if (!data.success) {
+    throw new Error(data.message || data.error || "Search failed");
+  }
+  return Array.isArray(data.data) ? data.data : [];
+}
+
+/**
+ * List formula maintenance templates — one Spring call per resolved tenant (aggregate scope loops + merges).
+ * `search` is filtered purely client-side (`filterFormulaRowsBySearch`), matching the page's existing behavior.
+ */
+export async function listFormulaTemplates({ process, scope, companies, signal }) {
+  const category = resolveFormulaMaintenanceCategory(scope);
+  const tenantIds = resolveFormulaMaintenanceTenantIds({ scope, companies });
+  if (tenantIds.length === 0) return [];
+
+  const processFilter = process != null && String(process).trim() !== "" ? String(process).trim() : null;
+
+  let merged = [];
+  for (const tenantId of tenantIds) {
+    const rows = await fetchFormulaMaintenancePage({ tenantId, process: processFilter, category, signal });
+    const normalizedPart = rows.map(normalizeSpringFormulaMaintenanceRow);
+    if (!normalizedPart.length) continue;
+    merged = merged.concat(normalizedPart).sort(compareFormulaMaintenanceRows);
+  }
+  return merged;
+}
+
+/**
+ * Update one formula maintenance row — only account/source%/input method/formula/description are editable server-side.
+ * @param {{tenantId:number, id:number, accountId?:number|string|null, sourcePercent?:string, inputMethod?:string, formula?:string, description?:string}} payload
+ */
+export async function updateFormulaTemplate(payload) {
+  const tenantId = Number(payload?.tenantId);
+  if (!Number.isFinite(tenantId) || tenantId <= 0) {
+    throw new Error("tenantIdRequired");
+  }
+  const id = Number(payload?.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error("Invalid formula id");
+  }
+  const rawAccountId = payload?.accountId;
+  const accountId =
+    rawAccountId != null && String(rawAccountId).trim() !== "" ? Number(rawAccountId) : null;
+
+  const body = {
+    tenantId,
+    id,
+    accountId: Number.isFinite(accountId) ? accountId : null,
+    sourcePercent: payload?.sourcePercent != null ? String(payload.sourcePercent) : null,
+    inputMethod: payload?.inputMethod || null,
+    formula: normalizeMaintenanceFormulaInput(payload?.formula),
+    description: payload?.description || null,
+  };
+
+  const response = await fetch(buildApiUrl("api/maintenance/formula-maintenance/update"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -155,15 +234,27 @@ export async function updateFormulaTemplate(payload, scope = null) {
   return data.data;
 }
 
-export async function deleteFormulaTemplates(companyId, templateIds, scope = null) {
-  const payload = { template_ids: templateIds };
-  appendFormulaScopeToPayload(payload, scope, companyId);
+/**
+ * Hard-delete formula maintenance rows (batch, tenant-scoped — no archive table).
+ * @param {{tenantId:number, formulaIds:number[]}} payload
+ */
+export async function deleteFormulaTemplates({ tenantId, formulaIds }) {
+  const tid = Number(tenantId);
+  if (!Number.isFinite(tid) || tid <= 0) {
+    throw new Error("tenantIdRequired");
+  }
+  const ids = Array.isArray(formulaIds)
+    ? formulaIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+    : [];
+  if (ids.length === 0) {
+    throw new Error("Please select at least one record");
+  }
 
-  const response = await fetch(buildApiUrl("api/formula_maintenance/delete_api.php"), {
+  const response = await fetch(buildApiUrl("api/maintenance/formula-maintenance/delete"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ tenantId: tid, formulaIds: ids }),
   });
   const data = await response.json();
   if (!data.success) throw new Error(data.message || data.error || "Delete failed");
@@ -171,12 +262,9 @@ export async function deleteFormulaTemplates(companyId, templateIds, scope = nul
 }
 
 export async function updateSessionCompany(companyId) {
-  const response = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${companyId}`), {
-    credentials: "include",
-  });
-  const result = await response.json();
-  if (!result.success) throw new Error(result.error || "Failed to update session company");
-  return result.data;
+  const json = await syncCompanySessionApi(companyId);
+  if (!json?.success) throw new Error(json?.message || "Failed to update session company");
+  return json.data;
 }
 
 export const INPUT_METHOD_OPTIONS = [
@@ -200,51 +288,20 @@ export const toUpperDisplay = (val) => {
 export function formulaRowIdsMatch(a, b) {
   if (a == null || b == null) return false;
   return String(a) === String(b);
-};
-
-/** Edit form: formula field is base-only; strip accidental *(source) suffix. */
-export function parseFormulaEditTail(raw) {
-  const base = normalizeMaintenanceFormulaInput(raw);
-  return { base, tail: null };
-}
-
-export function buildFormulaEditString(base) {
-  return String(base ?? "").trim();
-}
-
-/** Formula 编辑框展示 = base +（Source≠1 时）* (source)，与列表 Formula 列一致。 */
-export function buildEditFormFormulaDisplay(base, sourcePercent) {
-  const b = normalizeMaintenanceFormulaInput(base);
-  const source = formatSourcePercent(sourcePercent ?? "1");
-  const enable = source !== "1" && source !== "" ? 1 : 0;
-  return buildFormulaDisplayParenFromParts(b, source, enable);
-}
-
-export function resolveFormulaBaseFromRow(row) {
-  const fromEdit = String(row?.formula_edit ?? "").trim();
-  if (fromEdit) return normalizeMaintenanceFormulaInput(fromEdit);
-  return normalizeMaintenanceFormulaInput(row?.formula ?? "");
 }
 
 export function createFormulaEditFormFromRow(row) {
-  const sourcePercent =
-    row?.source != null && String(row.source).trim() !== "" && String(row.source).trim() !== "-"
-      ? String(row.source).trim()
-      : "1";
-  const base = resolveFormulaBaseFromRow(row);
   return {
     account_id: row?.account_id || "",
-    source_ref: row?.source_ref != null ? String(row.source_ref) : "",
-    source_percent: formatSourcePercent(sourcePercent),
+    source_percent: formatSourcePercent(row?.source ?? "1"),
     input_method: row?.input_method || "",
-    formula: buildEditFormFormulaDisplay(base, sourcePercent),
+    formula: row?.formula || "",
     description: row?.description || "",
   };
 }
 
-/** Source 列变更：同步更新 Formula 编辑框里的 * (source) 后缀。 */
+/** Source % edit only touches `source_percent` — Formula and Source are independent columns, stored and shown separately. */
 export function syncEditFormSourcePercent(form, newSourcePercent) {
-  const base = normalizeMaintenanceFormulaInput(form.formula);
   // Keep the user's edit buffer intact. Values such as "", "0.", and "0.60"
   // are valid intermediate states and must not be normalized on every keypress.
   const sourceInput = newSourcePercent == null ? "" : String(newSourcePercent);
@@ -253,11 +310,7 @@ export function syncEditFormSourcePercent(form, newSourcePercent) {
   if (!/^(?:\d+(?:\.\d*)?|\.\d*)?$/.test(sourceInput)) {
     return form;
   }
-  return {
-    ...form,
-    source_percent: sourceInput,
-    formula: buildEditFormFormulaDisplay(base, sourceInput),
-  };
+  return { ...form, source_percent: sourceInput };
 }
 
 function formulaLetters(value) {
@@ -300,20 +353,16 @@ export function syncEditFormDescriptionInput(form, newDescription) {
   };
 }
 
-export function patchFormulaRowAfterSave(row, { id, editForm, accountLabel, serverData }) {
+/** Update response `data` is always null — patch the local row optimistically from the saved edit form. */
+export function patchFormulaRowAfterSave(row, { id, editForm, accountLabel }) {
   if (!formulaRowIdsMatch(row.id, id)) return row;
-  const source = formatSourcePercent(editForm.source_percent ?? row.source ?? "1");
-  const formulaBase = normalizeMaintenanceFormulaInput(editForm.formula ?? row.formula_edit ?? "");
-  const enable = source !== "1" ? 1 : 0;
   const next = {
     ...row,
     account_id: editForm.account_id,
     account: accountLabel || row.account,
-    source_ref: serverData?.source_ref ?? editForm.source_ref ?? row.source_ref,
-    source: serverData?.source_summary_display ?? source,
+    source: formatSourcePercent(editForm.source_percent ?? row.source ?? "1"),
     input_method: editForm.input_method ?? "",
-    formula: serverData?.formula_display_paren ?? buildFormulaDisplayParenFromParts(formulaBase, source, enable),
-    formula_edit: serverData?.formula_edit ?? formulaBase,
+    formula: editForm.formula ?? row.formula ?? "",
     description: editForm.description ?? "",
   };
   return prepareFormulaRowsForDisplay([next])[0];
