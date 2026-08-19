@@ -254,12 +254,12 @@ export default function BankProcessTable({
                 <div key={r.id} className="process-card bank-virtual-data-row">
                   <div className={cellClass("no")}>{(showAll ? i : (currentPage - 1) * PAGE_SIZE + i) + 1}</div>
                   <div className={cellClass("supplier")}>
-                    <MaintenanceEllipsisText value={r.card_lower} className="bank-process-cell-text" />
+                    <MaintenanceEllipsisText value={r.card_merchant_name} className="bank-process-cell-text" />
                   </div>
                   <div className={cellClass("ccy")}>{r.country || "-"}</div>
                   <div className={cellClass("bank")}>{renderBankCell(r.bank, r.type)}</div>
                   <div className={cellClass("owner")}>
-                    <MaintenanceEllipsisText value={r.supplier} className="bank-owner-text" />
+                    <MaintenanceEllipsisText value={r.card_lower} className="bank-owner-text" />
                   </div>
                   <div className={cellClass("contract", "bank-contract-cell")}>
                     {renderBankContract(r.contract, r.day_start || r.date, r.day_end, lang)}

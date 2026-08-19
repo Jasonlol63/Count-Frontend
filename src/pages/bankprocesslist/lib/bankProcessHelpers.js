@@ -355,7 +355,7 @@ export function sortBankProcessTableRows(rows, sortColumn, sortDirection) {
       sortPrimary((a, b) => Number(a.id || 0) - Number(b.id || 0));
       break;
     case "supplier":
-      sortPrimary((a, b) => bankSortCompareText(a.card_lower || a.supplier, b.card_lower || b.supplier));
+      sortPrimary((a, b) => bankSortCompareText(a.card_merchant_name, b.card_merchant_name));
       break;
     case "ccy":
       sortPrimary((a, b) => bankSortCompareText(a.country, b.country));
