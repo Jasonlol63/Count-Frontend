@@ -199,8 +199,11 @@ export function useCompanyOwnership(shell) {
         const ownersUrl = isHistoricalView
           ? `api/ownership/list?tenant_id=${cid}&month=${encodeURIComponent(selectedMonth)}`
           : `api/ownership/list?tenant_id=${cid}`;
+        const availableAccountsUrl = isHistoricalView
+          ? `api/ownership/available-accounts?tenant_id=${cid}&month=${encodeURIComponent(selectedMonth)}`
+          : `api/ownership/available-accounts?tenant_id=${cid}`;
         const [aRes, oRes] = await Promise.all([
-          fetch(buildApiUrl(`api/ownership/available-accounts?tenant_id=${cid}`), {
+          fetch(buildApiUrl(availableAccountsUrl), {
             credentials: "include",
           }).then((r) => r.json()),
           fetch(buildApiUrl(ownersUrl), {

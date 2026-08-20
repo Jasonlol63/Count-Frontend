@@ -126,9 +126,12 @@ export function useGroupEarnings(shell) {
         const ownersUrl = isHistoricalView
           ? `api/ownership/list?tenant_id=${encodeURIComponent(gid)}&month=${encodeURIComponent(selectedMonth)}`
           : `api/ownership/list?tenant_id=${encodeURIComponent(gid)}`;
+        const availableAccountsUrl = isHistoricalView
+          ? `api/ownership/available-accounts?tenant_id=${encodeURIComponent(gid)}&month=${encodeURIComponent(selectedMonth)}`
+          : `api/ownership/available-accounts?tenant_id=${encodeURIComponent(gid)}`;
         const [aRes, oRes] = await Promise.all([
           fetch(
-            buildApiUrl(`api/ownership/available-accounts?tenant_id=${encodeURIComponent(gid)}`),
+            buildApiUrl(availableAccountsUrl),
             { credentials: "include" },
           ).then((r) => r.json()),
           fetch(buildApiUrl(ownersUrl), { credentials: "include" }).then((r) => r.json()),
