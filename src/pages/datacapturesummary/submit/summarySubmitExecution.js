@@ -25,7 +25,7 @@ function toSpringLine(row) {
     currencyId: row.currencyId != null ? Number(row.currencyId) : null,
     sourcePercent: String(row.sourcePercent ?? "1"),
     enableSourcePercent: !!row.enableSourcePercent,
-    formula: row.formula || row.formulaOperators || "",
+    formula: row.formula || "",
     processedAmount: truncateProcessedAmountTo6Decimals(row.processedAmount),
     rateValue: row.rateValue || null,
   };

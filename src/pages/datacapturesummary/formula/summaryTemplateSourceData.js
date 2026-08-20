@@ -289,9 +289,7 @@ export function resolveCurrentSourceDataFromTemplate({
 
   const mainTemplate = template?.main || template || {};
   let sourceColumnsValue = sanitizeSourceColumnsValue(mainTemplate.source_columns || "");
-  const formulaOperatorsValue = String(
-    mainTemplate.formula_operators || mainTemplate.formulaOperators || ""
-  ).trim();
+  const formulaOperatorsValue = String(mainTemplate.formula || "").trim();
   const savedSourceValue = String(mainTemplate.last_source_value || "").trim();
 
   const isNewFormat = isNewIdProductColumnFormat(sourceColumnsValue);

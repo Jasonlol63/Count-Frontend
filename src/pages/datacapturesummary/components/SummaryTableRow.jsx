@@ -144,7 +144,7 @@ function SummaryTableRowInner({ row, onRowChange, onNewFormula, onEditFormula, o
       data-account-id={row.accountId || undefined}
       data-currency-id={row.currencyId || undefined}
       data-source-columns={row.sourceColumns || undefined}
-      data-formula-operators={row.formulaOperators || undefined}
+      data-formula-operators={row.formula || undefined}
       data-source-percent={row.sourcePercent || undefined}
       data-template-id={row.templateId != null ? String(row.templateId) : undefined}
       data-formula-variant={row.formulaVariant != null ? String(row.formulaVariant) : undefined}

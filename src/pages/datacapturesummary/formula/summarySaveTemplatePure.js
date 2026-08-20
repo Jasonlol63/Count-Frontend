@@ -27,7 +27,7 @@ function validateFormulaRow(row) {
   const hasAccount = row.accountId != null && String(row.accountId).trim() !== "";
   const hasCurrency = row.currencyId != null && String(row.currencyId).trim() !== "";
   const hasFormula =
-    (row.formulaOperators != null && String(row.formulaOperators).trim() !== "") ||
+    (row.formula != null && String(row.formula).trim() !== "") ||
     (row.formulaDisplay != null && String(row.formulaDisplay).trim() !== "");
 
   if (!hasAccount) return { success: false, message: "Account is required." };
@@ -66,7 +66,7 @@ export async function saveAddFormulaSpring(row, { captureScope, companyId, proce
   const formulaDisplay = row.formulaDisplay || "";
   const isFormulaEmpty = !formulaDisplay.trim() || formulaDisplay === "Formula";
   const isSub = row.productType === "sub";
-  const formula = row.formulaOperators || row.formula || "";
+  const formula = row.formula || "";
 
   const body = {
     tenantId,
@@ -78,7 +78,6 @@ export async function saveAddFormulaSpring(row, { captureScope, companyId, proce
     description: row.originalDescription || "",
     sourceColumns: isFormulaEmpty ? "" : row.sourceColumns || "",
     formula,
-    formulaOperators: formula,
     sourcePercent: String(row.sourcePercent || "1").trim() || "1",
     enableSourcePercent: !!row.enableSourcePercent,
     enableInputMethod: !!row.enableInputMethod,
@@ -109,14 +108,13 @@ export async function saveUpdateFormulaSpring(row, { captureScope, companyId, pr
   if (!tenantId) return { success: false, message: "tenantId is required" };
 
   const isSub = row.productType === "sub";
-  const formula = row.formulaOperators || row.formula || "";
+  const formula = row.formula || "";
 
   const body = {
     tenantId,
     accountId: row.accountId,
     currencyId: row.currencyId,
     formula,
-    formulaOperators: formula,
     sourcePercent: String(row.sourcePercent || "1").trim() || "1",
     enableSourcePercent: !!row.enableSourcePercent,
     description: row.originalDescription || "",

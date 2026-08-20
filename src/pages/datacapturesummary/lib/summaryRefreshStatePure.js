@@ -16,7 +16,7 @@ export function summaryRowsLookPopulated(rows) {
   return rows.some((row) => {
     if (row?.templateApplied) return true;
     if (String(row?.account || "").trim()) return true;
-    if (String(row?.formulaOperators || "").trim()) return true;
+    if (String(row?.formula || "").trim()) return true;
     if (String(row?.formulaDisplay || "").trim()) return true;
     return false;
   });
@@ -179,7 +179,6 @@ function serializeRowForRefresh(row) {
     currencyId: row.currencyId,
     formula: row.formulaDisplay || row.formula,
     formulaDisplay: row.formulaDisplay || row.formula,
-    formulaOperators: row.formulaOperators,
     sourceColumns: row.sourceColumns,
     sourcePercent: row.sourcePercent,
     enableSourcePercent: row.enableSourcePercent,
@@ -237,7 +236,7 @@ export function saveSummaryRefreshStatePure(rows, processMeta, captureScope = nu
       processCode: processMeta?.processCode ?? "",
       rowOrder: syncedRows.map((r) => r.key),
       rows: syncedRows
-        .filter((r) => r.account?.trim() || r.formulaOperators || r.formulaDisplay)
+        .filter((r) => r.account?.trim() || r.formula || r.formulaDisplay)
         .map(serializeRowForRefresh),
     };
     localStorage.setItem(keys.formulaSource, JSON.stringify(payload));
@@ -327,41 +326,56 @@ export function loadSummaryRefreshFormulaState(captureScope, processMeta = null)
   return null;
 }
 
-/** Merge one saved refresh row into a live row model. */
+/**
+ * Merge one saved refresh row into a live row model.
+ *
+ * Config fields (account/currency/formula/source/input-method/description) are owned by
+ * Formula Maintenance. When this row was already matched to a live template fetch this pass
+ * (`row.templateApplied`), those fields must reflect that fresh fetch — otherwise an edit made
+ * in Formula Maintenance would never show up on Summary, since the cached draft would keep
+ * winning forever. The draft only supplies config fields as a fallback when no fresh template
+ * matched this row. Session-only fields (rate checkbox/value, batch-select) always come from
+ * the draft, since they aren't part of the template.
+ */
 export function applySavedRefreshRowToModel(row, saved) {
   if (!row || !saved) return row;
-  const formulaDisplay = saved.formula || saved.formulaDisplay || row.formulaDisplay;
+
+  const hasFreshTemplate = !!row.templateApplied;
+  const pick = (freshVal, savedVal) => (hasFreshTemplate ? freshVal || savedVal : savedVal || freshVal);
+  const pickBool = (freshVal, savedVal) => {
+    if (hasFreshTemplate) return freshVal != null ? !!freshVal : savedVal != null ? !!savedVal : freshVal;
+    return savedVal != null ? !!savedVal : freshVal;
+  };
+
+  const formulaDisplay = pick(row.formulaDisplay || row.formula, saved.formula || saved.formulaDisplay);
+  const formula = pick(row.formula, saved.formula) || formulaDisplay;
+
   return {
     ...row,
-    account: saved.account || saved.accountDisplay || row.account,
-    accountId: saved.accountId != null ? String(saved.accountId) : row.accountId,
-    currency: saved.currency || saved.currencyDisplay || row.currency,
-    currencyId: saved.currencyId != null ? String(saved.currencyId) : row.currencyId,
-    formulaOperators: saved.formulaOperators || row.formulaOperators,
+    account: pick(row.account, saved.account || saved.accountDisplay),
+    accountId: pick(row.accountId, saved.accountId != null ? String(saved.accountId) : undefined),
+    currency: pick(row.currency, saved.currency || saved.currencyDisplay),
+    currencyId: pick(row.currencyId, saved.currencyId != null ? String(saved.currencyId) : undefined),
+    formula,
     formulaDisplay,
-    formula: formulaDisplay || row.formula,
-    sourceColumns: saved.sourceColumns || saved.columns || row.sourceColumns,
-    sourcePercent: saved.sourcePercent != null ? String(saved.sourcePercent) : row.sourcePercent,
-    enableSourcePercent:
-      saved.enableSourcePercent != null ? !!saved.enableSourcePercent : row.enableSourcePercent,
-    clickedColumns: saved.clickedColumns || row.clickedColumns,
-    inputMethod: saved.inputMethod || row.inputMethod,
-    enableInputMethod:
-      saved.enableInputMethod != null ? !!saved.enableInputMethod : row.enableInputMethod,
-    originalDescription:
-      saved.originalDescription || saved.descriptionMain || row.originalDescription,
-    baseProcessedAmount:
-      saved.baseProcessedAmount != null ? String(saved.baseProcessedAmount) : row.baseProcessedAmount,
-    processedAmount:
-      saved.processedAmount != null ? String(saved.processedAmount) : row.processedAmount,
+    sourceColumns: pick(row.sourceColumns, saved.sourceColumns || saved.columns),
+    sourcePercent: pick(row.sourcePercent, saved.sourcePercent != null ? String(saved.sourcePercent) : undefined),
+    enableSourcePercent: pickBool(row.enableSourcePercent, saved.enableSourcePercent),
+    clickedColumns: pick(row.clickedColumns, saved.clickedColumns),
+    inputMethod: pick(row.inputMethod, saved.inputMethod),
+    enableInputMethod: pickBool(row.enableInputMethod, saved.enableInputMethod),
+    originalDescription: pick(row.originalDescription, saved.originalDescription || saved.descriptionMain),
+    // Recomputed downstream from formula/formulaDisplay via mapRowsWithAmountRecalc —
+    // values here are just a pre-recalc starting point, not authoritative.
+    baseProcessedAmount: row.baseProcessedAmount,
+    processedAmount: row.processedAmount,
     rateChecked: saved.rateChecked != null ? !!saved.rateChecked : row.rateChecked,
     rateValue: saved.rateValue != null ? String(saved.rateValue) : row.rateValue,
     selectChecked: saved.selectChecked != null ? !!saved.selectChecked : row.selectChecked,
     subOrder: saved.subOrder != null ? Number(saved.subOrder) : row.subOrder,
-    formulaVariant:
-      saved.formulaVariant != null ? Number(saved.formulaVariant) : row.formulaVariant,
-    templateId: saved.templateId != null ? Number(saved.templateId) : row.templateId,
-    templateKey: saved.templateKey || row.templateKey,
+    formulaVariant: pick(row.formulaVariant, saved.formulaVariant != null ? Number(saved.formulaVariant) : undefined),
+    templateId: pick(row.templateId, saved.templateId != null ? Number(saved.templateId) : undefined),
+    templateKey: pick(row.templateKey, saved.templateKey),
     templateApplied: true,
   };
 }

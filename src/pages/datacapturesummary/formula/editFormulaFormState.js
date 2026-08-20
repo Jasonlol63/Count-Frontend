@@ -189,8 +189,7 @@ export function createEmptyEditFormulaForm(processValue = "") {
 
 export function rowToEditFormulaForm(row) {
   if (!row) return createEmptyEditFormulaForm();
-  const formulaText =
-    row.formulaOperators || row.formula || row.formulaDisplay || "";
+  const formulaText = row.formula || row.formulaDisplay || "";
   return {
     // Id Product shows the base id only; the description (e.g. COMM) is a
     // separate field and must not be appended here.
@@ -633,7 +632,6 @@ export function buildFormulaSavePatchFromForm(form, row) {
       currencyId,
       formula: normalizedFormula,
       formulaDisplay,
-      formulaOperators: normalizedFormula,
       sourceColumns,
       sourcePercent: sourcePercentValue,
       enableSourcePercent,

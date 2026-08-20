@@ -115,7 +115,7 @@ function resolveTemplateFormulaDisplayCore({
     template: {
       ...(template || {}),
       source_columns: sourceColumns || template?.source_columns,
-      formula_operators: formulaOperators || template?.formula_operators,
+      formula: formulaOperators || template?.formula,
     },
     idProduct,
     tableData,

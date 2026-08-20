@@ -269,7 +269,6 @@ export async function populateSummaryRowsPure({
         ...row,
         formula: "",
         formulaDisplay: "",
-        formulaOperators: "",
         sourceColumns: "",
       };
     }

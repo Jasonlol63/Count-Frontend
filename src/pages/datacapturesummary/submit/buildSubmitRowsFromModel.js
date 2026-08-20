@@ -1,8 +1,5 @@
 import { removeTrailingSourcePercentExpression } from "../../../shared/formula/index.js";
-import {
-  resolveFormulaTextForCalculation,
-  resolveSubmitProcessedAmount,
-} from "../table/summaryRowAmount.js";
+import { resolveSubmitProcessedAmount } from "../table/summaryRowAmount.js";
 import {
   resolveSubmitAccountId,
   validateSubmitRowGuards,
@@ -46,9 +43,6 @@ export function buildSubmitRowsFromModel(rows, parsedProcessData, accounts = [],
       .trim();
     const sourcePercent = String(row.sourcePercent || "1").trim() || "1";
     const formulaDisplay = String(row.formulaDisplay || row.formula || "").trim();
-    const formulaOperators = String(
-      row.formulaOperators || resolveFormulaTextForCalculation(row) || ""
-    ).trim();
     const isSourceOne = Math.abs(parseFloat(sourcePercent) - 1) < 0.0001;
     const formulaToSend =
       isSourceOne && formulaDisplay
@@ -83,7 +77,6 @@ export function buildSubmitRowsFromModel(rows, parsedProcessData, accounts = [],
       source: "",
       sourcePercent,
       enableSourcePercent: row.enableSourcePercent ? 1 : 0,
-      formulaOperators,
       formula: formulaToSend,
       processedAmount: Number.isFinite(finalProcessedAmount) ? finalProcessedAmount : 0,
       inputMethod: row.inputMethod || "",
@@ -106,7 +99,7 @@ export function validateRowsForSubmit(rows, accounts = [], globalRateInput = "")
   for (const row of rows) {
     if (row.selectChecked || !row.account?.trim()) continue;
     const hasFormula = Boolean(
-      (row.formulaDisplay || row.formula || row.formulaOperators || "").trim()
+      (row.formulaDisplay || row.formula || "").trim()
     );
     const hasCurrency = Boolean((row.currency || row.currencyId || "").toString().trim());
     if (hasFormula && !hasCurrency) {

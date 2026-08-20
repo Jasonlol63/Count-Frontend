@@ -123,7 +123,6 @@ export function applyBatchSourceColumnsToRows(rows, tableData, inputValue) {
     const merged = {
       ...row,
       sourceColumns: columnNumbers.join(" "),
-      formulaOperators: sourceData,
       formula: sourceData,
       formulaDisplay,
       enableSourcePercent: sourcePercent.trim() !== "",

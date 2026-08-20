@@ -7,10 +7,10 @@ import {
   resolveEnableSourcePercent,
 } from "./editFormulaFormState.js";
 
-/** Value shown when double-clicking Formula — prefer operators ($refs), else display text. */
+/** Value shown when double-clicking Formula — prefer the raw formula ($refs), else display text. */
 export function getFormulaInlineEditValue(row) {
-  const stored = String(row?.formulaOperators || "").trim();
-  const displayed = String(row?.formulaDisplay || row?.formula || "").trim();
+  const stored = String(row?.formula || "").trim();
+  const displayed = String(row?.formulaDisplay || "").trim();
   if (!displayed && !stored) return "";
   return stored || displayed;
 }
@@ -48,7 +48,6 @@ function buildDisplayPatch(row, baseFormula, sourcePercent) {
     enableSourcePercent
   );
   return {
-    formulaOperators: baseFormula,
     formula: baseFormula,
     formulaDisplay,
     sourcePercent: sourcePercentValue,
@@ -84,7 +83,7 @@ export function buildSourceInlineEditPatch(row, newSourceValue, originalValue) {
   const next = String(newSourceValue ?? "").trim() || "1";
   if (next === original) return null;
 
-  let baseFormula = String(row?.formulaOperators || "").trim();
+  let baseFormula = String(row?.formula || "").trim();
   if (!baseFormula) {
     const fromDisplay = removeTrailingSourcePercentExpression(
       String(row?.formulaDisplay || row?.formula || "").trim(),

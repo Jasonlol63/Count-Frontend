@@ -125,7 +125,6 @@ function toTemplateShape(row) {
     description: row.description,
     source_columns: row.sourceColumns,
     formula: row.formula,
-    formula_operators: row.formulaOperators,
     input_method: row.inputMethod,
     source_percent: row.sourcePercent,
     enable_source_percent: row.enableSourcePercent,

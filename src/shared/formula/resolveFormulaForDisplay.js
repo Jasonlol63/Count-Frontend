@@ -51,7 +51,7 @@ export function resolveEffectiveSourcePercentForRow(row) {
   }
 
   const formulaBody =
-    String(row?.formula_operators ?? "").trim() || lastSourceValue.trim();
+    String(row?.formula ?? "").trim() || lastSourceValue.trim();
   const dbPctRaw = String(row?.source_percent ?? "").trim();
   if (dbPctRaw !== "" && isMisplacedCommission(dbPctRaw, formulaBody)) {
     return { source: "1", enable: enableDb };
@@ -70,7 +70,7 @@ export function resolveEffectiveSourcePercentForRow(row) {
 export function resolveTemplateFormulaBaseAndPercent(row) {
   const { source, enable } = resolveEffectiveSourcePercentForRow(row);
 
-  let raw = String(row?.formula_operators ?? "").trim();
+  let raw = String(row?.formula ?? "").trim();
   if (!raw) {
     raw = String(row?.formula_display ?? "").trim();
   }

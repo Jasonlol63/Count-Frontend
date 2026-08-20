@@ -82,13 +82,13 @@ function applyRateValueToAmount(processedAmount, rateValueStr) {
 
 /** Resolve expression used to calculate base processed amount (legacy recalculateAndRenderProcessedAmount). */
 export function resolveFormulaTextForCalculation(row) {
-  const operators = String(row.formulaOperators || "").trim();
-  const displayExpanded = String(row.formulaDisplay || row.formula || "").trim();
+  const formula = String(row.formula || "").trim();
+  const displayExpanded = String(row.formulaDisplay || "").trim();
 
-  // formulaOperators holds $refs; formulaDisplay may show parenthesized negatives with implicit
+  // formula holds $refs; formulaDisplay may show parenthesized negatives with implicit
   // multiplication between adjacent factors — evaluateMoneyExpression handles )( as *.
-  if (operators) {
-    return operators;
+  if (formula) {
+    return formula;
   }
 
   if (displayExpanded && displayExpanded !== "Formula") {
@@ -176,9 +176,7 @@ export function applyRateToRowAmount(row, baseAmount, globalRateInput = "") {
 export function recalculateRowAmounts(row, globalRateInput = "") {
   if (!row) return row;
 
-  const hasFormula = Boolean(
-    (row.formulaOperators || row.formulaDisplay || row.formula || "").trim()
-  );
+  const hasFormula = Boolean((row.formulaDisplay || row.formula || "").trim());
   const hasStoredBase = String(row.baseProcessedAmount || "").trim() !== "";
 
   let baseProcessedAmount;
@@ -288,7 +286,7 @@ export function rowsHaveCompleteFormulaCurrency(rows) {
     const currencyText = String(row.currency || "")
       .replace(/[()]/g, "")
       .trim();
-    const formulaText = String(row.formulaDisplay || row.formula || row.formulaOperators || "").trim();
+    const formulaText = String(row.formulaDisplay || row.formula || "").trim();
     const currencyEmpty = !currencyText || /^select\s*curren/i.test(currencyText);
     const formulaEmpty = !formulaText;
     if (currencyEmpty || formulaEmpty) return false;

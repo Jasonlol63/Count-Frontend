@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import {
   buildInitialSummaryRows,
@@ -19,16 +19,10 @@ import { stripSummarySuccessParamFromUrl } from "../lib/summaryStorage.js";
 import {
   saveSummaryRefreshStatePure,
   clearSummaryRefreshDraftStorage,
-  loadSummarySessionSnapshotWithFallback,
   summaryRowsLookPopulated,
 } from "../lib/summaryRefreshStatePure.js";
 
-import { restoreRateValuesOnRows } from "../lib/summaryRefreshRestore.js";
-
-import { mapRowsWithAmountRecalc } from "../table/summaryRowAmount.js";
-
 import { pushSummaryNotification } from "../lib/summaryNotify.js";
-import { resolveDataCaptureScopeFromSessionMeta } from "../../datacapture/lib/dataCaptureScope.js";
 import { loadSuppressedRowKeys } from "../lib/summarySuppressedRows.js";
 
 function readCaptureId() {
@@ -74,16 +68,6 @@ export function useSummaryTableModel({
 
   const processMeta = { processId, processCode };
 
-  const snapshotScopeCandidates = useMemo(() => {
-    const candidates = [];
-    if (processData) {
-      const fromMeta = resolveDataCaptureScopeFromSessionMeta(processData);
-      if (fromMeta) candidates.push(fromMeta);
-    }
-    candidates.push(null);
-    return candidates;
-  }, [processData]);
-
   const executePopulate = useCallback(
     async () => {
       if (!enabled || !hasCaptureData || !tableData) return false;
@@ -110,25 +94,11 @@ export function useSummaryTableModel({
 
         const accounts = await consumePrefetchedAccounts(captureScope);
 
-        if (!isFirstFreshPopulate) {
-          const snapshot = loadSummarySessionSnapshotWithFallback(
-            captureScope,
-            processMeta,
-            snapshotScopeCandidates,
-          );
-          if (snapshot?.rows?.length) {
-            let restoredRows = restoreRateValuesOnRows(snapshot.rows, captureScope);
-            restoredRows = mapRowsWithAmountRecalc(restoredRows);
-            setAccounts(accounts);
-            replaceRows(restoredRows);
-            saveSummaryRefreshStatePure(restoredRows, processMeta, captureScope);
-            setTableChromeVisible(true);
-            document.body.classList.add("page-ready");
-            initialPopulateCompletedRef.current = true;
-            return true;
-          }
-        }
-
+        // Always re-fetch live templates below (never short-circuit to the cached row
+        // snapshot verbatim) so a Formula Maintenance edit shows up on every Summary visit,
+        // not just the first one right after Data Capture submit. The cached draft is still
+        // used inside populateSummaryRowsPure to restore rate/select state, but config fields
+        // (formula/account/currency/source/input method) always come from the fresh fetch.
         const captureId = readCaptureId();
         const populatedRows = await populateSummaryRowsPure({
           tableData,
@@ -198,7 +168,6 @@ export function useSummaryTableModel({
       setAccounts,
       setDataPopulating,
       setTableChromeVisible,
-      snapshotScopeCandidates,
     ]
   );
 

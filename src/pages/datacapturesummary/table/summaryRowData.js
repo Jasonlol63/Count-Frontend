@@ -33,7 +33,6 @@ import {
  * @property {string|null} currencyId
  * @property {string} formula
  * @property {string} formulaDisplay
- * @property {string} formulaOperators
  * @property {string} sourceColumns
  * @property {string} sourcePercent
  * @property {boolean} enableSourcePercent
@@ -65,7 +64,6 @@ export function createEmptyRowFields() {
     currencyId: null,
     formula: "",
     formulaDisplay: "",
-    formulaOperators: "",
     sourceColumns: "",
     sourcePercent: "1",
     enableSourcePercent: true,
@@ -129,8 +127,8 @@ export function createSubRowFromTemplate(parentRow, subTemplate, insertIndex) {
   };
 }
 
-function resolveFormulaDisplay(row, formulaOperators) {
-  const ops = String(formulaOperators || row.formulaOperators || "").trim();
+function resolveFormulaDisplay(row, formula) {
+  const ops = String(formula || row.formula || "").trim();
   if (!ops || ops === "Formula") return row.formulaDisplay || "";
   try {
     const evaluated = evaluateFormulaExpression(
@@ -158,8 +156,8 @@ export function applyMainTemplateToRowModel(row, mainTemplate, templateKey) {
   const sourcePercent = source || "1";
   const enableSourcePercent = enable ? true : sourcePercent.trim() !== "";
   const [resolvedOperators] = resolveTemplateFormulaBaseAndPercent(mainTemplate);
-  const formulaOperators = normalizeFormulaBeforeReferenceExpand(
-    String(resolvedOperators || mainTemplate.formula_operators || mainTemplate.formulaOperators || "").trim(),
+  const formula = normalizeFormulaBeforeReferenceExpand(
+    String(resolvedOperators || mainTemplate.formula || "").trim(),
     row.productType === "sub" ? row.subIdProduct || row.idProduct : row.idProduct,
     String(mainTemplate.clicked_columns || mainTemplate.clickedColumns || row.clickedColumns || "").trim(),
     row?.rowIndex ?? null
@@ -189,7 +187,7 @@ export function applyMainTemplateToRowModel(row, mainTemplate, templateKey) {
         ""
     ).trim(),
     sourceColumns,
-    formulaOperators,
+    formula,
     sourcePercent,
     enableSourcePercent,
     inputMethod: String(mainTemplate.input_method || row.inputMethod || "").trim(),
@@ -211,13 +209,13 @@ export function applyMainTemplateToRowModel(row, mainTemplate, templateKey) {
       row: next,
       template: templateForDisplay,
       sourceColumns,
-      formulaOperators,
+      formulaOperators: formula,
       sourcePercent,
       enableSourcePercent,
     }) || dbFormulaDisplay;
 
   next.formulaDisplay = formulaDisplay;
-  next.formula = formulaOperators || formulaDisplay;
+  next.formula = formula || formulaDisplay;
   if (mainTemplate.batch_selection == 1) {
     next.selectChecked = true;
   }

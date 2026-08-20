@@ -342,7 +342,7 @@ export function useSummaryEditFormulaPure({
     if (targetRow) {
       removeSuppressedRow(targetRow);
       const hasFormula =
-        String(targetRow.formulaOperators || targetRow.formulaDisplay || result.patch?.formulaOperators || "")
+        String(targetRow.formula || targetRow.formulaDisplay || result.patch?.formula || "")
           .trim() !== "";
       const isEmptyNewSub = applied.action === "insertSub" && !hasFormula;
       if (!isEmptyNewSub) {
