@@ -107,6 +107,13 @@ export function normalizeGroupCaptureScope(scope, processMeta = null) {
     .trim()
     .toUpperCase();
 
+  // Preserve the already-resolved group ledger tenant id (the GROUP tenant's own
+  // `tenant.id`, e.g. currency/process_submitted rows keyed directly on it) even
+  // though `scopeCompanyId` is zeroed below to keep subsidiary company ids out of
+  // ledger-scoped APIs (Summary submit / group payroll process resolution).
+  const resolvedEntityId = Number(scope?.scopeCompanyId);
+  const groupEntityTenantId = resolvedEntityId > 0 ? resolvedEntityId : (scope?.groupEntityTenantId ?? null);
+
   return {
     mode: "group",
     scopeCompanyId: 0,
@@ -114,6 +121,7 @@ export function normalizeGroupCaptureScope(scope, processMeta = null) {
     groupId: groupKey || scope?.groupId || null,
     viewGroup: groupKey || scope?.viewGroup || null,
     resolveCompanyViaGroupId: true,
+    groupEntityTenantId,
   };
 }
 
@@ -254,7 +262,9 @@ export function resolveDataCaptureScopeFromSessionMeta(meta, companies = []) {
     const savedScopeId =
       meta.scopeCompanyId != null && Number(meta.scopeCompanyId) > 0
         ? Number(meta.scopeCompanyId)
-        : 0;
+        : meta.groupEntityTenantId != null && Number(meta.groupEntityTenantId) > 0
+          ? Number(meta.groupEntityTenantId)
+          : 0;
     if (savedScopeId > 0) {
       return {
         mode: "group",
@@ -262,6 +272,7 @@ export function resolveDataCaptureScopeFromSessionMeta(meta, companies = []) {
         groupId: groupKey,
         viewGroup: groupKey,
         uiCompanyId: null,
+        groupEntityTenantId: savedScopeId,
       };
     }
     return resolveDataCaptureScope({

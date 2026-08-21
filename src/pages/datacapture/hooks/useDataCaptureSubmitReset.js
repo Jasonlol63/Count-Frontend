@@ -26,13 +26,9 @@ import {
   isSubmitReady,
   validateDataCaptureForm,
 } from "../lib/dataCaptureFormRules.js";
-import { fetchGroupProcessIdByCode } from "../lib/dataCaptureApi.js";
 import { postGameCaptureForm } from "../lib/dataCaptureSpringApi.js";
 import { resolveDataCaptureTenantId } from "../lib/dataCaptureTenant.js";
-import {
-  dataCaptureScopeLedgerCompanyId,
-  isPureGroupCaptureScope,
-} from "../lib/dataCaptureScope.js";
+import { dataCaptureScopeLedgerCompanyId } from "../lib/dataCaptureScope.js";
 import {
   applyConvertTableOnSubmitToGrid,
   convertTableFormatForSubmit,
@@ -191,24 +187,12 @@ export function useDataCaptureSubmitReset({
           processData.processCode ||
           String(processData.process || "").toUpperCase();
         processData.processCode = String(code).trim().toUpperCase();
-        // True AP/IG group ledger scope only — `get_group_process_id` is unmigrated PHP.
-        // C168 / bank-only company payroll (incl. plain Bank-category company scope) resolves
-        // processId server-side from processCode at Summary Submit time (Spring), so skip here.
-        if (captureScope?.mode === "group" && !isPureGroupCaptureScope(captureScope, processData)) {
-          let numericId;
-          try {
-            numericId = await fetchGroupProcessIdByCode(captureScope, code, form.currencyId);
-          } catch (resolveErr) {
-            pushDataCaptureNotification(
-              resolveErr?.message || t("failedCaptureData"),
-              "danger"
-            );
-            return;
-          }
-          processData.process = numericId;
-        } else {
-          processData.process = processData.processCode;
-        }
+        // Summary Submit (Spring) resolves processId server-side from processCode for every
+        // scope — company, pure Group, and Group-with-anchor-company alike — via
+        // `ensureBankProcess` (see DataCaptureSummaryServiceImpl#resolveProcess), so this
+        // client-side pre-resolve is never needed. `fetchGroupProcessIdByCode` (legacy PHP
+        // `get_group_process_id`) is no longer called from this flow.
+        processData.process = processData.processCode;
       }
 
       const capturedAfterConvert = convertTableFormatForSubmit(activeCaptureType, preConvertSnapshot);

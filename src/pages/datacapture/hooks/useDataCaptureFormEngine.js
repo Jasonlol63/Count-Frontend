@@ -326,7 +326,10 @@ export function useDataCaptureFormEngine(
       setCurrencyId("");
       return;
     }
-    const list = await fetchGroupCaptureCurrencies(viewGroup);
+    const tenantId = resolveDataCaptureTenantId(captureScopeRef.current);
+    const list = tenantId
+      ? await fetchCaptureCurrenciesByTenantId(tenantId)
+      : await fetchGroupCaptureCurrencies(viewGroup);
     setCurrencies(list);
     setCurrencyId((prev) => {
       if (!prev) return "";

@@ -1,6 +1,9 @@
 /**
- * Payroll table drafts — shared via server for both group buckets (AP/IG, scope_type=group)
- * and company payroll buckets (e.g. company:5 for C168 / bank-only, scope_type=company).
+ * Payroll table drafts — shared via server (Spring `data_capture_draft` table,
+ * `POST /api/datacapture/bank/draft/save|get`) for both group buckets (AP/IG,
+ * tenant resolved from the Group's own `groupEntityTenantId`) and company
+ * payroll buckets (e.g. company:5 for C168 / bank-only, tenant parsed from the
+ * bucket id). No PHP endpoint involved.
  */
 import { GROUP_ONLY_GRID_COLS, resolveDataCaptureGridDimensions } from "../grid/dataCaptureGridMeta.js";
 import {
@@ -10,12 +13,8 @@ import {
 import { tableSnapshotHasData } from "./dataCaptureTableSnapshot.js";
 import { applyBridgeCaptureType } from "./dataCaptureBridge.js";
 import { callDataCaptureRuntime, getDataCaptureState } from "./dataCaptureRuntime.js";
-import {
-  clearGroupCaptureDraft,
-  fetchGroupCaptureDraft,
-  saveGroupCaptureDraft,
-} from "./dataCaptureGroupDraftApi.js";
 import { getBankCaptureDraft, saveBankCaptureDraft } from "./dataCaptureSpringApi.js";
+import { resolveDataCaptureTenantId } from "./dataCaptureTenant.js";
 import {
   isGroupPayrollCaptureSession,
   payrollDraftBucketIsCompany,
@@ -24,6 +23,11 @@ import {
 function tenantIdFromCompanyBucket(bucketId) {
   const m = /^company:(\d+)$/i.exec(String(bucketId || "").trim());
   return m ? Number(m[1]) : null;
+}
+
+/** Company bucket carries its own tenant id; a group bucket needs the scope's `groupEntityTenantId`. */
+function resolveDraftTenantId(bucketId, scope) {
+  return tenantIdFromCompanyBucket(bucketId) ?? resolveDataCaptureTenantId(scope);
 }
 
 /**
@@ -43,57 +47,52 @@ function normalizeBankDraftTableData(tableData) {
 }
 
 /**
- * C168 / bank-only company payroll buckets ("company:{tenantId}") persist drafts via the
- * Spring `data_capture_draft` table (`POST /api/datacapture/bank/draft/save|get`), not the
- * PHP `group_capture_draft_api.php` used by true AP/IG group buckets.
+ * Both company payroll buckets ("company:{tenantId}") and Group buckets (AP/IG code, tenant
+ * resolved from `scope.groupEntityTenantId`) persist drafts via the same Spring
+ * `data_capture_draft` table (`POST /api/datacapture/bank/draft/save|get`).
  */
-function bankDraftBackend(bucketId) {
-  const tenantId = tenantIdFromCompanyBucket(bucketId);
-  return {
-    async fetch(_scope, _bucketId, processKey, currencyId) {
-      if (!tenantId) return null;
-      try {
-        const result = await getBankCaptureDraft({ tenantId, processCode: processKey, currencyId });
-        return result?.tableData
-          ? { tableData: normalizeBankDraftTableData(result.tableData), captureType: "1.Text" }
-          : null;
-      } catch {
-        return null;
-      }
-    },
-    async save(_scope, _bucketId, processKey, currencyId, payload) {
-      if (!tenantId) return false;
-      try {
-        await saveBankCaptureDraft({
-          tenantId,
-          processCode: processKey,
-          currencyId,
-          tableData: payload?.tableData ?? null,
-        });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    async clear(_scope, _bucketId, processKey, currencyId) {
-      if (!tenantId) return false;
-      try {
-        await saveBankCaptureDraft({ tenantId, processCode: processKey, currencyId, tableData: null });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-  };
-}
+const draftBackend = {
+  async fetch(scope, bucketId, processKey, currencyId) {
+    const tenantId = resolveDraftTenantId(bucketId, scope);
+    if (!tenantId) return null;
+    try {
+      const result = await getBankCaptureDraft({ tenantId, processCode: processKey, currencyId });
+      return result?.tableData
+        ? { tableData: normalizeBankDraftTableData(result.tableData), captureType: "1.Text" }
+        : null;
+    } catch {
+      return null;
+    }
+  },
+  async save(scope, bucketId, processKey, currencyId, payload) {
+    const tenantId = resolveDraftTenantId(bucketId, scope);
+    if (!tenantId) return false;
+    try {
+      await saveBankCaptureDraft({
+        tenantId,
+        processCode: processKey,
+        currencyId,
+        tableData: payload?.tableData ?? null,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  async clear(scope, bucketId, processKey, currencyId) {
+    const tenantId = resolveDraftTenantId(bucketId, scope);
+    if (!tenantId) return false;
+    try {
+      await saveBankCaptureDraft({ tenantId, processCode: processKey, currencyId, tableData: null });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+};
 
-function resolveDraftBackend(bucketId) {
-  if (payrollDraftBucketIsCompany(bucketId)) return bankDraftBackend(bucketId);
-  return {
-    fetch: fetchGroupCaptureDraft,
-    save: saveGroupCaptureDraft,
-    clear: clearGroupCaptureDraft,
-  };
+function resolveDraftBackend() {
+  return draftBackend;
 }
 
 export const GROUP_ONLY_TABLE_DRAFTS_KEY = "dc_group_only_table_drafts";

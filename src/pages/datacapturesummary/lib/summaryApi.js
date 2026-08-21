@@ -1,23 +1,10 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { appendDataCaptureScopeParams } from "../../datacapture/lib/dataCaptureApi.js";
 import { fetchAccountListByTenantId, filterAccountListRows } from "../../account/accountListApi.js";
 import {
   resolveDataCaptureEffectiveTenantId,
   resolveDataCaptureTenantId,
 } from "../../datacapture/lib/dataCaptureTenant.js";
 import { isGroupPayrollProcessId } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
-
-/** True AP/IG group-ledger submit only (unmigrated, see docs/datacapture-spring-api.md §4). */
-const SUMMARY_SUBMIT_API = "api/datacapture_summary/summary_submit_api.php";
-
-function withCaptureScope(url, captureScope) {
-  if (!captureScope) return url;
-  const sep = url.includes("?") ? "&" : "?";
-  const params = new URLSearchParams();
-  appendDataCaptureScopeParams(params, captureScope);
-  const qs = params.toString();
-  return qs ? `${url}${sep}${qs}` : url;
-}
 
 /**
  * `data_capture_summary_state` was deliberately never built (see docs/datacapture-spring-api.md
@@ -26,56 +13,6 @@ function withCaptureScope(url, captureScope) {
  */
 export async function fetchSummaryServerState() {
   return null;
-}
-
-/** POST ?action=submit — returns parsed JSON or throws with { status, message, isSizeError }. */
-export async function submitSummaryPayload(captureScope, payload) {
-  const url = withCaptureScope(buildApiUrl(SUMMARY_SUBMIT_API), captureScope);
-  const response = await fetch(url, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  const responseText = await response.text();
-  if (!response.ok) {
-    const lowerText = (responseText || "").toLowerCase();
-    const isSizeError =
-      response.status === 413 ||
-      lowerText.includes("post_max_size") ||
-      lowerText.includes("payload too large") ||
-      lowerText.includes("request entity too large") ||
-      lowerText.includes("数据太大") ||
-      lowerText.includes("exceeds");
-    throw {
-      status: response.status,
-      message: responseText || `HTTP ${response.status}`,
-      isSizeError,
-    };
-  }
-
-  let json;
-  try {
-    json = JSON.parse(responseText);
-  } catch {
-    throw {
-      status: response.status,
-      message: `Invalid JSON response: ${responseText}`,
-      isSizeError: false,
-    };
-  }
-
-  if (!json.success) {
-    const message = json.message || json.error || "Unknown error";
-    throw {
-      status: response.status,
-      message,
-      isSizeError: /太大|post_max_size/i.test(message),
-    };
-  }
-
-  return json;
 }
 
 /**

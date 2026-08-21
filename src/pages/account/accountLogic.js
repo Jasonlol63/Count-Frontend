@@ -98,19 +98,25 @@ export function getOrderedRoles(roles) {
   return [...out, ...Array.from(map.values()).sort((a, b) => a.localeCompare(b))];
 }
 
-/** Add/Edit Account modal：DB 未建 role 时仍展示的核心角色 */
-const ACCOUNT_MODAL_FALLBACK_ROLES = ["PARTNER", "DEBTOR"];
+/**
+ * Add/Edit Account modal：Role options are a static system list.
+ *
+ * The Spring account API does not expose a dynamic per-company role endpoint.
+ * The current account role (for Edit) is only a selected value, not the list
+ * of available options, so it must never be used as the source of the option
+ * list. Always merge the complete ROLE_PRIORITY list and preserve any legacy
+ * role returned by the backend.
+ */
+export function getAccountModalOrderedRoles(roles = []) {
+  const merged = [...roles];
 
-export function getAccountModalOrderedRoles(roles) {
-  const merged = [...(roles || [])];
-  if (merged.length === 0) {
-    // Empty group / roles API miss — still offer full account role list for the modal.
-    ROLE_PRIORITY.forEach((role) => merged.push(role));
-  } else {
-    ACCOUNT_MODAL_FALLBACK_ROLES.forEach((role) => {
-      if (!merged.some((r) => toUpper(r) === role)) merged.push(role);
-    });
-  }
+  // Always include every standard account role.
+  ROLE_PRIORITY.forEach((role) => {
+    if (!merged.some((r) => toUpper(r) === role)) {
+      merged.push(role);
+    }
+  });
+
   return getOrderedRoles(merged);
 }
 

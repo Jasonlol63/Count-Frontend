@@ -38,6 +38,7 @@ import {
   canAccessFullMaintenance,
   canAccessLimitedMaintenance,
   canAccessPermission,
+  canShowDataCaptureInSidebar,
   canShowReportInSidebar,
   resolveDefaultLandingPath,
   showMaintenanceInSidebar,
@@ -60,7 +61,6 @@ import {
   shouldHideSidebarProcess,
   shouldShowBankprocessMaintenanceInSidebar,
   fetchOwnerCompaniesAll,
-  fetchOwnerGroupsAll,
   findOwnerCompanyById,
   resolveSidebarExpirationForFilter,
   resolveGroupCategoryFlagsForSidebar,
@@ -1080,7 +1080,9 @@ export default function AuthenticatedLayout() {
 
     const runCompanies = () => {
       void fetchOwnerCompaniesAll({ me });
-      void fetchOwnerGroupsAll(me);
+      /* Domain groups warm has no Spring endpoint yet (still legacy PHP `domain_api.php`,
+       * currently 500ing) — do not eager-warm it from every page. Pages that actually need
+       * it (Report, Transaction, Dashboard) already call fetchOwnerGroupsAll themselves. */
     };
 
     const runAccountListWarm = () => {
@@ -1529,7 +1531,7 @@ export default function AuthenticatedLayout() {
               </SidebarNavTip>
             </div>
           )}
-          {canAccess("datacapture") && (me?.company_has_gambling || me?.company_has_bank) && (
+          {canShowDataCaptureInSidebar(me) && (
             <div className="informationmenu-section">
               <SidebarNavTip label={i18n.sidebarDataCapture} enabled={sidebarIconOnly}>
                 <SidebarSectionLink

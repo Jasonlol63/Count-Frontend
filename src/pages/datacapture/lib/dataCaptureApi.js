@@ -2,12 +2,6 @@ import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { getDataCaptureWeekdayLabels } from "../../../translateFile/pages/dataCaptureTranslate.js";
 import { dataCaptureScopeApiParams, dataCaptureScopeCacheKey } from "./dataCaptureScope.js";
 
-/**
- * True AP/IG group ledger only (unmigrated, see docs/datacapture-spring-api.md §4) —
- * `get_group_process_id` resolves the numeric process id for group payroll codes.
- */
-const DATA_CAPTURE_SUBMISSIONS_API = "api/datacapture/submissions_api.php";
-
 /** One option per currency code (subsidiary + group rows can share company_id). */
 export function dedupeCaptureCurrenciesByCode(rows) {
   const byCode = new Map();
@@ -150,38 +144,6 @@ export async function fetchGroupCaptureCurrencies(viewGroup) {
   } catch {
     return [];
   }
-}
-
-/**
- * Resolve numeric process.id for group payroll codes (SALARY/COMMISSION/BONUS/PROFIT) under scoped company.
- * True AP/IG group ledger only (unmigrated, see docs/datacapture-spring-api.md §4).
- */
-export async function fetchGroupProcessIdByCode(scope, processCode, currencyId = null) {
-  const params = new URLSearchParams({
-    action: "get_group_process_id",
-    process_code: String(processCode || "").trim().toUpperCase(),
-  });
-  const cid =
-    currencyId != null && String(currencyId).trim() !== "" ? Number(currencyId) : 0;
-  if (Number.isFinite(cid) && cid > 0) {
-    params.set("currency_id", String(cid));
-  }
-  appendDataCaptureScopeParams(params, scope);
-  const url = buildApiUrl(`${DATA_CAPTURE_SUBMISSIONS_API}?${params.toString()}`);
-  const response = await fetch(url, { credentials: "include" });
-  const json = await response.json();
-  if (!json?.success) {
-    const msg = json?.error || json?.message;
-    throw new Error(msg || "Process not found for scope");
-  }
-  if (json.data?.process_id == null) {
-    throw new Error("Process not found for scope");
-  }
-  const id = Number(json.data.process_id);
-  if (!Number.isFinite(id) || id <= 0) {
-    throw new Error("Process not found for scope");
-  }
-  return id;
 }
 
 /** Matches `renderSubmittedProcesses` date/time formatting in `js/datacapture.js`. */

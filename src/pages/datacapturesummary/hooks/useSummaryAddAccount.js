@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { accountModalOverlayZIndex } from "../../../components/ProcessModalPortal.jsx";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { fetchOwnerCompaniesAll } from "../../../utils/company/sharedCompanyFilter.js";
-import {
-  applyTenantLedgerToParams,
-  LEDGER_GROUP,
-  resolvePageLedgerScope,
-} from "../../../utils/company/tenantLedgerParams.js";
 import {
   buildAccountCreateRequest,
   createAccountUser,
@@ -17,7 +11,6 @@ import {
 import {
   DEFAULT_FORM,
   getAccountModalOrderedRoles,
-  normalizeAlertAmount,
   pickDefaultAddCurrencyIds,
   toUpper,
 } from "../../account/accountLogic.js";
@@ -39,7 +32,14 @@ function isVirtualGroupLinkCompanyRow(c) {
 }
 
 import { isGroupLedgerCapture } from "../../../utils/company/c168CaptureChannel.js";
+import { resolveDataCaptureTenantId } from "../../datacapture/lib/dataCaptureTenant.js";
 
+/**
+ * `groupOnlyAccountMode` only changes the picker UI (single fixed "the group itself" row
+ * instead of a multi-company picker) — the Group is a first-class tenant (`tenant.id`,
+ * resolved via `groupEntityTenantId`), so both branches call the same Spring `/api/account/*`
+ * + `/api/currency/*` endpoints against `ctx.tenantId`.
+ */
 function resolveSummaryAddAccountContext(captureScope, processData, companyId) {
   const isGroupLedger = isGroupLedgerCapture(captureScope, processData);
 
@@ -48,11 +48,12 @@ function resolveSummaryAddAccountContext(captureScope, processData, companyId) {
     .toUpperCase();
 
   if (isGroupLedger && groupId) {
+    const tenantId = resolveDataCaptureTenantId(captureScope);
     return {
       groupOnlyAccountMode: true,
       selectedGroup: groupId,
       companyId: null,
-      pageLedgerScope: { ledger: LEDGER_GROUP, groupId, companyId: null },
+      tenantId,
     };
   }
 
@@ -61,16 +62,12 @@ function resolveSummaryAddAccountContext(captureScope, processData, companyId) {
     groupOnlyAccountMode: false,
     selectedGroup: groupId || null,
     companyId: cid,
-    pageLedgerScope: resolvePageLedgerScope({
-      groupOnly: false,
-      selectedGroup: groupId || null,
-      companyId: cid,
-    }),
+    tenantId: cid,
   };
 }
 
 function canOpenAddAccount(ctx) {
-  if (ctx.groupOnlyAccountMode && ctx.selectedGroup) return true;
+  if (ctx.groupOnlyAccountMode) return Boolean(ctx.tenantId);
   return ctx.companyId != null && Number(ctx.companyId) > 0;
 }
 
@@ -86,13 +83,9 @@ function purgeLegacySummaryAddAccountModal() {
 
 /**
  * Summary Add Account — shared AccountModal; supports company and group capture scope.
- *
- * Company scope (the common case: Games/Bank company, incl. C168/bank-only) is fully
- * Spring (`accountListApi.js` — same `/api/account/*` + `/api/currency/*` the Account List
- * page uses). True AP/IG group ledger scope (`groupOnlyAccountMode`) has no resolvable
- * numeric tenant id here and stays on the legacy `api/accounts/*` PHP endpoints, matching
- * the same documented boundary as the rest of the group-ledger capture path (see
- * docs/datacapture-spring-api.md §4) — not part of this migration pass.
+ * Both scopes are fully Spring (`accountListApi.js` — same `/api/account/*` +
+ * `/api/currency/*` the Account List page uses), keyed on `ctx.tenantId` (the Company's own
+ * id, or the Group's own `tenant.id` resolved via `groupEntityTenantId`).
  */
 export function useSummaryAddAccount({
   companyId,
@@ -138,9 +131,10 @@ export function useSummaryAddAccount({
   );
 
   const groupPickerCompanies = useMemo(() => {
-    if (!ledgerCtx.groupOnlyAccountMode || !ledgerCtx.selectedGroup) return [];
-    const g = ledgerCtx.selectedGroup;
-    return [{ id: g, company_id: g, group_id: g }];
+    if (!ledgerCtx.groupOnlyAccountMode || !ledgerCtx.tenantId) return [];
+    // `id` must be the numeric tenant id (used as tenantIds[] on submit); `company_id` is
+    // just the display label for the picker row.
+    return [{ id: ledgerCtx.tenantId, company_id: ledgerCtx.selectedGroup, group_id: ledgerCtx.selectedGroup }];
   }, [ledgerCtx]);
 
   const companyButtons = useMemo(
@@ -177,34 +171,13 @@ export function useSummaryAddAccount({
   /** New account has nothing linked yet — currency catalog only, no per-account lookup needed. */
   const loadSelectionMeta = useCallback(async () => {
     const ctx = ledgerCtxRef.current;
-
-    if (ctx.groupOnlyAccountMode) {
-      // True AP/IG group ledger — unmigrated, see docs/datacapture-spring-api.md §4.
-      const currencyParams = new URLSearchParams({ action: "get_available_currencies" });
-      applyTenantLedgerToParams(currencyParams, ctx.pageLedgerScope);
-      try {
-        const curRes = await fetch(
-          buildApiUrl(`api/accounts/account_currency_api.php?${currencyParams.toString()}`),
-          { credentials: "include" },
-        );
-        const curJ = await curRes.json();
-        if (curJ.success && Array.isArray(curJ.data)) {
-          setCurrencies(curJ.data.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked })));
-          setSelectedCurrencyIds(pickDefaultAddCurrencyIds(curJ.data));
-        }
-      } catch {
-        /* optional */
-      }
-      return;
-    }
-
-    if (!ctx.companyId) {
+    if (!ctx.tenantId) {
       setCurrencies([]);
       setSelectedCurrencyIds([]);
       return;
     }
     try {
-      const rows = await fetchAvailableCurrencies(ctx.companyId, null);
+      const rows = await fetchAvailableCurrencies(ctx.tenantId, null);
       setCurrencies(rows.map((c) => ({ id: c.id, code: c.code, is_linked: !!c.is_linked })));
       setSelectedCurrencyIds(pickDefaultAddCurrencyIds(rows));
     } catch {
@@ -216,8 +189,8 @@ export function useSummaryAddAccount({
     const ctx = ledgerCtxRef.current;
     setForm({ ...DEFAULT_FORM, payment_alert: "0" });
     setSelectedCurrencyIds([]);
-    if (ctx.groupOnlyAccountMode && ctx.selectedGroup) {
-      setSelectedCompanyIds([ctx.selectedGroup]);
+    if (ctx.groupOnlyAccountMode) {
+      setSelectedCompanyIds(ctx.tenantId ? [Number(ctx.tenantId)] : []);
     } else {
       setSelectedCompanyIds(ctx.companyId ? [Number(ctx.companyId)] : []);
     }
@@ -262,40 +235,12 @@ export function useSummaryAddAccount({
       if (!code) return;
       const ctx = ledgerCtxRef.current;
 
-      if (ctx.groupOnlyAccountMode) {
-        // True AP/IG group ledger — unmigrated, see docs/datacapture-spring-api.md §4.
-        const payload = { code };
-        if (ctx.pageLedgerScope?.groupId) payload.group_id = ctx.pageLedgerScope.groupId;
-        payload.group_only = true;
-        try {
-          const res = await fetch(buildApiUrl("api/accounts/create_currency_api.php"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-            credentials: "include",
-          });
-          const json = await res.json();
-          if (!json.success || !json.data) {
-            emitNotify(apiMsg(json, "createFailed"), "danger");
-            return;
-          }
-          const newId = Number(json.data.id);
-          if (Number.isFinite(newId) && newId > 0) {
-            setCurrencies((prev) => [...prev, { id: newId, code: json.data.code, is_linked: false }]);
-          }
-          setCurrencyInput("");
-        } catch {
-          emitNotify(t("createFailed"), "danger");
-        }
-        return;
-      }
-
-      if (!ctx.companyId) {
+      if (!ctx.tenantId) {
         emitNotify(t("pleaseSelectCompanyFirst"), "danger");
         return;
       }
       try {
-        const created = await createTenantCurrency({ code, tenantId: ctx.companyId });
+        const created = await createTenantCurrency({ code, tenantId: ctx.tenantId });
         const newId = Number(created?.id);
         if (Number.isFinite(newId) && newId > 0) {
           setCurrencies((prev) => [...prev, { id: newId, code: created.code, is_linked: false }]);
@@ -312,32 +257,9 @@ export function useSummaryAddAccount({
     async (cid) => {
       const ctx = ledgerCtxRef.current;
 
-      if (ctx.groupOnlyAccountMode) {
-        // True AP/IG group ledger — unmigrated, see docs/datacapture-spring-api.md §4.
-        try {
-          const res = await fetch(buildApiUrl("api/accounts/delete_currency_api.php"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: cid }),
-            credentials: "include",
-          });
-          const json = await res.json();
-          if (!json.success) {
-            emitNotify(apiMsg(json, "failedDeleteCurrency"), "danger");
-            return;
-          }
-        } catch {
-          emitNotify(t("failedDeleteCurrency"), "danger");
-          return;
-        }
-        setCurrencies((prev) => prev.filter((c) => Number(c.id) !== Number(cid)));
-        setSelectedCurrencyIds((prev) => prev.filter((x) => Number(x) !== Number(cid)));
-        return;
-      }
-
-      if (!ctx.companyId) return;
+      if (!ctx.tenantId) return;
       try {
-        const result = await deleteTenantCurrency({ id: cid, tenantId: ctx.companyId });
+        const result = await deleteTenantCurrency({ id: cid, tenantId: ctx.tenantId });
         if (!result.success) {
           emitNotify(apiMsg(result.json, "failedDeleteCurrency"), "danger");
           return;
@@ -360,78 +282,15 @@ export function useSummaryAddAccount({
         return;
       }
 
-      if (ctx.groupOnlyAccountMode) {
-        // True AP/IG group ledger — unmigrated, see docs/datacapture-spring-api.md §4.
-        const alertAmount = normalizeAlertAmount(form.alert_amount);
-        const fd = new FormData();
-        Object.entries(form).forEach(([k, v]) => {
-          if (k === "alert_amount") {
-            fd.append(k, alertAmount);
-            return;
-          }
-          const raw = v ?? "";
-          const out = k === "account_id" || k === "name" || k === "remark" ? toUpper(raw) : raw;
-          fd.append(k, out);
-        });
-        if (form.payment_alert === "0") {
-          fd.set("alert_type", "");
-          fd.set("alert_start_date", "");
-          fd.set("alert_amount", "");
-        }
-        applyTenantLedgerToParams(fd, ctx.pageLedgerScope);
-        if (selectedCurrencyIds.length) {
-          fd.set("currency_ids", JSON.stringify(selectedCurrencyIds));
-        }
-        try {
-          const res = await fetch(buildApiUrl("api/accounts/addaccountapi.php"), {
-            method: "POST",
-            body: fd,
-            credentials: "include",
-          });
-          const json = await res.json();
-          if (!json.success) {
-            emitNotify(apiMsg(json, "saveFailed"), "danger");
-            return;
-          }
-          const newAccountId = json?.data?.id;
-          if (newAccountId && selectedCurrencyIds.length) {
-            await Promise.all(
-              selectedCurrencyIds.map((cur) =>
-                fetch(buildApiUrl("api/accounts/account_currency_api.php?action=add_currency"), {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ account_id: newAccountId, currency_id: cur }),
-                  credentials: "include",
-                }),
-              ),
-            );
-          }
-          closeAddAccount();
-          const accountCode = String(form.account_id || "").trim().toUpperCase();
-          emitNotify(
-            accountCode
-              ? t("accountAddedToFormulaList", { accountId: accountCode })
-              : t("accountSavedSuccessfully"),
-            "success",
-          );
-          if (typeof onAccountCreated === "function") {
-            await onAccountCreated(newAccountId);
-          }
-        } catch {
-          emitNotify(t("saveFailed"), "danger");
-        }
-        return;
-      }
-
       const tenantIds = selectedCompanyIds.map(Number).filter((id) => Number.isFinite(id) && id > 0);
-      if (!ctx.companyId || !tenantIds.length) {
+      if (!ctx.tenantId || !tenantIds.length) {
         emitNotify(t("pleaseSelectCompanyFirst"), "danger");
         return;
       }
       const currencyIds = selectedCurrencyIds.map(Number).filter((id) => Number.isFinite(id) && id > 0);
 
       try {
-        const request = buildAccountCreateRequest(form, ctx.companyId, currencyIds, tenantIds);
+        const request = buildAccountCreateRequest(form, ctx.tenantId, currencyIds, tenantIds);
         const created = await createAccountUser(request);
         closeAddAccount();
         const accountCode = String(form.account_id || "").trim().toUpperCase();

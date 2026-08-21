@@ -77,6 +77,7 @@ export function useSummaryBoot() {
           groupOnlyCapture: true,
           captureSelectedGroup: pointerMeta.captureSelectedGroup,
           scopeCompanyId: pointerMeta.scopeCompanyId,
+          groupEntityTenantId: pointerMeta.groupEntityTenantId,
           captureScopeMode: pointerMeta.captureScopeMode,
         },
         {

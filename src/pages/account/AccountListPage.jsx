@@ -7,12 +7,14 @@ import { pathnameIs, spaPath } from "../../utils/routing/pageRoutes.js";
 import { replaceBrowserPathOnly } from "../../utils/routing/privateBrowserUrl.js";
 import {
   clearDashboardGroupFilterKeepCompany,
+  companiesGroupEntityList,
   companiesInGroupList,
   dashboardFilterEventMatchesPersisted,
   isDashboardGroupOnlyMode,
   DASHBOARD_GROUP_FILTER_OPT_OUT_KEY,
   DASHBOARD_GROUP_FILTER_EVENT,
   notifyDashboardGroupFilterChanged,
+  normalizeCompanyGroupId,
   persistDashboardFilterState,
   readPersistedDashboardGcFilter,
   applyLoginScopeToSessionStorageIfNeeded,
@@ -70,7 +72,6 @@ import {
   isCompanyInAccountListPicker,
   pickDefaultAddCurrencyIds,
   readAccountListGroupFilterOptOut,
-  resolveAccountListGroupOnlyFetch,
   resolveAccountListInlinePickerCompanies,
   shouldLoadAccountListData,
   formatAccountLastLoginDate,
@@ -377,10 +378,19 @@ export default function AccountListPage() {
     replaceBrowserPathOnly();
   }, []);
 
+  /**
+   * Whether the current scope is a bare group-only view (group selected, no company, not
+   * aggregating). Derived directly from the scope's own fields — same shape as the page-level
+   * `groupOnlyAccountMode` memo — rather than `resolveAccountListGroupOnlyFetch`'s sessionStorage
+   * flag, which can lag the real scope (e.g. a group-login session that lands here without ever
+   * going through the sidebar's group-pick handler) and silently made every list fetch return
+   * null in that case, leaving Group Account List permanently empty regardless of filters.
+   */
   const resolveGroupOnlyFetch = useCallback((gcScope) => {
     const { companyId: cid, selectedGroup: sg, groupsAllMode: gAll, groupAllMode: cAll } =
       gcScope || {};
-    return resolveAccountListGroupOnlyFetch(sg, cid, gAll, cAll);
+    const hasCompany = cid != null && Number(cid) > 0;
+    return Boolean(sg && !hasCompany && !gAll && !cAll);
   }, []);
 
   const bumpGcFilterSwitchGen = useCallback(() => {
@@ -528,20 +538,39 @@ export default function AccountListPage() {
 
       const loadPromise = (async () => {
         // Spring `/api/account/list` is single-tenant only (no group_id/group_only) — a
-        // single company hits it directly, every other scope (company-all inside a group,
-        // groups-all, or a bare group-only view) merges per-tenant across mergeIds, which
-        // useGcFilterWithAllModes already resolves to real company/tenant ids for all three.
+        // single company hits it directly. Explicit aggregate scopes (company-all inside a
+        // group, groups-all) merge per-tenant across mergeIds, which useGcFilterWithAllModes
+        // resolves to real company/tenant ids. A bare group-only view is NOT an aggregate of
+        // its companies' accounts — tenant access is company↔company or group↔group, never
+        // group↔company, so it must query the group's own tenant id directly.
         if (cid) {
           return fetchFilteredAccountListByTenantId(cid, { searchTerm, showInactive, showAll }, ac.signal);
         }
-        if (cAll || gAll || (useGroupOnly && sg)) {
+        if (cAll || gAll) {
           return fetchMergedAccountLists({ tenantIds: mergeIds, searchTerm, showInactive, showAll }, ac.signal);
+        }
+        if (useGroupOnly && sg) {
+          const groupTenantId = companiesGroupEntityList(companies, sg)[0]?.id ?? null;
+          if (!groupTenantId) return [];
+          return fetchFilteredAccountListByTenantId(
+            groupTenantId,
+            { searchTerm, showInactive, showAll },
+            ac.signal,
+          );
         }
         return null;
       })();
 
       try {
         const nextAccounts = await loadPromise;
+        // eslint-disable-next-line no-console
+        console.log("[fetchAccounts]", {
+          cid, sg, cAll, gAll, useGroupOnly, requestedFilters,
+          stale: isStaleResponse(),
+          nextCount: Array.isArray(nextAccounts) ? nextAccounts.length : nextAccounts,
+          matchesFilters: matchesLiveListFilters(requestedFilters),
+          matchesScope: trustRequestScope || matchesLiveListScope(),
+        });
         if (isStaleResponse()) return;
         if (nextAccounts == null) return;
         if (!matchesLiveListFilters(requestedFilters)) return;
@@ -939,7 +968,20 @@ export default function AccountListPage() {
   useEffect(() => () => listFetchAbortRef.current?.abort(), []);
 
   const allCompanyButtons = useMemo(
-    () => companies.filter(c => c.company_id && String(c.company_id).trim() !== "" && !isVirtualGroupLinkCompanyRow(c)),
+    () =>
+      companies.filter(
+        (c) =>
+          c.company_id &&
+          String(c.company_id).trim() !== "" &&
+          !isVirtualGroupLinkCompanyRow(c) &&
+          // Account scoping must always resolve to a real Company-type tenant — the backend
+          // (UserServiceImpl.assertCompanyTenants) rejects a bare Group tenant id outright.
+          // `/auth/tenant-accessible` returns Group rows in the same shape as Company rows
+          // (see tenantAccessibleApi.js), and for a Group row `company_id` equals the group's
+          // own code, so without this filter a Group can accidentally match "the company for
+          // this group" lookups below and get sent to the backend as an account's tenant.
+          String(c.tenant_type || "").toUpperCase() !== "GROUP",
+      ),
     [companies]
   );
 
@@ -1667,7 +1709,11 @@ export default function AccountListPage() {
             groupsAllMode,
             groupAllMode,
             isListScopeReady,
-            groupOnlyMode: isDashboardGroupOnlyMode(),
+            // Derived from the scope itself (same shape as `groupOnlyAccountMode`) — not the
+            // `isDashboardGroupOnlyMode()` sessionStorage flag, which can lag a session that
+            // lands here already group-scoped (e.g. group login) without going through the
+            // sidebar's group-pick handler, leaving this key "" and the list stuck empty.
+            groupOnlyMode: Boolean(selectedGroup && companyId == null && !groupAllMode && !groupsAllMode),
           }),
     [bootLoading, isListScopeReady, groupsAllMode, groupAllMode, companyId, selectedGroup],
   );
@@ -1922,15 +1968,19 @@ export default function AccountListPage() {
     () => (groupOnlyAccountMode ? groupPickerCompanies : allCompanyButtons),
     [groupOnlyAccountMode, groupPickerCompanies, allCompanyButtons]
   );
+  /**
+   * Tenant used for all account/currency reads+writes in the current picker scope. A single
+   * Company pill resolves to that company's own tenant id. A bare group-only view resolves to
+   * the GROUP's own tenant id (account_tenant_access and currency both accept GROUP or COMPANY
+   * tenants — see backend `assertHomogeneousAccountTenants`) — never a subsidiary company's, so
+   * Group-scoped CRUD never silently mixes group and company tenants.
+   */
   const scopeCompanyId = useMemo(() => {
     if (companyId) return Number(companyId);
     if (!groupOnlyAccountMode || !selectedGroup) return null;
-    const groupCode = String(selectedGroup).trim().toUpperCase();
-    const entity = allCompanyButtons.find(
-      (c) => String(c.company_id || "").trim().toUpperCase() === groupCode
-    );
-    return entity?.id ? Number(entity.id) : null;
-  }, [companyId, groupOnlyAccountMode, selectedGroup, allCompanyButtons]);
+    const groupEntity = companiesGroupEntityList(companies, selectedGroup)[0];
+    return groupEntity?.id ? Number(groupEntity.id) : null;
+  }, [companyId, groupOnlyAccountMode, selectedGroup, companies]);
 
   const hasAccountMutationScope = useMemo(
     () =>
@@ -1941,6 +1991,9 @@ export default function AccountListPage() {
       }),
     [scopeCompanyId, groupOnlyAccountMode, selectedGroup, sessionMe, companies],
   );
+
+  /** Alias — Currency shares the same tenant resolution as the rest of account CRUD. */
+  const currencyScopeTenantId = scopeCompanyId;
 
   useEffect(() => {
     if (!showInactive) {
@@ -1993,20 +2046,32 @@ export default function AccountListPage() {
   /** Tenant used by Add/Currency-setting when no specific row is being edited. */
   const resolveModalTenantId = useCallback(() => {
     const explicit = modalLedgerScopeRef.current ?? modalLedgerScope;
-    return explicit ?? scopeCompanyId ?? null;
-  }, [modalLedgerScope, scopeCompanyId]);
+    return explicit ?? currencyScopeTenantId ?? null;
+  }, [modalLedgerScope, currencyScopeTenantId]);
 
-  /** Resolve the anchor company (real tenant) behind a group code in the group-only picker. */
-  const resolveAnchorCompanyIdForGroup = useCallback(
+  /** Resolve the GROUP's own tenant id (never a subsidiary company's) for the group-only picker. */
+  const resolveGroupTenantId = useCallback(
     (groupCode) => {
       const gc = String(groupCode || "").trim().toUpperCase();
       if (!gc) return null;
-      const entity = allCompanyButtons.find(
-        (c) => String(c.company_id || "").trim().toUpperCase() === gc,
-      );
+      const entity = companiesGroupEntityList(companies, gc)[0];
       return entity?.id ? Number(entity.id) : null;
     },
-    [allCompanyButtons],
+    [companies],
+  );
+
+  /**
+   * Real group a tenant natively belongs to — for reverse-mapping an account's actual
+   * `scope_tenant_id` back to a value the group-only single-select picker can show. Looks up
+   * the full tenant list (not just Company rows) so an account whose tenant IS a group itself
+   * resolves to that group's own code, not "".
+   */
+  const resolveOwnerGroupCodeForTenant = useCallback(
+    (tenantId) => {
+      const row = companies.find((c) => Number(c.id) === Number(tenantId));
+      return row ? normalizeCompanyGroupId(row) : "";
+    },
+    [companies],
   );
 
   const loadSelectionMeta = async (id, isEdit, { selectCode = null, tenantId = undefined } = {}) => {
@@ -2054,7 +2119,7 @@ export default function AccountListPage() {
     } else {
       setSelectedCompanyIds([]);
     }
-    void loadSelectionMeta(null, false, { tenantId: scopeCompanyId });
+    void loadSelectionMeta(null, false, { tenantId: currencyScopeTenantId });
   };
 
   const clearCurrencySettingSelection = useCallback(() => {
@@ -2072,7 +2137,7 @@ export default function AccountListPage() {
     syncModalLedgerScope(null);
     clearCurrencySettingSelection();
     setCurrencySettingOpen(true);
-    void loadSelectionMeta(null, false, { tenantId: scopeCompanyId });
+    void loadSelectionMeta(null, false, { tenantId: currencyScopeTenantId });
   };
 
   const openEdit = async (id) => {
@@ -2093,9 +2158,9 @@ export default function AccountListPage() {
     setForm(form_);
     if (groupOnlyAccountMode) {
       // The group-only picker is a single-select of group codes, not real tenant ids —
-      // reverse-map the account's tenant back to the group-anchor company's code.
-      const anchorRow = allCompanyButtons.find((c) => Number(c.id) === Number(tenantId));
-      const groupCode = anchorRow?.company_id ? String(anchorRow.company_id).toUpperCase() : "";
+      // reverse-map the account's tenant to the GROUP it natively belongs to (a legacy
+      // account's tenant may still be a subsidiary company such as OK1, not "OK" itself).
+      const groupCode = resolveOwnerGroupCodeForTenant(tenantId);
       setSelectedCompanyIds(groupCode ? [groupCode] : []);
     } else {
       setSelectedCompanyIds(tenantIdsToPickerCompanyIds(row.tenant_ids));
@@ -2149,13 +2214,30 @@ export default function AccountListPage() {
     let primaryTenantId;
     if (groupOnlyAccountMode) {
       const groupCode = String(selectedCompanyIds[0] || "").trim().toUpperCase();
-      const anchorId = resolveAnchorCompanyIdForGroup(groupCode);
-      if (!anchorId) {
+      if (!groupCode) {
         notify(t("pleaseSelectCompanyFirst"), "danger");
         return;
       }
-      tenantIds = [anchorId];
-      primaryTenantId = anchorId;
+      // An edited account's real tenant may be a subsidiary company under the group (legacy
+      // company-scoped accounts) rather than the group's own tenant. Only reassign when the
+      // user actually picked a *different* group than the one this account already belongs to
+      // — otherwise keep its existing tenant untouched, so merely opening/saving Edit can't
+      // silently move it (and can't send a scopeTenantId the account has no
+      // account_tenant_access row for, which the backend rejects with "user not found").
+      const originalTenantId = isEditMode ? Number(form.scope_tenant_id) || null : null;
+      const originalGroupCode = originalTenantId ? resolveOwnerGroupCodeForTenant(originalTenantId) : "";
+      if (originalTenantId && groupCode === originalGroupCode) {
+        tenantIds = [originalTenantId];
+        primaryTenantId = originalTenantId;
+      } else {
+        const groupTenantId = resolveGroupTenantId(groupCode);
+        if (!groupTenantId) {
+          notify(t("pleaseSelectCompanyFirst"), "danger");
+          return;
+        }
+        tenantIds = [groupTenantId];
+        primaryTenantId = groupTenantId;
+      }
     } else {
       tenantIds = selectedCompanyIds.map(Number).filter((id) => Number.isFinite(id) && id > 0);
       if (!tenantIds.length) {
@@ -2200,7 +2282,7 @@ export default function AccountListPage() {
       setCurrencyInput("");
       return;
     }
-    const tenantId = currencySettingOpen ? scopeCompanyId : resolveModalTenantId();
+    const tenantId = currencySettingOpen ? currencyScopeTenantId : resolveModalTenantId();
     if (!tenantId) {
       notify(t("pleaseSelectCompanyFirst"), "danger");
       return;
@@ -2287,7 +2369,7 @@ export default function AccountListPage() {
       try {
         const entries = await Promise.all(
           currencyIds.map(async (currencyId) => {
-            const ids = await fetchLinkedAccountIdsByCurrency(currencyId, scopeCompanyId);
+            const ids = await fetchLinkedAccountIdsByCurrency(currencyId, currencyScopeTenantId);
             return [currencyId, new Set(ids)];
           }),
         );
@@ -2307,7 +2389,7 @@ export default function AccountListPage() {
     currencySettingOpen,
     settingCurrencyIdsKey,
     fetchLinkedAccountIdsByCurrency,
-    scopeCompanyId,
+    currencyScopeTenantId,
     notify,
     t,
   ]);
@@ -2374,7 +2456,7 @@ export default function AccountListPage() {
       return;
     }
 
-    const tenantId = scopeCompanyId;
+    const tenantId = currencyScopeTenantId;
     try {
       const otherAccountsInUse = await fetchAccountsUsingCurrency(id, tenantId);
       const { success, json, msg } = await requestCurrencyDelete(id, { tenantId });
@@ -2508,7 +2590,7 @@ export default function AccountListPage() {
       notify(t("pleaseSelectAccountFirst"), "danger");
       return;
     }
-    const tenantId = scopeCompanyId;
+    const tenantId = currencyScopeTenantId;
     try {
       for (const { currencyId, linked, unlinked } of changed) {
         await updateAccountsLinkedToCurrency({

@@ -49,6 +49,8 @@ export function filterAccountListRows(
     });
   }
   if (!applyStatusFilter) return out;
+  // eslint-disable-next-line no-console
+  console.log("[filterAccountListRows]", { showInactive, showAll, inCount: out.length, statuses: out.map((a) => a.status) });
   if (showAll && showInactive) {
     out = out.filter((a) => String(a.status || "").toLowerCase() === "inactive");
   } else if (showAll) {

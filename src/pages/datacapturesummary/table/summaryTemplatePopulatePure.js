@@ -7,8 +7,6 @@ import {
 } from "./summaryRowData.js";
 import { findMainRowForTemplate, findMainRowForSubTemplatePure } from "./summaryTemplateMatching.js";
 import { fetchSummaryTemplates } from "../lib/summaryApi.js";
-import { fetchGroupProcessIdByCode } from "../../datacapture/lib/dataCaptureApi.js";
-import { isGroupPayrollProcessId } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
 import { normalizeSummaryIdProductText } from "../lib/summaryIdProductUtils.js";
 import { restoreRateValuesOnRows } from "../lib/summaryRefreshRestore.js";
 import {
@@ -155,14 +153,9 @@ export async function populateSummaryRowsPure({
   let effectiveProcessId =
     processId != null && Number(processId) > 0 ? Number(processId) : null;
 
-  // Pure Group SALARY/etc.: session only has processCode — resolve numeric id before templates.
-  if (effectiveProcessId == null && isGroupPayrollProcessId(code) && captureScope) {
-    try {
-      effectiveProcessId = await fetchGroupProcessIdByCode(captureScope, code);
-    } catch {
-      /* PHP templates handler can still resolve via processCode */
-    }
-  }
+  // Pure/Group payroll processes (SALARY/etc.) only carry processCode in session —
+  // `fetchSummaryTemplates` (Spring `formula-maintenance/list`) accepts a code string
+  // directly, so no client-side numeric-id pre-resolve is needed here.
 
   if (!idProducts.length || (effectiveProcessId == null && !code && processId == null)) {
     return rows;

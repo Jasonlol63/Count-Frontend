@@ -100,6 +100,13 @@ export function saveCaptureSession(tableData, processData, captureType, context 
       : context.scopeCompanyId != null && Number(context.scopeCompanyId) > 0
         ? Number(context.scopeCompanyId)
         : null;
+  // Group ledger's own tenant id — `scopeCompanyId` is intentionally zeroed for pure
+  // group scope (see normalizeGroupCaptureScope), so it must be persisted separately
+  // or Summary's session-restore re-resolves against an empty companies list and loses it.
+  const groupEntityTenantId =
+    scope?.groupEntityTenantId != null && Number(scope.groupEntityTenantId) > 0
+      ? Number(scope.groupEntityTenantId)
+      : null;
   const payrollPrefsKey =
     context.payrollPrefsKey ||
     (groupPayrollCapture && scopeCompanyId ? `company:${scopeCompanyId}` : captureSelectedGroup);
@@ -114,6 +121,7 @@ export function saveCaptureSession(tableData, processData, captureType, context 
     payrollPrefsKey,
     captureScopeMode: scope?.mode || (groupLedgerCapture ? "group" : "company"),
     scopeCompanyId,
+    groupEntityTenantId,
   };
 
   const keys = captureStorageKeys(scope);
