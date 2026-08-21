@@ -450,8 +450,15 @@ export function isDashboardGroupOnlyMode() {
 }
 
 export function persistDashboardGroupOnlyMode(groupOnly) {
-  if (groupOnly) sessionStorage.setItem(DASHBOARD_GROUP_ONLY_KEY, "1");
-  else sessionStorage.removeItem(DASHBOARD_GROUP_ONLY_KEY);
+  if (groupOnly) {
+    sessionStorage.setItem(DASHBOARD_GROUP_ONLY_KEY, "1");
+    // Group-only and a selected company are mutually exclusive — a stale company id left
+    // over from a prior page/company selection would otherwise make readPersistedDashboardGcFilter()
+    // compute groupOnly=false on the next page's boot, silently hiding Report (sidebarPermissions.js).
+    sessionStorage.removeItem(DASHBOARD_SELECTED_COMPANY_KEY);
+  } else {
+    sessionStorage.removeItem(DASHBOARD_GROUP_ONLY_KEY);
+  }
 }
 
 export function isDashboardGroupAllMode() {
