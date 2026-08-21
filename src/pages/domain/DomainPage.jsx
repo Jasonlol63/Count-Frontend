@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { assetUrl, buildApiUrl } from "../../utils/core/apiUrl.js";
+import { assetUrl } from "../../utils/core/apiUrl.js";
 import "../../../public/css/domain.css";
 import "../../../public/css/date-range-picker.css";
 import "../../../public/css/accountCSS.css";
@@ -29,6 +29,13 @@ import { ensureC168DomainApiSession } from "../../utils/company/companySessionSy
 import { fetchOwnerCompaniesAll, readPersistedDashboardGcFilter } from "../../utils/company/sharedCompanyFilter.js";
 import { useRealtimeDomain } from "../../lib/realtime/useRealtimeDomain.js";
 import { REALTIME_DOMAINS } from "../../lib/realtime/realtimeEvents.js";
+import {
+  fetchDomainList,
+  fetchDomainFeeSettings,
+  deleteOwner,
+  resolveShareLedgerTenantId,
+  resolveShareLedgerTenantCode,
+} from "./domainApi.js";
 
 export default function DomainPage() {
   const navigate = useNavigate();
@@ -90,15 +97,10 @@ export default function DomainPage() {
 
   // ── Fee summary ────────────────────────────────────────────────────────────
   function refreshFeeSummary() {
-    fetch(buildApiUrl("api/domain/domain_api.php"), {
-      cache: "no-cache", method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "get_domain_fee_settings" }),
-    })
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.success && res.data) {
-          setDomainPeriodPrices(normalizeDomainFeeSettingsFromApi(res.data));
+    fetchDomainFeeSettings()
+      .then((data) => {
+        if (data) {
+          setDomainPeriodPrices(normalizeDomainFeeSettingsFromApi(data));
         }
       })
       .catch(() => {});
@@ -115,19 +117,9 @@ export default function DomainPage() {
         if (!silent) setLoadError(getDomainText(lang, "failedToLoadDomainData"));
         return;
       }
-      const r2 = await fetch(buildApiUrl("api/domain/domain_api.php"), {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "list" }),
-      });
-      const j2 = await r2.json();
-      if (!r2.ok || !j2?.success) {
-        if (!silent) setLoadError(j2?.message || getDomainText(lang, "failedToLoadDomainData"));
-        return;
-      }
+      const rows = await fetchDomainList();
       if (!silent) setLoadError("");
-      setDomains(Array.isArray(j2?.data?.domains) ? j2.data.domains : []);
+      setDomains(rows);
       refreshFeeSummary();
     } catch {
       if (!silent) setLoadError(getDomainText(lang, "failedToLoadDomainData"));
@@ -253,13 +245,7 @@ export default function DomainPage() {
         setConfirmModal(null);
         try {
           const results = await Promise.all(
-            valid.map((d) =>
-              fetch(buildApiUrl("api/domain/domain_api.php"), {
-                cache: "no-cache", method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "delete", id: d.id }),
-              }).then((r) => r.json())
-            )
+            valid.map((d) => deleteOwner(d.id).then(({ json }) => json))
           );
           const okResults = results.filter((r) => r && r.success);
           const failResults = results.filter((r) => !(r && r.success));
@@ -339,6 +325,8 @@ export default function DomainPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   const isOwnerOrAdmin = ["owner", "admin"].includes(String(me?.role || "").toLowerCase());
+  const shareLedgerTenantId = resolveShareLedgerTenantId(me);
+  const shareLedgerTenantCode = resolveShareLedgerTenantCode(me);
 
   return (
     <>
@@ -585,8 +573,9 @@ export default function DomainPage() {
           editingDomain={editingDomain}
           hasC168Context={canAccessC168DomainPages(me)}
           isOwnerOrAdmin={isOwnerOrAdmin}
-          sessionCompanyId={me?.company_id ?? null}
-          sessionCompanyCode={String(me?.company_code || "")}
+          shareLedgerTenantId={shareLedgerTenantId}
+          shareLedgerTenantCode={shareLedgerTenantCode}
+          domains={domains}
           domainPeriodPrices={domainPeriodPrices}
           onClose={() => setShowDomainForm(false)}
           onSaved={handleDomainSaved}

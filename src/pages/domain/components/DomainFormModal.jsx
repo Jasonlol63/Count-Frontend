@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { notifySessionRefreshRequested } from "../../../utils/company/companySessionEvents.js";
 import { showDomainAlert } from "./DomainNotification.jsx";
 import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
@@ -7,19 +6,23 @@ import CompanySettingsModal from "./CompanySettingsModal.jsx";
 import GroupSettingsModal from "./GroupSettingsModal.jsx";
 import {
   formatDate,
-  defaultFeeShareAllocations,
-  normalizeFeeShareFromServer,
   ensureCompanyFeeShare,
-  companyToDomainPayloadEntry,
+  defaultFeeShareAllocations,
   createEmptyGroup,
-  groupFromApiRow,
-  groupToDomainPayloadEntry,
   tempGroupCode,
   forceUppercaseValue,
   forceNumericValue,
   findChargeMissingStartDate,
   findMissingExpirationDate,
 } from "../domainHelpers.js";
+import {
+  validateTenantCodeGlobally,
+  createDomain,
+  updateDomain,
+  mergeTenantIdsFromDomainResponse,
+  syncAllTenantSettings,
+  fetchDomainList,
+} from "../domainApi.js";
 import { sanitizeEmailInput, validateEmail } from "../../../utils/input/emailValidation.js";
 import { getDomainText } from "../../../translateFile/pages/domainTranslate.js";
 import DomainModalPortal from "./DomainModalPortal.jsx";
@@ -93,8 +96,8 @@ function findGroupCompanyCodeOverlap(tempGroups, tempCompanies) {
  *   editingDomain   — domain object (for edit), null for add
  *   hasC168Context  — boolean
  *   isOwnerOrAdmin  — boolean
- *   sessionCompanyId   — number
- *   sessionCompanyCode — string
+ *   shareLedgerTenantId   — C168 ledger tenant.id (Share % account pickers)
+ *   shareLedgerTenantCode — C168 ledger tenant code
  *   domainPeriodPrices — per-period default amounts (for share calc in company settings)
  *   onClose()
  *   onSaved(domainData) — called after successful save
@@ -102,7 +105,7 @@ function findGroupCompanyCodeOverlap(tempGroups, tempCompanies) {
 export default function DomainFormModal({
   lang = "en",
   isEditMode, editingDomain, hasC168Context, isOwnerOrAdmin,
-  sessionCompanyId, sessionCompanyCode, domainPeriodPrices,
+  shareLedgerTenantId, shareLedgerTenantCode, domains, domainPeriodPrices,
   onClose, onSaved,
 }) {
   const isZh = lang === "zh";
@@ -134,91 +137,80 @@ export default function DomainFormModal({
     showDomainAlert(message, "danger");
   }
 
-  /** 与库中任一 owner 的 company_id / group_id 冲突则失败；编辑时可排除当前 owner 已有行（见 domain_api validate_domain_code） */
+  /** 与库中任一 owner 的 company_id / group_id 冲突则失败；编辑时排除当前 owner 已有行（纯客户端校验，见 domainApi.validateTenantCodeGlobally） */
   async function validateCodeGlobally(code) {
     const trimmed = String(code ?? "").trim();
     if (!trimmed) return false;
-    try {
-      const payload = {
-        action: "validate_domain_code",
-        code: trimmed,
-      };
-      if (isEditMode && editingDomain?.id !== undefined && editingDomain?.id !== null && editingDomain?.id !== "") {
-        payload.exclude_owner_id = Number(editingDomain.id);
-      }
-      const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-      if (!json.success) {
-        toastDanger(json.message || t("operationFailed"));
-        return false;
-      }
-      return true;
-    } catch {
-      toastDanger(t("validateDomainCodeUnavailable"));
+    const excludeOwnerId =
+      isEditMode && editingDomain?.id !== undefined && editingDomain?.id !== null && editingDomain?.id !== ""
+        ? Number(editingDomain.id)
+        : undefined;
+    const result = validateTenantCodeGlobally(trimmed, { excludeOwnerId, domains });
+    if (!result.ok) {
+      toastDanger(t(result.message || "operationFailed"));
       return false;
     }
+    return true;
   }
 
   const showSecondaryPwd =
     !isEditMode || (hasC168Context && isOwnerOrAdmin);
 
-  // On mount, load data if editing
+  // On mount, seed from the already-loaded (Spring aggregate) domain row — no extra request needed.
   useEffect(() => {
     if (isEditMode && editingDomain) {
       setOwnerCode(editingDomain.owner_code || "");
       setName(editingDomain.name || "");
       setEmail(editingDomain.email || "");
-      const ownerId = editingDomain.id;
-      const req = (action) =>
-        fetch(buildApiUrl("api/domain/domain_api.php"), {
-          cache: "no-cache",
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action, owner_id: ownerId }),
-        }).then((r) => r.json());
 
-      Promise.all([req("get_companies"), req("get_groups")])
-        .then(([coData, grData]) => {
-          const validCompanies = [];
-          if (coData.success && Array.isArray(coData.data?.companies)) {
-            coData.data.companies.forEach((c) => {
-              if (!c.company_id) return;
-              const co = {
-                company_id: c.company_id,
-                expiration_date: c.expiration_date || null,
-                permissions: Array.isArray(c.permissions) ? c.permissions : [],
-                group_id: c.group_id ? normalizeDomainCode(c.group_id) : null,
-                fee_share_allocations: normalizeFeeShareFromServer(c.fee_share_allocations),
-              };
-              ensureCompanyFeeShare(co);
-              co.originalExpirationDate = co.expiration_date || null;
-              co.selectedPeriod = null;
-              co.startDate = new Date().toISOString().split("T")[0];
-              co.isExtending = false;
-              validCompanies.push(co);
-            });
-          }
-          setTempCompanies(validCompanies);
+      const companiesFull = Array.isArray(editingDomain.companies_full) ? editingDomain.companies_full : [];
+      const validCompanies = companiesFull
+        .filter((c) => c.company_id)
+        .map((c) => {
+          const co = {
+            id: c.id,
+            company_id: c.company_id,
+            expiration_date: c.expiration_date || null,
+            permissions: Array.isArray(c.permissions) ? c.permissions : [],
+            group_id: c.group_id ? normalizeDomainCode(c.group_id) : null,
+            fee_share_allocations: c.fee_share_allocations,
+          };
+          ensureCompanyFeeShare(co);
+          co.originalExpirationDate = co.expiration_date || null;
+          co.selectedPeriod = null;
+          co.startDate = new Date().toISOString().split("T")[0];
+          co.isExtending = false;
+          return co;
+        });
+      setTempCompanies(validCompanies);
 
-          const groups = [];
-          if (grData.success && Array.isArray(grData.data?.groups) && grData.data.groups.length > 0) {
-            grData.data.groups.forEach((row) => groups.push(groupFromApiRow(row)));
-          } else {
-            const legacy = new Set();
-            validCompanies.forEach((c) => {
-              if (c.group_id) legacy.add(c.group_id);
-            });
-            [...legacy].sort().forEach((code) => groups.push(createEmptyGroup(code)));
-          }
-          groups.sort((a, b) => tempGroupCode(a).localeCompare(tempGroupCode(b)));
-          setTempGroups(groups);
-        })
-        .catch(() => {});
+      const groupsFull = Array.isArray(editingDomain.groups_full) ? editingDomain.groups_full : [];
+      const groups = [];
+      if (groupsFull.length > 0) {
+        groupsFull.forEach((row) => {
+          const g = {
+            id: row.id,
+            group_code: tempGroupCode(row),
+            expiration_date: row.expiration_date || null,
+            permissions: [],
+            fee_share_allocations: row.fee_share_allocations,
+          };
+          ensureCompanyFeeShare(g);
+          g.originalExpirationDate = g.expiration_date || null;
+          g.selectedPeriod = null;
+          g.startDate = new Date().toISOString().split("T")[0];
+          g.isExtending = false;
+          groups.push(g);
+        });
+      } else {
+        const legacy = new Set();
+        validCompanies.forEach((c) => {
+          if (c.group_id) legacy.add(c.group_id);
+        });
+        [...legacy].sort().forEach((code) => groups.push(createEmptyGroup(code)));
+      }
+      groups.sort((a, b) => tempGroupCode(a).localeCompare(tempGroupCode(b)));
+      setTempGroups(groups);
     }
   }, []);
 
@@ -384,18 +376,6 @@ export default function DomainFormModal({
 
   // ── Form submit ────────────────────────────────────────────────────────────
 
-  function buildGroupsPayload() {
-    return [...tempGroups]
-      .sort((a, b) => tempGroupCode(a).localeCompare(tempGroupCode(b)))
-      .map(groupToDomainPayloadEntry);
-  }
-
-  function buildCompaniesPayload() {
-    return [...tempCompanies]
-      .sort((a, b) => a.company_id.toUpperCase().localeCompare(b.company_id.toUpperCase()))
-      .map(companyToDomainPayloadEntry);
-  }
-
   async function handleSubmit(e) {
     e.preventDefault();
     const emailCheck = validateEmail(email);
@@ -418,43 +398,56 @@ export default function DomainFormModal({
       toastDanger(t("expirationRequiredBeforeConfirm", { id: missingExp.id }));
       return;
     }
-    const data = {
-      action: isEditMode ? "update" : "create",
-      owner_code: ownerCode,
-      name,
-      email: emailCheck.normalized,
-      companies: JSON.stringify(buildCompaniesPayload()),
-      groups: JSON.stringify(buildGroupsPayload()),
-    };
-    if (!isEditMode || password) data.password = password;
-    if (!isEditMode) {
-      data.secondary_password = secondaryPassword;
-      data.id = "";
-    } else {
-      data.id = editingDomain.id;
-      if (secondaryPassword) data.secondary_password = secondaryPassword;
-    }
 
-    console.log("[Domain Save] companies data:", data.companies);
+    const groupsSorted = [...tempGroups].sort((a, b) => tempGroupCode(a).localeCompare(tempGroupCode(b)));
+    const companiesSorted = [...tempCompanies].sort((a, b) =>
+      a.company_id.toUpperCase().localeCompare(b.company_id.toUpperCase())
+    );
 
     try {
-      const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      const json = await res.json();
-      if (json.success) {
-        showDomainAlert(isEditMode ? t("ownerUpdated") : t("ownerCreated"));
-        onSaved(json.data);
-        notifySessionRefreshRequested();
-        onClose();
-      } else {
+      const { res, json } = isEditMode
+        ? await updateDomain({
+            id: editingDomain.id,
+            ownerCode,
+            name,
+            email: emailCheck.normalized,
+            password: password || undefined,
+            secondaryPassword: secondaryPassword || undefined,
+            groups: groupsSorted,
+            companies: companiesSorted,
+          })
+        : await createDomain({
+            ownerCode,
+            name,
+            email: emailCheck.normalized,
+            password,
+            secondaryPassword,
+            groups: groupsSorted,
+            companies: companiesSorted,
+          });
+
+      if (!res.ok || !json.success) {
         toastDanger(json.message || t("operationFailed"));
+        return;
       }
-    } catch {
-      toastDanger(t("saveOwnerError"));
+
+      const ownerId = json.data?.id ?? editingDomain?.id;
+      const { groups: mergedGroups, companies: mergedCompanies } = mergeTenantIdsFromDomainResponse(
+        groupsSorted,
+        companiesSorted,
+        json.data
+      );
+      await syncAllTenantSettings(ownerId, mergedGroups, mergedCompanies);
+
+      const rows = await fetchDomainList(ownerId);
+      const savedRow = rows.find((r) => Number(r.id) === Number(ownerId)) ?? rows[0];
+
+      showDomainAlert(isEditMode ? t("ownerUpdated") : t("ownerCreated"));
+      if (savedRow) onSaved(savedRow);
+      notifySessionRefreshRequested();
+      onClose();
+    } catch (err) {
+      toastDanger(err?.message || t("saveOwnerError"));
     }
   }
 
@@ -899,8 +892,9 @@ export default function DomainFormModal({
           lang={lang}
           company={csCompany}
           domainPeriodPrices={domainPeriodPrices}
-          sessionCompanyId={sessionCompanyId}
-          sessionCompanyCode={sessionCompanyCode}
+          shareLedgerTenantId={shareLedgerTenantId}
+          shareLedgerTenantCode={shareLedgerTenantCode}
+          domains={domains}
           excludeOwnerId={isEditMode ? editingDomain?.id : null}
           siblingGroupCodes={tempGroups.map(tempGroupCode)}
           siblingCompanyCodes={tempCompanies
@@ -915,8 +909,9 @@ export default function DomainFormModal({
           lang={lang}
           group={gsGroup}
           domainPeriodPrices={domainPeriodPrices}
-          sessionCompanyId={sessionCompanyId}
-          sessionCompanyCode={sessionCompanyCode}
+          shareLedgerTenantId={shareLedgerTenantId}
+          shareLedgerTenantCode={shareLedgerTenantCode}
+          domains={domains}
           excludeOwnerId={isEditMode ? editingDomain?.id : null}
           siblingGroupCodes={tempGroups
             .filter((g) => tempGroupCode(g) !== gsModalGroupCode)

@@ -608,6 +608,174 @@ export function sumFeeShareRolePercentages(rows) {
   return rows.reduce((acc, r) => acc + (parseFloat(r && r.percentage) || 0), 0);
 }
 
+// ===================== Spring Boot bridging (tenant / feature module / fee share) =====================
+// See Count/docs/frontend-springboot-migration.md §4.2 / §14 for the backend contract.
+
+/** feature_module seed rows (schema.sql) — fixed id ↔ Games/Bank/Loan/Rate/Money name. */
+const FEATURE_MODULE_NAME_TO_ID = { Games: 1, Bank: 2, Loan: 3, Rate: 4, Money: 5 };
+const FEATURE_MODULE_ID_TO_NAME = { 1: "Games", 2: "Bank", 3: "Loan", 4: "Rate", 5: "Money" };
+
+/** Spring Tenant.featureModules (full FeatureModule rows) → UI permission name list. */
+export function featureModulesToPermissionNames(featureModules) {
+  if (!Array.isArray(featureModules)) return [];
+  return featureModules
+    .map((m) => {
+      if (!m) return null;
+      if (m.name && FEATURE_MODULE_NAME_TO_ID[m.name] != null) return m.name;
+      const id = Number(m.id);
+      return FEATURE_MODULE_ID_TO_NAME[id] || null;
+    })
+    .filter(Boolean);
+}
+
+/** UI permission name list → Tenant.featureModules write shape (only `id` is read server-side). */
+export function permissionNamesToFeatureModules(names) {
+  const list = Array.isArray(names) ? names : [];
+  return list
+    .map((n) => FEATURE_MODULE_NAME_TO_ID[n])
+    .filter((id) => Number.isFinite(id))
+    .map((id) => ({ id }));
+}
+
+const SHARE_TYPE_TO_ROLE = { SALES: "sales", CS: "cs", IT: "it", PROFIT: "profit" };
+const ROLE_TO_SHARE_TYPE = { sales: "SALES", cs: "CS", it: "IT", profit: "PROFIT" };
+
+/**
+ * Spring `TenantFeeShareAllocate[]` → UI `{profit,sales,cs,it}`.
+ * Idempotent: already-UI-shaped input (has array props under those keys, not a bare array) passes through.
+ */
+export function feeShareSpringToUi(raw) {
+  const out = defaultFeeShareAllocations();
+  if (raw && !Array.isArray(raw) && typeof raw === "object") {
+    ["profit", "sales", "cs", "it"].forEach((role) => {
+      if (Array.isArray(raw[role])) out[role] = raw[role];
+    });
+    return out;
+  }
+  const rows = Array.isArray(raw) ? raw : [];
+  for (const row of rows) {
+    const shareType = String(row?.shareType ?? row?.share_type ?? "").toUpperCase();
+    const role = SHARE_TYPE_TO_ROLE[shareType];
+    if (!role) continue;
+    // Partner-tenant ("group" ownerType) rows aren't rendered by the UI yet — skip, keep account-based rows only.
+    const accountId = parseInt(row?.accountId ?? row?.account_id, 10);
+    if (!accountId) continue;
+    out[role].push({
+      account_id: accountId,
+      percentage: row?.percentage != null ? Number(row.percentage) : 0,
+    });
+  }
+  return out;
+}
+
+/**
+ * Profit has no % input in the UI (see CompanySettingsModal) — its share is always the remainder
+ * after Sales/CS/IT, split evenly across assigned Profit accounts (same rounding as computeShareTotals's
+ * profitRowAmounts, kept independent here to avoid touching the already-working display path).
+ */
+export function distributeProfitPercentages(fsa) {
+  const source = fsa && typeof fsa === "object" ? fsa : defaultFeeShareAllocations();
+  const salesSum = sumFeeShareRolePercentages(source.sales);
+  const csSum = sumFeeShareRolePercentages(source.cs);
+  const itSum = sumFeeShareRolePercentages(source.it);
+  const profitPool = Math.max(0, 100 - (salesSum + csSum + itSum));
+
+  const profitRows = Array.isArray(source.profit) ? source.profit : [];
+  const assignedIdxs = [];
+  profitRows.forEach((r, idx) => {
+    if (parseInt(r?.account_id, 10)) assignedIdxs.push(idx);
+  });
+  const perBase = assignedIdxs.length > 0 ? profitPool / assignedIdxs.length : 0;
+  const perRounded = Math.round(perBase * 10000) / 10000;
+
+  let assignedSumPct = 0;
+  const nextProfit = profitRows.map((r, idx) => {
+    const pos = assignedIdxs.indexOf(idx);
+    if (pos === -1) return { ...r, percentage: 0 };
+    const isLast = pos === assignedIdxs.length - 1;
+    const pct = isLast
+      ? Math.round((profitPool - assignedSumPct) * 10000) / 10000
+      : perRounded;
+    if (!isLast) assignedSumPct += pct;
+    return { ...r, percentage: pct };
+  });
+
+  return { ...source, profit: nextProfit };
+}
+
+/**
+ * UI `{profit,sales,cs,it}` → Spring `TenantFeeShareAllocate[]` write shape.
+ * Profit rows: ownerType "owner", percentage computed via distributeProfitPercentages.
+ * Sales/CS/IT rows: ownerType "user", percentage taken as entered.
+ */
+export function feeShareUiToSpring(fsaUi, tenantId) {
+  const withProfit = distributeProfitPercentages(fsaUi);
+  const rows = [];
+  ["sales", "cs", "it"].forEach((role) => {
+    const list = Array.isArray(withProfit[role]) ? withProfit[role] : [];
+    for (const r of list) {
+      const accountId = parseInt(r?.account_id, 10);
+      if (!accountId) continue;
+      rows.push({
+        tenantId,
+        shareType: ROLE_TO_SHARE_TYPE[role],
+        ownerType: "user",
+        accountId,
+        percentage: r?.percentage !== "" && r?.percentage != null ? Number(r.percentage) : 0,
+      });
+    }
+  });
+  const profitList = Array.isArray(withProfit.profit) ? withProfit.profit : [];
+  for (const r of profitList) {
+    const accountId = parseInt(r?.account_id, 10);
+    if (!accountId) continue;
+    rows.push({
+      tenantId,
+      shareType: "PROFIT",
+      ownerType: "owner",
+      accountId,
+      percentage: r?.percentage != null ? Number(r.percentage) : 0,
+    });
+  }
+  return rows;
+}
+
+/**
+ * tempGroups/tempCompanies entry → `Tenant` write shape for `DomainDTO.groups[]`/`companies[]`.
+ * `code` is the only field the backend actually matches on for add-vs-update; `tenantType`/`name`/
+ * `status` are always forced server-side, and `expirationDate` is discarded for an existing tenant
+ * on `/update` (real expiration is set via the follow-up `update-setting` call) — see
+ * DomainServiceImpl.createDomain/updateDomain.
+ */
+export function groupToTenantSaveEntry(g) {
+  return {
+    code: tempGroupCode(g),
+    expirationDate: g?.expiration_date || null,
+  };
+}
+
+/** @see groupToTenantSaveEntry — `parentGroupCode` must match a code in the same request's groups[]. */
+export function companyToTenantSaveEntry(c) {
+  const code = String(c?.company_id ?? c?.code ?? "").trim().toUpperCase();
+  const groupCode = c?.group_id ? String(c.group_id).trim().toUpperCase() : null;
+  return {
+    code,
+    expirationDate: c?.expiration_date || null,
+    parentGroupCode: groupCode,
+  };
+}
+
+/** UI period-price edit state (strings) → Spring `PeriodPrices` DTO (numbers, same "7days" style keys). */
+export function periodPricesUiToFeeDto(periodPrices) {
+  const out = {};
+  DOMAIN_FEE_PERIOD_KEYS.forEach((key) => {
+    const raw = periodPrices?.[key];
+    const n = raw !== "" && raw != null ? Number(raw) : null;
+    out[key] = Number.isFinite(n) ? n : null;
+  });
+  return out;
+}
+
 /** Check if a card/domain contains protected company C168 */
 export function hasProtectedCompany(companiesFull) {
   if (!Array.isArray(companiesFull) || companiesFull.length === 0) return false;
