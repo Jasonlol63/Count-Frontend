@@ -474,15 +474,13 @@ export default function AutoRenewPage() {
     if (!row || !canEditGlobal || busyRequestId) return;
     if (!canApproveRow(row, rowDrafts, feeSettings)) return;
 
-    const { period, fromAccountId, toAccountId } = getRowDraftValues(row, rowDrafts);
+    const { period } = getRowDraftValues(row, rowDrafts);
     setApproveConfirmRow(null);
     setBusyRequestId(row.request_id);
     try {
       await approveAutoRenew({
         requestId: row.request_id,
         period,
-        fromAccountId,
-        toAccountId,
       });
       invalidateTransactionListCache("auto_renew_approve");
       notify(t("approvedSuccess"), "success");

@@ -1,43 +1,45 @@
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
-import {
-  ensureCompanyFeeShare,
-  groupFromApiRow,
-  normalizeFeeShareFromServer,
-} from "../domain/domainHelpers.js";
+import { fetchDomainList, fetchDomainFeeSettings } from "../domain/domainApi.js";
+import { ensureCompanyFeeShare } from "../domain/domainHelpers.js";
 
 function normalizeCode(value) {
   return String(value ?? "").trim().toUpperCase();
 }
 
-async function postDomainAction(action, payload = {}) {
-  const res = await fetch(buildApiUrl("api/domain/domain_api.php"), {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, ...payload }),
-  });
-  const json = await res.json();
-  if (!json.success) {
-    throw new Error(json.message || "Domain request failed");
-  }
-  return json.data;
+function todayStr() {
+  return new Date().toISOString().split("T")[0];
 }
 
-function mapCompanyRow(c) {
+function buildCompanyTenant(row) {
   const co = {
-    company_id: c.company_id,
-    expiration_date: c.expiration_date || null,
-    permissions: Array.isArray(c.permissions) ? c.permissions : [],
-    group_id: c.group_id ? normalizeCode(c.group_id) : null,
-    fee_share_allocations: normalizeFeeShareFromServer(c.fee_share_allocations),
-    apply_commission_payments_on_domain_save: !!c.apply_commission_payments_on_domain_save,
+    id: row.id,
+    company_id: row.company_id,
+    expiration_date: row.expiration_date || null,
+    permissions: Array.isArray(row.permissions) ? row.permissions : [],
+    group_id: row.group_id ? normalizeCode(row.group_id) : null,
+    fee_share_allocations: row.fee_share_allocations,
   };
   ensureCompanyFeeShare(co);
   co.originalExpirationDate = co.expiration_date || null;
   co.selectedPeriod = null;
-  co.startDate = new Date().toISOString().split("T")[0];
+  co.startDate = todayStr();
   co.isExtending = false;
   return co;
+}
+
+function buildGroupTenant(row) {
+  const g = {
+    id: row.id,
+    group_code: row.group_code,
+    expiration_date: row.expiration_date || null,
+    permissions: [],
+    fee_share_allocations: row.fee_share_allocations,
+  };
+  ensureCompanyFeeShare(g);
+  g.originalExpirationDate = g.expiration_date || null;
+  g.selectedPeriod = null;
+  g.startDate = todayStr();
+  g.isExtending = false;
+  return g;
 }
 
 /**
@@ -53,30 +55,31 @@ export async function loadAutoRenewTenantSettings(row) {
 
   const isGroup = row?.entity_type === "group";
 
+  const owners = await fetchDomainList(ownerId);
+  const owner = owners.find((o) => Number(o.id) === ownerId) || owners[0];
+  if (!owner) return null;
+
   if (isGroup) {
-    const data = await postDomainAction("get_groups", { owner_id: ownerId });
-    const groups = Array.isArray(data?.groups) ? data.groups : [];
+    const groups = Array.isArray(owner.groups_full) ? owner.groups_full : [];
     const match = groups.find((g) => normalizeCode(g.group_code) === code);
     if (!match) return null;
     return {
       type: "group",
       ownerId,
-      tenant: groupFromApiRow(match),
+      tenant: buildGroupTenant(match),
     };
   }
 
-  const data = await postDomainAction("get_companies", { owner_id: ownerId });
-  const companies = Array.isArray(data?.companies) ? data.companies : [];
+  const companies = Array.isArray(owner.companies_full) ? owner.companies_full : [];
   const match = companies.find((c) => normalizeCode(c.company_id) === code);
   if (!match) return null;
   return {
     type: "company",
     ownerId,
-    tenant: mapCompanyRow(match),
+    tenant: buildCompanyTenant(match),
   };
 }
 
 export async function fetchDomainFeeSettingsForAutoRenew() {
-  const data = await postDomainAction("get_domain_fee_settings");
-  return data;
+  return fetchDomainFeeSettings();
 }

@@ -3,7 +3,7 @@ import { buildApiUrl } from "../core/apiUrl.js";
 export const AUTO_RENEW_PENDING_CHANGED_EVENT = "eazycount:auto-renew-pending-changed";
 
 export async function fetchAutoRenewPendingCount({ signal } = {}) {
-  const res = await fetch(buildApiUrl("api/subscription/auto_renew_api.php"), {
+  const res = await fetch(buildApiUrl("api/auto-renew/list"), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },

@@ -11,16 +11,16 @@ export const AUTO_RENEW_PERIODS = [
 
 export const AUTO_RENEW_STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
-async function postAutoRenew(body, { signal } = {}) {
-  const res = await fetch(buildApiUrl("api/subscription/auto_renew_api.php"), {
+async function postJson(path, body, { signal } = {}) {
+  const res = await fetch(buildApiUrl(path), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body ?? {}),
     signal,
   });
-  const json = await res.json();
-  if (!json.success) {
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success) {
     throw new Error(json.message || "Auto renew request failed");
   }
   return json.data;
@@ -30,18 +30,41 @@ export async function fetchAutoRenewApprovals(
   status = "pending",
   { dateFrom, dateTo, entityType = "company", signal } = {},
 ) {
-  const body = { action: "list", status, entity_type: entityType === "group" ? "group" : "company" };
+  const body = { status, entity_type: entityType === "group" ? "group" : "company" };
   if (dateFrom) body.date_from = dateFrom;
   if (dateTo) body.date_to = dateTo;
-  return postAutoRenew(body, { signal });
+  return postJson("api/auto-renew/list", body, { signal });
 }
 
-export async function fetchAutoRenewStatusMap() {
-  return postAutoRenew({ action: "status_map" });
+export async function approveAutoRenew({ requestId, period }) {
+  return postJson("api/auto-renew/approve", { request_id: requestId, period });
+}
+
+export async function rejectAutoRenew({ requestId }) {
+  return postJson("api/auto-renew/reject", { request_id: requestId });
+}
+
+/**
+ * No Spring endpoint exists yet for delete/rollback of processed Auto Renew requests
+ * (backend gap — see docs/frontend-springboot-migration.md §7.4 / §11.5). Kept on the
+ * legacy PHP path until the backend adds it; currently non-functional in this environment.
+ */
+async function postAutoRenewLegacy(body) {
+  const res = await fetch(buildApiUrl("api/subscription/auto_renew_api.php"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  if (!json.success) {
+    throw new Error(json.message || "Auto renew request failed");
+  }
+  return json.data;
 }
 
 export async function saveAutoRenewDraft({ requestId, period, fromAccountId, toAccountId }) {
-  return postAutoRenew({
+  return postAutoRenewLegacy({
     action: "save_draft",
     request_id: requestId,
     period: period || null,
@@ -50,25 +73,8 @@ export async function saveAutoRenewDraft({ requestId, period, fromAccountId, toA
   });
 }
 
-export async function approveAutoRenew({ requestId, period, fromAccountId, toAccountId }) {
-  return postAutoRenew({
-    action: "approve",
-    request_id: requestId,
-    period,
-    from_account_id: fromAccountId,
-    to_account_id: toAccountId,
-  });
-}
-
-export async function rejectAutoRenew({ requestId }) {
-  return postAutoRenew({
-    action: "reject",
-    request_id: requestId,
-  });
-}
-
 export async function deleteAutoRenew({ requestId, transactionId, entityType }) {
-  return postAutoRenew({
+  return postAutoRenewLegacy({
     action: "delete",
     request_id: requestId,
     transaction_id: transactionId || null,
