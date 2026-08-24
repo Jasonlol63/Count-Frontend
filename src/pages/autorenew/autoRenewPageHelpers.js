@@ -31,9 +31,7 @@ function compareNullableNumber(a, b, nullsLast = true) {
 }
 
 function rowSortKey(row) {
-  if (row?.request_id) return Number(row.request_id);
-  if (row?.deleted_payment_id) return Number(row.deleted_payment_id);
-  return 0;
+  return row?.request_id ? Number(row.request_id) : 0;
 }
 
 export function periodToLabelKey(period) {
@@ -171,15 +169,12 @@ export function formatSubmitterAt(value) {
 }
 
 export function rowStableKey(row) {
-  if (row?.is_payment_deleted && row.deleted_payment_id) {
-    return `deleted-${row.deleted_payment_id}`;
-  }
   const entity = row?.entity_type === "group" ? "group" : "company";
   return `${entity}-${String(row?.request_id ?? "")}`;
 }
 
 export function resolveAutoRenewDisplayPrice(row, drafts, feeSettings) {
-  const isPendingEditable = row.status === "pending" && !row.is_payment_deleted;
+  const isPendingEditable = row.status === "pending";
   if (!isPendingEditable) {
     const saved = Number(row.price);
     return Number.isFinite(saved) && saved > 0 ? saved : 0;
@@ -196,20 +191,19 @@ export function canDeleteRow(row) {
   return (
     (row?.status === "approved" || row?.status === "rejected") &&
     Boolean(row?.can_delete) &&
-    Number(row?.request_id) > 0 &&
-    !row?.is_payment_deleted
+    Number(row?.request_id) > 0
   );
 }
 
 export function canApproveRow(row, drafts, feeSettings) {
-  if (row.status !== "pending" || row.is_payment_deleted) return false;
+  if (row.status !== "pending") return false;
   const { period, fromAccountId, toAccountId } = getRowDraftValues(row, drafts);
   const price = resolveAutoRenewDisplayPrice(row, drafts, feeSettings);
   return Boolean(period && fromAccountId && toAccountId && price > 0);
 }
 
 export function getAutoRenewApproveDisabledReason(row, drafts, feeSettings, t) {
-  if (row.status !== "pending" || row.is_payment_deleted) return "";
+  if (row.status !== "pending") return "";
   const { period, fromAccountId, toAccountId } = getRowDraftValues(row, drafts);
   const price = resolveAutoRenewDisplayPrice(row, drafts, feeSettings);
   if (!period) return t("selectPeriod");

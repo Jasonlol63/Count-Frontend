@@ -317,7 +317,7 @@ export default function AutoRenewPage() {
 
   const handleOpenComm = useCallback(async (row) => {
     const rowKey = rowStableKey(row);
-    if (!canEditGlobal || row.is_payment_deleted || busyRequestId) return;
+    if (!canEditGlobal || busyRequestId) return;
     if (!row.owner_id) {
       notify(t("commSettingsNotFound"), "error");
       return;
@@ -494,13 +494,13 @@ export default function AutoRenewPage() {
   }, [approveConfirmRow, busyRequestId, canEditGlobal, feeSettings, notify, refreshListAfterMutation, rowDrafts, t]);
 
   const handleReject = useCallback((row) => {
-    if (!canEditGlobal || busyRequestId || row.is_payment_deleted) return;
+    if (!canEditGlobal || busyRequestId) return;
     setRejectConfirmRow(row);
   }, [busyRequestId, canEditGlobal]);
 
   const confirmRejectRow = useCallback(async () => {
     const row = rejectConfirmRow;
-    if (!row || !canEditGlobal || busyRequestId || row.is_payment_deleted) return;
+    if (!row || !canEditGlobal || busyRequestId) return;
     setRejectConfirmRow(null);
 
     setBusyRequestId(row.request_id);
@@ -533,11 +533,7 @@ export default function AutoRenewPage() {
 
     setBusyRequestId(row.request_id);
     try {
-      await deleteAutoRenew({
-        requestId: row.request_id,
-        transactionId: row.transaction_id,
-        entityType: row.entity_type,
-      });
+      await deleteAutoRenew({ requestId: row.request_id });
       if (row.status === "approved") {
         invalidateTransactionListCache("auto_renew_delete");
       }
@@ -639,7 +635,7 @@ export default function AutoRenewPage() {
   );
 
   const renderCommButton = (row) => {
-    if (!canEditGlobal || row.is_payment_deleted || !row.owner_id) return null;
+    if (!canEditGlobal || !row.owner_id) return null;
     const rowKey = rowStableKey(row);
     const loading = commLoadingKey === rowKey;
     return (
@@ -656,12 +652,6 @@ export default function AutoRenewPage() {
   };
 
   const renderStatusCell = (row) => {
-    if (row.is_payment_deleted) {
-      return (
-        <span className="auto-renew-approval-badge is-deleted">{t("statusDeleted")}</span>
-      );
-    }
-
     if (row.status === "pending" && canEditGlobal) {
       const approveEnabled = canApproveRow(row, rowDrafts, feeSettings) && busyRequestId !== row.request_id;
       const approveDisabledReason = approveEnabled
@@ -895,7 +885,7 @@ export default function AutoRenewPage() {
                     const globalIdx = showAll
                       ? idx + 1
                       : (effectivePage - 1) * pageSize + idx + 1;
-                    const isPendingEditable = row.status === "pending" && canEditGlobal && !row.is_payment_deleted;
+                    const isPendingEditable = row.status === "pending" && canEditGlobal;
                     const draft = getRowDraftValues(row, rowDrafts);
                     const displayPrice = resolveAutoRenewDisplayPrice(row, rowDrafts, feeSettings);
                     const rowBusy = busyRequestId === row.request_id;
@@ -904,7 +894,7 @@ export default function AutoRenewPage() {
                     return (
                       <div
                         key={rowKey}
-                        className={`user-card user-list-row auto-renew-table-row show-card ${idx % 2 === 0 ? "row-even" : "row-odd"}${row.is_payment_deleted ? " maintenance-row-deleted" : ""}`}
+                        className={`user-card user-list-row auto-renew-table-row show-card ${idx % 2 === 0 ? "row-even" : "row-odd"}`}
                       >
                         <div className="card-item auto-renew-table-muted">{globalIdx}</div>
                         <div className="card-item card-item--strong">{row.company_code}</div>

@@ -44,42 +44,8 @@ export async function rejectAutoRenew({ requestId }) {
   return postJson("api/auto-renew/reject", { request_id: requestId });
 }
 
-/**
- * No Spring endpoint exists yet for delete/rollback of processed Auto Renew requests
- * (backend gap — see docs/frontend-springboot-migration.md §7.4 / §11.5). Kept on the
- * legacy PHP path until the backend adds it; currently non-functional in this environment.
- */
-async function postAutoRenewLegacy(body) {
-  const res = await fetch(buildApiUrl("api/subscription/auto_renew_api.php"), {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json();
-  if (!json.success) {
-    throw new Error(json.message || "Auto renew request failed");
-  }
-  return json.data;
-}
-
-export async function saveAutoRenewDraft({ requestId, period, fromAccountId, toAccountId }) {
-  return postAutoRenewLegacy({
-    action: "save_draft",
-    request_id: requestId,
-    period: period || null,
-    from_account_id: fromAccountId || null,
-    to_account_id: toAccountId || null,
-  });
-}
-
-export async function deleteAutoRenew({ requestId, transactionId, entityType }) {
-  return postAutoRenewLegacy({
-    action: "delete",
-    request_id: requestId,
-    transaction_id: transactionId || null,
-    entity_type: entityType === "group" ? "group" : "company",
-  });
+export async function deleteAutoRenew({ requestId }) {
+  return postJson("api/auto-renew/delete", { request_id: requestId });
 }
 
 export function invalidateTransactionListCache(source = "auto_renew") {

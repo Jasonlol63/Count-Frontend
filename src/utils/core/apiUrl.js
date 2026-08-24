@@ -18,9 +18,6 @@ export function buildApiUrl(pathAndQuery) {
       const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
       return `auth/tenant-accessible${q}`;
     }
-    if (raw.startsWith("api/subscription/auto_renew_api.php")) {
-      return "api/auto-renew/list";
-    }
     if (raw.startsWith("api/announcements/announcement_list_api.php")) {
       return "api/announcement/listAnnouncement";
     }
