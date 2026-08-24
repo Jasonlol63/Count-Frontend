@@ -329,13 +329,15 @@ export function loadSummaryRefreshFormulaState(captureScope, processMeta = null)
 /**
  * Merge one saved refresh row into a live row model.
  *
- * Config fields (account/currency/formula/source/input-method/description) are owned by
- * Formula Maintenance. When this row was already matched to a live template fetch this pass
+ * Config fields (account/currency/formula/source/description) are owned by Formula
+ * Maintenance. When this row was already matched to a live template fetch this pass
  * (`row.templateApplied`), those fields must reflect that fresh fetch — otherwise an edit made
  * in Formula Maintenance would never show up on Summary, since the cached draft would keep
  * winning forever. The draft only supplies config fields as a fallback when no fresh template
- * matched this row. Session-only fields (rate checkbox/value, batch-select) always come from
- * the draft, since they aren't part of the template.
+ * matched this row. Session-only fields (rate checkbox/value, batch-select, input method) always
+ * come from the draft, since they aren't part of the template — input method in particular is
+ * picked per-row on the Summary page itself and is never stored on the Formula Maintenance
+ * template, so treating it as "fresh template wins" always reset it to disabled on refresh.
  */
 export function applySavedRefreshRowToModel(row, saved) {
   if (!row || !saved) return row;
@@ -362,8 +364,8 @@ export function applySavedRefreshRowToModel(row, saved) {
     sourcePercent: pick(row.sourcePercent, saved.sourcePercent != null ? String(saved.sourcePercent) : undefined),
     enableSourcePercent: pickBool(row.enableSourcePercent, saved.enableSourcePercent),
     clickedColumns: pick(row.clickedColumns, saved.clickedColumns),
-    inputMethod: pick(row.inputMethod, saved.inputMethod),
-    enableInputMethod: pickBool(row.enableInputMethod, saved.enableInputMethod),
+    inputMethod: saved.inputMethod != null ? saved.inputMethod : row.inputMethod,
+    enableInputMethod: saved.enableInputMethod != null ? !!saved.enableInputMethod : row.enableInputMethod,
     originalDescription: pick(row.originalDescription, saved.originalDescription || saved.descriptionMain),
     // Recomputed downstream from formula/formulaDisplay via mapRowsWithAmountRecalc —
     // values here are just a pre-recalc starting point, not authoritative.

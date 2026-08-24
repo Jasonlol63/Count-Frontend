@@ -132,9 +132,12 @@ export function useSummaryAddAccount({
 
   const groupPickerCompanies = useMemo(() => {
     if (!ledgerCtx.groupOnlyAccountMode || !ledgerCtx.tenantId) return [];
-    // `id` must be the numeric tenant id (used as tenantIds[] on submit); `company_id` is
-    // just the display label for the picker row.
-    return [{ id: ledgerCtx.tenantId, company_id: ledgerCtx.selectedGroup, group_id: ledgerCtx.selectedGroup }];
+    // `id` is the group code (matches AccountModal's groupPickerMode picker_value, which reads
+    // group_id/id — same shape AccountListPage.jsx uses for its own group picker rows), so the
+    // preset selection in resetToAdd() actually matches this row instead of showing "none
+    // selected". submitAddAccount() resolves the real numeric tenantId from ctx.tenantId
+    // directly, not from this code.
+    return [{ id: ledgerCtx.selectedGroup, company_id: ledgerCtx.selectedGroup, group_id: ledgerCtx.selectedGroup }];
   }, [ledgerCtx]);
 
   const companyButtons = useMemo(
@@ -190,7 +193,9 @@ export function useSummaryAddAccount({
     setForm({ ...DEFAULT_FORM, payment_alert: "0" });
     setSelectedCurrencyIds([]);
     if (ctx.groupOnlyAccountMode) {
-      setSelectedCompanyIds(ctx.tenantId ? [Number(ctx.tenantId)] : []);
+      // groupPickerCompanies' single row is keyed by the group code, not the numeric tenant
+      // id — preset with the same code so the picker shows it as already selected on open.
+      setSelectedCompanyIds(ctx.selectedGroup ? [ctx.selectedGroup] : []);
     } else {
       setSelectedCompanyIds(ctx.companyId ? [Number(ctx.companyId)] : []);
     }
@@ -282,7 +287,14 @@ export function useSummaryAddAccount({
         return;
       }
 
-      const tenantIds = selectedCompanyIds.map(Number).filter((id) => Number.isFinite(id) && id > 0);
+      // Group picker rows are keyed by group code (see groupPickerCompanies), not a numeric
+      // tenant id — resolve the real tenantIds[] from ctx.tenantId directly in that mode
+      // instead of Number()-coercing the selected code (which would always come out NaN).
+      const tenantIds = ctx.groupOnlyAccountMode
+        ? ctx.tenantId
+          ? [Number(ctx.tenantId)]
+          : []
+        : selectedCompanyIds.map(Number).filter((id) => Number.isFinite(id) && id > 0);
       if (!ctx.tenantId || !tenantIds.length) {
         emitNotify(t("pleaseSelectCompanyFirst"), "danger");
         return;
