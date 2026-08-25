@@ -235,7 +235,6 @@ export default function LoginPage() {
       "maintenance-page",
       "ownership-page",
       "domain-page",
-      "deleted-log-page",
       "transaction-payment-history-page",
       "transaction-payment-history-page--popup",
       "transaction-payment-history-page--popup-compact",

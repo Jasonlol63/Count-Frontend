@@ -362,7 +362,7 @@ export default function AuthenticatedLayout() {
    * keep overflow policy stable while lazy route chunks are still loading.
    */
   useLayoutEffect(() => {
-    const onAccountLike = pathnameIs("account-list", location.pathname) || pathnameIs("deleted-log", location.pathname);
+    const onAccountLike = pathnameIs("account-list", location.pathname);
     const onUserLike = pathnameIs("userlist", location.pathname);
     const onAutoRenew = pathnameIs("auto-renew", location.pathname);
     const onAnnouncement = pathnameIs("announcement", location.pathname);
