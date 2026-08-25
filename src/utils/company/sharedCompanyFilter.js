@@ -4,7 +4,6 @@
  *
  * Login scope rules: see `loginScope.js` and `includes/group_company_access.php`.
  */
-import { buildApiUrl } from "../core/apiUrl.js";
 import { fetchAccessibleTenants, tenantAccessibleRowToUiTenant } from "./tenantAccessibleApi.js";
 import { stripPrivateQueryFromBrowserUrl } from "../routing/privateBrowserUrl.js";
 import { pathnameIs } from "../routing/pageRoutes.js";
@@ -898,39 +897,16 @@ function setOwnerGroupsCache(rows) {
   ownerGroupsCache = map;
 }
 
-/** Fetch owner groups (Domain `groups` table) — one request per session. */
-export async function fetchOwnerGroupsAll(me, options = {}) {
-  const ownerId = resolveOwnerIdForGroupsCache(me);
-  if (!ownerId) {
-    setOwnerGroupsCache([]);
-    return [];
-  }
-  const { signal } = options;
-  if (ownerGroupsCache instanceof Map) return [...ownerGroupsCache.values()];
-  if (!ownerGroupsInflight) {
-    ownerGroupsInflight = fetch(buildApiUrl("api/domain/domain_api.php"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      signal,
-      body: JSON.stringify({ action: "get_groups", owner_id: ownerId }),
-    })
-      .then(async (res) => {
-        const json = await res.json();
-        const groups = Array.isArray(json?.data?.groups) ? json.data.groups : [];
-        setOwnerGroupsCache(groups);
-        ownerGroupsInflight = null;
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("eazycount:owner-groups-loaded"));
-        }
-        return groups;
-      })
-      .catch((err) => {
-        ownerGroupsInflight = null;
-        throw err;
-      });
-  }
-  return ownerGroupsInflight;
+/**
+ * Owner groups (Domain `groups` table: group_code → expiration_date, fee_share_allocations, …).
+ * No Spring endpoint exists for this table yet (legacy PHP domain_api.php `get_groups` only) — until
+ * one is built, this stays a no-op so callers never hit the dead `/api/*` path. Callers already treat
+ * an empty cache as "not ready" and fall back to `resolveGroupExpirationDate`'s secondary path
+ * (the group-entity company row from `getCachedOwnerCompanies()`).
+ */
+export async function fetchOwnerGroupsAll(_me, _options = {}) {
+  setOwnerGroupsCache([]);
+  return [];
 }
 
 /**

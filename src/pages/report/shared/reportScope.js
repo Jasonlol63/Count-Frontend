@@ -79,7 +79,22 @@ export function resolveCustomerReportScope({
     groupAllMode,
     snapGroupIds: resolveReportSnapGroupIds(list, me),
   });
-  return mapTransactionScopeToReportScope(tx);
+  const mapped = mapTransactionScopeToReportScope(tx);
+
+  // Pure group scope (no subsidiary drilled into): Transaction's ledger semantics leave
+  // scopeCompanyId at 0, but Report/Account/Currency APIs are single-tenant. Resolve to the
+  // group's own entity company (company_id === group code) — same tenant Data Capture uses
+  // for group payroll (SALARY/COMMISSION/BONUS/PROFIT) — so this scope gets a real tenantId
+  // without touching company/aggregate scope resolution at all.
+  if (mapped?.mode === "group" && !(Number(mapped.scopeCompanyId) > 0)) {
+    const entityRow = resolveGroupEntityRowFromSnap(list, mapped.groupId || selectedGroup);
+    const entityId = entityRow?.id != null ? Number(entityRow.id) : 0;
+    if (entityId > 0) {
+      return { ...mapped, scopeCompanyId: entityId, resolveCompanyViaGroupId: false };
+    }
+  }
+
+  return mapped;
 }
 
 export function customerReportScopeIsReady(scope) {

@@ -7,6 +7,7 @@ import {
 } from "../lib/dataCaptureSpringApi.js";
 import { pushDataCaptureNotification } from "../lib/dataCaptureNotify.js";
 import { translateDataCaptureMessage } from "../../../translateFile/pages/dataCaptureTranslate.js";
+import { useSubmitGuard } from "../../../hooks/useSubmitGuard.js";
 
 function normalizeCatalog(json) {
   const raw = json?.descriptions ?? json?.data?.descriptions ?? [];
@@ -32,6 +33,7 @@ export default function DescriptionSelectionModal({
   const [pendingNames, setPendingNames] = useState([]);
   const [search, setSearch] = useState("");
   const [newName, setNewName] = useState("");
+  const { submitting: addingDesc, guardSubmit } = useSubmitGuard(open);
 
   const notify = useCallback(
     (message, type = "danger") => {
@@ -92,8 +94,7 @@ export default function DescriptionSelectionModal({
   }, []);
 
   const handleAdd = useCallback(
-    async (e) => {
-      e.preventDefault();
+    async () => {
       const trimmed = newName.trim().toUpperCase();
       if (!trimmed || !tenantId) return;
       try {
@@ -189,7 +190,7 @@ export default function DescriptionSelectionModal({
             <div className="available-descriptions-section">
               <div className="add-description-bar">
                 <h3>{t("addNewDescription")}</h3>
-                <form className="add-description-form" onSubmit={handleAdd}>
+                <form className="add-description-form" onSubmit={guardSubmit(handleAdd)}>
                   <div className="add-description-input-group">
                     <input
                       type="text"
@@ -197,11 +198,12 @@ export default function DescriptionSelectionModal({
                       placeholder={t("enterNewDescriptionName")}
                       required
                       value={newName}
+                      disabled={addingDesc}
                       onChange={(e) => setNewName(e.target.value)}
                       style={{ textTransform: "uppercase" }}
                     />
-                    <button type="submit" className="btn btn-save">
-                      {t("add")}
+                    <button type="submit" className="btn btn-save" disabled={addingDesc}>
+                      {addingDesc ? t("saving") : t("add")}
                     </button>
                   </div>
                 </form>

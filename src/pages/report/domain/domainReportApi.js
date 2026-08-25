@@ -1,67 +1,39 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
+import { fetchProcessListByTenantId, resolveProcessListTenantId } from "../../processlist/processListApi.js";
 import { formatReportAmount, reportAmountAdd } from "../shared/reportAmountFormat.js";
-import { customerReportScopeApiParams } from "../shared/reportScope.js";
 
 export const formatAmount = formatReportAmount;
 
-function appendScopeParams(params, scope) {
-  const { companyId, viewGroup, groupId, groupsAll, groupAll, groupAggregate } =
-    customerReportScopeApiParams(scope);
-  if (companyId) params.append("company_id", String(companyId));
-  const vg = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
-  if (vg) params.append("view_group", vg);
-  const gid = groupId ? String(groupId).trim().toUpperCase() : "";
-  if (gid) params.append("group_id", gid);
-  if (groupsAll) params.append("groups_all", "1");
-  if (groupAll) params.append("group_all", "1");
-  if (groupAggregate) params.append("group_aggregate", "1");
-  if (scope?.mode) params.append("report_scope", scope.mode);
-}
-
 /**
- * Group-only scope (AP/IG payroll: SALARY/COMMISSION/BONUS) is a different data domain — those are
- * BANK-category processes, but the Spring Domain Report endpoint only reports on GAME-category
- * processes (see docs/domain-report-spring-migration.md). No Spring equivalent exists for this scope
- * yet, so it keeps hitting the legacy PHP endpoint unchanged.
+ * Same `POST /api/process/process-list` endpoint as `fetchProcessListByTenantId`, but reads the raw
+ * DTO rows directly instead of going through `normalizeProcessListRows` — that helper deliberately
+ * drops `category === "BANK"` rows for the Games Process List page. Group-scope Domain Report wants
+ * exactly those BANK rows (PROFIT/SALARY/COMMISSION/BONUS payroll processes).
  */
-async function fetchDomainReportLegacy(
-  { dateFrom, dateTo, processId, reportScope, selectedCurrencies = [], showAllCurrencies = true },
-  options = {},
-) {
-  const { signal } = options;
-  const params = new URLSearchParams();
-  params.append("date_from", dateFrom);
-  params.append("date_to", dateTo);
-  if (processId) params.append("process_id", processId);
-  appendScopeParams(params, reportScope);
-  if (!showAllCurrencies && Array.isArray(selectedCurrencies) && selectedCurrencies.length > 0) {
-    params.append("currency", selectedCurrencies.join(","));
-  }
+async function fetchBankProcessesByTenantId(tenantId, signal) {
+  const tid = resolveProcessListTenantId(tenantId);
+  if (!tid) throw new Error("tenantIdRequired");
 
-  const res = await fetch(buildApiUrl(`api/reports/domain_report_api.php?${params.toString()}`), {
+  const res = await fetch(buildApiUrl("api/process/process-list"), {
+    method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(tid),
     signal,
   });
   const json = await res.json();
-  if (!res.ok || !json.success) {
-    throw new Error(json.message || json.error || "Failed to load report");
+  if (!res.ok || !(json?.success === true)) {
+    throw new Error(json?.message || "Failed to load processes");
   }
-  return json;
-}
-
-async function fetchProcessesLegacy(reportScope, options = {}) {
-  const { signal } = options;
-  const params = new URLSearchParams();
-  params.append("action", "processes");
-  appendScopeParams(params, reportScope);
-  const url = buildApiUrl(`api/reports/domain_report_api.php?${params.toString()}`);
-  const res = await fetch(url, { credentials: "include", signal });
-  const json = await res.json();
-  if (!res.ok || !json.success) {
-    throw new Error(json.message || json.error || "Failed to load processes");
-  }
-  return json.data || [];
+  const rows = Array.isArray(json.data) ? json.data : [];
+  return rows
+    .filter((dto) => String(dto?.process?.category || "").trim().toUpperCase() === "BANK")
+    .map((dto) => ({
+      id: dto?.id ?? dto?.process?.id,
+      process: String(dto?.process?.code || "").trim(),
+      display_text: String(dto?.process?.code || "").trim(),
+    }))
+    .filter((row) => row.id != null && row.process);
 }
 
 /** Resolve the single tenantId a scope points at (company mode / one leg of an aggregate loop). */
@@ -81,7 +53,7 @@ function resolveDomainReportTenantIds(reportScope) {
 }
 
 /** Spring POST /api/report/domain-report/list body (tenant-only, no currency dimension). */
-function buildSpringDomainReportRequest({ tenantId, dateFrom, dateTo, processId }) {
+function buildSpringDomainReportRequest({ tenantId, dateFrom, dateTo, processId, category }) {
   const tid = Number(tenantId);
   if (!Number.isFinite(tid) || tid <= 0) {
     throw new Error("tenantIdRequired");
@@ -92,6 +64,7 @@ function buildSpringDomainReportRequest({ tenantId, dateFrom, dateTo, processId 
     dateFrom: String(dateFrom || "").trim(),
     dateTo: String(dateTo || "").trim(),
     processId: Number.isFinite(pid) && pid > 0 ? pid : null,
+    category: category === "BANK" ? "BANK" : "GAME",
   };
 }
 
@@ -115,8 +88,8 @@ const ZERO_TOTALS = { turnover: "0", win: "0", lose: "0", win_lose: "0" };
  * The Spring response list ends with one synthesized row (totalRow=true) carrying the Total —
  * split it out here so callers get { rows, totals } regardless of how many tenants get merged.
  */
-async function fetchDomainReportOnce({ tenantId, dateFrom, dateTo, processId, signal }) {
-  const body = buildSpringDomainReportRequest({ tenantId, dateFrom, dateTo, processId });
+async function fetchDomainReportOnce({ tenantId, dateFrom, dateTo, processId, category, signal }) {
+  const body = buildSpringDomainReportRequest({ tenantId, dateFrom, dateTo, processId, category });
 
   const res = await fetch(buildApiUrl("api/report/domain-report/list"), {
     method: "POST",
@@ -151,16 +124,14 @@ async function fetchDomainReportOnce({ tenantId, dateFrom, dateTo, processId, si
 }
 
 /**
- * Domain Report list. Group "aggregate" scope loops per company tenant and merges client-side —
- * the Spring backend only ever answers for one tenant at a time. Group-only scope (SALARY/COMMISSION/
- * BONUS payroll) stays on the legacy PHP call — see fetchDomainReportLegacy.
+ * Domain Report list. "aggregate" scope loops per company tenant and merges client-side — the
+ * Spring backend only ever answers for one tenant at a time. Group scope (SALARY/COMMISSION/BONUS/
+ * PROFIT payroll) resolves to the group's own entity tenant (see reportScope.js) and reports on
+ * BANK-category processes instead of GAME.
  */
 export async function fetchDomainReport(params, options = {}) {
   const { dateFrom, dateTo, processId, reportScope } = params;
-
-  if (reportScope?.mode === "group") {
-    return fetchDomainReportLegacy(params, options);
-  }
+  const category = reportScope?.mode === "group" ? "BANK" : "GAME";
 
   const { signal } = options;
   const tenantIds = resolveDomainReportTenantIds(reportScope);
@@ -171,7 +142,7 @@ export async function fetchDomainReport(params, options = {}) {
   let rows = [];
   let totals = { ...ZERO_TOTALS };
   for (const tenantId of tenantIds) {
-    const part = await fetchDomainReportOnce({ tenantId, dateFrom, dateTo, processId, signal });
+    const part = await fetchDomainReportOnce({ tenantId, dateFrom, dateTo, processId, category, signal });
     rows = rows.concat(part.rows);
     totals = {
       turnover: reportAmountAdd(totals.turnover, part.totals.turnover),
@@ -197,19 +168,30 @@ function normalizeSpringProcessOption(row) {
 }
 
 /**
- * Process dropdown data source. Company/aggregate scope: Spring `POST /api/process/process-list`
- * (already filters out BANK-category processes, same helper Games Process List uses), looped per
- * tenant for aggregate mode. Group-only scope: legacy PHP (see fetchProcessesLegacy) — SALARY/
- * COMMISSION/BONUS are BANK-category processes with no Spring Domain Report equivalent yet.
+ * Process dropdown data source, all via Spring `POST /api/process/process-list`. Company/aggregate
+ * scope reads GAME-category rows through `fetchProcessListByTenantId` (same helper Games Process
+ * List uses), looped per tenant for aggregate mode. Group scope reads BANK-category rows (SALARY/
+ * COMMISSION/BONUS/PROFIT) for the group's own entity tenant via fetchBankProcessesByTenantId.
  */
 export async function fetchProcesses(reportScope, options = {}) {
-  if (reportScope?.mode === "group") {
-    return fetchProcessesLegacy(reportScope, options);
-  }
-
   const { signal } = options;
   const tenantIds = resolveDomainReportTenantIds(reportScope);
   if (!tenantIds.length) return [];
+
+  if (reportScope?.mode === "group") {
+    const seen = new Set();
+    const merged = [];
+    for (const tenantId of tenantIds) {
+      const rows = await fetchBankProcessesByTenantId(tenantId, signal);
+      for (const opt of rows) {
+        if (opt.id == null || seen.has(opt.id)) continue;
+        seen.add(opt.id);
+        merged.push(opt);
+      }
+    }
+    merged.sort((a, b) => a.process.localeCompare(b.process));
+    return merged;
+  }
 
   const seen = new Set();
   const merged = [];

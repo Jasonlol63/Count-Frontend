@@ -1,18 +1,28 @@
 import { buildApiUrl } from "../core/apiUrl.js";
 import { notifyCompanySessionUpdated } from "./companySessionEvents.js";
+import { rememberCompanySessionFlags } from "./companySessionFlagsCache.js";
 
-/** POST `update_company_session_api.php` — shared by Admin-aligned optimistic company picks. */
+/**
+ * POST Spring `/auth/switch-tenant` — shared by Admin-aligned optimistic company picks.
+ * (Was the legacy PHP `api/session/update_company_session_api.php`, which 404s now that the
+ * reverse proxy sends every unrewritten `/api/*` path to Spring; `companySessionSync.js`'s
+ * `syncCompanySessionApi` already migrated to this endpoint — this mirrors that, but keeps
+ * `signal` support for the abort-on-rapid-switch pattern these callers rely on.)
+ */
 export async function fetchUpdateCompanySession(companyId, { signal } = {}) {
   const nextId = Number(companyId);
   if (!Number.isFinite(nextId) || nextId <= 0) {
     return { ok: false, json: { success: false } };
   }
   try {
-    const res = await fetch(
-      buildApiUrl(`api/session/update_company_session_api.php?company_id=${nextId}`),
-      { credentials: "include", signal },
-    );
+    const q = new URLSearchParams({ tenant_id: String(nextId) });
+    const res = await fetch(buildApiUrl(`auth/switch-tenant?${q.toString()}`), {
+      method: "POST",
+      credentials: "include",
+      signal,
+    });
     const json = await res.json().catch(() => ({}));
+    if (json?.success && json?.data) rememberCompanySessionFlags(json.data);
     return { ok: res.ok, json };
   } catch (err) {
     if (err?.name === "AbortError") throw err;
