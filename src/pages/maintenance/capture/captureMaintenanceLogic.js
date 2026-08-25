@@ -3,7 +3,6 @@ import { isC168CompanyCode } from "../../../utils/company/c168CaptureChannel.js"
 import { fetchDomainCompanyPermissions } from "../shared/maintenanceCompanyApi.js";
 import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
 import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
-import { resolveGroupEntityRowFromSnap } from "../../report/shared/reportScope.js";
 import { mapGroupPayrollProcesses } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
 import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
 import { formatSpringDateTimeToDmy } from "../shared/maintenanceDateHelpers.js";
@@ -53,29 +52,30 @@ export async function fetchProcesses(companyId, scope = null) {
   return mapProcessesForMaintenanceSelect(rows);
 }
 
-/** "Bank" for C168 / bank-only payroll companies; "Games" otherwise — category is a required hard filter server-side. */
+/**
+ * "Bank" for C168 / bank-only payroll companies AND pure Group mode — group payroll submissions
+ * (SALARY/COMMISSION/BONUS/PROFIT) always land under category BANK, same tenant as GAME data.
+ * Mirrors `captureMaintenanceUsesGroupProcesses` exactly (same three conditions) so the process
+ * dropdown and the actual list/delete category filter never disagree.
+ * "Games" otherwise — category is a required hard filter server-side.
+ */
 function resolveCaptureMaintenanceCategory(scope) {
-  const payrollChannel = Boolean(scope?.c168Channel || scope?.companyPayrollChannel);
-  return payrollChannel ? "Bank" : "Games";
+  return captureMaintenanceUsesGroupProcesses(scope) ? "Bank" : "Games";
 }
 
 /**
  * Numeric tenant id(s) for capture maintenance list/delete.
- * Group entity + subsidiary company share one Spring tenant row; "aggregate" (Groups All / Group All) spans several;
- * pure Group ledger (no subsidiary drill-down) resolves `scope.scopeCompanyId` to 0 and must be looked up by group id.
+ * Group entity + subsidiary company share one Spring tenant row; "aggregate" (Groups All / Group All) spans several.
+ * Pure Group scope's `scope.scopeCompanyId` is already resolved to the group's real entity tenantId by
+ * `resolveCustomerReportScope` (reportScope.js) — capture maintenance has no separate group-only resolution path.
  */
-function resolveCaptureMaintenanceTenantIds({ companyId, scope, companies } = {}) {
+function resolveCaptureMaintenanceTenantIds({ companyId, scope } = {}) {
   if (scope?.mode === "aggregate") {
     const ids = Array.isArray(scope.mergeCompanyIds) ? scope.mergeCompanyIds : [];
     return ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
   }
   const tid = Number(companyId ?? scope?.scopeCompanyId);
   if (Number.isFinite(tid) && tid > 0) return [tid];
-  if (scope?.mode === "group" && scope.groupId && Array.isArray(companies)) {
-    const row = resolveGroupEntityRowFromSnap(companies, scope.groupId);
-    const id = Number(row?.id);
-    if (Number.isFinite(id) && id > 0) return [id];
-  }
   return [];
 }
 
@@ -134,11 +134,11 @@ async function fetchCaptureMaintenancePage({ tenantId, dateFrom, dateTo, process
  * @param {AbortSignal} [options.signal] — 切换公司等场景取消过时请求，避免列表闪动与竞态
  */
 export async function searchCaptureData(
-  { dateFrom, dateTo, process, query, scope, companies },
+  { dateFrom, dateTo, process, query, scope },
   options = {},
 ) {
   const { signal } = options;
-  const tenantIds = resolveCaptureMaintenanceTenantIds({ scope, companies });
+  const tenantIds = resolveCaptureMaintenanceTenantIds({ scope });
   if (tenantIds.length === 0) return [];
 
   const processFilter = String(process ?? "").trim();
@@ -168,9 +168,8 @@ export async function searchCaptureData(
  * @param {number[]} captureIds
  * @param {object} scope
  * @param {Array<object>} rows currently-loaded rows (carry `_tenant_id` from the search response)
- * @param {Array<object>} companies owner companies snapshot — fallback group-entity lookup only
  */
-export async function deleteCaptureItems({ captureIds, scope = null, rows = [], companies = [] }) {
+export async function deleteCaptureItems({ captureIds, scope = null, rows = [] }) {
   const ids = Array.isArray(captureIds)
     ? captureIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
     : [];
@@ -179,7 +178,7 @@ export async function deleteCaptureItems({ captureIds, scope = null, rows = [], 
   }
 
   const rowByCaptureId = new Map((Array.isArray(rows) ? rows : []).map((r) => [Number(r.capture_id), r]));
-  const fallbackTenantId = resolveCaptureMaintenanceTenantIds({ scope, companies })[0] ?? null;
+  const fallbackTenantId = resolveCaptureMaintenanceTenantIds({ scope })[0] ?? null;
 
   const idsByTenant = new Map();
   for (const id of ids) {

@@ -11,10 +11,7 @@ import "../../../../public/css/customer_report.css";
 import "../../../../public/css/report-outlined-fields.css";
 import "../../../../public/css/capture_maintenance.css";
 import "../../../../public/css/maintenance_unified_filters.css";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { removeOtherMaintenanceStylesheets, waitForStylesheet } from "../../../utils/maintenance/maintenanceStylesheets.js";
-import { ensureMaintenanceDateRangePicker } from "../../../utils/date/dateRangePicker.js";
-import { formatYmd } from "../../../utils/date/dateUtils.js";
 import { useMaintenanceGroupCompanyFilter } from "../shared/useMaintenanceGroupCompanyFilter.js";
 import { runMaintenanceCompanySwitch } from "../shared/maintenanceCompanySwitch.js";
 import { useMaintenancePageScrollLock } from "../shared/useMaintenancePageScrollLock.js";
@@ -440,7 +437,6 @@ export default function CaptureMaintenancePage() {
             process: selectedProcess,
             query,
             scope: effectiveScope,
-            companies,
           },
           { signal: ac.signal },
         );
@@ -648,7 +644,6 @@ export default function CaptureMaintenancePage() {
         captureIds: selectedIds,
         scope: captureScope,
         rows: captureData,
-        companies,
       });
 
       notifyTransactionListInvalidated("capture_maintenance_delete");
