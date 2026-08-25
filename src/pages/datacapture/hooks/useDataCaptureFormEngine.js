@@ -2,7 +2,6 @@ import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useR
 import {
   buildDateOptions,
   displayTextFromProcessRow,
-  fetchGroupCaptureCurrencies,
   getLocalDateString,
 } from "../lib/dataCaptureApi.js";
 import {
@@ -327,9 +326,7 @@ export function useDataCaptureFormEngine(
       return;
     }
     const tenantId = resolveDataCaptureTenantId(captureScopeRef.current);
-    const list = tenantId
-      ? await fetchCaptureCurrenciesByTenantId(tenantId)
-      : await fetchGroupCaptureCurrencies(viewGroup);
+    const list = tenantId ? await fetchCaptureCurrenciesByTenantId(tenantId) : [];
     setCurrencies(list);
     setCurrencyId((prev) => {
       if (!prev) return "";

@@ -1,21 +1,5 @@
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { getDataCaptureWeekdayLabels } from "../../../translateFile/pages/dataCaptureTranslate.js";
 import { dataCaptureScopeApiParams, dataCaptureScopeCacheKey } from "./dataCaptureScope.js";
-
-/** One option per currency code (subsidiary + group rows can share company_id). */
-export function dedupeCaptureCurrenciesByCode(rows) {
-  const byCode = new Map();
-  for (const row of rows || []) {
-    const code = String(row.code || "").trim().toUpperCase();
-    if (!code) continue;
-    const id = String(row.id);
-    const existing = byCode.get(code);
-    if (!existing || Number(id) < Number(existing.id)) {
-      byCode.set(code, { id, code });
-    }
-  }
-  return Array.from(byCode.values()).sort((a, b) => a.code.localeCompare(b.code));
-}
 
 export const dataCaptureQueryKeys = {
   root: () => ["dataCapture"],
@@ -35,11 +19,6 @@ export const dataCaptureQueryKeys = {
     ...dataCaptureQueryKeys.root(),
     "companyFormCatalog",
     scopeKey || "none",
-  ],
-  groupCurrencies: (viewGroup) => [
-    ...dataCaptureQueryKeys.root(),
-    "groupCurrencies",
-    viewGroup || "none",
   ],
   processesByDay: (scopeKey, date) => [
     ...dataCaptureQueryKeys.root(),
@@ -111,39 +90,6 @@ export function appendDataCaptureScopeParams(params, scope) {
   if (groupAll) params.set("group_all", "1");
   if (reportScope) params.set("report_scope", reportScope);
   if (groupOnly) params.set("group_only", "1");
-}
-
-/**
- * Group Data Capture: currencies from group ledger scope only (same as Dashboard group-only filter).
- * Uses account_currency on group KPI accounts — not subsidiary company currency rows.
- * True AP/IG group ledger only (unmigrated, see docs/datacapture-spring-api.md §4).
- */
-export async function fetchGroupCaptureCurrencies(viewGroup) {
-  const gid = viewGroup ? String(viewGroup).trim().toUpperCase() : "";
-  if (!gid) return [];
-  const params = new URLSearchParams({
-    group_id: gid,
-    view_group: gid,
-    group_aggregate: "1",
-  });
-  try {
-    const response = await fetch(
-      buildApiUrl(
-        `api/transactions/get_scope_account_currencies_api.php?${params.toString()}`,
-      ),
-      { credentials: "include" },
-    );
-    const json = await response.json();
-    if (!response.ok || !json.success || !Array.isArray(json.data)) return [];
-    return dedupeCaptureCurrenciesByCode(
-      json.data.map((r) => ({
-        id: String(r.id),
-        code: String(r.code || "").trim().toUpperCase(),
-      })),
-    );
-  } catch {
-    return [];
-  }
 }
 
 /** Matches `renderSubmittedProcesses` date/time formatting in `js/datacapture.js`. */
