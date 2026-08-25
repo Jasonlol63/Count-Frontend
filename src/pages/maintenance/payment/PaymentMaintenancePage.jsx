@@ -352,7 +352,7 @@ export default function PaymentMaintenancePage() {
             companyId: null,
             me: u,
           });
-          const currList = await fetchCompanyCurrencies(null, bootScope, rows);
+          const currList = await fetchCompanyCurrencies(null, bootScope);
           if (cancelled) return;
           setCurrencies(orderPaymentMaintenanceCurrencies(currList, bootScope));
           setSelectedCurrency(pickPaymentMaintenanceCurrency(currList, bootScope));
@@ -374,7 +374,7 @@ export default function PaymentMaintenancePage() {
             me: u,
           });
 
-          const currList = await fetchCompanyCurrencies(null, bootScope, rows);
+          const currList = await fetchCompanyCurrencies(null, bootScope);
           setCurrencies(orderPaymentMaintenanceCurrencies(currList, bootScope));
           setSelectedCurrency(pickPaymentMaintenanceCurrency(currList, bootScope));
 
@@ -436,7 +436,7 @@ export default function PaymentMaintenancePage() {
     const scope = paymentScope;
     (async () => {
       try {
-        const currList = await fetchCompanyCurrencies(null, scope, companies);
+        const currList = await fetchCompanyCurrencies(null, scope);
         if (cancelled) return;
         setCurrencies(orderPaymentMaintenanceCurrencies(currList, scope));
         setSelectedCurrency(pickPaymentMaintenanceCurrency(currList, scope));
@@ -449,7 +449,7 @@ export default function PaymentMaintenancePage() {
     return () => {
       cancelled = true;
     };
-  }, [bootLoading, paymentScope, companyId, companyCode, selectedGroup, companies, notify, t]);
+  }, [bootLoading, paymentScope, companyId, companyCode, selectedGroup, notify, t]);
 
   // -- Search Logic --
   /** 与 Capture Maintenance 对齐：支持 overrides.companyId；seq + ref + Abort；首次 Loading / 之后 listSyncing 保留旧表 */
@@ -488,7 +488,6 @@ export default function PaymentMaintenancePage() {
           companyId: effectiveScope.scopeCompanyId,
           currency: overrides.currency ?? selectedCurrency,
           scope: effectiveScope,
-          companies,
           signal: controller.signal,
         });
         if (seq !== searchSeqRef.current) return;
@@ -564,13 +563,13 @@ export default function PaymentMaintenancePage() {
    * currency fetch returns, skip applying state (stale results are dropped, not shown).
    */
   const reloadScopeMeta = useCallback(async (scope, seq, seqRef) => {
-    const currList = await fetchCompanyCurrencies(null, scope, companies);
+    const currList = await fetchCompanyCurrencies(null, scope);
     if (seqRef && seq !== seqRef.current) return null;
     setCurrencies(orderPaymentMaintenanceCurrencies(currList, scope));
     const nextCurrency = pickPaymentMaintenanceCurrency(currList, scope);
     setSelectedCurrency(nextCurrency);
     return nextCurrency;
-  }, [companies]);
+  }, []);
 
   /** Local drag reorder — scoped to this company/group, never written to Dashboard's shared order. */
   const handleCurrencyDropOn = useCallback(
@@ -752,7 +751,7 @@ export default function PaymentMaintenancePage() {
   const handleConfirmDelete = async () => {
     setIsDeleteModalOpen(false);
     try {
-      await deletePaymentRecords(selectedIds, paymentScope, paymentData, companies);
+      await deletePaymentRecords(selectedIds, paymentScope, paymentData);
       notifyTransactionListInvalidated("payment_maintenance_delete");
       notify(t("successfullyDeletedN", { n: selectedIds.length }), "success");
       performSearch({ scope: paymentScope });

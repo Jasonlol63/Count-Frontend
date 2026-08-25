@@ -3,7 +3,6 @@ import { fetchCurrencyListByTenantId, normalizeCurrencyRow } from "../../../util
 import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
 import { formatSpringDateTimeToDmy } from "../shared/maintenanceDateHelpers.js";
 import { paymentMaintenanceScopeApiParams } from "./paymentMaintenanceScope.js";
-import { resolveGroupEntityRowFromSnap } from "../../report/shared/reportScope.js";
 import {
   mergeCurrencyCodesWithSavedOrder,
   resolvePaymentMaintenanceCurrencyOrder,
@@ -11,21 +10,16 @@ import {
 
 /**
  * Group entity + subsidiary company share one Spring tenant row; "aggregate" (Groups All / Group All) spans several.
- * Pure Group-ledger view (no subsidiary drill-down) resolves `scope.scopeCompanyId` to 0 — the actual tenant is the
- * group's own entity company row (company_id === group code), so it must be looked up from `companies`.
+ * Pure Group scope's `scope.scopeCompanyId` is already resolved to the group's real entity tenantId by
+ * `resolveCustomerReportScope`, so payment maintenance has no separate group-only resolution path.
  */
-function resolvePaymentMaintenanceTenantIds({ companyId, scope, companies } = {}) {
+function resolvePaymentMaintenanceTenantIds({ companyId, scope } = {}) {
   if (scope?.mode === "aggregate") {
     const ids = Array.isArray(scope.mergeCompanyIds) ? scope.mergeCompanyIds : [];
     return ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
   }
   const tid = Number(companyId ?? scope?.scopeCompanyId);
   if (Number.isFinite(tid) && tid > 0) return [tid];
-  if (scope?.mode === "group" && scope.selectedGroup && Array.isArray(companies)) {
-    const row = resolveGroupEntityRowFromSnap(companies, scope.selectedGroup);
-    const id = Number(row?.id);
-    if (Number.isFinite(id) && id > 0) return [id];
-  }
   return [];
 }
 
@@ -40,8 +34,8 @@ export function pickPaymentMaintenanceCurrency(currList, scope) {
 }
 
 /** Currencies for active group ledger vs subsidiary company (no cross-scope bleed); unions across aggregate scope. */
-export async function fetchCompanyCurrencies(_companyId, scope = null, companies = []) {
-  const tenantIds = resolvePaymentMaintenanceTenantIds({ scope, companies });
+export async function fetchCompanyCurrencies(_companyId, scope = null) {
+  const tenantIds = resolvePaymentMaintenanceTenantIds({ scope });
   if (tenantIds.length === 0) return [];
 
   if (tenantIds.length === 1) {
@@ -157,10 +151,9 @@ export async function searchPaymentData({
   companyId,
   currency,
   scope,
-  companies,
   signal,
 }) {
-  const tenantIds = resolvePaymentMaintenanceTenantIds({ companyId, scope, companies });
+  const tenantIds = resolvePaymentMaintenanceTenantIds({ companyId, scope });
   if (tenantIds.length === 0) return [];
 
   const q = query?.trim() ? query.trim().toUpperCase() : null;
@@ -182,9 +175,8 @@ export async function searchPaymentData({
  * @param {number[]} transactionIds
  * @param {object} scope
  * @param {Array<object>} rows currently-loaded rows (carry `_tenant_id` from the search response)
- * @param {Array<object>} companies owner companies snapshot — fallback group-entity lookup only
  */
-export async function deletePaymentRecords(transactionIds, scope = null, rows = [], companies = []) {
+export async function deletePaymentRecords(transactionIds, scope = null, rows = []) {
   const ids = Array.isArray(transactionIds)
     ? transactionIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
     : [];
@@ -193,7 +185,7 @@ export async function deletePaymentRecords(transactionIds, scope = null, rows = 
   }
 
   const rowById = new Map((Array.isArray(rows) ? rows : []).map((r) => [Number(r.transaction_id), r]));
-  const fallbackTenantId = resolvePaymentMaintenanceTenantIds({ scope, companies })[0] ?? null;
+  const fallbackTenantId = resolvePaymentMaintenanceTenantIds({ scope })[0] ?? null;
 
   const idsByTenant = new Map();
   for (const id of ids) {
