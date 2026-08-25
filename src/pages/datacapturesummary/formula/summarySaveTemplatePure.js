@@ -78,6 +78,7 @@ export async function saveAddFormulaSpring(row, { captureScope, companyId, proce
     description: row.originalDescription || "",
     sourceColumns: isFormulaEmpty ? "" : row.sourceColumns || "",
     formula,
+    inputMethod: row.inputMethod || null,
     sourcePercent: String(row.sourcePercent || "1").trim() || "1",
     enableSourcePercent: !!row.enableSourcePercent,
     enableInputMethod: !!row.enableInputMethod,
@@ -115,8 +116,10 @@ export async function saveUpdateFormulaSpring(row, { captureScope, companyId, pr
     accountId: row.accountId,
     currencyId: row.currencyId,
     formula,
+    inputMethod: row.inputMethod || null,
     sourcePercent: String(row.sourcePercent || "1").trim() || "1",
     enableSourcePercent: !!row.enableSourcePercent,
+    enableInputMethod: !!row.enableInputMethod,
     description: row.originalDescription || "",
   };
 

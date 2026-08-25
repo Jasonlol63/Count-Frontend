@@ -126,3 +126,61 @@ description）是配置数据，永远该以最新一次接口请求为准；只
   —— `applySavedRefreshRowToModel` 合并优先级反转
 - [`src/pages/datacapturesummary/hooks/useSummaryTableModel.js`](../src/pages/datacapturesummary/hooks/useSummaryTableModel.js)
   —— 删除 sessionStorage 整行快照短路分支，改为每次都走 `populateSummaryRowsPure`
+
+---
+
+## 6. 2026-08-27：Summary「Edit Formula」保存时 Input Method 从未真正落库
+
+> 范围：Data Capture Summary 页面里点某一行的 Edit Formula，在弹窗里选好 Input Method（比如
+> "Positive to negative, negative to positive"）保存，提示 "Formula saved." 成功；但回
+> Formula Maintenance 页面看这一行，Input Method 列永远是 `-`（空）；直接查 `data_capture_formula`
+> 表也确认 `input_method` 列是 `NULL`。跟第 1-5 节的"缓存架空新数据"是完全不同的根因，这次是
+> 请求体本身就没带这个字段。
+
+### 6.1 根因
+
+[`formula/summarySaveTemplatePure.js`](../src/pages/datacapturesummary/formula/summarySaveTemplatePure.js)
+的 `saveAddFormulaSpring`（新增）和 `saveUpdateFormulaSpring`（编辑）在拼装
+`POST /api/datacapture-summary/formula/save|update` 的请求体时，把 `formula` /
+`sourcePercent` / `enableSourcePercent` / `description` 等字段都从 `row.*` 搬进了
+`body.*`，唯独漏了 `inputMethod`（Add 那边只带了 `enableInputMethod` 这个布尔标记，
+Update 那边连 `enableInputMethod` 都没带）。
+
+弹窗本身没问题——`editFormulaFormState.js:639` 的 `buildFormulaSavePatchFromForm` 确实把
+选中的 Input Method 值放进了 patch（`inputMethod: inputMethodValue`），也确实合并回了本地
+`row.inputMethod`，UI 上看着"已经选好了"；但组装成 fetch body 那一步，这个字段被静默漏掉，
+根本没发出去。
+
+后端 `DataCaptureSummaryServiceImpl.updateFormula`（`Count` 仓库，line 313-315）逻辑是：
+```java
+String inputMethod = request.getInputMethod() != null
+        ? trimToNull(request.getInputMethod())
+        : existing.getInputMethod();
+```
+既然前端从来没在 body 里放 `inputMethod`，`request.getInputMethod()` 永远是 `null`，于是
+永远回退到 `existing.getInputMethod()`——而这一行最初是靠同样漏了这个字段的
+`saveAddFormulaSpring` 创建的，`existing.getInputMethod()` 从一开始就是 `null`。结果是：
+不管在弹窗里编辑多少次、选了什么 Input Method，落库的值永远是最初 Add 时的 `NULL`，
+点几次 Save 都不会变。跟 `source_percent`（同样走 `row.sourcePercent → body.sourcePercent`，
+但这条链路没漏字段）落库正常形成对照，印证了问题确实出在"漏发字段"而不是弹窗算错、也不是
+后端逻辑错。
+
+### 6.2 修复
+
+文件：[`src/pages/datacapturesummary/formula/summarySaveTemplatePure.js`](../src/pages/datacapturesummary/formula/summarySaveTemplatePure.js)
+
+- `saveAddFormulaSpring`：`body` 里补上 `inputMethod: row.inputMethod || null`。
+- `saveUpdateFormulaSpring`：`body` 里补上 `inputMethod: row.inputMethod || null`，
+  同时补上原来完全没发的 `enableInputMethod: !!row.enableInputMethod`（跟
+  `enableSourcePercent` 的处理方式对齐——`enableInputMethod` 表单里是
+  `Boolean(inputMethodValue)` 算出来的，理应跟 `inputMethod` 的值同步发出去，否则会重现
+  "字段值对了、但 enable 标记没跟上"的同类漏发问题）。
+
+### 6.3 验证
+
+跑过 `vite build --mode development`，构建通过，无未用变量/引用报错。
+
+**未验证**：本次只做了代码审查 + 静态修复，没有跑浏览器端到端回归。建议人工验证：在 Summary
+页面 Edit Formula 选一个 Input Method 保存，回 Formula Maintenance 页面确认该行 Input Method
+列显示正确（不再是 `-`），并直接查 `data_capture_formula.input_method` 确认落库；同时验证
+Add Formula（新增一行）路径下选 Input Method 也能正确落库。
