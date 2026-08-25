@@ -419,6 +419,8 @@ function UserModal({
   setSelectedCompanyIds,
   groupPickerMode = false,
   dualTenantPicker = false,
+  /** Page-level "single group, no company selected" scope — Process ACL is fixed/hidden here even if the user has a company assigned. */
+  groupOnlyUserList = false,
   modalGroupCompanies = [],
   modalSubsidiaryCompanies = [],
   selectedGroupIds = [],
@@ -602,7 +604,11 @@ function UserModal({
     [pickerCompanyRows, companySearchQuery, groupPickerMode]
   );
 
-  const showProcessColumn = dualTenantPicker ? activeSelectedCompanyIds.length > 0 : !groupPickerMode;
+  const showProcessColumn = groupOnlyUserList
+    ? false
+    : dualTenantPicker
+      ? activeSelectedCompanyIds.length > 0
+      : !groupPickerMode;
 
   const selectedPermissionLabels = useMemo(
     () => visiblePermissionKeys.filter((k) => permSelected.has(k)).map((k) => getPermissionLabel(k, t)),
