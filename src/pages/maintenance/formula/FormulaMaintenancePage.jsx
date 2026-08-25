@@ -39,7 +39,7 @@ import "../../../../public/css/report-outlined-fields.css";
 import "../../../../public/css/formula_maintenance.css";
 import "../../../../public/css/maintenance_unified_filters.css";
 import {
-  fetchCompanyPermissionsRaw,
+  resolveCompanyPermissions,
   fetchProcesses,
   fetchAccounts,
   listFormulaTemplates,
@@ -483,8 +483,11 @@ export default function FormulaMaintenancePage() {
             companyId: initialCompanyId,
           });
 
-          const rawPerms = await fetchCompanyPermissionsRaw(code);
-          if (cancelled) return;
+          const rawPerms = resolveCompanyPermissions({
+            companyCode: code,
+            hasGame: u.tenant_has_game,
+            hasBank: u.tenant_has_bank,
+          });
 
           const procList = await fetchProcesses(initialCompanyId, bootScope);
           if (cancelled) return;

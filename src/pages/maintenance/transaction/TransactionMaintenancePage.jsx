@@ -714,20 +714,26 @@ export default function TransactionMaintenancePage() {
           const code = currentComp.company_id || "";
           setCompanyCode(code);
 
+          // Sync session first so the category flags below reflect `initialCompanyId`
+          // (it may differ from the session's own tenant, e.g. a persisted UI selection).
+          let sessionData = null;
+          try {
+            sessionData = await updateSessionCompany(initialCompanyId);
+          } catch (err) {
+            console.error("Session company sync error:", err);
+          }
+          if (cancelled) return;
+
           // Access guard: Data Capture maintenance requires eligible company permissions.
-          const companyPerms = await fetchCompanyPermissions(code);
+          const companyPerms = fetchCompanyPermissions(code, {
+            hasGame: sessionData?.has_gambling ?? u.tenant_has_game,
+            hasBank: sessionData?.has_bank ?? u.tenant_has_bank,
+          });
 
           if (!companyPermsAllowDataCaptureMaintenance(companyPerms)) {
             navigate(spaPath("dashboard"), { replace: true });
             return;
           }
-
-          try {
-            await updateSessionCompany(initialCompanyId);
-          } catch (err) {
-            console.error("Session company sync error:", err);
-          }
-          if (cancelled) return;
 
           const bootScope = resolveTransactionMaintenanceScope({
             companies: filtered,
@@ -962,9 +968,12 @@ export default function TransactionMaintenancePage() {
         currentPath: location.pathname,
         navigate,
         updateSessionCompany,
-        onStay: async () => {
+        onStay: async (sessionData) => {
           suppressNextSearchEffectRef.current = true;
-          const perms = await fetchCompanyPermissions(code);
+          const perms = fetchCompanyPermissions(code, {
+            hasGame: sessionData?.has_gambling,
+            hasBank: sessionData?.has_bank,
+          });
           if (!companyPermsAllowDataCaptureMaintenance(perms)) {
             navigate(spaPath("dashboard"), { replace: true });
             return;

@@ -1,6 +1,6 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { isC168CompanyCode } from "../../../utils/company/c168CaptureChannel.js";
-import { fetchDomainCompanyPermissions } from "../shared/maintenanceCompanyApi.js";
+import { resolveCompanyPermissions } from "../shared/maintenanceCompanyApi.js";
 import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
 import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
 import { mapGroupPayrollProcesses } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
@@ -22,13 +22,12 @@ export function mapProcessesForMaintenanceSelect(apiList) {
   });
 }
 
-export async function fetchCompanyPermissions(companyCode) {
+export function fetchCompanyPermissions(companyCode, { hasGame = false, hasBank = false } = {}) {
   const code = String(companyCode ?? "").trim().toUpperCase();
   if (isC168CompanyCode(code)) {
     return ["Games", "Gambling"];
   }
-  const perms = await fetchDomainCompanyPermissions(companyCode);
-  return perms.length > 0 ? perms : ["Games", "Bank"];
+  return resolveCompanyPermissions({ companyCode: code, hasGame, hasBank });
 }
 
 export async function fetchProcesses(companyId, scope = null) {

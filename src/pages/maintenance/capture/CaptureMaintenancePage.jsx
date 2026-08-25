@@ -336,10 +336,11 @@ export default function CaptureMaintenancePage() {
             companyId: initialCompanyId,
           });
 
-          const [procList, companyPerms] = await Promise.all([
-            fetchProcesses(initialCompanyId, bootScope),
-            fetchCompanyPermissions(code),
-          ]);
+          const companyPerms = fetchCompanyPermissions(code, {
+            hasGame: u.tenant_has_game,
+            hasBank: u.tenant_has_bank,
+          });
+          const procList = await fetchProcesses(initialCompanyId, bootScope);
           if (cancelled) return;
 
           const skipCategoryGuard = shouldSkipMaintenanceCategoryGuard({
@@ -563,10 +564,13 @@ export default function CaptureMaintenancePage() {
         currentPath: location.pathname,
         navigate,
         updateSessionCompany,
-        onStay: async () => {
+        onStay: async (sessionData) => {
           suppressNextSearchEffectRef.current = true;
           try {
-            const perms = await fetchCompanyPermissions(nextCode);
+            const perms = fetchCompanyPermissions(nextCode, {
+              hasGame: sessionData?.has_gambling,
+              hasBank: sessionData?.has_bank,
+            });
             if (!companyPermsAllowDataCaptureMaintenance(perms)) {
               navigate(spaPath("dashboard"), { replace: true });
               return;

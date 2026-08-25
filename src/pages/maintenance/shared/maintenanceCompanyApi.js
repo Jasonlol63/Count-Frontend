@@ -1,60 +1,34 @@
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
+/**
+ * Games/Bank category flags for a company — computed from data already in hand
+ * (SessionUser.tenant_has_game/tenant_has_bank at boot, or the `has_gambling`/`has_bank`
+ * fields Spring's `auth/switch-tenant` response already returns on company switch), not
+ * fetched. The legacy PHP `domain/domain_api.php` "get_company_permissions" round-trip this
+ * replaced was redundant: every caller already had the same answer in hand for free.
+ */
 
-/** Fallback when domain_api permissions are unavailable (access guards only; no Category UI). */
+/** Fallback when category flags are unavailable (access guards only; no Category UI). */
 const DEFAULT_PERMISSIONS_FULL = ["Games", "Bank"];
-const DEFAULT_PERMISSIONS_FORMULA = ["Games", "Bank"];
 
-async function fetchPermissionsFromApi(companyCode, { credentials = false } = {}) {
-  const init = {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      action: "get_company_permissions",
-      company_id: companyCode,
-    }),
-  };
-  if (credentials) {
-    init.credentials = "include";
-  }
-  const response = await fetch(buildApiUrl("api/domain/domain_api.php"), init);
-  const result = await response.json();
-  if (result.success && result.data && Array.isArray(result.data.permissions)) {
-    return result.data.permissions;
-  }
-  return null;
+/** `{hasGame, hasBank}` → legacy `["Games","Bank"]`-shaped array the existing predicates below expect. */
+export function permissionsFromCategoryFlags({ hasGame = false, hasBank = false } = {}) {
+  const perms = [];
+  if (hasGame) perms.push("Games");
+  if (hasBank) perms.push("Bank");
+  return perms;
 }
 
 /**
- * Domain company permissions with per-page defaults (capture / payment / bankprocess / transaction / formula).
+ * Games/Bank permissions for a company, with the same C168-bypass + fail-open default the
+ * page boot/switch flows relied on when this was a PHP fetch.
  */
-export async function fetchDomainCompanyPermissions(companyCode, options = {}) {
-  const {
-    emptyForC168 = false,
-    defaultPermissions = DEFAULT_PERMISSIONS_FULL,
-    credentials = false,
-  } = options;
-
-  if (!companyCode) return [];
-  if (emptyForC168 && String(companyCode).trim().toUpperCase() === "C168") {
-    return [];
-  }
-
-  try {
-    const fromApi = await fetchPermissionsFromApi(companyCode, { credentials });
-    if (fromApi) {
-      return fromApi;
-    }
-  } catch (err) {
-    console.error("Error fetching company permissions:", err);
-  }
-  return [...defaultPermissions];
-}
-
-/** Raw permissions for formula (Bank and Games both supported). */
-export async function fetchFormulaCompanyPermissionsRaw(companyCode) {
-  return fetchDomainCompanyPermissions(companyCode, {
-    defaultPermissions: DEFAULT_PERMISSIONS_FORMULA,
-  });
+export function resolveCompanyPermissions({
+  companyCode = null,
+  hasGame = false,
+  hasBank = false,
+  defaultPermissions = DEFAULT_PERMISSIONS_FULL,
+} = {}) {
+  const perms = permissionsFromCategoryFlags({ hasGame, hasBank });
+  return perms.length > 0 ? perms : [...defaultPermissions];
 }
 
 export function isBankOnlyCategoryCompany(permissions) {
@@ -70,29 +44,4 @@ export function companyPermsAllowDataCaptureMaintenance(permissions) {
   const hasGames = permissions.includes("Games") || permissions.includes("Gambling");
   const hasBank = permissions.includes("Bank");
   return hasGames || hasBank;
-}
-
-/**
- * Process list for maintenance filters.
- */
-export async function fetchMaintenanceProcesses(
-  companyId,
-  { credentials = false, permission } = {},
-) {
-  const params = new URLSearchParams();
-  if (companyId) {
-    params.append("company_id", companyId);
-  }
-  const perm = String(permission ?? "").trim();
-  if (perm) {
-    params.append("permission", perm);
-  }
-  const url = buildApiUrl(`api/processes/processlist_api.php?${params.toString()}`);
-  const init = credentials ? { credentials: "include" } : {};
-  const response = await fetch(url, init);
-  const data = await response.json();
-  if (!data.success) {
-    throw new Error(data.error || "Failed to load process list");
-  }
-  return data.data || [];
 }

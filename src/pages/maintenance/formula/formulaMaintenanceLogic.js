@@ -1,5 +1,4 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
-import { fetchFormulaCompanyPermissionsRaw } from "../shared/maintenanceCompanyApi.js";
 import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
 import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
 import { fetchAccountListByTenantId, filterAccountListRows } from "../../account/accountListApi.js";
@@ -35,11 +34,7 @@ export function mapProcessesForMaintenanceSelect(apiList, { groupPayrollShort = 
   });
 }
 
-export async function fetchCompanyPermissionsRaw(companyCode) {
-  return fetchFormulaCompanyPermissionsRaw(companyCode);
-}
-
-export { isBankOnlyCategoryCompany } from "../shared/maintenanceCompanyApi.js";
+export { resolveCompanyPermissions, isBankOnlyCategoryCompany } from "../shared/maintenanceCompanyApi.js";
 
 export async function fetchProcesses(companyId, scope = null) {
   const payrollChannel = Boolean(scope?.c168Channel || scope?.companyPayrollChannel);

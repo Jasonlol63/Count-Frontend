@@ -1,6 +1,6 @@
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import {
-  fetchDomainCompanyPermissions,
+  resolveCompanyPermissions,
   isBankOnlyCategoryCompany,
 } from "../shared/maintenanceCompanyApi.js";
 import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
@@ -49,8 +49,8 @@ function throwMaintenanceTransferError(message = "Failed to fetch") {
   throw err;
 }
 
-export async function fetchCompanyPermissions(companyCode) {
-  return fetchDomainCompanyPermissions(companyCode, { credentials: true });
+export function fetchCompanyPermissions(companyCode, { hasGame = false, hasBank = false } = {}) {
+  return resolveCompanyPermissions({ companyCode, hasGame, hasBank });
 }
 
 export { isBankOnlyCategoryCompany };
