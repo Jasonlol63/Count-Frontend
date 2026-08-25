@@ -2,7 +2,6 @@ import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import { fetchFormulaCompanyPermissionsRaw } from "../shared/maintenanceCompanyApi.js";
 import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
 import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
-import { resolveGroupEntityRowFromSnap } from "../../report/shared/reportScope.js";
 import { fetchAccountListByTenantId, filterAccountListRows } from "../../account/accountListApi.js";
 import { formatSourcePercent, normalizeMaintenanceFormulaInput } from "../../../shared/formula/index.js";
 import {
@@ -90,29 +89,30 @@ export async function fetchAccounts(companyId, scope = null) {
   return active.map(normalizeFormulaAccountOption).filter(Boolean);
 }
 
-/** "Bank" for C168 / bank-only payroll companies; "Games" otherwise — category is a required hard filter server-side. */
+/**
+ * "Bank" for C168 / bank-only payroll companies AND pure Group mode — group payroll submissions
+ * (SALARY/COMMISSION/BONUS/PROFIT) always land under category BANK, same tenant as GAME data.
+ * Mirrors `formulaMaintenanceUsesGroupProcesses` exactly (same conditions) so the process
+ * dropdown and the actual list-request category filter never disagree.
+ * "Games" otherwise — category is a required hard filter server-side.
+ */
 function resolveFormulaMaintenanceCategory(scope) {
-  const payrollChannel = Boolean(scope?.c168Channel || scope?.companyPayrollChannel);
-  return payrollChannel ? "Bank" : "Games";
+  return formulaMaintenanceUsesGroupProcesses(scope) ? "Bank" : "Games";
 }
 
 /**
  * Numeric tenant id(s) for formula maintenance list.
- * Group entity + subsidiary company share one Spring tenant row; "aggregate" (Groups All / Group All) spans several;
- * pure Group ledger (no subsidiary drill-down) resolves `scope.scopeCompanyId` to 0 and must be looked up by group id.
+ * Group entity + subsidiary company share one Spring tenant row; "aggregate" (Groups All / Group All) spans several.
+ * Pure Group scope's `scope.scopeCompanyId` is already resolved to the group's real entity tenantId by
+ * `resolveCustomerReportScope` (reportScope.js) — formula maintenance has no separate group-only resolution path.
  */
-function resolveFormulaMaintenanceTenantIds({ scope, companies } = {}) {
+function resolveFormulaMaintenanceTenantIds({ scope } = {}) {
   if (scope?.mode === "aggregate") {
     const ids = Array.isArray(scope.mergeCompanyIds) ? scope.mergeCompanyIds : [];
     return ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
   }
   const tid = Number(scope?.scopeCompanyId);
   if (Number.isFinite(tid) && tid > 0) return [tid];
-  if (scope?.mode === "group" && scope.groupId && Array.isArray(companies)) {
-    const row = resolveGroupEntityRowFromSnap(companies, scope.groupId);
-    const id = Number(row?.id);
-    if (Number.isFinite(id) && id > 0) return [id];
-  }
   return [];
 }
 
@@ -179,9 +179,9 @@ async function fetchFormulaMaintenancePage({ tenantId, process, category, signal
  * List formula maintenance templates — one Spring call per resolved tenant (aggregate scope loops + merges).
  * `search` is filtered purely client-side (`filterFormulaRowsBySearch`), matching the page's existing behavior.
  */
-export async function listFormulaTemplates({ process, scope, companies, signal }) {
+export async function listFormulaTemplates({ process, scope, signal }) {
   const category = resolveFormulaMaintenanceCategory(scope);
-  const tenantIds = resolveFormulaMaintenanceTenantIds({ scope, companies });
+  const tenantIds = resolveFormulaMaintenanceTenantIds({ scope });
   if (tenantIds.length === 0) return [];
 
   const processFilter = process != null && String(process).trim() !== "" ? String(process).trim() : null;

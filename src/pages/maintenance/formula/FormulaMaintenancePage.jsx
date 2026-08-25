@@ -666,7 +666,6 @@ export default function FormulaMaintenancePage() {
       const data = await listFormulaTemplates({
         process: effectiveProcess === "" ? undefined : effectiveProcess,
         scope: effectiveScope,
-        companies,
       });
       if (!skipStaleGuard && seq !== searchSeqRef.current) return;
       if (!skipStaleGuard && searchScopeKey !== scopeKeyRef.current) return;
