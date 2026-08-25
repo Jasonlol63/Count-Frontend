@@ -29,7 +29,6 @@ import {
   notifyDashboardGroupFilterChanged,
   pickDefaultCompanyForGroup,
   pickDefaultSubsidiaryForGroup,
-  findOwnerGroupByCode,
   resolveCompanyWhenClosingGroup,
   resolveCompanyPickWhenSwitchingGroup,
   resolveBootCompanyId,
@@ -245,16 +244,13 @@ function buildModalGroupOptions(companies, me) {
       pickDefaultCompanyForGroup(companies, g, { me });
     let id = entity?.id != null ? Number(entity.id) : Number.NaN;
     if (!Number.isFinite(id) || id <= 0) {
-      // Phase 4 / 8: empty group — synthetic id so picker can select group_codes.
-      // Prefer groups.id from cache / session; fall back to stable hash of group code
-      // so Add User still works when owner-groups cache is cold or session pk missing.
-      const cached = findOwnerGroupByCode(g);
+      // Phase 4 / 8: no accessible group-entity tenant row for this group — synthetic id so
+      // the picker can still select group_codes. Prefer the session's own group-scope pk when
+      // this is the logged-in user's own group; otherwise a stable hash of the group code.
       const pk =
-        cached?.id != null && Number(cached.id) > 0
-          ? Number(cached.id)
-          : me?.login_identifier && String(me.login_identifier).toUpperCase() === g && Number(me?.login_group_scope_id) > 0
-            ? Number(me.login_group_scope_id)
-            : 0;
+        me?.login_identifier && String(me.login_identifier).toUpperCase() === g && Number(me?.login_group_scope_id) > 0
+          ? Number(me.login_group_scope_id)
+          : 0;
       id = syntheticEmptyGroupPickerId(g, pk);
     }
     seen.add(g);

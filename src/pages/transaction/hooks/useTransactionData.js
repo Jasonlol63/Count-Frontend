@@ -8,7 +8,6 @@ import { replaceBrowserPathOnly } from "../../../utils/routing/privateBrowserUrl
 import {
   filterCompaniesWithDisplayId,
   fetchOwnerCompaniesAll,
-  fetchOwnerGroupsAll,
   getCachedOwnerCompanies,
   clearDashboardGroupFilterKeepCompany,
   DASHBOARD_GROUP_FILTER_OPT_OUT_KEY,
@@ -229,9 +228,6 @@ export function useTransactionData({
         }
 
         const rows = await fetchOwnerCompaniesAll({ me: u });
-        if (cancelled) return;
-        // Warm Domain groups cache so snapGroupIds includes owner portfolio (empty Group KK).
-        await fetchOwnerGroupsAll(u).catch(() => null);
         if (cancelled) return;
 
         const url = new URL(window.location.href);

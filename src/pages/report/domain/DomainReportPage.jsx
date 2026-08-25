@@ -18,7 +18,6 @@ import {
   resolveInitialSelectedGroupFromSession,
   sortedUniqueGroupIds,
   fetchOwnerCompaniesAll,
-  fetchOwnerGroupsAll,
 } from "../../../utils/company/sharedCompanyFilter.js";
 import {
   resolveReportCompanyWhenClosingGroup,
@@ -190,7 +189,6 @@ export default function DomainReportPage() {
     (async () => {
       try {
         const rows = await fetchOwnerCompaniesAll({ me: u });
-        await fetchOwnerGroupsAll(u).catch(() => null);
         if (cancelled) return;
         setCompanies(rows);
 

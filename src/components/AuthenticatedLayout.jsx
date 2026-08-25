@@ -1109,9 +1109,8 @@ export default function AuthenticatedLayout() {
 
     const runCompanies = () => {
       void fetchOwnerCompaniesAll({ me });
-      /* Domain groups warm has no Spring endpoint yet (still legacy PHP `domain_api.php`,
-       * currently 500ing) — do not eager-warm it from every page. Pages that actually need
-       * it (Report, Transaction, Dashboard) already call fetchOwnerGroupsAll themselves. */
+      /* No separate "Domain groups" warm-up needed: a Group is just a Tenant row
+       * (tenant_type = GROUP), already included in this same owner-companies snapshot. */
     };
 
     const runAccountListWarm = () => {
@@ -1125,11 +1124,20 @@ export default function AuthenticatedLayout() {
       });
     };
 
-    /* processRoutePrefetch.js still calls PHP `processlist_api.php` / `get_company_currencies_api.php` /
-     * `user_currency_order_api.php` under the hood (not yet Spring-migrated) — do not eager-warm it from
-     * other pages (e.g. Account) so those dead PHP calls don't fire off-page. Re-enable once
-     * processRoutePrefetch.js is migrated to Spring. */
-    const runProcessListWarm = () => {};
+    const runProcessListWarm = () => {
+      const { companyId } = readPersistedDashboardGcFilter();
+      const groupOnly = isDashboardGroupOnlyMode();
+      if (groupOnly || !companyId) return;
+      void import("../pages/processlist/processRoutePrefetch.js").then(
+        ({ warmProcessListRouteCache, warmBankProcessListRouteCache }) => {
+          if (me?.company_has_bank && !me?.company_has_gambling) {
+            warmBankProcessListRouteCache(companyId);
+          } else {
+            warmProcessListRouteCache(companyId);
+          }
+        },
+      );
+    };
 
     // Eager Acc→Process: prefetch Process chunk + warm list as soon as Acc is open (not only idle).
     if (pathnameIs("account-list", path) || pathnameIs("add-account", path)) {

@@ -859,71 +859,19 @@ export function resolveOwnerIdForGroupsCache(me) {
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-/** In-memory cache: group_code → { group_code, expiration_date, ... } */
-let ownerGroupsCache = null;
-let ownerGroupsInflight = null;
-
-export function clearOwnerGroupsCache() {
-  ownerGroupsCache = null;
-  ownerGroupsInflight = null;
-}
-
-export function hasOwnerGroupsCache() {
-  return ownerGroupsCache instanceof Map && ownerGroupsCache.size >= 0;
-}
-
-export function findOwnerGroupByCode(groupCode) {
-  if (!(ownerGroupsCache instanceof Map)) return undefined;
-  const g = String(groupCode ?? "")
-    .trim()
-    .toUpperCase();
-  if (!g) return null;
-  return ownerGroupsCache.get(g) ?? null;
-}
-
-function setOwnerGroupsCache(rows) {
-  if (!Array.isArray(rows)) {
-    ownerGroupsCache = null;
-    return;
-  }
-  const map = new Map();
-  for (const row of rows) {
-    if (!row || typeof row !== "object") continue;
-    const code = String(row.group_code ?? row.group_id ?? "")
-      .trim()
-      .toUpperCase();
-    if (code) map.set(code, row);
-  }
-  ownerGroupsCache = map;
-}
-
-/**
- * Owner groups (Domain `groups` table: group_code → expiration_date, fee_share_allocations, …).
- * No Spring endpoint exists for this table yet (legacy PHP domain_api.php `get_groups` only) — until
- * one is built, this stays a no-op so callers never hit the dead `/api/*` path. Callers already treat
- * an empty cache as "not ready" and fall back to `resolveGroupExpirationDate`'s secondary path
- * (the group-entity company row from `getCachedOwnerCompanies()`).
- */
-export async function fetchOwnerGroupsAll(_me, _options = {}) {
-  setOwnerGroupsCache([]);
-  return [];
-}
-
 /**
  * Group-only sidebar expiry — never use a subsidiary row (e.g. 95 under IG).
- * Prefers Domain `groups` table, then legacy group-entity company row.
- * @returns {string|null|undefined} undefined when caches are not ready yet.
+ * A Group is just a `Tenant` row (`tenant_type = GROUP`), same as any company — it already
+ * carries its own `expiration_date` in the `/auth/tenant-accessible` snapshot
+ * (`getCachedOwnerCompanies()`), self-referencing via `company_id === group_id`. There is no
+ * separate "groups table" to query in the tenant model, so this reads that snapshot directly.
+ * @returns {string|null|undefined} undefined when the companies cache is not ready yet.
  */
 export function resolveGroupExpirationDate(groupCode) {
   const g = String(groupCode ?? "")
     .trim()
     .toUpperCase();
   if (!g) return undefined;
-
-  if (ownerGroupsCache instanceof Map) {
-    const fromGroups = ownerGroupsCache.get(g);
-    return fromGroups?.expiration_date ?? null;
-  }
 
   const rows = getCachedOwnerCompanies();
   if (rows?.length) {
@@ -1282,7 +1230,6 @@ let ownerCompaniesInflight = null;
 export function clearOwnerCompaniesCache() {
   ownerCompaniesCache = null;
   ownerCompaniesInflight = null;
-  clearOwnerGroupsCache();
 }
 
 function hasOwnerCompaniesCache() {
@@ -1495,19 +1442,13 @@ export function sortedUniqueGroupIds(companies) {
 }
 
 /**
- * Dashboard GroupID pills: company.group_id + Domain `groups` table (owner portfolio).
+ * Dashboard GroupID pills: unique `group_id`s from the tenant-accessible company snapshot.
+ * A Group with zero visible subsidiaries still appears here as its own self-referencing row
+ * (`company_id === group_id`) as long as the owner/admin has access to that Group tenant — there
+ * is no separate "groups table" in the tenant model to union in on top of this.
  */
 export function resolveOwnerDashboardGroupIds(companies, me = null) {
-  const set = new Set(sortedUniqueGroupIds(companies));
-  const role = String(me?.role || me?.user_type || "")
-    .trim()
-    .toLowerCase();
-  if (role === "owner" && ownerGroupsCache instanceof Map) {
-    for (const code of ownerGroupsCache.keys()) {
-      if (code) set.add(String(code).trim().toUpperCase());
-    }
-  }
-  return [...set].sort();
+  return sortedUniqueGroupIds(companies);
 }
 
 export function persistDashboardGroupFilter(selectedGroup) {

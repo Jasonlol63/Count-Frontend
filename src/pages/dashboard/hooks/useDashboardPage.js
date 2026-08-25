@@ -116,7 +116,6 @@ import {
   isVirtualGroupLinkCompanyRow,
   fetchOwnerCompaniesAll,
   getCachedOwnerCompanies,
-  fetchOwnerGroupsAll,
   pickDefaultSubsidiaryForGroup,
   resolveCompanyWhenClosingGroup,
   resolveCompanyWhenPickingAllGroups,
@@ -1563,7 +1562,6 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     if (!sessionReady || !u) return;
     try {
       const cjRows = await fetchOwnerCompaniesAll({ signal, throwOnError: true, me: u });
-      await fetchOwnerGroupsAll(u, { signal });
       const scopedCompanies = cjRows;
       setCompanies((prev) =>
         companiesListSignature(prev) === companiesListSignature(scopedCompanies)

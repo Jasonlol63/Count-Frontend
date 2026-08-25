@@ -12,7 +12,6 @@ import {
   resolveInitialSelectedGroupFromSession,
   sortedUniqueGroupIds,
   fetchOwnerCompaniesAll,
-  fetchOwnerGroupsAll,
   resolveGcFilterBootCompanyId,
   readPersistedDashboardGcFilter,
   readDashboardSelectedCompanyId,
@@ -216,7 +215,6 @@ export default function CustomerReportPage() {
     (async () => {
       try {
         const rows = await fetchOwnerCompaniesAll({ me: u });
-        await fetchOwnerGroupsAll(u).catch(() => null);
         if (cancelled) return;
         setCompanies(rows);
 
