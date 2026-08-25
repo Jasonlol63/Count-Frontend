@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { notifyCompanySessionUpdated } from "../../utils/company/companySessionEvents.js";
 import { ensureCrossPageCompanySelection, syncCompanySessionApi } from "../../utils/company/companySessionSync.js";
+import { fetchUpdateCompanySession } from "../../utils/company/companySessionSwitchCore.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
 import { replaceBrowserPathOnly } from "../../utils/routing/privateBrowserUrl.js";
 import {
@@ -1140,15 +1141,14 @@ export default function ProcessListPage() {
         void runFetch();
 
         try {
-          const res = await fetch(
-            buildApiUrl(`api/session/update_company_session_api.php?company_id=${nextId}`),
-            { credentials: "include", signal: sessionAc.signal },
-          );
-          const json = await res.json();
+          const { json } = await fetchUpdateCompanySession(nextId, { signal: sessionAc.signal });
           if (sessionAc.signal.aborted) return;
-          if (!res.ok || !json.success) {
-            const reason = json?.data?.reason;
-            if (reason === "expired" || reason === "no_set") {
+          if (!json?.success) {
+            // Spring `auth/switch-tenant` has no structured `reason` field (legacy PHP's
+            // `no_set` block for an unconfigured expiration date has no Spring equivalent
+            // yet — that case simply succeeds now); detect "expired" from the message text.
+            const expired = String(json?.message || "").toLowerCase().includes("expired");
+            if (expired) {
               if (previousCompanyId != null && Number(previousCompanyId) !== nextId) {
                 skipCompanyFetchEffectRef.current = true;
                 flushSync(() => {

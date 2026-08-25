@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { flushSync } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { notifyCompanySessionUpdated } from "../../../utils/company/companySessionEvents.js";
+import { fetchUpdateCompanySession } from "../../../utils/company/companySessionSwitchCore.js";
 import { ensureCrossPageCompanySelection } from "../../../utils/company/companySessionSync.js";
 import { fetchOwnerCompaniesAll } from "../../../utils/company/sharedCompanyFilter.js";
 import { spaPath } from "../../../utils/routing/pageRoutes.js";
@@ -1450,13 +1451,9 @@ export function useBankProcessListPage() {
         companySessionAbortRef.current = sessionAc;
 
         try {
-          const res = await fetch(
-            buildApiUrl(`api/session/update_company_session_api.php?company_id=${nextId}`),
-            { credentials: "include", signal: sessionAc.signal },
-          );
-          const json = await res.json();
+          const { json } = await fetchUpdateCompanySession(nextId, { signal: sessionAc.signal });
           if (sessionAc.signal.aborted) return;
-          if (!res.ok || !json.success) {
+          if (!json?.success) {
             notify(apiMsg(json, "switchCompanyFailed"), "danger");
             return;
           }
