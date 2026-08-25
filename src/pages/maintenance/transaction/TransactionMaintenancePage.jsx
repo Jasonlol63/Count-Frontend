@@ -272,13 +272,7 @@ export default function TransactionMaintenancePage() {
 
   const searchQueryKey = useMemo(
     () =>
-      JSON.stringify([
-        transactionScopeKey,
-        dateFrom,
-        dateTo,
-        processFilter,
-        "Games",
-      ]),
+      JSON.stringify([transactionScopeKey, dateFrom, dateTo, processFilter]),
     [transactionScopeKey, dateFrom, dateTo, processFilter],
   );
 
@@ -303,7 +297,6 @@ export default function TransactionMaintenancePage() {
           groupsAllMode,
           groupAllMode,
         });
-      const category = overrides.category ?? "Games";
       if (
         !transactionMaintenanceScopeIsReady(effectiveScope) ||
         !dateFrom ||
@@ -318,7 +311,6 @@ export default function TransactionMaintenancePage() {
         dateFrom,
         dateTo,
         processFilter,
-        category,
       ]);
       const filtersChanged = effectiveSearchKey !== lastSearchQueryKeyRef.current;
       if (overrides.scope || filtersChanged) {
@@ -352,9 +344,7 @@ export default function TransactionMaintenancePage() {
           dateFrom,
           dateTo,
           process: processFilter,
-          category,
           scope: effectiveScope,
-          companies,
           signal: ac.signal,
           onProgress: quietRefresh
             ? undefined
@@ -432,7 +422,6 @@ export default function TransactionMaintenancePage() {
 
   const runBootMaintenanceSearch = useCallback(async (pending) => {
     if (!pending?.scope || !transactionMaintenanceScopeIsReady(pending.scope)) return false;
-    const category = pending.category || "Games";
     maintenanceAbortRef.current?.abort();
     const ac = new AbortController();
     maintenanceAbortRef.current = ac;
@@ -447,9 +436,7 @@ export default function TransactionMaintenancePage() {
         dateFrom: dateFromRef.current,
         dateTo: dateToRef.current,
         process: processFilter,
-        category,
         scope: pending.scope,
-        companies: pending.companies,
         signal: ac.signal,
         onProgress: (progressRows) => {
           if (seq !== maintenanceSeqRef.current) return;
@@ -475,7 +462,6 @@ export default function TransactionMaintenancePage() {
         dateFromRef.current,
         dateToRef.current,
         processFilter,
-        category,
       ]);
       return true;
     } catch (err) {
@@ -698,7 +684,7 @@ export default function TransactionMaintenancePage() {
             selectedGroup: bootGroup,
             companyId: null,
           });
-          pendingBootSearchRef.current = { scope: bootScope, category: "Games", companies: filtered };
+          pendingBootSearchRef.current = { scope: bootScope };
           try {
             const procList = bootScope ? await fetchProcesses(null, bootScope) : [];
             if (!cancelled) setProcesses(procList);
@@ -748,7 +734,7 @@ export default function TransactionMaintenancePage() {
             selectedGroup: bootGroup,
             companyId: initialCompanyId,
           });
-          pendingBootSearchRef.current = { scope: bootScope, category: "Games", companies: filtered };
+          pendingBootSearchRef.current = { scope: bootScope };
           try {
             const procList = await fetchProcesses(initialCompanyId, bootScope);
             if (!cancelled) setProcesses(procList);
@@ -1003,7 +989,7 @@ export default function TransactionMaintenancePage() {
             setProcesses(procList);
             setSelectedProcess("");
             suppressNextSearchEffectRef.current = true;
-            await performMaintenanceSearch({ scope: nextScope, category: "Games" });
+            await performMaintenanceSearch({ scope: nextScope });
           } catch (err) {
             console.error("Process list load error:", err);
             setListSyncing(false);

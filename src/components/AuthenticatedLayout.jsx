@@ -545,7 +545,25 @@ export default function AuthenticatedLayout() {
           has_gambling: u.company_has_gambling,
           has_bank: u.company_has_bank,
         });
-        setMe(u);
+        // Landing directly on a maintenance/report page URL while pure-Group is persisted
+        // never fires the company-session-updated / dashboard-filter events that normally
+        // apply the "Group is fixed Games, never Bank" sidebar contract (those only run on
+        // in-session filter changes) — apply it once here so a cold load/refresh in pure
+        // Group mode doesn't render `me.company_has_gambling`/`company_has_bank` from a
+        // stale/unrelated anchored tenant and hide Payment/Transaction/Formula Maintenance.
+        const bootFilter = readPersistedDashboardGcFilter();
+        const bootGroupOnly = isDashboardGroupOnlyMode() || bootFilter.groupOnly;
+        const bootMe =
+          bootGroupOnly && bootFilter.selectedGroup
+            ? patchMeFromCompanyContext(u, {
+                companyId: null,
+                companyCode: bootFilter.selectedGroup,
+                hasBank: false,
+                forceGroupGamesCategory: true,
+                hasGambling: resolveGroupOnlySidebarGambling(bootFilter.selectedGroup) ?? true,
+              })
+            : u;
+        setMe(bootMe);
         clearChunkReloadFlag();
       } catch (err) {
         if (cancelled || err?.name === "AbortError") return;

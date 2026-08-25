@@ -5,7 +5,6 @@ import {
 } from "../shared/maintenanceCompanyApi.js";
 import { fetchProcessListByTenantId } from "../../processlist/processListApi.js";
 import { fetchProcesses as fetchDomainReportProcesses } from "../../report/domain/domainReportApi.js";
-import { resolveGroupEntityRowFromSnap } from "../../report/shared/reportScope.js";
 import { mapGroupPayrollProcesses } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
 import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
 import { formatSpringDateTimeToDmy } from "../shared/maintenanceDateHelpers.js";
@@ -91,29 +90,30 @@ export async function fetchProcesses(companyId, scope = null) {
   return mapProcessesForMaintenanceSelect(rows);
 }
 
-/** "Bank" for C168 / bank-only payroll companies; "Games" otherwise — category is a required hard filter server-side. */
+/**
+ * "Bank" for C168 / bank-only payroll companies AND pure Group mode — group payroll submissions
+ * (SALARY/COMMISSION/BONUS/PROFIT) always land under category BANK, same tenant as GAME data.
+ * Mirrors `transactionMaintenanceUsesGroupProcesses` exactly (same three conditions) so the process
+ * dropdown and the actual list-request category filter never disagree.
+ * "Games" otherwise — category is a required hard filter server-side.
+ */
 function resolveTransactionMaintenanceCategory(scope) {
-  const payrollChannel = Boolean(scope?.c168Channel || scope?.companyPayrollChannel);
-  return payrollChannel ? "Bank" : "Games";
+  return transactionMaintenanceUsesGroupProcesses(scope) ? "Bank" : "Games";
 }
 
 /**
  * Numeric tenant id(s) for transaction maintenance list.
- * Group entity + subsidiary company share one Spring tenant row; "aggregate" (Groups All / Group All) spans several;
- * pure Group ledger (no subsidiary drill-down) resolves `scope.scopeCompanyId` to 0 and must be looked up by group id.
+ * Group entity + subsidiary company share one Spring tenant row; "aggregate" (Groups All / Group All) spans several.
+ * Pure Group scope's `scope.scopeCompanyId` is already resolved to the group's real entity tenantId by
+ * `resolveCustomerReportScope` (reportScope.js) — transaction maintenance has no separate group-only resolution path.
  */
-function resolveTransactionMaintenanceTenantIds({ scope, companies } = {}) {
+function resolveTransactionMaintenanceTenantIds({ scope } = {}) {
   if (scope?.mode === "aggregate") {
     const ids = Array.isArray(scope.mergeCompanyIds) ? scope.mergeCompanyIds : [];
     return ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
   }
   const tid = Number(scope?.scopeCompanyId);
   if (Number.isFinite(tid) && tid > 0) return [tid];
-  if (scope?.mode === "group" && scope.groupId && Array.isArray(companies)) {
-    const row = resolveGroupEntityRowFromSnap(companies, scope.groupId);
-    const id = Number(row?.id);
-    if (Number.isFinite(id) && id > 0) return [id];
-  }
   return [];
 }
 
@@ -264,7 +264,6 @@ export async function searchTransactionData({
   dateTo,
   process,
   scope,
-  companies,
   signal,
   onFirstPage,
   onProgress,
@@ -276,7 +275,7 @@ export async function searchTransactionData({
     else if (typeof onFirstPage === "function") onFirstPage(rows);
   };
 
-  const tenantIds = resolveTransactionMaintenanceTenantIds({ scope, companies });
+  const tenantIds = resolveTransactionMaintenanceTenantIds({ scope });
   if (tenantIds.length === 0) return [];
 
   let merged = [];

@@ -115,10 +115,10 @@ export default function TransactionHistoryTable({ rows, histMoney, histBalanceMo
                   {r.rate && r.rate !== "-" ? formatRateForHistoryDisplay(r.rate) : "-"}
                 </td>
                 <td className="transaction-history-col-winloss">
-                  <TransactionWinLossCell value={r.win_loss} formatMoney={histMoney} />
+                  <TransactionWinLossCell value={isBf ? "-" : r.win_loss} formatMoney={histMoney} />
                 </td>
                 <td className="transaction-history-col-crdr">
-                  <TransactionWinLossCell value={r.cr_dr} formatMoney={histMoney} />
+                  <TransactionWinLossCell value={isBf ? "-" : r.cr_dr} formatMoney={histMoney} />
                 </td>
                 <td className="transaction-history-col-balance">
                   <TransactionWinLossCell value={r.balance} formatMoney={balanceMoney} />
