@@ -1,7 +1,7 @@
 /** Tenant currency master — Spring Boot `/api/currency/*`. */
 
 import { buildApiUrl } from "../core/apiUrl.js";
-import { applyTenantLedgerToParams, LEDGER_GROUP } from "../company/tenantLedgerParams.js";
+import { LEDGER_GROUP } from "../company/tenantLedgerParams.js";
 import { resolveListTenantId } from "../../pages/userlist/userListApi.js";
 
 export const resolveCurrencyTenantId = resolveListTenantId;
@@ -307,18 +307,13 @@ export async function createCurrency(
   };
 }
 
-/**
- * POST /api/currency/delete?id=&tenantId=
- * When `force` is true, falls back to legacy PHP (usage checks / cascade).
- */
+/** POST /api/currency/delete?id=&tenantId= */
 export async function deleteCurrency(
   {
     id,
     tenantId = null,
     ledgerScope = null,
     companyId = null,
-    anchorCompanyId = null,
-    force = false,
   },
   signal,
 ) {
@@ -334,36 +329,6 @@ export async function deleteCurrency(
 
   if (!Number.isFinite(tid) || tid <= 0) {
     throw new Error("tenantIdRequired");
-  }
-
-  if (force) {
-    const deleteUrl = new URL(buildApiUrl("api/accounts/delete_currency_api.php"));
-    if (ledgerScope) applyTenantLedgerToParams(deleteUrl.searchParams, ledgerScope);
-    const payload = { id: currencyId, force: true };
-    if (ledgerScope?.ledger === LEDGER_GROUP) {
-      payload.group_only = true;
-      if (ledgerScope.groupId) payload.group_id = ledgerScope.groupId;
-    } else {
-      if (ledgerScope?.companyId) payload.company_id = ledgerScope.companyId;
-      if (ledgerScope?.groupId) payload.group_id = ledgerScope.groupId;
-    }
-
-    const { res, json } = await parseJsonResponse(
-      await fetch(deleteUrl.toString(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-        signal,
-      }),
-    );
-
-    return {
-      success: Boolean(json.success),
-      message: String(json.message || json.error || ""),
-      data: json.data ?? null,
-      status: res.status,
-    };
   }
 
   const { res, json } = await parseJsonResponse(
