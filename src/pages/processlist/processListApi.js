@@ -49,6 +49,43 @@ export async function fetchProcessListByTenantId(tenantId, signal) {
   return normalizeProcessListRows(data);
 }
 
+/**
+ * POST /api/process/process-list — all categories (Games + Bank), unlike
+ * {@link fetchProcessListByTenantId} which drops Bank for the Games List page.
+ * For permission pickers (User Access) that need every process regardless of category.
+ */
+export async function fetchAllProcessListByTenantId(tenantId, signal) {
+  const tid = resolveProcessListTenantId(tenantId);
+  if (!tid) throw new Error("tenantIdRequired");
+
+  const res = await fetch(buildApiUrl("api/process/process-list"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(tid),
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !isApiSuccess(json)) {
+    throw new Error(json?.message || "failedToLoadProcesses");
+  }
+  const data = Array.isArray(json.data) ? json.data : [];
+  return data
+    .map((dto) => {
+      const process = dto?.process || {};
+      const descriptions = Array.isArray(dto?.processDescriptions) ? dto.processDescriptions : [];
+      const id = dto?.id ?? process.id;
+      if (id == null) return null;
+      return {
+        id,
+        process_name: String(process.code || ""),
+        description: descriptions.map((d) => d?.name).filter(Boolean).join(", "),
+        category: String(process.category || "").trim().toUpperCase(),
+      };
+    })
+    .filter(Boolean);
+}
+
 /** Spring ProcessDescription → picker row. */
 export function normalizeProcessDescriptionItem(item) {
   if (!item || typeof item !== "object") return null;

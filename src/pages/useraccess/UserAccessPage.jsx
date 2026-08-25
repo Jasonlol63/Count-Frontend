@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SimpleSelect from "../../components/SimpleSelect.jsx";
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { useAuthSession } from "../../context/AuthSessionContext.jsx";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
 import { useRealtimeDomain } from "../../lib/realtime/useRealtimeDomain.js";
 import { REALTIME_DOMAINS } from "../../lib/realtime/realtimeEvents.js";
 
 import { getVisiblePermissionKeys } from "../userlist/userListLogic.js";
+import { fetchAdminListByTenantId, buildAdminUpdateRequest, updateAdminUser } from "../userlist/userListApi.js";
+import { fetchAccountListByTenantId } from "../account/accountListApi.js";
+import { fetchAllProcessListByTenantId } from "../processlist/processListApi.js";
 
 const PERMISSION_OPTIONS = getVisiblePermissionKeys("");
 
@@ -49,26 +51,25 @@ export default function UserAccessPage() {
     if (!me) return;
     try {
       const companyId = Number(me.company_id || 0);
+      if (!companyId) throw new Error("No company selected");
 
-      const usersRes = await fetch(buildApiUrl("api/useraccess/useraccess_api.php"), {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "get_all_users" }),
-      });
-      const usersJson = await usersRes.json();
-      const list = Array.isArray(usersJson?.data) ? usersJson.data : [];
-
-      const [accRes, procRes] = await Promise.all([
-        fetch(buildApiUrl(`api/accounts/accountlistapi.php?company_id=${companyId}&showAll=1`), { credentials: "include" }),
-        fetch(buildApiUrl(`api/processes/processlist_api.php?company_id=${companyId}&showAll=1`), { credentials: "include" }),
+      const [adminRows, accountRows, processRows] = await Promise.all([
+        fetchAdminListByTenantId(companyId),
+        fetchAccountListByTenantId(companyId),
+        fetchAllProcessListByTenantId(companyId),
       ]);
-      const accJson = await accRes.json();
-      const procJson = await procRes.json();
+
+      const list = adminRows.map((row) => ({
+        ...row,
+        login_id: row.loginId,
+        tenant_access_id: row.tenantAccess?.id ?? null,
+        account_permissions: row.tenantAccess?.accountPermissions ?? null,
+        process_permissions: row.tenantAccess?.processPermissions ?? null,
+      }));
 
       setUsers(list);
-      setAccounts(Array.isArray(accJson?.data?.accounts) ? accJson.data.accounts : []);
-      setProcesses(Array.isArray(procJson?.data) ? procJson.data : []);
+      setAccounts(accountRows);
+      setProcesses(processRows);
     } catch {
       if (!silent) setNotice("Failed to load user access data");
     } finally {
@@ -162,6 +163,11 @@ export default function UserAccessPage() {
       setNotice("Please select at least one affected user");
       return;
     }
+    const companyId = Number(me?.company_id || 0);
+    if (!companyId) {
+      setNotice("No company selected");
+      return;
+    }
     setSubmitting(true);
     setNotice("");
     try {
@@ -171,27 +177,35 @@ export default function UserAccessPage() {
       });
       const processPermissions = Array.from(selectedProcessIds).map((id) => {
         const row = processes.find((p) => Number(p.id) === Number(id));
-        return { id: Number(id), process_id: row?.process_name || row?.process_id || "", process_description: row?.description_name || row?.description || "" };
+        return { id: Number(id), process_id: row?.process_name || "", description: row?.description || "" };
       });
 
-      const res = await fetch(buildApiUrl("api/useraccess/useraccess_api.php"), {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "copy_permissions",
-          source_type: sourceType,
-          template_user_id: sourceType === "template" ? Number(templateUserId) : null,
-          affected_user_ids: Array.from(selectedUserIds).map(Number),
-          permissions: effectivePermissions,
-          account_permissions: accountPermissions,
-          process_permissions: processPermissions,
-        }),
-      });
-      const json = await res.json();
-      setNotice(json?.message || (json?.success ? "Updated successfully" : "Update failed"));
-      if (json?.success) {
+      const affectedUsers = Array.from(selectedUserIds)
+        .map((id) => users.find((u) => Number(u.id) === Number(id)))
+        .filter(Boolean);
+
+      const results = await Promise.allSettled(
+        affectedUsers.map((u) =>
+          updateAdminUser(
+            buildAdminUpdateRequest({
+              id: u.id,
+              tenantAccessId: u.tenant_access_id ?? undefined,
+              scopeTenantId: companyId,
+              permissions: effectivePermissions,
+              accountPermissions,
+              processPermissions,
+            }),
+          ),
+        ),
+      );
+
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed === 0) {
+        setNotice("Updated successfully");
         setSelectedUserIds(new Set());
+        void loadAccessData({ silent: true });
+      } else {
+        setNotice(`Updated ${results.length - failed}/${results.length} user(s); ${failed} failed`);
       }
     } catch {
       setNotice("Failed to update permissions");
