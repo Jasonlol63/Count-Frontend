@@ -2086,9 +2086,6 @@ export default function AccountListPage() {
         const ids = rows.filter((c) => c.is_linked).map((c) => Number(c.id));
         let baselineIds = ids;
         if (!ids.length && id) {
-          // No currency link yet under this tenant (e.g. account just gained access to a
-          // new company) — auto-link like Add Account's default (MYR, else first) right
-          // away, so the highlighted pill reflects a real link instead of a pending one.
           const fallback = pickDefaultAddCurrencyIds(rows);
           if (fallback.length) {
             try {
@@ -3046,7 +3043,6 @@ export default function AccountListPage() {
           syncModalLedgerScope(null);
         }}
         groupPickerMode={groupOnlyAccountMode}
-        lockedCompanyId={isEditMode && !groupOnlyAccountMode ? resolveLinkTenantId() : null}
         t={t}
       />
       <AccountConfirmModal open={confirmDeleteOpen} message={t("deleteConfirmMessage", { count: selectedDeleteIds.size })} onConfirm={confirmDelete} onClose={() => setConfirmDeleteOpen(false)} t={t} />
