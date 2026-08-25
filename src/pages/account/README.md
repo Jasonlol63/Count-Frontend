@@ -23,7 +23,7 @@ The page now calls the Spring backend exclusively — no `api/accounts/*.php` / 
 - `POST /api/account/list|add|update|updateStatus|delete` and `/api/account/link*` (`UserController`) — accounts + account-to-account linking.
 - `POST /api/currency/available|add|delete` and `/api/currency/account/linked-accounts[-update]` (`CurrencyController`) — per-account currency picker + the Currency Setting screen.
 
-Both are strictly **single-tenant** (`tenant_id` / `scopeTenantId` — a real Company-type tenant id, never a bare Group id; see the backend's `docs/account-company-multi-tenant.md`). There is no `group_id` / `group_only` concept server-side, so:
+Both are strictly **single-tenant** (`tenant_id` / `scopeTenantId` — a real Company-type tenant id, never a bare Group id; see the backend's `docs/frontend-springboot-migration.md` 第23节). There is no `group_id` / `group_only` concept server-side, so:
 
 - A single company view hits `/api/account/list` directly.
 - "Company all" / "Groups all" / a bare group-only view all merge per-tenant across the ids `useGcFilterWithAllModes` already resolves (`fetchMergedAccountLists`) — no separate group-aware endpoint needed.

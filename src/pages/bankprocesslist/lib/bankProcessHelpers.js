@@ -459,7 +459,7 @@ export function isBankResendScheduleLockedToday(row, dayStartRaw) {
 
 /**
  * Client-side duplicate hint only — the Accounting Due inbox only ever contains
- * unsettled rows (accounting-due-frequency-rules.md: "Accounting Due 只返回尚未结算的账期"),
+ * unsettled rows (backend docs/frontend-springboot-migration.md 第31节: "Accounting Due 只返回尚未结算的账期"),
  * so there is no "already posted today" case to filter out here; the backend is the
  * authoritative check on submit (`isBankResendDayStartBackendErrorMessage`).
  */
@@ -476,8 +476,8 @@ export function isResendDayStartDuplicateInAccountingDue(rows, processId, daySta
 }
 
 /**
- * Spring has no same-day resend lock pre-check endpoint (Phase 1 gap, see
- * accounting-due-frequency-rules.md §Resend "尚未实现：Post 同日锁"). The local
+ * Spring has no same-day resend lock pre-check endpoint (Phase 1 gap, see backend
+ * docs/frontend-springboot-migration.md 第31节 §Resend "尚未实现：Post 同日锁"). The local
  * checks (`isBankResendScheduleLockedToday`, `isResendDayStartDuplicateInAccountingDue`)
  * plus the server's authoritative rejection on submit are the real guard now.
  */
@@ -935,7 +935,7 @@ export function accountingDueRowKey(r) {
 /**
  * Spring `BankProcessDTO.shares`-style money field passthrough → `AccountingDueDTO`.
  * `dto.postedDate` doubles as `billing_period_start`/`billing_period_end` when the
- * backend omits an explicit billing window (accounting-due-frequency-rules.md confirms
+ * backend omits an explicit billing window (backend docs/frontend-springboot-migration.md 第31节 confirms
  * billingStart === postedDate for every period type except 1st-of-month partial/tail
  * ranges, which always send an explicit billingStart/billingEnd).
  */

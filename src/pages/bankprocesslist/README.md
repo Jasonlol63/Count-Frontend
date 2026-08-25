@@ -4,7 +4,7 @@ Route: `/bank-process-list` (see `App.jsx`). Entry: `BankProcessListPage.jsx`.
 
 ## Money precision (Post → Transaction)
 
-Bank Process 入账金额：**DB 存 6 位**，前端 Half Up **仅展示 2 位**。详见 [`docs/bankprocess-transaction-amount-precision.md`](../../../../docs/bankprocess-transaction-amount-precision.md)。
+Bank Process 入账金额：**DB 存 6 位**，前端 Half Up **仅展示 2 位**。详见后端 `docs/frontend-springboot-migration.md` 第27节。
 
 ## Where to change what
 

@@ -7,8 +7,8 @@ import {
 import { isGroupPayrollProcessId } from "../../datacapture/lib/dataCaptureGroupOnlyProcesses.js";
 
 /**
- * `data_capture_summary_state` was deliberately never built (see docs/datacapture-spring-api.md
- * §1.1) — unsubmitted draft state lives in front-end session/localStorage instead
+ * `data_capture_summary_state` was deliberately never built (see backend
+ * docs/frontend-springboot-migration.md 第32节) — unsubmitted draft state lives in front-end session/localStorage instead
  * (`summaryRefreshStatePure.js` / `summaryStorage.js`). No Spring or PHP endpoint backs this.
  */
 export async function fetchSummaryServerState() {

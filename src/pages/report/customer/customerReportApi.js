@@ -7,7 +7,7 @@ export const reportAdd = reportAmountAdd;
 
 /**
  * Spring POST /api/report/customer-report/list body (tenant-only, aligned with Maintenance/Payment
- * History: no legacy company_id/group_id/report_scope — see docs/customer-report-spring-migration.md).
+ * History: no legacy company_id/group_id/report_scope — see backend docs/frontend-springboot-migration.md 第29节).
  */
 export function buildSpringCustomerReportRequest({
   tenantId,
@@ -171,7 +171,7 @@ export async function fetchCustomerReport(
 
 /**
  * Account dropdown data source — Spring `POST /api/account/list` (same helper Formula Maintenance
- * uses for its account dropdown, see docs/maintenance-navigation.md §11.6.2). Replaces the legacy
+ * uses for its account dropdown, see backend docs/frontend-springboot-migration.md 第18节). Replaces the legacy
  * `api/transactions/get_accounts_api.php`, which 500s now that the reverse proxy sends every
  * unrewritten `/api/*` path to Spring. Aggregate scope loops per tenant and merges, same pattern as
  * the report list itself. No status filter — matches the legacy Customer Report account list, which

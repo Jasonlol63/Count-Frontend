@@ -454,7 +454,7 @@ export function calculateTotals(rows) {
     }
   }
   // HALF_UP for all four — must match per-row display (formatTransactionGridMoneyHalfUp) and the
-  // backend precision policy (UI 展示一律 HALF_UP → 2，见 transaction-amount-precision.md). Previously
+  // backend precision policy (UI 展示一律 HALF_UP → 2，见 backend docs/frontend-springboot-migration.md 第27节). Previously
   // bf/cr_dr used ROUND_DOWN (truncate) while win_loss/balance used HALF_UP, so the Total row's B/F
   // could land a cent below what the displayed per-row B/F values actually sum to.
   const bfTot = MoneyDecimal.formatFixedHalfUp(bfAcc.toString(), 2);

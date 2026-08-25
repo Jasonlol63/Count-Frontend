@@ -31,7 +31,7 @@ function notify(title, message, type = "success") {
 
 /**
  * Games / Bank company-scope submit (incl. C168 / bank-only payroll) — Spring,
- * one atomic transaction, no batching. See docs/datacapture-spring-api.md §2.8.
+ * one atomic transaction, no batching. See backend docs/frontend-springboot-migration.md 第32节.
  * Since Phase 1/2 of the Group Spring migration this also covers every Group
  * scope (pure or with an anchor company) — `tenantId` resolves to the Group's
  * own `tenant.id` via `groupEntityTenantId`, and `processCode` fallback lets

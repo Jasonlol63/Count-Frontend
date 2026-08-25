@@ -5,7 +5,7 @@
 > Spring Boot 端点上（部分来自 Account 页，部分来自 Maintenance > Formula 页），因此本文档只详细
 > 描述前端改动。
 > **最后更新**：2026-08-19（Edit Formula Save 报「Process Id is required」但改动实际未落库的 bug，见 §5）
-> **后端契约参考**（未改，仅引用）：`Count/docs/datacapture-spring-api.md`（Games/Formula CRUD/Submit
+> **后端契约参考**（未改，仅引用）：`Count/docs/frontend-springboot-migration.md` 第32节（Games/Formula CRUD/Submit
 > 契约）、`Count/backend/.../MaintenanceController.java`（`formula-maintenance/list` 契约，本次复用）
 
 ---
@@ -159,8 +159,8 @@ id_product, ...)` 唯一键 + 「已有带 account_id 的 MAIN 才会插 SUB」�
 
 ```js
 /**
- * `data_capture_summary_state` was deliberately never built (see docs/datacapture-spring-api.md
- * §1.1) — unsubmitted draft state lives in front-end session/localStorage instead
+ * `data_capture_summary_state` was deliberately never built (see backend
+ * docs/frontend-springboot-migration.md 第32节) — unsubmitted draft state lives in front-end session/localStorage instead
  * (`summaryRefreshStatePure.js` / `summaryStorage.js`). No Spring or PHP endpoint backs this.
  */
 export async function fetchSummaryServerState() {
@@ -178,10 +178,12 @@ export async function fetchSummaryServerState() {
 `deleteFormulasSpring()`），连带清掉只服务它们的 `SUMMARY_CATALOG_API` / `SUMMARY_TEMPLATES_API` /
 `SUMMARY_STATE_API` 常量、`withCompany()` / `parseJsonResponse()` 辅助函数。
 
-**保留不动**：`submitSummaryPayload()`（`SUMMARY_SUBMIT_API` = `summary_submit_api.php`）——这是真
+**保留不动（写作时）**：`submitSummaryPayload()`（`SUMMARY_SUBMIT_API` = `summary_submit_api.php`）——当时是真
 AP/IG group ledger 的批次提交，后端 tenant/process 解析仍依赖未迁移的 `get_group_process_id`
-（`Count/docs/datacapture-spring-api.md` §4 明确列为暂不迁移），本次不碰。`submitSummaryToSpring()`
-（Games/Bank company scope 的单次 Spring 提交）不变。
+（`Count/docs/frontend-springboot-migration.md` 第32节曾列为暂不迁移），本次不碰。`submitSummaryToSpring()`
+（Games/Bank company scope 的单次 Spring 提交）不变。**2026-08-25 更新**：`submitSummaryPayload()` 这条
+PHP 分批提交路径实际上早已被替换掉，`executeSummarySubmit()` 现在所有 Group scope 都走 Spring，见
+`Count/docs/frontend-springboot-migration.md` 第7节。
 
 ---
 
@@ -405,11 +407,11 @@ localStorage 恢复出来的 session 原样），不阻断整个还原流程。
 
 ---
 
-## 3. 仍然有意保留 PHP 的范围（本次未动，未来 group ledger 迁移时一起处理）
+## 3. 仍然有意保留 PHP 的范围（写作时未动；**2026-08-25 更新：本节已全部清理完毕**，见下方表格后的更新说明）
 
 以下全部限定在**真 AP/IG group ledger scope**（`isGroupLedgerCapture()` 判定为 true 的分支），
-后端 tenant/process 解析目前仍依赖未迁移的 `get_group_process_id`（`Count/docs/datacapture-spring-api.md`
-§4），本次范围之外，代码里都留了注释标注：
+后端 tenant/process 解析当时仍依赖未迁移的 `get_group_process_id`（`Count/docs/frontend-springboot-migration.md`
+第32节），本次范围之外，代码里都留了注释标注：
 
 | 函数 / 文件 | PHP 端点 |
 |---|---|
@@ -418,6 +420,12 @@ localStorage 恢复出来的 session 原样），不阻断整个还原流程。
 | `dataCaptureGroupDraftApi.js` 整个文件 | `api/datacapture/group_capture_draft_api.php` |
 | `summaryApi.js` 的 `submitSummaryPayload()` | `api/datacapture_summary/summary_submit_api.php` |
 | `useSummaryAddAccount.js` 的 `groupOnlyAccountMode` 分支 | `editdata_api.php`（角色，本次已删）之外的 `account_currency_api.php` / `create_currency_api.php` / `delete_currency_api.php` / `addaccountapi.php` |
+
+**2026-08-25 更新**：调查发现新 tenant 模型下 GROUP 类型 tenant 天生自带自己的 `tenant.id`（数据库主键约束保证），
+上表第 1-4 行描述的"没有 tenant 身份需要走 PHP"这种情况结构性不存在。实际清点代码后确认表格第 1、3、4 行
+（`fetchGroupProcessIdByCode`、`dataCaptureGroupDraftApi.js`、`submitSummaryPayload`）早已不再被调用，
+只有第 2 行 `fetchGroupCaptureCurrencies()` 还在用，本次已一并删除（函数本体 + 唯一调用点）。详见
+`Count/docs/frontend-springboot-migration.md` 第7节。本节所记录的"仍保留 PHP 的范围"现已不再适用。
 
 ---
 
