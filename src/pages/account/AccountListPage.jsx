@@ -2084,7 +2084,10 @@ export default function AccountListPage() {
       const matched = wantCode ? rows.find((c) => toUpper(c.code).trim() === wantCode) : null;
       if (isEdit) {
         const ids = rows.filter((c) => c.is_linked).map((c) => Number(c.id));
-        const base = matched ? [...new Set([...ids, Number(matched.id)])] : ids;
+        // No currency link yet under this tenant (e.g. account just gained access to a new
+        // company) — default-select like Add Account instead of leaving every pill unselected.
+        const idsWithFallback = ids.length ? ids : pickDefaultAddCurrencyIds(rows);
+        const base = matched ? [...new Set([...idsWithFallback, Number(matched.id)])] : idsWithFallback;
         setSelectedCurrencyIds(base);
         setInitialEditCurrencyIds(ids);
       } else if (matched) {
