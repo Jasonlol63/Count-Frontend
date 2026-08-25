@@ -31,7 +31,6 @@ export const PAGE_PATHS = {
   "bankprocess-maintenance": "/bankprocess-maintenance",
   "payment-maintenance": "/payment-maintenance",
   useraccess: "/useraccess",
-  "deleted-log": "/deleted-log",
   "auto-renew": "/auto-renew",
 };
 
@@ -66,7 +65,6 @@ export const PAGE_ROUTE_UUIDS = {
   "bankprocess-maintenance": "e4bef560-3371-4a79-96c9-75ae055ca7d9",
   "payment-maintenance": "0cc1f0cd-e901-48ce-8a30-038ccce3344a",
   useraccess: "10049c16-fb17-4889-8228-98bf465544ef",
-  "deleted-log": "3f5cf41e-53c2-45c5-a2c2-92e26352d8a1",
   "auto-renew": "148b6740-9f41-47e8-b8ca-e52db63cd4b2",
 };
 
@@ -194,7 +192,7 @@ export function allUuidRoutePathnames() {
 
 /** Nginx/Apache: readable route names (optional /{uuid} suffix). */
 export const SPA_READABLE_ROUTE_PATTERN =
-  "login|member|reset-password|owner-secondary-password|user-secondary-password|dashboard|domain|announcement|auto-renew|account-list|add-account|process-list|games-process-list|bank-process-list|userlist|useraccess|deleted-log|ownership|datacapture|datacapturesummary|transaction|customer-report|domain-report|capture-maintenance|transaction-maintenance|formula-maintenance|bankprocess-maintenance|payment-maintenance|transcation|customer_report|domain_report|capture_maintenance|transaction_maintenance|formula_maintenance|bankprocess_maintenance|payment_maintenance|auto_renew";
+  "login|member|reset-password|owner-secondary-password|user-secondary-password|dashboard|domain|announcement|auto-renew|account-list|add-account|process-list|games-process-list|bank-process-list|userlist|useraccess|ownership|datacapture|datacapturesummary|transaction|customer-report|domain-report|capture-maintenance|transaction-maintenance|formula-maintenance|bankprocess-maintenance|payment-maintenance|transcation|customer_report|domain_report|capture_maintenance|transaction_maintenance|formula_maintenance|bankprocess_maintenance|payment_maintenance|auto_renew";
 
 /** Nginx: UUID suffix in /{page}/{uuid}. */
 export const SPA_UUID_SUFFIX_PATTERN =

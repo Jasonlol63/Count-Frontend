@@ -37,7 +37,6 @@ export function prefetchAuthenticatedRoutes() {
     "bankprocess-maintenance",
     "payment-maintenance",
     "useraccess",
-    "deleted-log",
   ];
   pageKeys.forEach((pageKey) => prefetchRouteModule(spaPath(pageKey)));
 }
@@ -95,9 +94,6 @@ export function prefetchRouteModule(pathname) {
       break;
     case "useraccess":
       prefetchModule(pageKey, () => import("../../pages/useraccess/UserAccessPage.jsx"));
-      break;
-    case "deleted-log":
-      prefetchModule(pageKey, () => import("../../pages/deletedlog/DeletedLogPage.jsx"));
       break;
     default:
       break;

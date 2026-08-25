@@ -34,7 +34,6 @@ const FormulaMaintenancePage = lazyWithRetry(() => import("./pages/maintenance/f
 const BankprocessMaintenancePage = lazyWithRetry(() => import("./pages/maintenance/bankprocess/BankprocessMaintenancePage.jsx"));
 const PaymentMaintenancePage = lazyWithRetry(() => import("./pages/maintenance/payment/PaymentMaintenancePage.jsx"));
 const UserAccessPage = lazyWithRetry(() => import("./pages/useraccess/UserAccessPage.jsx"));
-const DeletedLogPage = lazyWithRetry(() => import("./pages/deletedlog/DeletedLogPage.jsx"));
 
 function OwnerSecondaryPasswordPage() {
   return <SecondaryPasswordPage variant="owner" />;
@@ -72,7 +71,6 @@ const PAGE_COMPONENTS = {
   "bankprocess-maintenance": BankprocessMaintenancePage,
   "payment-maintenance": PaymentMaintenancePage,
   useraccess: UserAccessPage,
-  "deleted-log": DeletedLogPage,
   "auto-renew": AutoRenewPage,
 };
 
