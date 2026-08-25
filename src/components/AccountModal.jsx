@@ -49,6 +49,9 @@ export default function AccountModal({
   portalToBody = true,
   /** Group-only mode: picker behaves as Choose Group (single-select). */
   groupPickerMode = false,
+  /** Company id the list is currently scoped to (Edit only) — cannot be unchecked here, since
+   * removing it mid-edit would pull the account out from under the view/tenant it's being edited in. */
+  lockedCompanyId = null,
 }) {
   const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
   const [companySearchQuery, setCompanySearchQuery] = useState("");
@@ -104,6 +107,9 @@ export default function AccountModal({
       .filter((c) => selectedSet.has(c.picker_value))
       .map((c) => String(c.company_id || "").toUpperCase());
   }, [companyRows, selectedCompanyIds]);
+
+  const lockedPickerValue =
+    !groupPickerMode && lockedCompanyId != null ? normalizePickerValue(lockedCompanyId) : "";
 
   const companyPickerFiltered = useMemo(() => {
     const q = companySearchQuery.trim().toUpperCase();
@@ -520,14 +526,19 @@ export default function AccountModal({
                 <ul className="user-modal-company-picker-list">
                   {companyPickerFiltered.map((c) => {
                     const id = c.picker_value;
-                    const checked = draftCompanyIds.map((v) => normalizePickerValue(v)).includes(id);
+                    const isLocked = lockedPickerValue !== "" && id === lockedPickerValue;
+                    const checked = isLocked || draftCompanyIds.map((v) => normalizePickerValue(v)).includes(id);
                     return (
                       <li key={id} className="user-modal-company-picker-row">
-                        <label className={checked ? "user-modal-company-picker-label is-checked" : "user-modal-company-picker-label"}>
+                        <label
+                          className={`user-modal-company-picker-label${checked ? " is-checked" : ""}${isLocked ? " is-locked" : ""}`}
+                          title={isLocked ? text("companyPickerLockedHint") : undefined}
+                        >
                           <input
                             type={groupPickerMode ? "radio" : "checkbox"}
                             name={groupPickerMode ? "account-group-picker" : undefined}
                             checked={checked}
+                            disabled={isLocked}
                             onChange={() =>
                               setDraftCompanyIds((prev) => {
                                 if (groupPickerMode) return [id];
@@ -548,7 +559,12 @@ export default function AccountModal({
                   type="button"
                   className="user-modal-company-picker-done"
                   onClick={() => {
-                    setSelectedCompanyIds(draftCompanyIds);
+                    const committed =
+                      lockedPickerValue !== "" &&
+                      !draftCompanyIds.map((v) => normalizePickerValue(v)).includes(lockedPickerValue)
+                        ? [...draftCompanyIds, lockedCompanyId]
+                        : draftCompanyIds;
+                    setSelectedCompanyIds(committed);
                     closeCompanyPicker();
                   }}
                 >

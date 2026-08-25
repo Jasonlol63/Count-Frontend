@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useNavigate } from "react-router-dom";
 import { useAuthSession } from "../../context/AuthSessionContext.jsx";
 import { canAccessC168AutoRenew } from "../../utils/company/loginScope.js";
+import { notifySessionRefreshRequested } from "../../utils/company/companySessionEvents.js";
 import { ensureC168DomainApiSession } from "../../utils/company/companySessionSync.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
 import {
@@ -483,6 +484,7 @@ export default function AutoRenewPage() {
         period,
       });
       invalidateTransactionListCache("auto_renew_approve");
+      notifySessionRefreshRequested();
       notify(t("approvedSuccess"), "success");
       await refreshListAfterMutation();
     } catch (err) {

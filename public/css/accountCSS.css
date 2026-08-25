@@ -3873,6 +3873,15 @@ body > .user-modal-permission-picker-root--above-modals {
     height: 13px;
 }
 
+.user-modal-company-picker-label.is-locked {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.user-modal-company-picker-label.is-locked input[type="checkbox"] {
+    cursor: not-allowed;
+}
+
 .user-modal-company-picker--account .user-modal-company-picker-footer {
     padding: 10px 14px 12px;
 }

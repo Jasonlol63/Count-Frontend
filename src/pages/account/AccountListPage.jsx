@@ -2084,12 +2084,28 @@ export default function AccountListPage() {
       const matched = wantCode ? rows.find((c) => toUpper(c.code).trim() === wantCode) : null;
       if (isEdit) {
         const ids = rows.filter((c) => c.is_linked).map((c) => Number(c.id));
-        // No currency link yet under this tenant (e.g. account just gained access to a new
-        // company) — default-select like Add Account instead of leaving every pill unselected.
-        const idsWithFallback = ids.length ? ids : pickDefaultAddCurrencyIds(rows);
-        const base = matched ? [...new Set([...idsWithFallback, Number(matched.id)])] : idsWithFallback;
+        let baselineIds = ids;
+        if (!ids.length && id) {
+          // No currency link yet under this tenant (e.g. account just gained access to a
+          // new company) — auto-link like Add Account's default (MYR, else first) right
+          // away, so the highlighted pill reflects a real link instead of a pending one.
+          const fallback = pickDefaultAddCurrencyIds(rows);
+          if (fallback.length) {
+            try {
+              await updateAccountsLinkedToCurrency({
+                tenantId: effectiveTenantId,
+                currencyId: fallback[0],
+                linkedAccountIds: [id],
+              });
+              baselineIds = fallback;
+            } catch {
+              /* leave unselected — a highlighted pill must reflect a real saved link */
+            }
+          }
+        }
+        const base = matched ? [...new Set([...baselineIds, Number(matched.id)])] : baselineIds;
         setSelectedCurrencyIds(base);
-        setInitialEditCurrencyIds(ids);
+        setInitialEditCurrencyIds(baselineIds);
       } else if (matched) {
         setSelectedCurrencyIds((prev) =>
           prev.map(Number).includes(Number(matched.id)) ? prev : [...prev, Number(matched.id)],
@@ -3030,6 +3046,7 @@ export default function AccountListPage() {
           syncModalLedgerScope(null);
         }}
         groupPickerMode={groupOnlyAccountMode}
+        lockedCompanyId={isEditMode && !groupOnlyAccountMode ? resolveLinkTenantId() : null}
         t={t}
       />
       <AccountConfirmModal open={confirmDeleteOpen} message={t("deleteConfirmMessage", { count: selectedDeleteIds.size })} onConfirm={confirmDelete} onClose={() => setConfirmDeleteOpen(false)} t={t} />

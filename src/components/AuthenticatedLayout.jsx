@@ -31,6 +31,7 @@ import {
   syncAutoRenewPendingCount,
 } from "../utils/autoRenew/autoRenewPendingSync.js";
 import { useExpirationReminder } from "../hooks/useExpirationReminder.js";
+import { buildSidebarExpirationFields } from "../utils/expiration/expirationReminder.js";
 import { applyLoginLang } from "../utils/i18n/useLoginLang.js";
 import {
   canAccessDashboard,
@@ -108,6 +109,7 @@ import "../../public/css/select-unified.css";
 function formatSidebarExpirationHint(hint, i18n) {
   if (!hint || hint === "-") return "-";
   if (hint === "No expiration date") return i18n.expNoDate;
+  if (hint === "Expired") return i18n.expExpired;
   return hint;
 }
 
@@ -657,7 +659,7 @@ export default function AuthenticatedLayout() {
               hasBank: false,
               forceGroupGamesCategory: true,
               hasGambling: groupGambling != null ? groupGambling : true,
-              expirationDate: groupExp !== undefined ? groupExp : null,
+              expirationDate: groupExp !== undefined ? groupExp : (data.expiration_date ?? null),
             });
           });
           setSidebarGcTick((n) => n + 1);
@@ -695,14 +697,26 @@ export default function AuthenticatedLayout() {
             has_bank: hasBank,
           });
         }
-        const sessionMe =
-          categoryOverride != null
-            ? {
-                ...data,
-                company_has_gambling: hasGambling,
-                company_has_bank: hasBank,
-              }
-            : data;
+        // Tenant is the single source of truth for expiry: prefer the cached tenant-accessible
+        // row for the selected company, fall back to this session payload's own expiration_date
+        // (always correct for the tenant `data` represents) when the cache isn't ready yet.
+        // Hint/status/days are always derived locally — the Spring Boot session payload has no
+        // such fields (legacy PHP-only), so never read them off `data`.
+        const companyExpirationDate = resolveSidebarExpirationForFilter({
+          selectedGroup: filterNow.selectedGroup,
+          companyId: categoryCompanyId,
+        });
+        const expirationFields = buildSidebarExpirationFields(
+          companyExpirationDate !== undefined ? companyExpirationDate : (data.expiration_date ?? null),
+        );
+
+        const sessionMe = {
+          ...data,
+          ...(categoryOverride != null
+            ? { company_has_gambling: hasGambling, company_has_bank: hasBank }
+            : {}),
+          ...expirationFields,
+        };
 
         let appliedSessionToSidebar = false;
         setMe((prev) => {
@@ -713,10 +727,7 @@ export default function AuthenticatedLayout() {
           }
           return {
             ...prev,
-            expiration_hint: data.expiration_hint,
-            expiration_status: data.expiration_status,
-            expiration_date: data.expiration_date,
-            days_until_expiration: data.days_until_expiration,
+            ...expirationFields,
             pending_auto_renew_count: Number(data.pending_auto_renew_count) || 0,
           };
         });
