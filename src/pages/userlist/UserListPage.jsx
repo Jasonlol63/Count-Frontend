@@ -3,6 +3,7 @@ import { createPortal, flushSync } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { notifyCompanySessionUpdated } from "../../utils/company/companySessionEvents.js";
 import { syncCompanySessionApi } from "../../utils/company/companySessionSync.js";
+import { fetchTenantIdByCode } from "../../utils/company/tenantAccessibleApi.js";
 import {
   clearDashboardGroupFilterKeepCompany,
   companiesGroupEntityList,
@@ -159,6 +160,18 @@ function resolveGroupEntityTenantId(companies, groupCode) {
   const rows = companiesGroupEntityList(companies, groupCode);
   const id = rows?.[0]?.id != null ? Number(rows[0].id) : Number.NaN;
   return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+/**
+ * Same as resolveGroupEntityTenantId, but falls back to a DB-fresh backend lookup when the group
+ * isn't in the local `companies` snapshot yet (e.g. right after creating a new group, before the
+ * session-wide owner-companies cache has been refreshed on this page). Self-heals without waiting
+ * for a manual refresh.
+ */
+async function resolveGroupEntityTenantIdFresh(companies, groupCode, signal) {
+  const localId = resolveGroupEntityTenantId(companies, groupCode);
+  if (localId != null) return localId;
+  return fetchTenantIdByCode(groupCode, { signal });
 }
 
 /** Active Process rows for the Admin ACL checklist — Spring `/api/process/process-list` (RequestBody = tenant id). */
@@ -1168,16 +1181,17 @@ export default function UserListPage() {
     let tenantIds = [];
     if (aggregateUserList) {
       if (groupsAllMode) {
-        tenantIds = groupIds
-          .map((code) => resolveGroupEntityTenantId(effectiveCompanies, code))
-          .filter((id) => id != null);
+        const resolved = await Promise.all(
+          groupIds.map((code) => resolveGroupEntityTenantIdFresh(effectiveCompanies, code, signal)),
+        );
+        tenantIds = resolved.filter((id) => id != null);
       } else if (activeGroup) {
         tenantIds = companiesInGroupList(effectiveCompanies, activeGroup)
           .map((c) => Number(c.id))
           .filter((id) => Number.isFinite(id) && id > 0);
       }
     } else if (useGroupOnly && activeGroup) {
-      const id = resolveGroupEntityTenantId(effectiveCompanies, activeGroup);
+      const id = await resolveGroupEntityTenantIdFresh(effectiveCompanies, activeGroup, signal);
       if (id != null) tenantIds = [id];
     } else if (activeCompanyId != null) {
       const id = Number(activeCompanyId);

@@ -105,3 +105,37 @@ export async function fetchAccessibleTenants(options = {}) {
 
   return { tenants, accessibleParentTenantCodes, raw: json };
 }
+
+// Session-lifetime positive cache — once a code resolves, don't re-hit the backend for it again.
+const tenantIdByCodeCache = new Map();
+
+export function clearTenantIdByCodeCache() {
+  tenantIdByCodeCache.clear();
+}
+
+/**
+ * GET /auth/tenant-by-code — DB-fresh fallback for when a group/company was just created and the
+ * client-side tenant cache hasn't refreshed yet. Returns the tenant id, or null if not found/not accessible.
+ * Successful lookups are cached in-memory for the session so repeated switches into the same group
+ * don't keep re-hitting the backend.
+ */
+export async function fetchTenantIdByCode(code, options = {}) {
+  const { signal } = options;
+  const normalized = code == null ? "" : String(code).trim().toUpperCase();
+  if (!normalized) return null;
+  if (tenantIdByCodeCache.has(normalized)) return tenantIdByCodeCache.get(normalized);
+
+  try {
+    const res = await fetch(buildApiUrl(`auth/tenant-by-code?code=${encodeURIComponent(normalized)}`), {
+      credentials: "include",
+      signal,
+    });
+    const json = await res.json();
+    const id = Number(json?.data?.tenant_id);
+    const resolved = res.ok && json?.success && Number.isFinite(id) && id > 0 ? id : null;
+    if (resolved != null) tenantIdByCodeCache.set(normalized, resolved);
+    return resolved;
+  } catch {
+    return null;
+  }
+}
