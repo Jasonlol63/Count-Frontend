@@ -176,6 +176,9 @@ export function useTransactionSearch({
   const categoryAllCheckboxRef = useRef(null);
   const effectiveDateFrom = dateFrom || todayDmy;
   const effectiveDateTo = dateTo || todayDmy;
+  /** Capture Date range is exactly "today" (single day) — see docs/transaction-today-zero-balance-autoshow.md. */
+  const isTodayOnlyRange =
+    !!todayDmy && effectiveDateFrom === todayDmy && effectiveDateTo === todayDmy;
   const effectiveDateRangeText = `${effectiveDateFrom} - ${effectiveDateTo}`;
   const captureRangeKey = `${effectiveDateFrom}|${effectiveDateTo}`;
   const submitFocusActive =
@@ -797,7 +800,15 @@ export function useTransactionSearch({
         saveTxListToSession(cleaned);
         lastCompletedSearchKeyRef.current = requestKey;
         lastCompletedSearchTsRef.current = Date.now();
-        const displayed = countDisplayedRows(cleaned, effectiveSearchState, presentationFormType, activeTypeSearch);
+        const queryIsTodayOnlyRange =
+          !!todayDmy && queryDateFrom === todayDmy && queryDateTo === todayDmy;
+        const displayed = countDisplayedRows(
+          cleaned,
+          effectiveSearchState,
+          presentationFormType,
+          activeTypeSearch,
+          queryIsTodayOnlyRange,
+        );
         setTablesVisible(displayed > 0);
         if (!silent && displayed > 0) {
           pushToast(t("searchCompletedFoundRecords", { displayed }), "success");
@@ -905,6 +916,7 @@ export function useTransactionSearch({
       typeSearchAccountIds,
       typeSearchFormType,
       rawSearchData,
+      todayDmy,
       m,
       t,
     ],
@@ -1860,6 +1872,7 @@ export function useTransactionSearch({
       showZeroBalance: listPresentationModeActive ? true : searchState.showZeroBalance,
       showPaymentOnly: listPresentationModeActive ? false : searchState.showPaymentOnly,
       showCaptureOnly: listPresentationModeActive ? false : searchState.showCaptureOnly,
+      autoShowTodayActivity: listPresentationModeActive ? false : isTodayOnlyRange,
     });
     const sortedLeft = filtered.left;
     const sortedRight = filtered.right;
@@ -2005,6 +2018,7 @@ export function useTransactionSearch({
     baseRowsPresentation,
     searchState,
     listPresentationModeActive,
+    isTodayOnlyRange,
     showAllCurrencies,
     selectedCurrencies,
     currencyRowsOrdered,

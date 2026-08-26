@@ -331,6 +331,12 @@ export function rowPassesHideZeroBalanceFilter(showZero, row, opts = {}) {
   if (!rowIsZeroBalance(row)) return true;
   if (opts.showPaymentOnly && rowHasPeriodCrdr(row)) return true;
   if (opts.showWinLossOnly && rowHasPeriodWinLoss(row)) return true;
+  // Today-only auto-surface: a row with today's Cr/Dr or Win/Loss activity (even netting to
+  // 0.00, e.g. a CONTRA that clears to nothing) still shows in the default view without the
+  // user needing to tick Show Payment/Win-Loss Only. Applies only when the queried Capture
+  // Date range is today — viewing any other day/range falls back to requiring
+  // "Show all 0 balance" to see 0.00 rows. See docs/transaction-today-zero-balance-autoshow.md.
+  if (opts.autoShowTodayActivity && (rowHasPeriodCrdr(row) || rowHasPeriodWinLoss(row))) return true;
   return false;
 }
 
@@ -339,7 +345,7 @@ export function rowPassesHideZeroBalanceFilter(showZero, row, opts = {}) {
  * @param {object[]} rows
  * @param {{ showZero?: boolean, showPaymentOnly?: boolean, showWinLossOnly?: boolean }} opts
  */
-export function applyTransactionDisplayFilters(rows, { showZero = false, showPaymentOnly = false, showWinLossOnly = false } = {}) {
+export function applyTransactionDisplayFilters(rows, { showZero = false, showPaymentOnly = false, showWinLossOnly = false, autoShowTodayActivity = false } = {}) {
   let filtered = Array.isArray(rows) ? rows : [];
   if (showPaymentOnly || showWinLossOnly) {
     if (showPaymentOnly && showWinLossOnly) {
@@ -358,16 +364,17 @@ export function applyTransactionDisplayFilters(rows, { showZero = false, showPay
       );
     }
   }
-  const layerBOpts = { showPaymentOnly, showWinLossOnly };
+  const layerBOpts = { showPaymentOnly, showWinLossOnly, autoShowTodayActivity };
   return filtered.filter((row) => rowPassesHideZeroBalanceFilter(showZero, row, layerBOpts));
 }
 
 /** 左右表一次性过滤（rawSearchData → 展示行）。 */
-export function filterTransactionTableRows(rawLeft, rawRight, { showZeroBalance, showPaymentOnly, showCaptureOnly }) {
+export function filterTransactionTableRows(rawLeft, rawRight, { showZeroBalance, showPaymentOnly, showCaptureOnly, autoShowTodayActivity }) {
   const opts = {
     showZero: !!showZeroBalance,
     showPaymentOnly: !!showPaymentOnly,
     showWinLossOnly: !!showCaptureOnly,
+    autoShowTodayActivity: !!autoShowTodayActivity,
   };
   return {
     left: applyTransactionDisplayFilters(rawLeft, opts),
@@ -654,7 +661,7 @@ export function getSubmitFocusAccountIdsForCurrency(byCurrency, currencyCode) {
 }
 
 /** Row count after the same client filters as the main grid (for search-complete toasts). */
-export function countDisplayedRows(rawSearchData, searchState, txType, typeSearchActive = false) {
+export function countDisplayedRows(rawSearchData, searchState, txType, typeSearchActive = false, autoShowTodayActivity = false) {
   if (!rawSearchData) return 0;
   const rawLeft = dedupeRowsByAccountAndCurrency(rawSearchData.left_table || []);
   const rawRight = dedupeRowsByAccountAndCurrency(rawSearchData.right_table || []);
@@ -662,6 +669,7 @@ export function countDisplayedRows(rawSearchData, searchState, txType, typeSearc
     showZeroBalance: typeSearchActive ? true : searchState.showZeroBalance,
     showPaymentOnly: typeSearchActive ? false : searchState.showPaymentOnly,
     showCaptureOnly: typeSearchActive ? false : searchState.showCaptureOnly,
+    autoShowTodayActivity: typeSearchActive ? false : autoShowTodayActivity,
   });
   return (z.left?.length || 0) + (z.right?.length || 0);
 }

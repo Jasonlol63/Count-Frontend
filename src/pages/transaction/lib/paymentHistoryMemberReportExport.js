@@ -1,6 +1,6 @@
 import { assetUrl } from "../../../utils/core/apiUrl.js";
 import { fetchAvailableCurrencies } from "../../../utils/api/currencyApi.js";
-import { getHistory } from "./transactionApi.js";
+import { getHistory, resolveTransactionSpringTenantId } from "./transactionApi.js";
 import pdfBrandLogoUrl from "../../../assets/images/count_brandlogo.png?url";
 import { formatDmyFromYmd } from "../../maintenance/shared/maintenanceDateHelpers.js";
 import { computeTableTotals, formatPaymentHistoryMoney } from "../../member/memberPageHelpers.js";
@@ -212,9 +212,9 @@ const REPORT_TABLE_COLGROUP = `<colgroup>
   <col class="col-remark" />
 </colgroup>`;
 
+/** Same precedence as TransactionHistoryTable's idProductDisplay — product first, card_owner fallback. */
 function productCell(row) {
-  if (row?.is_bank_process_transaction) return row.card_owner || "-";
-  return row?.product || "-";
+  return row?.product || row?.card_owner || "-";
 }
 
 function remarkCell(row) {
@@ -227,13 +227,18 @@ function pdfRemarkText(row) {
   return remarkCell(row);
 }
 
-/** Account currencies for export modal (member report scope). */
+/**
+ * Account currencies for export modal (member report scope).
+ * Resolves tenantId the same way as `getHistory()` (Spring tenant id from companyId,
+ * falling back to the Group's tenant id via the owner-companies cache) — a pure
+ * Group-ledger account (companyId empty, groupId set) must still resolve, not short-circuit.
+ */
 export async function fetchPaymentHistoryExportCurrencies(accountId, companyId, groupId, signal) {
   const id = Number(accountId) || 0;
-  const cid = Number(companyId) || 0;
-  if (!id || cid <= 0) return [];
+  const tenantId = resolveTransactionSpringTenantId({ companyId, groupId });
+  if (!id || !tenantId) return [];
   try {
-    const rows = await fetchAvailableCurrencies({ tenantId: cid, accountId: id }, signal);
+    const rows = await fetchAvailableCurrencies({ tenantId, accountId: id }, signal);
     const linked = rows
       .filter((row) => row.is_linked)
       .map((row) => String(row.code || "").trim().toUpperCase())
@@ -255,12 +260,12 @@ export async function fetchPaymentHistoryExportCurrencies(accountId, companyId, 
  */
 export async function fetchMemberReportHistory({ accountId, companyId, groupId, dateFrom, dateTo, currency, signal }) {
   const id = Number(accountId) || 0;
-  const cid = Number(companyId) || 0;
-  if (!id || cid <= 0) {
+  const tenantId = resolveTransactionSpringTenantId({ companyId, groupId });
+  if (!id || !tenantId) {
     throw new Error("Account or company is missing");
   }
   const json = await getHistory({
-    companyId: cid,
+    companyId: tenantId,
     groupId,
     accountId: id,
     dateFrom,

@@ -97,7 +97,7 @@ async function postSpringJson(path, body, signal) {
 }
 
 /** UI company pill id, or Group tenant id from owner-companies cache. */
-function resolveTransactionSpringTenantId({ companyId, groupId } = {}) {
+export function resolveTransactionSpringTenantId({ companyId, groupId } = {}) {
   const cid = companyId != null && companyId !== "" ? Number(companyId) : 0;
   if (Number.isFinite(cid) && cid > 0) return cid;
   const row = resolveGroupEntityRowFromSnap(getCachedOwnerCompanies() || [], groupId);
