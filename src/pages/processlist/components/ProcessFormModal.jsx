@@ -113,7 +113,7 @@ export default function ProcessFormModal({
   const placeholderBtn = t("selectProcessToCopyFrom");
   const selectedCopyRow = copyOptions.find(
     (p) =>
-      String(p.process_id) === String(form.copy_from) ||
+      String(p.id) === String(form.copy_from) ||
       String(p.process_name || "") === String(form.copy_from),
   );
   const selectedCurrency = currencies.find((c) => String(c.id) === String(form.currency_id));
@@ -184,7 +184,7 @@ export default function ProcessFormModal({
                               applyCopyFromSelection("");
                             } else {
                               const p = filteredCopy[idx - 1];
-                              if (p) applyCopyFromSelection(String(p.process_id ?? ""));
+                              if (p) applyCopyFromSelection(String(p.id ?? ""));
                             }
                           },
                         });
@@ -215,7 +215,7 @@ export default function ProcessFormModal({
                                       applyCopyFromSelection("");
                                     } else {
                                       const p = filteredCopy[idx - 1];
-                                      if (p) applyCopyFromSelection(String(p.process_id ?? ""));
+                                      if (p) applyCopyFromSelection(String(p.id ?? ""));
                                     }
                                   },
                                   onClose: () => setCopyOpen(false),
@@ -241,12 +241,12 @@ export default function ProcessFormModal({
                               const kbIdx = idx + 1;
                               return (
                               <div
-                                key={`${p.process_id}_${p.description_name || ""}`}
+                                key={`${p.id}_${p.description_name || ""}`}
                                 className={`custom-select-option${copyKeyboard.highlightClass(kbIdx)}`}
                                 role="button"
                                 data-kb-idx={kbIdx}
                                 onMouseEnter={() => copyKeyboard.setHighlightIdx(kbIdx)}
-                                onClick={() => applyCopyFromSelection(String(p.process_id ?? ""))}
+                                onClick={() => applyCopyFromSelection(String(p.id ?? ""))}
                               >
                                 {`${p.process_name || t("unknown")} - ${p.description_name || t("noDescription")}`}
                               </div>

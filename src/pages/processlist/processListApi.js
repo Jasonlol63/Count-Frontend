@@ -211,6 +211,11 @@ export async function addProcess(tenantId, fields, signal) {
     category: "GAME",
   };
 
+  const copyFromProcessId = Number(fields?.copyFromProcessId);
+  if (Number.isFinite(copyFromProcessId) && copyFromProcessId > 0) {
+    body.copyFromProcessId = copyFromProcessId;
+  }
+
   const res = await fetch(buildApiUrl("api/process/add-process"), {
     method: "POST",
     credentials: "include",

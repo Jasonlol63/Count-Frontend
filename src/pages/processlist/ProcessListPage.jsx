@@ -1466,6 +1466,10 @@ export default function ProcessListPage() {
       replaceWordTo: toProcessFormUpperInput(form.replace_word_to || ""),
       remark: toProcessFormUpperInput(form.remark || ""),
     };
+    const copyFromProcessId = !editMode && form.copy_from ? Number(form.copy_from) : null;
+    if (Number.isFinite(copyFromProcessId) && copyFromProcessId > 0) {
+      sharedFields.copyFromProcessId = copyFromProcessId;
+    }
     const submitCompanyId = activeCompanyId ?? companyId;
 
     if (editMode) {
