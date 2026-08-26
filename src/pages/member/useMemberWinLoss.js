@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
 import { getMemberText, translateMemberApiMessage } from "../../translateFile/pages/memberTranslate.js";
 import {
   MINI_GRID_SHELL_CCY,
@@ -18,21 +17,21 @@ import {
   saveWLGridSelection,
   sanitizeCurrencySelection,
 } from "./memberPageHelpers.js";
-import { fetchAccountHistoryClosingBalance, mapBatchCurrencies, mapLinkedAccountsApiList, parseJsonResponse } from "./memberWinLossApi.js";
+import {
+  fetchMemberAccountCurrencyRows,
+  fetchMemberBatchAccountCurrencies,
+  fetchMemberCurrencySummaryRows,
+  fetchMemberHistoryRows,
+  fetchMemberLinkedAccounts,
+  fetchMemberMiniGridBalances,
+} from "./memberWinLossApi.js";
+import { persistCurrencyDisplayOrder, readCurrencyDisplayOrder } from "../../utils/company/currencyDisplayOrder.js";
+import { switchSessionTenant } from "../../utils/auth/authApi.js";
 import { useRealtimeDomain } from "../../lib/realtime/useRealtimeDomain.js";
 import { REALTIME_DOMAINS } from "../../lib/realtime/realtimeEvents.js";
 
-/**
- * Empty-group members: $_SESSION['company_id'] resolved at login is an arbitrary
- * linked subsidiary, not the ledger the account actually lives on. When the member
- * logged in via a group code, scope every query by group_id instead of company_id.
- */
-function scopeQueryFields(compId, gid) {
-  return gid ? { group_id: gid } : { company_id: String(compId) };
-}
-
-function hasScope(compId, gid) {
-  return Boolean(compId) || Boolean(gid);
+function hasTenant(tenantId) {
+  return Number(tenantId) > 0;
 }
 
 export function useMemberWinLoss({ showNotification, lang }) {
@@ -45,8 +44,7 @@ export function useMemberWinLoss({ showNotification, lang }) {
   );
   const [loginRootAccountId, setLoginRootAccountId] = useState(0);
   const [viewAccountId, setViewAccountId] = useState(0);
-  const [companyId, setCompanyId] = useState(0);
-  const [groupId, setGroupId] = useState("");
+  const [tenantId, setTenantId] = useState(0);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [linkedAccounts, setLinkedAccounts] = useState([]);
@@ -89,65 +87,41 @@ export function useMemberWinLoss({ showNotification, lang }) {
   miniGridBalancesRef.current = miniGridBalances;
 
   const buildViewCacheKey = useCallback(
-    (viewId, compId, from, to, useAll, useSelected) =>
+    (viewId, tid, from, to, useAll, useSelected) =>
       [
         Number(viewId) || 0,
-        Number(compId) || 0,
-        String(groupId || ""),
+        Number(tid) || 0,
         String(from || ""),
         String(to || ""),
         useAll ? "all" : "sel",
         useAll ? "" : (useSelected || []).map((c) => String(c || "").trim().toUpperCase()).filter(Boolean).join(","),
       ].join("|"),
-    [groupId],
+    [],
   );
 
   const linkedAccountCurrenciesMapRef = useRef(linkedAccountCurrenciesMap);
   linkedAccountCurrenciesMapRef.current = linkedAccountCurrenciesMap;
 
-  const loadCurrencyOrder = useCallback(async () => {
-    try {
-      const params = new URLSearchParams(groupId ? { view_group: groupId } : {});
-      const qs = params.toString();
-      const res = await fetch(
-        buildApiUrl(`api/transactions/user_currency_order_api.php${qs ? `?${qs}` : ""}`),
-        { credentials: "include" },
-      );
-      const json = await res.json();
-      setCurrencyOrder(Array.isArray(json?.data?.order) ? json.data.order : []);
-    } catch {
-      setCurrencyOrder([]);
-    }
-  }, [groupId]);
+  const loadCurrencyOrder = useCallback((tid) => {
+    setCurrencyOrder(readCurrencyDisplayOrder(tid) || []);
+  }, []);
 
-  const loadOwnedCurrencies = useCallback(async (accountId, compId, gid) => {
-    if (!accountId || !hasScope(compId, gid)) {
+  const loadOwnedCurrencies = useCallback(async (accountId, tid) => {
+    if (!accountId || !hasTenant(tid)) {
       setOwnedCurrencies([]);
       return;
     }
+    // Already covered by the linked-accounts batch (viewAccountId is always one of
+    // linkedAccounts when there's an Account Link) — no need for a second request.
+    if (linkedCurrenciesLoaded && linkedAccountCurrenciesMap.has(Number(accountId))) {
+      const codes = linkedAccountCurrenciesMap.get(Number(accountId));
+      const list = [...codes].map((code) => ({ code, currency_id: currencySortOrderRef.current[code] || null }));
+      setOwnedCurrencies(list);
+      return;
+    }
     try {
-      const params = new URLSearchParams({
-        action: "get_account_currencies",
-        account_id: String(accountId),
-        ...scopeQueryFields(compId, gid),
-      });
-      const res = await fetch(
-        buildApiUrl(`api/accounts/account_currency_api.php?${params}`),
-        { credentials: "include", cache: "no-store" },
-      );
-      const json = await parseJsonResponse(await res.text());
-      if (!json?.success || !Array.isArray(json.data)) {
-        setOwnedCurrencies([]);
-        return;
-      }
-      const list = json.data
-        .map((row) => ({
-          code: String(row.currency_code || row.code || "")
-            .trim()
-            .toUpperCase(),
-          currency_id: row.currency_id != null ? Number(row.currency_id) : null,
-        }))
-        .filter((o) => o.code);
+      const rows = await fetchMemberAccountCurrencyRows(accountId);
+      const list = rows.map((r) => ({ code: r.currency_code, currency_id: r.currency_id }));
       list.forEach((o) => {
         if (o.currency_id && !currencySortOrderRef.current[o.code]) {
           currencySortOrderRef.current[o.code] = o.currency_id;
@@ -157,33 +131,19 @@ export function useMemberWinLoss({ showNotification, lang }) {
     } catch {
       setOwnedCurrencies([]);
     }
-  }, []);
+  }, [linkedCurrenciesLoaded, linkedAccountCurrenciesMap]);
 
-  const loadLinkedCurrenciesMap = useCallback(async (accounts, compId, gid) => {
+  const loadLinkedCurrenciesMap = useCallback(async (accounts, tid) => {
     const ids = accounts.map((a) => Number(a.id)).filter(Boolean);
-    if (!ids.length || !hasScope(compId, gid)) {
+    if (!ids.length || !hasTenant(tid)) {
       setLinkedAccountCurrenciesMap(new Map());
       setLinkedCurrenciesLoaded(true);
       return;
     }
     setLinkedCurrenciesLoaded(false);
     try {
-      const qs = new URLSearchParams({
-        action: "get_batch_account_currencies",
-        account_ids: ids.join(","),
-        ...scopeQueryFields(compId, gid),
-        _t: String(Date.now()),
-      });
-      const res = await fetch(buildApiUrl(`api/accounts/account_currency_api.php?${qs}`), {
-        credentials: "include",
-        cache: "no-store",
-      });
-      const json = await parseJsonResponse(await res.text());
-      if (!json?.success || !Array.isArray(json.data)) {
-        setLinkedAccountCurrenciesMap(new Map());
-      } else {
-        setLinkedAccountCurrenciesMap(mapBatchCurrencies(json.data, currencySortOrderRef));
-      }
+      const map = await fetchMemberBatchAccountCurrencies(ids, currencySortOrderRef);
+      setLinkedAccountCurrenciesMap(map);
     } catch {
       setLinkedAccountCurrenciesMap(new Map());
     } finally {
@@ -191,24 +151,14 @@ export function useMemberWinLoss({ showNotification, lang }) {
     }
   }, []);
 
-  const fetchLinkedAccountsForAccount = useCallback(async (accountId, compId, gid) => {
-    if (!accountId || !hasScope(compId, gid)) return [];
-    const params = new URLSearchParams({
-      action: "get_all_linked_accounts",
-      account_id: String(accountId),
-      ...scopeQueryFields(compId, gid),
-    });
-    const res = await fetch(
-      buildApiUrl(`api/accounts/account_link_api.php?${params}`),
-      { credentials: "include", cache: "no-store" },
-    );
-    const json = await parseJsonResponse(await res.text());
-    return json?.success ? mapLinkedAccountsApiList(json.data) : [];
+  const fetchLinkedAccountsForAccount = useCallback(async (accountId, tid) => {
+    if (!accountId || !hasTenant(tid)) return [];
+    return fetchMemberLinkedAccounts();
   }, []);
 
   const loadLinkedAccounts = useCallback(
-    async (rootId, compId, gid) => {
-      if (!rootId || !hasScope(compId, gid)) {
+    async (rootId, tid) => {
+      if (!rootId || !hasTenant(tid)) {
         setLinkedAccounts([]);
         setWlGridSelectedIds([]);
         setLinkedAccountCurrenciesMap(new Map());
@@ -217,13 +167,13 @@ export function useMemberWinLoss({ showNotification, lang }) {
         return;
       }
       try {
-        const list = await fetchLinkedAccountsForAccount(rootId, compId, gid);
+        const list = await fetchLinkedAccountsForAccount(rootId, tid);
         setLinkedAccounts(list);
         const linkedIds = list.map((a) => Number(a.id)).filter(Boolean);
-        const selectedIds = applyDefaultWLGridSelection(linkedIds, compId, rootId);
+        const selectedIds = applyDefaultWLGridSelection(linkedIds, tid, rootId);
         wlGridSelectedIdsRef.current = selectedIds;
         setWlGridSelectedIds(selectedIds);
-        await loadLinkedCurrenciesMap(list, compId, gid);
+        await loadLinkedCurrenciesMap(list, tid);
       } catch {
         setLinkedAccounts([]);
         setWlGridSelectedIds([]);
@@ -375,8 +325,8 @@ export function useMemberWinLoss({ showNotification, lang }) {
   );
 
   const fetchMissingMiniGridBalances = useCallback(
-    async (seq, gridCurrencies, fromDate, toDate, compId, gid) => {
-      if (!linkedAccounts.length || !fromDate || !toDate || !hasScope(compId, gid)) return;
+    async (seq, gridCurrencies, fromDate, toDate, tid) => {
+      if (!linkedAccounts.length || !fromDate || !toDate || !hasTenant(tid)) return;
       const orderUpper = (gridCurrencies || []).map((c) => String(c || "").trim().toUpperCase()).filter(Boolean);
       if (!orderUpper.length) return;
       const orderedAccounts = getOrderedMiniGridAccounts(
@@ -400,22 +350,19 @@ export function useMemberWinLoss({ showNotification, lang }) {
       const signal = gridAbortRef.current.signal;
 
       try {
-        const pairs = await Promise.all(
-          missing.map(({ id, cu }) =>
-            fetchAccountHistoryClosingBalance(id, cu, fromDate, toDate, compId, gid, signal).then((dec) => ({
-              id,
-              cu,
-              dec,
-            })),
-          ),
-        );
+        const missingIds = [...new Set(missing.map(({ id }) => id))];
+        const missingCurrencies = [...new Set(missing.map(({ cu }) => cu))];
+        const fetched = await fetchMemberMiniGridBalances({
+          accountIds: missingIds,
+          currencyCodes: missingCurrencies,
+          dateFrom: fromDate,
+          dateTo: toDate,
+          signal,
+        });
         if (seq !== searchSeqRef.current) return;
         setMiniGridBalances((prev) => {
           const next = new Map(prev);
-          pairs.forEach(({ id, cu, dec }) => {
-            if (id <= 0 || dec == null || typeof dec.plus !== "function") return;
-            next.set(`${id}|${cu}`, dec);
-          });
+          fetched.forEach((dec, key) => next.set(key, dec));
           miniGridBalancesRef.current = next;
           return next;
         });
@@ -430,10 +377,10 @@ export function useMemberWinLoss({ showNotification, lang }) {
   );
 
   const refreshMiniGrid = useCallback(
-    async (seq, gridCurrencies, fromDate, toDate, viewId, compId, gid) => {
+    async (seq, gridCurrencies, fromDate, toDate, viewId, tid) => {
       if (seq === searchSeqRef.current) setMiniGridLoading(true);
       try {
-        if (!linkedAccounts.length || !fromDate || !toDate || !viewId || !hasScope(compId, gid)) {
+        if (!linkedAccounts.length || !fromDate || !toDate || !viewId || !hasTenant(tid)) {
           setMiniGridBalances(new Map());
           miniGridBalancesRef.current = new Map();
           setMiniGridTotals(new Map());
@@ -485,21 +432,20 @@ export function useMemberWinLoss({ showNotification, lang }) {
           linkedCurrenciesLoaded,
           miniGridBalancesRef.current,
         );
-        const pairs = await Promise.all(
-          missing.map(({ id, cu }) =>
-            fetchAccountHistoryClosingBalance(id, cu, fromDate, toDate, compId, gid, signal).then((dec) => ({
-              id,
-              cu,
-              dec,
-            })),
-          ),
-        );
+        const missingIds = [...new Set(missing.map(({ id }) => id))];
+        const missingCurrencies = [...new Set(missing.map(({ cu }) => cu))];
+        const fetched = missingIds.length
+          ? await fetchMemberMiniGridBalances({
+              accountIds: missingIds,
+              currencyCodes: missingCurrencies,
+              dateFrom: fromDate,
+              dateTo: toDate,
+              signal,
+            })
+          : new Map();
         if (seq !== searchSeqRef.current) return;
         const balanceMap = new Map(miniGridBalancesRef.current);
-        pairs.forEach(({ id, cu, dec }) => {
-          if (id <= 0 || dec == null || typeof dec.plus !== "function") return;
-          balanceMap.set(`${id}|${cu}`, dec);
-        });
+        fetched.forEach((dec, key) => balanceMap.set(key, dec));
         miniGridBalancesRef.current = balanceMap;
         setMiniGridBalances(balanceMap);
         setMiniGridTotals(
@@ -535,145 +481,45 @@ export function useMemberWinLoss({ showNotification, lang }) {
 
   const fetchMemberHistory = useCallback(
     async (seq = searchSeqRef.current, selectionOverride = null) => {
-      if (!viewAccountId || !hasScope(companyId, groupId) || !dateFrom || !dateTo) return;
+      if (!viewAccountId || !hasTenant(tenantId) || !dateFrom || !dateTo) return;
       if (historyAbortRef.current) historyAbortRef.current.abort();
       historyAbortRef.current = new AbortController();
       const signal = historyAbortRef.current.signal;
 
       let useAll = selectionOverride?.isAllSelected ?? isAllSelected;
       let useSelected = selectionOverride?.selectedCurrencies ?? selectedCurrencies;
+      // Lets a caller (e.g. persistCurrencyOrder, right after a drag reorder) hand in the
+      // freshly known order instead of relying on `availableCurrencies` — which, being a
+      // useMemo over state set moments earlier in the same tick, would still be stale here.
+      const orderHint = selectionOverride?.currencyOrder ?? availableCurrencies;
       if (!useAll && (!useSelected?.length)) {
         setHistoryRows([]);
-        commitTableDisplayContext(false, [], [], availableCurrencies);
+        commitTableDisplayContext(false, [], [], orderHint);
         finishHistoryFetch(seq);
-        const gridCur = getMemberMiniGridCurrencies(availableCurrencies, false, []);
-        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId, groupId);
+        const gridCur = getMemberMiniGridCurrencies(orderHint, false, []);
+        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, tenantId);
         return;
       }
-      const cacheKey = buildViewCacheKey(viewAccountId, companyId, dateFrom, dateTo, useAll, useSelected);
-      const targetCurrencies = useAll ? availableCurrencies : [...useSelected];
-      if (!targetCurrencies.length) {
-        const params = new URLSearchParams({
-          account_id: String(viewAccountId),
-          date_from: dateFrom,
-          date_to: dateTo,
-          ...scopeQueryFields(companyId, groupId),
-        });
-        try {
-          const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params}&_t=${Date.now()}`), {
-            credentials: "include",
-            cache: "no-store",
-            signal,
-          });
-          const json = await parseJsonResponse(await res.text());
-          if (seq !== searchSeqRef.current) return;
-          if (!json?.success) {
-          setHistoryRows([]);
-          commitTableDisplayContext(useAll, useSelected, [], availableCurrencies);
-          notifyApi(json?.error, "info", "noDataInRange");
-            finishHistoryFetch(seq);
-            return;
-          }
-          const history = Array.isArray(json.data?.history) ? json.data.history : [];
-          setHistoryRows(history);
-          commitTableDisplayContext(useAll, useSelected, history, availableCurrencies);
-          viewCacheRef.current.set(cacheKey, {
-            historyRows: history,
-            tableDisplayContext: {
-              isAllSelected: useAll,
-              selectedCurrencies: [...(useSelected || [])],
-              currencyOrder: (Array.isArray(availableCurrencies) && availableCurrencies.length ? availableCurrencies : []).slice(),
-            },
-          });
-          finishHistoryFetch(seq);
-          showNotification(t("queryCompleted"), "success");
-        } catch (e) {
-          if (e?.name === "AbortError") return;
-          if (seq !== searchSeqRef.current) return;
-          setHistoryRows([]);
-          commitTableDisplayContext(useAll, useSelected, [], availableCurrencies);
-          notifyApi(e?.message, "info", "noDataInRange");
-          finishHistoryFetch(seq);
-        }
-        const gridCur = getMemberMiniGridCurrencies(availableCurrencies, useAll, useSelected);
-        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId, groupId);
-        return;
-      }
-
-      if (targetCurrencies.length > 1) {
-        try {
-          const histories = await Promise.all(
-            targetCurrencies.map(async (cu) => {
-              const params = new URLSearchParams({
-                account_id: String(viewAccountId),
-                date_from: dateFrom,
-                date_to: dateTo,
-                ...scopeQueryFields(companyId, groupId),
-                currency: String(cu || "").trim().toUpperCase(),
-              });
-              const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params}&_t=${Date.now()}`), {
-                credentials: "include",
-                cache: "no-store",
-                signal,
-              });
-              const json = await parseJsonResponse(await res.text());
-              if (!json?.success) throw new Error(json?.error || t("queryFailed"));
-              return Array.isArray(json.data?.history) ? json.data.history : [];
-            }),
-          );
-          if (seq !== searchSeqRef.current) return;
-          const history = histories.flat();
-          setHistoryRows(history);
-          commitTableDisplayContext(useAll, useSelected, history, availableCurrencies);
-          viewCacheRef.current.set(cacheKey, {
-            historyRows: history,
-            tableDisplayContext: {
-              isAllSelected: useAll,
-              selectedCurrencies: [...(useSelected || [])],
-              currencyOrder: (Array.isArray(availableCurrencies) && availableCurrencies.length ? availableCurrencies : []).slice(),
-            },
-          });
-          finishHistoryFetch(seq);
-          showNotification(t("queryCompleted"), "success");
-        } catch (e) {
-          if (e?.name === "AbortError") return;
-          if (seq !== searchSeqRef.current) return;
-          setHistoryRows([]);
-          commitTableDisplayContext(useAll, useSelected, [], availableCurrencies);
-          notifyApi(e?.message, "error", "queryFailed");
-          finishHistoryFetch(seq);
-        }
-        const gridCur = getMemberMiniGridCurrencies(availableCurrencies, useAll, useSelected);
-        void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId, groupId);
-        return;
-      }
-
-      const params = new URLSearchParams({
-        account_id: String(viewAccountId),
-        date_from: dateFrom,
-        date_to: dateTo,
-        ...scopeQueryFields(companyId, groupId),
-      });
-      if (targetCurrencies[0]) params.append("currency", targetCurrencies[0]);
+      const cacheKey = buildViewCacheKey(viewAccountId, tenantId, dateFrom, dateTo, useAll, useSelected);
+      const targetCurrencies = useAll ? orderHint : [...useSelected];
 
       try {
-        const res = await fetch(buildApiUrl(`api/transactions/history_api.php?${params}&_t=${Date.now()}`), {
-          credentials: "include",
-          cache: "no-store",
+        const history = await fetchMemberHistoryRows({
+          accountId: viewAccountId,
+          dateFrom,
+          dateTo,
+          currencyCodes: useAll ? [] : targetCurrencies,
           signal,
         });
-        const json = await parseJsonResponse(await res.text());
         if (seq !== searchSeqRef.current) return;
-        if (!json?.success) throw new Error(json?.error || t("queryFailed"));
-        const history = json.data?.history || [];
         setHistoryRows(history);
-        commitTableDisplayContext(useAll, useSelected, history, availableCurrencies);
+        commitTableDisplayContext(useAll, useSelected, history, orderHint);
         viewCacheRef.current.set(cacheKey, {
           historyRows: history,
           tableDisplayContext: {
             isAllSelected: useAll,
             selectedCurrencies: [...(useSelected || [])],
-            currencyOrder: (Array.isArray(availableCurrencies) && availableCurrencies.length ? availableCurrencies : []).slice(),
+            currencyOrder: (Array.isArray(orderHint) && orderHint.length ? orderHint : []).slice(),
           },
         });
         finishHistoryFetch(seq);
@@ -682,17 +528,16 @@ export function useMemberWinLoss({ showNotification, lang }) {
         if (e?.name === "AbortError") return;
         if (seq !== searchSeqRef.current) return;
         setHistoryRows([]);
-        commitTableDisplayContext(useAll, useSelected, [], availableCurrencies);
-        notifyApi(e?.message, "error", "queryFailed");
+        commitTableDisplayContext(useAll, useSelected, [], orderHint);
+        notifyApi(e?.message, "info", "noDataInRange");
         finishHistoryFetch(seq);
       }
-      const gridCur = getMemberMiniGridCurrencies(availableCurrencies, useAll, useSelected);
-      void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, companyId, groupId);
+      const gridCur = getMemberMiniGridCurrencies(orderHint, useAll, useSelected);
+      void refreshMiniGrid(seq, gridCur, dateFrom, dateTo, viewAccountId, tenantId);
     },
     [
       viewAccountId,
-      companyId,
-      groupId,
+      tenantId,
       dateFrom,
       dateTo,
       isAllSelected,
@@ -727,64 +572,41 @@ export function useMemberWinLoss({ showNotification, lang }) {
 
   const fetchMemberSummary = useCallback(
     async (seq = searchSeqRef.current) => {
-      if (!viewAccountId || !hasScope(companyId, groupId) || !dateFrom || !dateTo) return false;
+      if (!viewAccountId || !hasTenant(tenantId) || !dateFrom || !dateTo) return false;
       if (summaryAbortRef.current) summaryAbortRef.current.abort();
       summaryAbortRef.current = new AbortController();
       try {
-        const params = new URLSearchParams({
-          date_from: dateFrom,
-          date_to: dateTo,
-          target_account_id: String(viewAccountId),
-          ...scopeQueryFields(companyId, groupId),
-          show_inactive: "1",
-          hide_zero_balance: "0",
-        });
-        const res = await fetch(buildApiUrl(`api/transactions/search_api.php?${params}&_t=${Date.now()}`), {
-          credentials: "include",
-          cache: "no-store",
+        const rows = await fetchMemberCurrencySummaryRows({
+          tenantId,
+          accountId: viewAccountId,
+          dateFrom,
+          dateTo,
           signal: summaryAbortRef.current.signal,
         });
-        const json = await parseJsonResponse(await res.text());
         if (seq !== searchSeqRef.current) return false;
-        if (!json?.success) throw new Error(json?.error || t("failedLoadCurrencySummary"));
-        const rows = [...(json.data?.left_table || []), ...(json.data?.right_table || [])].filter(
-          (r) => Number(r.account_db_id) === Number(viewAccountId),
-        );
-        currencySortOrderRef.current = {};
-        rows.forEach((row) => {
-          const code = String(row.currency || "").trim();
-          if (!code) return;
-          const sortValue =
-            typeof row.currency_id === "number"
-              ? row.currency_id
-              : parseInt(row.currency_id || "0", 10) || Number.MAX_SAFE_INTEGER;
-          if (!currencySortOrderRef.current[code] || currencySortOrderRef.current[code] > sortValue) {
-            currencySortOrderRef.current[code] = sortValue;
-          }
-        });
+        currencySortOrderRef.current = { ...currencySortOrderRef.current };
         setCurrencySummary(rows);
         return true;
       } catch (e) {
         if (e?.name === "AbortError") return false;
         if (seq !== searchSeqRef.current) return false;
         setCurrencySummary([]);
-        currencySortOrderRef.current = {};
         if (!hasFallbackCurrencySources()) {
           notifyApi(e?.message, "error", "failedLoadCurrencyData");
         }
         return false;
       }
     },
-    [viewAccountId, companyId, groupId, dateFrom, dateTo, hasFallbackCurrencySources, notifyApi, t],
+    [viewAccountId, tenantId, dateFrom, dateTo, hasFallbackCurrencySources, notifyApi],
   );
 
   const performMemberSearch = useCallback(async () => {
-    if (!viewAccountId || !hasScope(companyId, groupId) || !dateFrom || !dateTo) return;
+    if (!viewAccountId || !hasTenant(tenantId) || !dateFrom || !dateTo) return;
     searchSeqRef.current += 1;
     const seq = searchSeqRef.current;
     const preKey = buildViewCacheKey(
       viewAccountId,
-      companyId,
+      tenantId,
       dateFrom,
       dateTo,
       isAllSelected,
@@ -809,11 +631,17 @@ export function useMemberWinLoss({ showNotification, lang }) {
       setMiniGridShell(true);
     }
     try {
-      const summaryOk = await fetchMemberSummary(seq);
-      if (seq !== searchSeqRef.current) return;
-      if (summaryOk) {
-        await loadCurrencyOrder();
+      // /api/transaction/search is only a fallback currency source for when
+      // owned/linked accounts produce no currencies at all — skip it whenever
+      // availableCurrencies (the thing that actually matters, incl. for the mini
+      // grid) is already non-empty. Checking availableCurrencies directly (not a
+      // proxy like ownedCurrencies alone) avoids skipping while the mini grid's
+      // own currency list is still empty.
+      if (!availableCurrencies.length) {
+        await fetchMemberSummary(seq);
+        if (seq !== searchSeqRef.current) return;
       }
+      loadCurrencyOrder(tenantId);
       await fetchMemberHistory(seq);
     } finally {
       if (seq === searchSeqRef.current) {
@@ -822,12 +650,12 @@ export function useMemberWinLoss({ showNotification, lang }) {
     }
   }, [
     viewAccountId,
-    companyId,
-    groupId,
+    tenantId,
     dateFrom,
     dateTo,
     isAllSelected,
     selectedCurrencies,
+    availableCurrencies,
     fetchMemberSummary,
     fetchMemberHistory,
     loadCurrencyOrder,
@@ -838,107 +666,79 @@ export function useMemberWinLoss({ showNotification, lang }) {
 
   useRealtimeDomain(REALTIME_DOMAINS.LEDGER, () => {
     void performMemberSearchRef.current?.();
-  }, { enabled: Boolean(viewAccountId && hasScope(companyId, groupId) && dateFrom && dateTo) });
+  }, { enabled: Boolean(viewAccountId && hasTenant(tenantId) && dateFrom && dateTo) });
 
-  const initSession = useCallback((u, compId, from, to) => {
+  const initSession = useCallback((u, tid, from, to) => {
     const loginId = Number(u.member_login_account_id || u.user_id) || 0;
     const viewId = Number(u.member_winloss_view_account_id || u.winloss_view_account_id || u.user_id) || 0;
-    const gid = String(u?.login_scope || "").toLowerCase() === "group"
-      ? String(u?.login_identifier || "").trim().toUpperCase()
-      : "";
     setLoginRootAccountId(loginId);
     setViewAccountId(viewId);
-    setCompanyId(Number(compId) || 0);
-    setGroupId(gid);
+    setTenantId(Number(tid) || 0);
     setDateFrom(from);
     setDateTo(to);
   }, []);
 
   const reloadLinkedChain = useCallback(
-    async (rootId, compId, gid) => {
+    async (rootId, tid) => {
       setLinkedDataReady(false);
-      await loadLinkedAccounts(rootId, compId, gid);
+      await loadLinkedAccounts(rootId, tid);
     },
     [loadLinkedAccounts],
   );
 
   const switchCompany = useCallback(
-    async (nextCompanyId, companyLabel) => {
-      if (!nextCompanyId || Number(nextCompanyId) === Number(companyId)) return;
+    async (nextTenantId, tenantLabel) => {
+      const nextId = Number(nextTenantId);
+      if (!nextId || nextId === Number(tenantId)) return;
       try {
-        const res = await fetch(buildApiUrl(`api/session/update_company_session_api.php?company_id=${nextCompanyId}`), {
-          credentials: "include",
-        });
-        const json = await parseJsonResponse(await res.text());
-        if (!json?.success) throw new Error(json?.error || t("failedSwitchCompany"));
-        if (typeof window.updateSidebarDataCaptureVisibility === "function" && json?.data) {
-          window.updateSidebarDataCaptureVisibility(json.data.has_gambling, json.data.has_bank);
-        }
-        setCompanyId(Number(nextCompanyId));
-        setGroupId(""); // explicit company pill: leave group ledger scope
-        showNotification(t("switchedToCompany", { label: companyLabel || nextCompanyId }), "success");
-        await reloadLinkedChain(loginRootAccountId, Number(nextCompanyId), "");
-        await loadOwnedCurrencies(viewAccountId, Number(nextCompanyId), "");
+        const { ok, json } = await switchSessionTenant(nextId);
+        if (!ok || !json?.success) throw new Error(json?.message || t("failedSwitchCompany"));
+        setTenantId(nextId);
+        showNotification(t("switchedToCompany", { label: tenantLabel || nextId }), "success");
+        await reloadLinkedChain(loginRootAccountId, nextId);
+        await loadOwnedCurrencies(viewAccountId, nextId);
       } catch (e) {
         notifyApi(e?.message, "error", "failedSwitchCompany");
       }
     },
-    [companyId, loginRootAccountId, viewAccountId, reloadLinkedChain, loadOwnedCurrencies, performMemberSearch, notifyApi, showNotification, t],
+    [tenantId, loginRootAccountId, viewAccountId, reloadLinkedChain, loadOwnedCurrencies, notifyApi, showNotification, t],
   );
 
   const switchAccount = useCallback(
     async (nextAccountId, code, name) => {
-      if (!nextAccountId || Number(nextAccountId) === Number(viewAccountId)) return;
-      try {
-        const res = await fetch(buildApiUrl(`api/session/update_account_session_api.php?account_id=${nextAccountId}`), {
-          credentials: "include",
-        });
-        const json = await parseJsonResponse(await res.text());
-        if (!json?.success) throw new Error(json?.message || t("switchFailed"));
-        const payload = json.data || json;
-        const newId = Number(payload.account_id) || Number(nextAccountId);
-        setViewAccountId(newId);
-        showNotification(
-          t("switchedToAccount", { label: payload.account_code || code || name || newId }),
-          "success",
-        );
-        await loadOwnedCurrencies(newId, companyId, groupId);
-      } catch (e) {
-        notifyApi(e?.message, "error", "failedSwitchAccount");
-      }
+      const newId = Number(nextAccountId);
+      if (!newId || newId === Number(viewAccountId)) return;
+      setViewAccountId(newId);
+      showNotification(t("switchedToAccount", { label: code || name || newId }), "success");
+      await loadOwnedCurrencies(newId, tenantId);
     },
-    [viewAccountId, companyId, groupId, loadOwnedCurrencies, performMemberSearch, notifyApi, showNotification, t],
+    [viewAccountId, tenantId, loadOwnedCurrencies, showNotification, t],
   );
 
   const persistCurrencyOrder = useCallback(
-    async (nextOrder) => {
-      try {
-        const res = await fetch(buildApiUrl("api/transactions/user_currency_order_api.php"), {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ order: nextOrder, ...(groupId ? { group_id: groupId } : {}) }),
-        });
-        const json = await parseJsonResponse(await res.text());
-        if (json?.success) {
-          setCurrencyOrder(Array.isArray(json?.data?.order) ? json.data.order : nextOrder);
-          setIsAllSelected(true);
-          setSelectedCurrencies([]);
-          showNotification(t("currencyOrderSaved"), "success");
-          await fetchMemberHistory();
-        }
-      } catch {
-        showNotification(t("saveOrderFailed"), "error");
-      }
+    (nextOrder) => {
+      persistCurrencyDisplayOrder(tenantId, nextOrder);
+      setCurrencyOrder(nextOrder);
+      setIsAllSelected(true);
+      setSelectedCurrencies([]);
+      showNotification(t("currencyOrderSaved"), "success");
+      // Pass nextOrder straight through — `availableCurrencies` won't reflect the new
+      // order until after this render commits, so relying on it here would redisplay
+      // the table in the old order even though the pills/mini grid already show the new one.
+      void fetchMemberHistory(searchSeqRef.current, {
+        isAllSelected: true,
+        selectedCurrencies: [],
+        currencyOrder: nextOrder,
+      });
     },
-    [groupId, fetchMemberHistory, showNotification, t],
+    [tenantId, fetchMemberHistory, showNotification, t],
   );
 
   const applyWlGridSelection = useCallback(
     (ids) => {
       wlGridSelectedIdsRef.current = ids;
       setWlGridSelectedIds(ids);
-      saveWLGridSelection(ids, companyId, loginRootAccountId);
+      saveWLGridSelection(ids, tenantId, loginRootAccountId);
       if (!ids.length) {
         setMiniGridBalances(new Map());
         miniGridBalancesRef.current = new Map();
@@ -974,11 +774,10 @@ export function useMemberWinLoss({ showNotification, lang }) {
         sanitized.selectedCurrencies,
       );
       syncMiniGridTotalsAndHint(gridCur);
-      void fetchMissingMiniGridBalances(searchSeqRef.current, gridCur, dateFrom, dateTo, companyId, groupId);
+      void fetchMissingMiniGridBalances(searchSeqRef.current, gridCur, dateFrom, dateTo, tenantId);
     },
     [
-      companyId,
-      groupId,
+      tenantId,
       loginRootAccountId,
       linkedCurrenciesLoaded,
       linkedAccountCurrenciesMap,
@@ -1043,19 +842,21 @@ export function useMemberWinLoss({ showNotification, lang }) {
   ]);
 
   useEffect(() => {
-    if (loginRootAccountId && hasScope(companyId, groupId)) {
-      reloadLinkedChain(loginRootAccountId, companyId, groupId);
+    if (loginRootAccountId && hasTenant(tenantId)) {
+      reloadLinkedChain(loginRootAccountId, tenantId);
     }
-  }, [loginRootAccountId, companyId, groupId, reloadLinkedChain]);
+  }, [loginRootAccountId, tenantId, reloadLinkedChain]);
 
   useEffect(() => {
-    if (viewAccountId && hasScope(companyId, groupId)) {
-      loadOwnedCurrencies(viewAccountId, companyId, groupId);
+    // Wait for the linked-accounts batch (linkedDataReady) so, when there's a link,
+    // loadOwnedCurrencies can reuse it instead of racing it with a duplicate single-account call.
+    if (linkedDataReady && viewAccountId && hasTenant(tenantId)) {
+      loadOwnedCurrencies(viewAccountId, tenantId);
     }
-  }, [viewAccountId, companyId, groupId, loadOwnedCurrencies]);
+  }, [linkedDataReady, viewAccountId, tenantId, loadOwnedCurrencies]);
 
   useEffect(() => {
-    if (!linkedDataReady || !viewAccountId || !hasScope(companyId, groupId) || !dateFrom || !dateTo) return undefined;
+    if (!linkedDataReady || !viewAccountId || !hasTenant(tenantId) || !dateFrom || !dateTo) return undefined;
 
     let cancelled = false;
     (async () => {
@@ -1069,14 +870,16 @@ export function useMemberWinLoss({ showNotification, lang }) {
       if (historyAbortRef.current) historyAbortRef.current.abort();
       if (gridAbortRef.current) gridAbortRef.current.abort();
     };
-  }, [linkedDataReady, viewAccountId, companyId, groupId, dateFrom, dateTo]);
+  }, [linkedDataReady, viewAccountId, tenantId, dateFrom, dateTo]);
 
   return {
     loginRootAccountId,
     viewAccountId,
-    companyId,
-    setCompanyId,
-    groupId,
+    tenantId,
+    // Back-compat alias for MemberPage.jsx / PaymentHistoryExportPdfModal — Company and Group are
+    // both just a tenantId on the Spring side, there is no separate group scope any more.
+    companyId: tenantId,
+    setTenantId,
     dateFrom,
     setDateFrom,
     dateTo,

@@ -9,12 +9,59 @@ import {
   subscribeMaintenanceModeEvent,
 } from "../../utils/maintenance/maintenanceRealtimeBus.js";
 import { useExpirationReminder } from "../../hooks/useExpirationReminder.js";
+import { buildSidebarExpirationFields } from "../../utils/expiration/expirationReminder.js";
 import { clearDashboardFilterSession, clearOwnerCompaniesCache } from "../../utils/company/sharedCompanyFilter.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
+import { fetchCurrentUser, fetchTenantAccessible, logoutSession } from "../../utils/auth/authApi.js";
 
 function readCookie(name) {
   const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
   return m ? decodeURIComponent(m[1]) : "";
+}
+
+/**
+ * Spring `SessionUser` (`/auth/current-user`) → legacy `current_user_api.php` field names,
+ * which `MemberPage.jsx`/`useMemberWinLoss.js` still read. Company and Group are both just a
+ * `tenantId` on the Spring side (no separate group_id concept) — `company_id` here is always
+ * the tenant id regardless of tenant type.
+ */
+function normalizeSessionUserToMemberMe(u) {
+  if (!u) return null;
+  return {
+    user_id: u.user_id,
+    member_login_account_id: u.user_id,
+    member_winloss_view_account_id: u.user_id,
+    winloss_view_account_id: u.user_id,
+    name: u.name || "",
+    login_id: u.login_id || "",
+    role: u.role || "",
+    user_type: u.user_type || "",
+    permissions: Array.isArray(u.permissions) ? u.permissions : [],
+    is_current_company_c168: Boolean(u.is_current_tenant_c168),
+    company_has_gambling: Boolean(u.tenant_has_game),
+    company_has_bank: Boolean(u.tenant_has_bank),
+    company_id: u.tenant_id ?? null,
+    company_code: u.tenant_code || null,
+    login_scope: u.login_scope ?? null,
+    login_identifier: u.login_identifier ?? null,
+    needs_owner_secondary: Boolean(u.needs_owner_secondary),
+    needs_user_secondary: Boolean(u.needs_user_secondary),
+    read_only: Number(u.read_only) || 0,
+    ...buildSidebarExpirationFields(u.expiration_date),
+  };
+}
+
+/** `/auth/tenant-accessible` rows → legacy `get_account_companies` shape the company pills expect. */
+function normalizeTenantAccessibleToCompanies(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row) => ({
+      id: row.tenant_id,
+      company_id: row.tenant_id,
+      company_code: row.tenant_code || "",
+      tenant_type: row.tenant_type || "",
+    }))
+    .filter((c) => c.company_id != null);
 }
 
 const AVATAR_MAP = {
@@ -87,26 +134,20 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
     let cancelled = false;
     (async () => {
       try {
-        const meRes = await fetch(buildApiUrl("api/session/current_user_api.php"), { credentials: "include" });
-        const meJson = await meRes.json();
-        if (!meRes.ok || !meJson.success || !meJson.data) {
+        const { ok, json: meRes } = await fetchCurrentUser();
+        if (!ok || !meRes.success || !meRes.data) {
           navigate(spaPath("login"), { replace: true });
           return;
         }
-        const u = meJson.data;
+        const u = normalizeSessionUserToMemberMe(meRes.data);
         if (String(u.user_type || "").toLowerCase() !== "member") {
           navigate(spaPath("dashboard"), { replace: true });
           return;
         }
-        const loginId = Number(u.member_login_account_id || u.user_id) || 0;
-        const cRes = await fetch(
-          buildApiUrl(`api/accounts/account_company_api.php?action=get_account_companies&account_id=${loginId}`),
-          { credentials: "include" },
-        );
-        const cJson = await cRes.json();
+        const { json: tenantRes } = await fetchTenantAccessible({ all: true });
         if (!cancelled) {
           setMe(u);
-          setCompanies(Array.isArray(cJson?.data) ? cJson.data : []);
+          setCompanies(normalizeTenantAccessibleToCompanies(tenantRes?.data));
           initSession(u, u.company_id, todayDmy, todayDmy);
         }
       } catch {
@@ -122,11 +163,11 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
 
   const refreshSession = useCallback(async () => {
     try {
-      const meRes = await fetch(buildApiUrl("api/session/current_user_api.php"), { credentials: "include" });
-      const meJson = await meRes.json();
-      if (meRes.ok && meJson.success && meJson.data) {
-        setMe(meJson.data);
-        return meJson.data;
+      const { ok, json: meRes } = await fetchCurrentUser();
+      if (ok && meRes.success && meRes.data) {
+        const u = normalizeSessionUserToMemberMe(meRes.data);
+        setMe(u);
+        return u;
       }
     } catch {
       /* ignore */
@@ -146,17 +187,8 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       inFlight = true;
       try {
-        const res = await fetch(buildApiUrl("api/session/current_user_api.php"), {
-          credentials: "include",
-          cache: "no-store",
-        });
-        let json = null;
-        try {
-          json = await res.json();
-        } catch {
-          json = null;
-        }
-        if (!res.ok && !stopped && (json?.maintenance_mode === true || json?.data?.maintenance_mode === true)) {
+        const { ok, json } = await fetchCurrentUser({ cache: "no-store" });
+        if (!ok && !stopped && (json?.maintenance_mode === true || json?.data?.maintenance_mode === true)) {
           if (typeof json?.message === "string" && json.message.trim() !== "") {
             sessionStorage.setItem("ec_maintenance_notice", json.message.trim());
           }
@@ -271,17 +303,16 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
     setLogoutLoading(true);
     try {
       sessionStorage.setItem("ec_skip_session_bootstrap", "1");
-      await fetch(buildApiUrl("api/session/logout_api.php"), {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-      });
+      await logoutSession();
     } finally {
       clearDashboardFilterSession();
       clearOwnerCompaniesCache();
       setLogoutLoading(false);
       setShowLogoutConfirm(false);
-      window.location.assign(new URL(spaPath("login"), window.location.origin).href);
+      // Member logout lands back on the Member tab, not the default Admin tab.
+      window.location.assign(
+        new URL(spaPath("login", { search: "?role=member" }), window.location.origin).href,
+      );
     }
   }, [logoutLoading]);
 

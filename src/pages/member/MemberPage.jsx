@@ -85,7 +85,6 @@ export default function MemberPage() {
   const {
     viewAccountId,
     companyId,
-    groupId,
     dateFrom,
     setDateFrom,
     dateTo,
@@ -197,6 +196,11 @@ export default function MemberPage() {
     };
   }, [linkedAccounts, viewAccountId, accountNarrowViewport, lang]);
 
+  const companyRowLabelKey = useMemo(() => {
+    const active = companies.find((c) => Number(c.company_id) === Number(companyId));
+    return String(active?.tenant_type || "").toUpperCase() === "GROUP" ? "group" : "company";
+  }, [companies, companyId]);
+
   const currencyCells = useMemo(() => {
     const codes = Array.isArray(availableCurrencies) ? availableCurrencies : [];
     const showAllBtn = codes.length === 0 || codes.length > 1;
@@ -303,7 +307,7 @@ export default function MemberPage() {
     return {
       accountDbId: viewAccountId,
       companyId,
-      groupId,
+      groupId: "",
       dateFrom,
       dateTo,
       currency: currencyPref,
@@ -314,7 +318,6 @@ export default function MemberPage() {
     linkedAccounts,
     viewAccountId,
     companyId,
-    groupId,
     dateFrom,
     dateTo,
     isAllSelected,
@@ -525,7 +528,7 @@ export default function MemberPage() {
                 className="member-winloss-export-pdf-btn"
                 aria-label={t("exportPdf")}
                 title={t("exportPdf")}
-                disabled={!viewAccountId || (!companyId && !groupId)}
+                disabled={!viewAccountId || !companyId}
                 onClick={onOpenExportPdf}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -541,9 +544,9 @@ export default function MemberPage() {
               </button>
             </div>
             <div className="user-gc-inline-panel member-winloss-gc-panel" id="member_gc_filter_panel">
-              {companies.length > 1 && (
+              {companies.length > 0 && (
                 <div className="user-gc-inline-row" id="member_company_filter">
-                  <span className="user-gc-inline-label">{t("company")}</span>
+                  <span className="user-gc-inline-label">{t(companyRowLabelKey)}</span>
                   <div className="user-gc-inline-pills user-gc-inline-pills--segment-scroll" id="member_company_buttons">
                     <div className="user-gc-segment-group" role="group" aria-label={t("ariaCompany")}>
                       {companies.map((company) => (

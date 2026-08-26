@@ -6,6 +6,7 @@ export const MEMBER_I18N = {
   en: {
     winLoss: "Win/Loss",
     company: "Company:",
+    group: "Group ID:",
     account: "Account:",
     currency: "Currency:",
     all: "ALL",
@@ -86,6 +87,7 @@ export const MEMBER_I18N = {
   zh: {
     winLoss: "输赢",
     company: "公司：",
+    group: "集团：",
     account: "账号：",
     currency: "货币：",
     all: "全部",
