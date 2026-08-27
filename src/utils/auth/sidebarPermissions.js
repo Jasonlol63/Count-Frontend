@@ -22,7 +22,7 @@ export function hasFullPermissions(me) {
 
 export function roleSupportsOwnershipPermission(role) {
   const r = normRole(role);
-  return r === "owner" || r === "partnership";
+  return r === "owner" || r === "partnership" || r === "admin";
 }
 
 export function canAccessPermission(me, key) {

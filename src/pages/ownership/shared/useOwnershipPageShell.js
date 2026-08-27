@@ -8,6 +8,9 @@ import {
 import { clearOwnerCompaniesCache } from "../../../utils/company/sharedCompanyFilter.js";
 import { useRealtimeDomain } from "../../../lib/realtime/useRealtimeDomain.js";
 import { REALTIME_DOMAINS } from "../../../lib/realtime/realtimeEvents.js";
+import { useOptionalAuthSession } from "../../../context/AuthSessionContext.jsx";
+import { canAccessPermission } from "../../../utils/auth/sidebarPermissions.js";
+import { isPartnershipAuditReadOnlyLocked } from "../../../utils/audit/partnershipAuditReadOnly.js";
 
 export function useOwnershipPageShell() {
   const [lang, setLang] = useState(() => (localStorage.getItem("login_lang") === "zh" ? "zh" : "en"));
@@ -17,7 +20,9 @@ export function useOwnershipPageShell() {
   const [allCompanies, setAllCompanies] = useState([]);
   const [toast, setToast] = useState(null);
   const [conflict, setConflict] = useState(null);
-  const [readOnlyMode, setReadOnlyMode] = useState(false);
+  const sessionMe = useOptionalAuthSession()?.me ?? null;
+  /** 没有 Ownership 权限，或 Partnership/Audit 处于 read_only，都视为只读——之前这里是个从未被置 true 的死开关。 */
+  const readOnlyMode = !canAccessPermission(sessionMe, "ownership") || isPartnershipAuditReadOnlyLocked(sessionMe);
   const [selectedMonth, setSelectedMonth] = useState(getOwnershipCurrentMonthKey);
   const [historyBanner, setHistoryBanner] = useState(null);
   const toastTimerRef = useRef(null);
@@ -70,7 +75,6 @@ export function useOwnershipPageShell() {
       try {
         const companies = await prefetchOwnershipCompanies(monthKey, { force });
         setAllCompanies(companies || []);
-        setReadOnlyMode(false);
       } catch (e) {
         if (!cached && !force) showToast(e?.message || "Server error", "error");
       } finally {

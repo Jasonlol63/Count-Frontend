@@ -53,10 +53,10 @@ export function normRole(r) {
   return String(r || "").trim().toLowerCase();
 }
 
-/** Ownership sidebar permission — only owner and partnership roles may have or see it. */
+/** Ownership sidebar permission — owner/partnership/admin may have or see it (matches user_role_permission). */
 export function roleSupportsOwnershipPermission(role) {
   const r = normRole(role);
-  return r === "owner" || r === "partnership";
+  return r === "owner" || r === "partnership" || r === "admin";
 }
 
 export function getVisiblePermissionKeys(targetRole) {
@@ -135,7 +135,8 @@ export function getUserEditFieldLocks(row, currentUserId, currentUserRole) {
   return {
     name: isSame || isLower,
     email: isSame || isLower,
-    role: isSame || isLower,
+    // role 字段：自己不能改自己的角色（防止自我提权），同级/上级同样不可改
+    role: isSelf || isSame || isLower,
     // 密码：自己或严格下级可改；同级/上级不可越级改
     password: isSame || isLower,
     sidebar: isSelf || isSame || isLower,
@@ -344,7 +345,7 @@ export function getCurrentUserRolePermissions(currentUserRole) {
   const rolePermissions = {
     owner: ["home", "admin", "account", "ownership", "process", "datacapture", "payment", "report", "maintenance"],
     partnership: ["home", "admin", "account", "ownership", "process", "datacapture", "payment", "report", "maintenance"],
-    admin: ["home", "admin", "account", "process", "datacapture", "payment", "report", "maintenance"],
+    admin: ["home", "admin", "account", "ownership", "process", "datacapture", "payment", "report", "maintenance"],
     manager: ["admin", "account", "process", "datacapture", "payment", "report", "maintenance"],
     supervisor: ["admin", "account", "process", "datacapture", "payment", "report"],
     accountant: ["account", "process", "payment", "report"],
@@ -356,7 +357,7 @@ export function getCurrentUserRolePermissions(currentUserRole) {
 
 export function getRoleTemplateSidebarList(role) {
   if (!role) return [];
-  const adminDefault = ["home", "admin", "account", "process", "datacapture", "payment", "report", "maintenance"];
+  const adminDefault = ["home", "admin", "account", "ownership", "process", "datacapture", "payment", "report", "maintenance"];
   const ownerDefault = ["home", "admin", "account", "ownership", "process", "datacapture", "payment", "report", "maintenance"];
   const partnershipDefault = [...ownerDefault];
   const rolePermissions = {
@@ -399,7 +400,7 @@ export function getFinalPermissionsForCreation(selectedRole, manuallySelected, c
   const currentUserPermissions = getCurrentUserRolePermissions(cur);
   const rolePerms = {
     partnership: PERMISSION_KEYS,
-    admin: ["home", "admin", "account", "process", "datacapture", "payment", "report", "maintenance"],
+    admin: ["home", "admin", "account", "ownership", "process", "datacapture", "payment", "report", "maintenance"],
     manager: ["admin", "account", "process", "datacapture", "payment", "report", "maintenance"],
     supervisor: ["admin", "account", "process", "datacapture", "payment", "report"],
     accountant: ["account", "process", "payment", "report"],
@@ -450,9 +451,10 @@ export function computeRowCapabilities(row, currentUserId, currentUserRole) {
   } else if (isLowPrivilegeUser && (isAdminUser || isOwnerUser)) {
     canEditDelete = false;
     canDelete = false;
-  } else if (isSameLevel) {
-    canDelete = false;
-  } else if (isHigherLevel) {
+  } else if (isSameLevel || isHigherLevel) {
+    // 同级或更高权限的目标：编辑也一并锁定，不只是禁止删除——否则会出现按钮可点、
+    // 提交后被后端 AccessControlUtils.assertCanManageAdminTarget 拒绝的情况。
+    canEditDelete = false;
     canDelete = false;
   }
 
