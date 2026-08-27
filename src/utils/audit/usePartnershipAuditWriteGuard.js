@@ -17,7 +17,9 @@ export function usePartnershipAuditWriteGuard(sessionMe, notify, blockedMessage)
   const guardWrite = useCallback(() => {
     return guardPartnershipAuditWrite(sessionMe, () => {
       if (typeof notify === "function") {
-        notify(blockedMessage || defaultMsg, "danger")
+        // "danger" 不是 maintenance-notification-* 里定义过的 type，样式会 fallback 成无色边框；
+        // 各 *_maintenance.css 只定义了 success/error/info，统一用 "error" 才能对上红色填充样式。
+        notify(blockedMessage || defaultMsg, "error")
       }
     })
   }, [sessionMe, notify, blockedMessage])

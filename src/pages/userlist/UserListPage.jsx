@@ -2599,9 +2599,13 @@ export default function UserListPage() {
       }
     } else {
       const caps = computeRowCapabilities(editingRow, currentUserId, currentUserRole);
-      if (!(caps.isSelf || caps.isHigherLevel || caps.isSameLevel)) {
-        permissionsValue = Array.from(permSelected);
-      }
+      // Always echo permSelected back, even for self/same-level/higher-level targets where the
+      // checkbox UI is hidden — permSelected was loaded from resolveEffectiveSidebarPermissionCodes
+      // when the modal opened, so it already reflects the current ROLE_DEFAULT/CUSTOM state. Omitting
+      // the field here (as before) made the backend treat "not sent" as "reset to ROLE_DEFAULT"
+      // (see AdminServiceImpl.resolvePermissionMode), which silently wiped a CUSTOM override on any
+      // self-edit (e.g. changing your own password).
+      permissionsValue = Array.from(permSelected);
       // Acc / Process：上级改下级，或自己关掉不想看的（self_hidden，可再开回）
       const accountLocked = !!(fieldLocks.account ?? fieldLocks.accountProcess);
       const processLocked = !!(fieldLocks.process ?? fieldLocks.accountProcess);

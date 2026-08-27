@@ -206,7 +206,8 @@ export default function CaptureMaintenancePage() {
     }, 2000);
   }, []);
 
-  const { guardWrite } = usePartnershipAuditWriteGuard(me, notify);
+  // 文案跟 Payment Maintenance 保持一致（后端 read_only 拒绝时也是这句话，见 AccessControlUtils.requireWritable）
+  const { guardWrite } = usePartnershipAuditWriteGuard(me, notify, "Read-only access cannot perform this action");
   useMaintenancePageScrollLock();
 
   // -- Initialization --
