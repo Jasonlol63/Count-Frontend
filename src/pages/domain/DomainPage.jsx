@@ -218,34 +218,15 @@ export default function DomainPage() {
     if (checkedIds.size === 0) { showDomainAlert(t("selectOwnersToDeleteFirst"), "danger"); return; }
 
     const selected = domains.filter((d) => checkedIds.has(d.id));
-    const withCompanies = selected.filter((d) => {
-      const comps = Array.isArray(d.companies_full) ? d.companies_full : [];
-      return comps.length > 0;
-    });
-    const valid = selected.filter((d) => {
-      const comps = Array.isArray(d.companies_full) ? d.companies_full : [];
-      return comps.length === 0;
-    });
 
-    if (withCompanies.length > 0 && valid.length === 0) {
-      showDomainAlert(t("cannotDeleteOwnersWithCompanies"), "danger");
-      return;
-    }
-    if (withCompanies.length > 0 && valid.length > 0) {
-      showDomainAlert(
-        t("ownersWithCompaniesSkippedWillDelete", { count: valid.length }),
-        "danger"
-      );
-    }
-
-    const names = valid.map((d) => d.name).join(", ");
+    const names = selected.map((d) => d.name).join(", ");
     setConfirmModal({
-      message: t("confirmDeleteOwners", { count: valid.length, names }),
+      message: t("confirmDeleteOwners", { count: selected.length, names }),
       onConfirm: async () => {
         setConfirmModal(null);
         try {
           const results = await Promise.all(
-            valid.map((d) => deleteOwner(d.id).then(({ json }) => json))
+            selected.map((d) => deleteOwner(d.id).then(({ json }) => json))
           );
           const okResults = results.filter((r) => r && r.success);
           const failResults = results.filter((r) => !(r && r.success));
@@ -262,7 +243,7 @@ export default function DomainPage() {
             );
           }
           const deletedIds = new Set(
-            valid.filter((_, i) => results[i] && results[i].success).map((d) => d.id)
+            selected.filter((_, i) => results[i] && results[i].success).map((d) => d.id)
           );
           if (deletedIds.size > 0) {
             setDomains((prev) => prev.filter((d) => !deletedIds.has(d.id)));
