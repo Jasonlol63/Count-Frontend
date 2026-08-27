@@ -52,9 +52,38 @@ const AUTH_API_MESSAGES = {
     en: "Unauthorized",
     zh: "未授权，请重新登录",
   },
+  "Group/Company ID and email are required": {
+    en: "Group/Company ID and email are required",
+    zh: "请填写公司 / 集团 ID 与邮箱",
+  },
+  "Group/Company ID, email and TAC are required": {
+    en: "Group/Company ID, email and TAC are required",
+    zh: "请填写公司 / 集团 ID、邮箱与验证码",
+  },
+  "New password is required": {
+    en: "New password is required",
+    zh: "请输入新密码",
+  },
+  "Verification code is invalid or expired": {
+    en: "Verification code is invalid or expired",
+    zh: "验证码不正确或已过期",
+  },
+  "Account not found": {
+    en: "Account not found",
+    zh: "找不到该账号",
+  },
+  "If this account exists, a verification code has been sent.": {
+    en: "If this account exists, a verification code has been sent.",
+    zh: "如果该账号存在，验证码已发送至对应邮箱。",
+  },
+  "Password has been reset": {
+    en: "Password has been reset",
+    zh: "密码已重置",
+  },
 };
 
 const LOGIN_ERROR_PREFIX = "An error occurred during login:";
+const RESET_COOLDOWN_PATTERN = /^Please wait (\d+)s before requesting another code$/;
 
 export function localizeAuthApiMessage(message, lang = "en") {
   const normalizedLang = lang === "zh" ? "zh" : "en";
@@ -68,6 +97,14 @@ export function localizeAuthApiMessage(message, lang = "en") {
     const detail = text.slice(LOGIN_ERROR_PREFIX.length).trim();
     return normalizedLang === "zh"
       ? `登录时发生错误：${detail}`
+      : text;
+  }
+
+  const cooldownMatch = text.match(RESET_COOLDOWN_PATTERN);
+  if (cooldownMatch) {
+    const seconds = cooldownMatch[1];
+    return normalizedLang === "zh"
+      ? `请等待 ${seconds} 秒后再重新发送`
       : text;
   }
 
@@ -129,6 +166,7 @@ export const RESET_PASSWORD_I18N = {
     tacPlaceholder: "TAC",
     send: "SEND",
     sending: "Sending...",
+    resendCountdown: "Resend in {s}s",
     newPasswordPlaceholder: "New Password",
     confirmPasswordPlaceholder: "Confirm New Password",
     showPassword: "Show password",
@@ -160,6 +198,7 @@ export const RESET_PASSWORD_I18N = {
     tacPlaceholder: "验证码（TAC）",
     send: "发送",
     sending: "发送中...",
+    resendCountdown: "{s} 秒后重新发送",
     newPasswordPlaceholder: "新密码",
     confirmPasswordPlaceholder: "确认新密码",
     showPassword: "显示密码",

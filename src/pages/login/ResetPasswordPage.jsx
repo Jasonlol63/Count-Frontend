@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { RESET_PASSWORD_I18N } from "../../translateFile/auth/authTranslate.js";
-import { buildApiUrl } from "../../utils/core/apiUrl.js";
+import { RESET_PASSWORD_I18N, localizeAuthApiMessage } from "../../translateFile/auth/authTranslate.js";
+import { logoutSession } from "../../utils/auth/authApi.js";
 import { useAuthBackground } from "./useAuthBackground.js";
 import { sendResetTac, submitResetPassword } from "./resetPassword.js";
 import { sanitizeEmailInput, validateEmail } from "../../utils/input/emailValidation.js";
@@ -50,7 +50,7 @@ function AlertModal({ open, title, message, confirmText, onClose }) {
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
   const [lang, setLang] = useState(() => localStorage.getItem("login_lang") || "en");
-  const [companyId, setCompanyId] = useState("");
+  const [tenantCode, setTenantCode] = useState("");
   const [email, setEmail] = useState("");
   const [tac, setTac] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -58,6 +58,8 @@ export default function ResetPasswordPage() {
   const [isSendingTac, setIsSendingTac] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [modal, setModal] = useState({ open: false, title: "", message: "" });
+  const [tacCooldown, setTacCooldown] = useState(0);
+  const [tacNotice, setTacNotice] = useState(null);
   const tacInputRef = useRef(null);
 
   const i18n = useMemo(() => RESET_PASSWORD_I18N[lang] || RESET_PASSWORD_I18N.en, [lang]);
@@ -87,6 +89,20 @@ export default function ResetPasswordPage() {
 
   useAuthBackground();
 
+  useEffect(() => {
+    if (tacCooldown <= 0) return undefined;
+    const timer = setInterval(() => {
+      setTacCooldown((seconds) => (seconds > 0 ? seconds - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [tacCooldown > 0]);
+
+  // A resend cooldown is scoped to one tenant+email pair — editing either invalidates it client-side.
+  useEffect(() => {
+    setTacCooldown(0);
+    setTacNotice(null);
+  }, [tenantCode, email]);
+
   const showModal = useCallback(
     (title, message) => {
       setModal({
@@ -104,10 +120,12 @@ export default function ResetPasswordPage() {
   }, [newPassword, confirmPassword]);
 
   const onSendTac = async () => {
-    const normalizedCompanyId = companyId.toUpperCase().trim();
+    if (isSendingTac || tacCooldown > 0) return;
+
+    const normalizedTenantCode = tenantCode.toUpperCase().trim();
     const trimmedEmail = validateEmail(email).normalized;
 
-    if (!normalizedCompanyId) {
+    if (!normalizedTenantCode) {
       showModal(i18n.notice, i18n.companyIdFirst);
       return;
     }
@@ -121,28 +139,25 @@ export default function ResetPasswordPage() {
     }
 
     setIsSendingTac(true);
+    setTacNotice(null);
     try {
       const data = await sendResetTac({
-        companyId: normalizedCompanyId,
+        tenantCode: normalizedTenantCode,
         email: trimmedEmail,
       });
 
       if (data.success) {
-        let message = data.message || i18n.tacSent;
-        if (data.tac) {
-          message += `\n\n${i18n.verifyCodeLine} ${data.tac}`;
-          setTac(data.tac);
-        }
-        showModal(i18n.success, message);
+        setTacNotice({ type: "success", text: localizeAuthApiMessage(data.message, lang) || i18n.tacSent });
+        setTacCooldown(60);
         requestAnimationFrame(() => {
           tacInputRef.current?.focus();
         });
       } else {
-        showModal(i18n.notice, data.message || i18n.tacFailed);
+        setTacNotice({ type: "error", text: localizeAuthApiMessage(data.message, lang) || i18n.tacFailed });
       }
     } catch (error) {
       console.error("Send TAC error:", error);
-      showModal(i18n.notice, i18n.networkError);
+      setTacNotice({ type: "error", text: i18n.networkError });
     } finally {
       setIsSendingTac(false);
     }
@@ -157,7 +172,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    const normalizedCompanyId = companyId.toUpperCase().trim();
+    const normalizedTenantCode = tenantCode.toUpperCase().trim();
     const emailCheck = validateEmail(email);
     const trimmedEmail = emailCheck.normalized;
     const trimmedTac = tac.trim();
@@ -167,7 +182,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (!normalizedCompanyId || !trimmedEmail) {
+    if (!normalizedTenantCode || !trimmedEmail) {
       showModal(i18n.notice, i18n.companyEmailRequired);
       return;
     }
@@ -179,7 +194,7 @@ export default function ResetPasswordPage() {
     setIsResetting(true);
     try {
       const data = await submitResetPassword({
-        companyId: normalizedCompanyId,
+        tenantCode: normalizedTenantCode,
         email: trimmedEmail,
         tac: trimmedTac,
         newPassword,
@@ -188,11 +203,7 @@ export default function ResetPasswordPage() {
       if (data.success) {
         sessionStorage.setItem("ec_skip_session_bootstrap", "1");
         try {
-          await fetch(buildApiUrl("api/session/logout_api.php"), {
-            method: "POST",
-            credentials: "include",
-            cache: "no-store",
-          });
+          await logoutSession();
         } catch {
           /* proceed to login even if logout request fails */
         }
@@ -203,7 +214,7 @@ export default function ResetPasswordPage() {
         return;
       }
 
-      showModal(i18n.notice, data.message || i18n.resetFailed);
+      showModal(i18n.notice, localizeAuthApiMessage(data.message, lang) || i18n.resetFailed);
       setIsResetting(false);
     } catch (error) {
       console.error("Reset password error:", error);
@@ -226,8 +237,8 @@ export default function ResetPasswordPage() {
                 <input
                   type="text"
                   placeholder={i18n.companyPlaceholder}
-                  value={companyId}
-                  onChange={(event) => setCompanyId(event.target.value)}
+                  value={tenantCode}
+                  onChange={(event) => setTenantCode(event.target.value)}
                   style={{ textTransform: "uppercase" }}
                   required
                 />
@@ -258,10 +269,25 @@ export default function ResetPasswordPage() {
                     onChange={(event) => setTac(event.target.value)}
                   />
                 </div>
-                <button type="button" className="tac-btn" onClick={onSendTac} disabled={isSendingTac}>
-                  {isSendingTac ? i18n.sending : i18n.send}
+                <button
+                  type="button"
+                  className="tac-btn"
+                  onClick={onSendTac}
+                  disabled={isSendingTac || tacCooldown > 0}
+                >
+                  {isSendingTac
+                    ? i18n.sending
+                    : tacCooldown > 0
+                      ? i18n.resendCountdown.replace("{s}", tacCooldown)
+                      : i18n.send}
                 </button>
               </div>
+
+              {tacNotice ? (
+                <p className={`tac-notice tac-notice--${tacNotice.type}`} role="status">
+                  {tacNotice.text}
+                </p>
+              ) : null}
 
               <div className="input-group">
                 <i className="fas fa-lock input-icon" />
