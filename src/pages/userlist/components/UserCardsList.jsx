@@ -10,7 +10,7 @@ import {
 import { formatUserRoleDisplay, formatUserStatusDisplay } from "../../../translateFile/pages/userListTranslate.js";
 
 function roleBadgeClass(role) {
-  return `role-${String(role || "").toLowerCase().replace(/\s+/g, "-")}`;
+  return `role-${String(role || "").trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
 }
 
 /**

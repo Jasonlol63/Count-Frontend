@@ -19,7 +19,7 @@ export const ROLE_HIERARCHY = {
   supervisor: 4,
   accountant: 5,
   audit: 6,
-  "customer service": 7,
+  customer_service: 7,
   company: 8,
 };
 
@@ -31,7 +31,7 @@ export const ALL_ROLE_OPTIONS = [
   { value: "supervisor", label: "Supervisor" },
   { value: "accountant", label: "Accountant" },
   { value: "audit", label: "Audit" },
-  { value: "customer service", label: "Customer Service" },
+  { value: "customer_service", label: "Customer Service" },
   { value: "company", label: "Company" },
 ];
 
@@ -50,7 +50,7 @@ export const PERMISSION_ICONS = {
 };
 
 export function normRole(r) {
-  return String(r || "").trim().toLowerCase();
+  return String(r || "").trim().toLowerCase().replace(/[\s_]+/g, "_");
 }
 
 /** Ownership sidebar permission — owner/partnership/admin may have or see it (matches user_role_permission). */
@@ -350,7 +350,7 @@ export function getCurrentUserRolePermissions(currentUserRole) {
     supervisor: ["admin", "account", "process", "datacapture", "payment", "report"],
     accountant: ["account", "process", "payment", "report"],
     audit: ["payment", "report", "maintenance"],
-    "customer service": ["account", "process", "datacapture", "payment", "report"],
+    "customer_service": ["account", "process", "datacapture", "payment", "report"],
   };
   return rolePermissions[normRole(currentUserRole)] || [];
 }
@@ -368,7 +368,7 @@ export function getRoleTemplateSidebarList(role) {
     supervisor: ["admin", "account", "process", "datacapture", "payment", "report"],
     accountant: ["account", "process", "payment", "report"],
     audit: ["payment", "report", "maintenance"],
-    "customer service": ["account", "process", "datacapture", "payment", "report"],
+    "customer_service": ["account", "process", "datacapture", "payment", "report"],
   };
   return rolePermissions[normRole(role)] || [];
 }
@@ -405,7 +405,7 @@ export function getFinalPermissionsForCreation(selectedRole, manuallySelected, c
     supervisor: ["admin", "account", "process", "datacapture", "payment", "report"],
     accountant: ["account", "process", "payment", "report"],
     audit: ["payment", "report", "maintenance"],
-    "customer service": ["account", "process", "datacapture", "payment", "report"],
+    "customer_service": ["account", "process", "datacapture", "payment", "report"],
   };
   const sr = normRole(selectedRole);
   if (!sr) {
@@ -434,7 +434,7 @@ export function computeRowCapabilities(row, currentUserId, currentUserRole) {
   const isSameLevel = currentLevel === targetLevel && !isSelf;
   const isHigherLevel = targetLevel < currentLevel;
   /** 不含 partnership：partnership 可按层级编辑 admin 等 */
-  const lowPrivilegeRoles = ["manager", "supervisor", "accountant", "audit", "customer service"];
+  const lowPrivilegeRoles = ["manager", "supervisor", "accountant", "audit", "customer_service"];
   const isLowPrivilegeUser = lowPrivilegeRoles.includes(normRole(currentUserRole));
   const isAdminUser = targetRole === "admin";
   const isOwnerUser = targetRole === "owner";

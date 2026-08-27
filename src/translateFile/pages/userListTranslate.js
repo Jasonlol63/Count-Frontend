@@ -416,14 +416,15 @@ const USER_ROLE_I18N_KEYS = {
   supervisor: "roleSupervisor",
   accountant: "roleAccountant",
   audit: "roleAudit",
-  "customer service": "roleCustomerService",
+  customer_service: "roleCustomerService",
   company: "roleCompany",
   owner: "roleOwner",
 };
 
 /** User list table / modal: localized role badge */
 export function formatUserRoleDisplay(t, role) {
-  const key = USER_ROLE_I18N_KEYS[String(role || "").trim().toLowerCase()];
+  const normalized = String(role || "").trim().toLowerCase().replace(/[\s_]+/g, "_");
+  const key = USER_ROLE_I18N_KEYS[normalized];
   if (key) return t(key);
   return String(role || "").toUpperCase();
 }

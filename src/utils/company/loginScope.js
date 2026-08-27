@@ -457,22 +457,24 @@ const C168_DOMAIN_PAGE_ROLES = new Set([
   "supervisor",
   "accountant",
   "audit",
-  "customer service",
+  "customer_service",
   "company",
 ]);
 
 /** Mirrors c168AutoRenewAllowedRoles */
 const C168_AUTO_RENEW_ROLES = new Set(["owner", "admin", "partnership"]);
 
+function normRoleSeparator(role) {
+  return String(role || "").trim().toLowerCase().replace(/[\s_]+/g, "_");
+}
+
 export function userRoleAllowsC168Domain(role) {
-  const r = String(role || "").trim().toLowerCase();
-  return C168_DOMAIN_PAGE_ROLES.has(r);
+  return C168_DOMAIN_PAGE_ROLES.has(normRoleSeparator(role));
 }
 
 export function userRoleAllowsC168AutoRenew(role, userType) {
   if (String(userType || "").trim().toLowerCase() === "member") return false;
-  const r = String(role || "").trim().toLowerCase();
-  return C168_AUTO_RENEW_ROLES.has(r);
+  return C168_AUTO_RENEW_ROLES.has(normRoleSeparator(role));
 }
 
 /**

@@ -5,10 +5,10 @@
 > 这次是把前端跟着核对一遍，修掉了几处「按钮能点、提交却被后端拒绝」或「入口跟后端权限对不上」的
 > 不一致，而不是新做一套前端权限系统——真正的防线始终在后端，前端这些改动都是 UX 层面的提前拦截。
 
-## 结论先行：`ROLE_HIERARCHY` 本身没问题
+## 结论先行：`ROLE_HIERARCHY` 的层级顺序本身没问题
 
 审计一度以为 `src/pages/userlist/userListLogic.js` 的 `ROLE_HIERARCHY` 跟后端 `user_role.hierarchy_level`
-矛盾（后端曾经把 Partnership 排最低）。重新核对后发现是**后端**那份错了，前端这份从一开始就是对的：
+矛盾（后端曾经把 Partnership 排最低）。重新核对后发现是**后端**那份错了，前端这份的层级顺序从一开始就是对的：
 
 ```js
 export const ROLE_HIERARCHY = {
@@ -19,13 +19,19 @@ export const ROLE_HIERARCHY = {
   supervisor: 4,
   accountant: 5,
   audit: 6,
-  "customer service": 7,
+  customer_service: 7,
   company: 8,
 };
 ```
 
 跟后端这次改完的 `OWNER(1) > PARTNERSHIP(2) > ADMIN(3) > MANAGER(4) > SUPERVISOR(5) > 其余(6-8)`
-顺序一致（只是从 0 起还是从 1 起的差异，相对顺序相同）。**这个常量本身未改动。**
+顺序一致（只是从 0 起还是从 1 起的差异，相对顺序相同）。
+
+> **更正（同一天，第 5 节实测后发现）**：上面说"这个常量本身未改动"是不准确的——`customer_service`
+> 这个 key 原本写的是 `"customer service"`（空格），跟后端角色码 `CUSTOMER_SERVICE` 经过 `normRole()`
+> 小写转换后的 `"customer_service"`（下划线）对不上，导致**任何目标角色是 Customer Service 的层级比较
+> 都会 fallback 成 999**。层级顺序的相对关系是对的，但这一个 key 本身有 bug，而且是同一个 bug 分散在
+> 四个文件里反复出现。详见第 5 节。
 
 ## 改了什么
 
@@ -106,6 +112,49 @@ export function roleSupportsOwnershipPermission(role) {
 `getFinalPermissionsForCreation` 三处 `admin` 角色的权限模板也加上 `"ownership"`——否则入口能显示了，
 但新建/编辑 Admin 账号时默认不会勾选、上级角色也没法帮 Admin 勾选这个权限。
 
+### 5. "customer service" vs "customer_service" 分隔符不一致——同一个 bug 出现在 4 个文件（2026-08-27）
+
+**根因：** 后端角色码是 `CUSTOMER_SERVICE`（下划线），前端好几处手写的查找表却用 `"customer service"`
+（空格）当 key。各处都是各自 `.toLowerCase()`（不统一走 `normRole`），空格和下划线从不互相转换，
+于是这些查找表在遇到 Customer Service 时全部查找失败，各自 fallback 成不同的"看起来还凑合但其实错了"
+的结果——这也是为什么这个 bug 拖了好几轮才被发现：每次表现出来的症状都不一样，容易被当成独立问题。
+
+**表现症状**（其实是同一个根因）：
+1. 层级比较 fallback 成 999（`ROLE_HIERARCHY`），本身不影响大部分场景，但会导致依赖层级数字做的其他判断（如同级/自己判断）在小概率组合下出错。
+2. Role 徽章显示成原始的 `"CUSTOMER_SERVICE"`（大写下划线），而不是 "Customer Service"。
+3. Role 徽章没有颜色样式，退化成纯文字。
+4. （C168 相关）Customer Service 账号可能拿不到 C168 Domain 页面权限。
+
+**改了 4 个文件，统一改成下划线格式 + 分隔符归一化：**
+
+| 文件 | 改动 |
+|---|---|
+| `src/pages/userlist/userListLogic.js` | `ROLE_HIERARCHY`、`ALL_ROLE_OPTIONS`（select 的 value）、三处角色权限模板对象、`lowPrivilegeRoles` 数组的 key 全部改成 `customer_service`；`normRole` 加了 `.replace(/[\s_]+/g, "_")`，以后无论来源是空格还是下划线格式都能归一化成同一种 |
+| `src/translateFile/pages/userListTranslate.js` | `USER_ROLE_I18N_KEYS` 的 key 改对；`formatUserRoleDisplay` 内联同样的分隔符归一化 |
+| `src/utils/company/loginScope.js` | `C168_DOMAIN_PAGE_ROLES` 的 key 改对；新增 `normRoleSeparator` helper，`userRoleAllowsC168Domain`/`userRoleAllowsC168AutoRenew` 都改用它 |
+| `src/pages/userlist/components/UserCardsList.jsx` | `roleBadgeClass` 原来只把空格换成短横线（`role-${role.toLowerCase().replace(/\s+/g, "-")}`），CSS 里定义的是 `.role-customer-service`（短横线），但角色码是下划线，正则匹配不到，样式类名对不上。改成 `.replace(/[\s_]+/g, "-")`，下划线和空格都能转成短横线，跟 CSS 类名对齐 |
+
+`ALL_ROLE_OPTIONS` 里 `value: "customer_service"` 会原样发给后端 `dto.getRole()`；后端
+`normalizeStaffRoleCode` 本来就是 `.replace(' ', '_').toUpperCase()`，之前传空格能working是因为这一步
+帮忙转了，现在直接传下划线只是让这一步变成空操作，结果不变，兼容性没问题。
+
+### 6. 自愿确认：「编辑自己只能改姓名/邮箱/密码」已经是正确行为，没有改动
+
+用户报告了一次疑似「自己编辑自己时 Role 下拉框还能选」的现象，逐行核对 `getUserEditFieldLocks`
+后确认结构上是对的：
+
+```js
+role: isSelf || isSame || isLower,      // isSelf 命中 → 锁死
+sidebar: isSelf || isSame || isLower,   // isSelf 命中 → 锁死
+company: isSelf || isSame || isLower || !canPickCompany,  // isSelf 命中 → 锁死
+name: isSame || isLower,                // 不含 isSelf → 自己可改
+email: isSame || isLower,               // 不含 isSelf → 自己可改
+password: isSame || isLower,            // 不含 isSelf → 自己可改
+```
+
+用户提供的截图实际是"角色 A 编辑角色 B（非自己）"，role 字段本来就该可编辑，不是 bug。这里没有代码改动，
+记录下来是为了避免以后重复排查同一个问题。
+
 ## 没有改动、但顺带核对过的地方
 
 - `src/utils/auth/sidebarPermissions.js` 其余函数（`canAccessPermission`/`canShowReportInSidebar` 等）
@@ -117,7 +166,8 @@ export function roleSupportsOwnershipPermission(role) {
 
 ## 验证
 
-- `npx vite build` 通过（两轮改动各跑了一次，均无报错）。
+- `npx vite build` 通过（每一轮改动都各自跑过一次，均无报错）。
 - 未跑真实浏览器端到端测试，建议实际登录几个不同角色（Partnership + read_only 开/关、Admin、
-  Manager、Supervisor）走一遍 Admin 页面的增删改和 Ownership 页面，确认前端按钮状态跟后端返回的
-  错误信息一致。
+  Manager、Supervisor、Customer Service）走一遍 Admin 页面的增删改和 Ownership 页面，确认前端按钮
+  状态跟后端返回的错误信息一致，顺便确认 Customer Service 的角色徽章现在能正常显示颜色和 "Customer
+  Service" 文字。
