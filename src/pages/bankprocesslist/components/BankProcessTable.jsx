@@ -39,10 +39,8 @@ function getContractStateClass(dayStart, dayEnd) {
   const start = String(dayStart).substring(0, 10);
   const end = dayEnd ? String(dayEnd).substring(0, 10) : null;
   if (todayStr < start) return "contract-pending";
-  if (end && todayStr > end) return "contract-expired";
-  if (start && end && todayStr >= start && todayStr <= end) return "contract-active";
-  if (start && todayStr >= start) return "contract-active";
-  return "contract-expired";
+  const isDue = end ? todayStr >= end : todayStr >= start;
+  return isDue ? "contract-expired" : "contract-active";
 }
 
 function renderBankContract(value, dayStart, dayEnd, lang) {

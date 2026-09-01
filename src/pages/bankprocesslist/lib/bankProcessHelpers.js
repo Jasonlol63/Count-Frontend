@@ -289,7 +289,7 @@ export function matchesCurrentBankFilters(row, filters) {
 
 export function canShowBankResend(row) {
   const s = normalizeBankProcessStatus(row?.status);
-  return s === "active" && !isBankInactiveLike(row?.status, row?.issue_flag);
+  return s !== "inactive";
 }
 
 export function isoToDmy(iso) {
@@ -891,23 +891,36 @@ export const billingContractExclusiveEndYmdFirstOfMonthJs = (startYmd, termMonth
   return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
 };
 
+/** 加 N 个月，若起点是当月最后一天则锚定到目标月的最后一天（避免 30/31 号链式错位）。 */
+export const addCalendarMonthsAnchoredToYmd = (ymd, months) => {
+  if (!ymd || months == null) return null;
+  const p = String(ymd).trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!p) return null;
+  const y = parseInt(p[1], 10);
+  const mo = parseInt(p[2], 10);
+  const day = parseInt(p[3], 10);
+  const lastDayOfStartMonth = new Date(y, mo, 0).getDate();
+  const target =
+    day === lastDayOfStartMonth ? new Date(y, mo + months, 0) : new Date(y, mo - 1 + months, day);
+  if (isNaN(target.getTime())) return null;
+  return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+};
+
 /**
  * Bank 表单 Day end 自动填（与 bank_process_list.js 一致，不参与入账）。
- * 起租日 1 号：起租 + N 月（如 5/1 + 1M → 6/1）。
- * 起租日非 1 号：起租 + N 月再减 1 天（如 4/15 + 1M → 5/14），不用 1 号锚点。
+ * frequency=monthly：提早一天出账，起算日 = day_start - 1 天，再加 N 月（月末锚定）。
+ *   如 6/1 + 3M（monthly）→ 起算 5/31 → 8/31；4/15 + 1M（monthly）→ 起算 4/14 → 5/14。
+ * frequency=1st_of_every_month：起租 + N 月，不调整（如 5/1 + 1M → 6/1）。
  */
 export const contractBillingEndYmdForBankForm = (startYmd, termMonths, frequency) => {
   if (!startYmd || termMonths == null || termMonths < 1) return null;
   if (frequency === "once") return null;
-  const head = String(startYmd).trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!head) return null;
-  const startDay = parseInt(head[3], 10);
-  if (startDay === 1) {
-    return addCalendarMonthsToYmd(startYmd, termMonths);
+  if (frequency === "monthly") {
+    const effectiveStart = subtractOneDayFromYmd(startYmd);
+    if (!effectiveStart) return null;
+    return addCalendarMonthsAnchoredToYmd(effectiveStart, termMonths);
   }
-  const exclusiveCal = addCalendarMonthsToYmd(startYmd, termMonths);
-  if (!exclusiveCal) return null;
-  return subtractOneDayFromYmd(exclusiveCal) || null;
+  return addCalendarMonthsToYmd(startYmd, termMonths);
 };
 
 /**
