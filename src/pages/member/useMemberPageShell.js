@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { assetUrl, buildApiUrl } from "../../utils/core/apiUrl.js";
+import { formatAnnouncementTimestamp } from "../announcement/announcementApi.js";
 import { injectStylesheet } from "../../utils/core/injectStylesheet.js";
 import { MAINTENANCE_I18N } from "../../translateFile/pages/maintenanceTranslate.js";
 import { formatMemberRole, getMemberText } from "../../translateFile/pages/memberTranslate.js";
@@ -286,11 +287,17 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
     setShowNotifications(true);
     setAnnouncementsLoading(true);
     try {
-      const res = await fetch(buildApiUrl("api/announcements/announcement_get_dashboard_api.php"), {
+      const res = await fetch(buildApiUrl("api/announcement/getDashboardAnnouncements"), {
         credentials: "include",
       });
       const json = await res.json();
-      setAnnouncements(json?.success && Array.isArray(json?.data) ? json.data : []);
+      const rows = json?.success && Array.isArray(json?.data) ? json.data : [];
+      setAnnouncements(
+        rows.map((item) => ({
+          ...item,
+          created_at: formatAnnouncementTimestamp(item.createdAt ?? item.created_at),
+        })),
+      );
     } catch {
       setAnnouncements([]);
     } finally {

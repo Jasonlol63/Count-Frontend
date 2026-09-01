@@ -99,6 +99,7 @@ import {
 } from "../utils/date/dateRangePicker.js";
 import { formatDmy } from "../utils/date/dateUtils.js";
 import AnnouncementUpdateCard from "./announcements/AnnouncementUpdateCard.jsx";
+import { formatAnnouncementTimestamp } from "../pages/announcement/announcementApi.js";
 import {
   publishMaintenanceModeEvent,
   subscribeMaintenanceModeEvent,
@@ -1240,10 +1241,15 @@ export default function AuthenticatedLayout() {
       setShowNotifications(true);
       setAnnouncementsLoading(true);
       try {
-        const res = await fetch(buildApiUrl("api/announcements/announcement_get_dashboard_api.php"), { credentials: "include" });
+        const res = await fetch(buildApiUrl("api/announcement/getDashboardAnnouncements"), { credentials: "include" });
         const json = await res.json();
         if (json.success && json.data) {
-          setAnnouncements(json.data);
+          setAnnouncements(
+            json.data.map((item) => ({
+              ...item,
+              created_at: formatAnnouncementTimestamp(item.createdAt ?? item.created_at),
+            })),
+          );
         } else {
           setAnnouncements([]);
         }
@@ -1281,6 +1287,7 @@ export default function AuthenticatedLayout() {
   const showFullMaintenanceMenu = canAccessFullMaintenance(me);
   const showLimitedMaintenanceMenu = canAccessLimitedMaintenance(me);
   const showMaintenanceMenu = showMaintenanceInSidebar(me);
+  const isBankOnlyCategory = Boolean(me?.company_has_bank) && !me?.company_has_gambling;
   const showCaptureMaintenance = useMemo(() => {
     void sidebarGcTick;
     return canAccessCaptureMaintenance(me);
@@ -1699,7 +1706,8 @@ export default function AuthenticatedLayout() {
                       </a>
                     )}
                     {(me?.company_has_gambling || me?.company_has_bank) &&
-                      (showFullMaintenanceMenu || showLimitedMaintenanceMenu) && (
+                      (showFullMaintenanceMenu || showLimitedMaintenanceMenu) &&
+                      !isBankOnlyCategory && (
                       <a
                         {...sidebarSubmenuLinkProps("/transaction-maintenance", goTo)}
                         className={`submenu-item ${pageKey === "transaction-maintenance" ? "current-page" : ""}`}
@@ -1717,7 +1725,9 @@ export default function AuthenticatedLayout() {
                         <span>{i18n.sidebarPayment}</span>
                       </a>
                     )}
-                    {(me?.company_has_gambling || me?.company_has_bank) && (showFullMaintenanceMenu || showLimitedMaintenanceMenu) && (
+                    {(me?.company_has_gambling || me?.company_has_bank) &&
+                      (showFullMaintenanceMenu || showLimitedMaintenanceMenu) &&
+                      !isBankOnlyCategory && (
                       <a
                         {...sidebarSubmenuLinkProps("/formula-maintenance", goTo)}
                         className={`submenu-item ${pageKey === "formula-maintenance" ? "current-page" : ""}`}

@@ -18,36 +18,6 @@ export function buildApiUrl(pathAndQuery) {
       const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
       return `auth/tenant-accessible${q}`;
     }
-    if (raw.startsWith("api/announcements/announcement_list_api.php")) {
-      return "api/announcement/listAnnouncement";
-    }
-    if (raw.startsWith("api/announcements/announcement_create_api.php")) {
-      return "api/announcement/addAnnouncementContent";
-    }
-    if (raw.startsWith("api/announcements/announcement_update_api.php")) {
-      return "api/announcement/updateAnnouncement";
-    }
-    if (raw.startsWith("api/announcements/announcement_delete_api.php")) {
-      return "api/announcement/deleteAnnouncement";
-    }
-    if (raw.startsWith("api/announcements/announcement_get_dashboard_api.php")) {
-      return "api/announcement/getDashboardAnnouncements";
-    }
-    if (raw.startsWith("api/maintenance/list_api.php")) {
-      return "api/announcement/listMaintenance";
-    }
-    if (raw.startsWith("api/maintenance/create_api.php")) {
-      return "api/announcement/addMaintenanceContent";
-    }
-    if (raw.startsWith("api/maintenance/update_api.php")) {
-      return "api/announcement/updateMaintenance";
-    }
-    if (raw.startsWith("api/maintenance/delete_api.php")) {
-      return "api/announcement/deleteMaintenance";
-    }
-    if (raw.startsWith("api/maintenance/get_public_api.php")) {
-      return "api/announcement/getMaintenanceInLogin";
-    }
     return raw;
   })();
 

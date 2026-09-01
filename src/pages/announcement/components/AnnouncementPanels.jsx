@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import RichTextEditor from "./RichTextEditor.jsx";
 import {
   isRichTextEffectivelyEmpty,
@@ -7,6 +6,7 @@ import {
   toSafeRenderHtml,
 } from "../../../utils/content/richTextSanitizer.js";
 import { composeAnnouncementSection } from "../../../components/announcements/announcementSectionLabel.js";
+import { createAnnouncement, createMaintenance, formatAnnouncementTimestamp } from "../announcementApi.js";
 
 export function AnnouncementPanel({ t, announcements, onEdit, onDelete, onPublished, onPublishFailed }) {
   const [form, setForm] = useState({ title: "", sectionLabel: "", content: "" });
@@ -26,13 +26,7 @@ export function AnnouncementPanel({ t, announcements, onEdit, onDelete, onPublis
     }
     setSubmitting(true);
     try {
-      const fd = new FormData();
-      fd.append("title", title);
-      fd.append("content", content);
-      const res = await fetch(buildApiUrl("api/announcements/announcement_create_api.php"), {
-        method: "POST", body: fd, credentials: "include",
-      });
-      const json = await res.json();
+      const { json } = await createAnnouncement({ title, content });
       if (json.success) {
         setForm({ title: "", sectionLabel: "", content: "" });
         onPublished?.();
@@ -117,8 +111,8 @@ export function AnnouncementPanel({ t, announcements, onEdit, onDelete, onPublis
                     dangerouslySetInnerHTML={{ __html: toSafeRenderHtml(item.content) }}
                   />
                   <div className="announcement-meta">
-                    <span>{t("createdBy", { name: item.created_by })}</span>
-                    <span>{t("createdAt", { time: item.created_at })}</span>
+                    <span>{t("createdBy", { name: item.createdBy ?? item.created_by })}</span>
+                    <span>{t("createdAt", { time: formatAnnouncementTimestamp(item.createdAt ?? item.created_at) })}</span>
                   </div>
                 </div>
               ))
@@ -133,11 +127,6 @@ export function AnnouncementPanel({ t, announcements, onEdit, onDelete, onPublis
 export function MaintenancePanel({
   t,
   maintenanceList,
-  maintenanceMode,
-  canManageMaintenanceMode,
-  modeSubmitting,
-  onEnableMaintenanceMode,
-  onDisableMaintenanceMode,
   onEdit,
   onDelete,
   onPublished,
@@ -146,9 +135,6 @@ export function MaintenancePanel({
   const [form, setForm] = useState({ prefix: "", content: "" });
   const [submitting, setSubmitting] = useState(false);
   const canCreate = maintenanceList.length === 0;
-  const modeEnabled = Boolean(maintenanceMode?.enabled);
-  const modeCanToggle = modeEnabled || maintenanceList.length > 0;
-  const modeToggleDisabled = modeSubmitting || !modeCanToggle;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -164,13 +150,7 @@ export function MaintenancePanel({
     }
     setSubmitting(true);
     try {
-      const fd = new FormData();
-      fd.append("prefix", prefix);
-      fd.append("content", content);
-      const res = await fetch(buildApiUrl("api/maintenance/create_api.php"), {
-        method: "POST", body: fd, credentials: "include",
-      });
-      const json = await res.json();
+      const { json } = await createMaintenance({ prefix, content });
       if (json.success) {
         setForm({ prefix: "", content: "" });
         onPublished?.();
@@ -229,24 +209,6 @@ export function MaintenancePanel({
         <div className="maintenance-list-section">
           <div className="maintenance-list-header">
             <h2>{t("publishedMaintenanceContent")}</h2>
-            {canManageMaintenanceMode ? (
-              <div className="maintenance-mode-inline">
-                <span className="maintenance-mode-inline-label">Maintenance Mode</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={modeEnabled}
-                  aria-label="Maintenance Mode"
-                  className={`maintenance-mode-toggle maintenance-mode-toggle--inline ${modeEnabled ? "is-on" : "is-off"}`}
-                  disabled={modeToggleDisabled}
-                  onClick={modeEnabled ? onDisableMaintenanceMode : onEnableMaintenanceMode}
-                >
-                  <span className="maintenance-mode-switch" aria-hidden="true">
-                    <span className="maintenance-mode-switch-thumb" />
-                  </span>
-                </button>
-              </div>
-            ) : null}
           </div>
           <div id="maintenanceList" style={{ flex: 1, overflowY: "auto" }}>
             {maintenanceList.length === 0 ? (
@@ -266,8 +228,8 @@ export function MaintenancePanel({
                     <span dangerouslySetInnerHTML={{ __html: toSafeRenderHtml(item.content) }} />
                   </div>
                   <div className="announcement-meta">
-                    <span>{t("createdBy", { name: item.created_by })}</span>
-                    <span>{t("createdAt", { time: item.created_at })}</span>
+                    <span>{t("createdBy", { name: item.createdBy ?? item.created_by })}</span>
+                    <span>{t("createdAt", { time: formatAnnouncementTimestamp(item.createdAt ?? item.created_at) })}</span>
                   </div>
                 </div>
               ))
