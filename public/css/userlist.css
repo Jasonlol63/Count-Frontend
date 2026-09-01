@@ -3341,6 +3341,63 @@ body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-
     min-width: 6.25rem;
 }
 
+/* Bank Process 窄屏（<1350px）：chip 尺寸改用固定紧缩值（不用 vw），一跌破门槛立刻缩到位，
+   不会像 clamp(vw) 那样要等宽度掉到很小才逼近下限，避免刚跌破门槛那段仍塞不下要横向 scroll。 */
+@media (max-width: 1349px) {
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process {
+        gap: 4px;
+    }
+
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip {
+        padding: 3px 7px 3px 3px;
+        gap: 4px;
+        font-size: 10px;
+    }
+
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip__dot {
+        width: 13px;
+        height: 13px;
+    }
+
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip__check {
+        width: 8px;
+        height: 8px;
+    }
+
+    /* 窄屏下不再预留较长语言的固定宽度，改成贴合当前文案实际长度 */
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip:nth-child(1),
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip:nth-child(2),
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip:nth-child(3),
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip:nth-child(4),
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip:nth-child(5),
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip:nth-child(6) {
+        min-width: 0;
+    }
+}
+
+/* 更窄（<1200px）：再进一步压缩一级，给 Add/Date/Search/Delete 留够空间 */
+@media (max-width: 1199px) {
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process {
+        gap: 3px;
+    }
+
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip {
+        padding: 2px 6px 2px 2px;
+        gap: 3px;
+        font-size: 9px;
+    }
+
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip__dot {
+        width: 11px;
+        height: 11px;
+    }
+
+    body.process-page.process-page--bank .userlist-filter-chips--bank-process .user-filter-chip__check {
+        width: 7px;
+        height: 7px;
+    }
+}
+
 /* Bank Process 窄屏下拉：横列 chip 浮条，chip 之间留间距 */
 body.process-page.process-page--bank .userlist-filter-chips--bank-process-dropdown {
     flex-direction: row;

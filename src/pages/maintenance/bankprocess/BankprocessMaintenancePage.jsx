@@ -24,7 +24,9 @@ import {
   readPersistedDashboardGcFilter,
   resolveBootCompanyId,
   resolveInitialSelectedGroupFromSession,
+  clearDashboardSelectedCurrency,
 } from "../../../utils/company/sharedCompanyFilter.js";
+import { useCrossPageCurrencySync } from "../../../utils/company/useCrossPageCurrencySync.js";
 import "../../../../public/css/accountCSS.css";
 import "../../../../public/css/userlist.css";
 import "../../../../public/css/date-range-picker.css";
@@ -47,6 +49,13 @@ import {
   toggleBankprocessMaintenanceBatchSelection,
   updateSessionCompany,
 } from "./bankprocessMaintenanceLogic.js";
+import {
+  mergeCurrencyCodesWithSavedOrder,
+  persistCurrencyDisplayOrder,
+  persistUserCurrencyDisplayOrder,
+  resolveSavedCurrencyOrder,
+} from "../../../utils/company/currencyDisplayOrder.js";
+import { saveUserCurrencyOrder } from "../../transaction/lib/transactionApi.js";
 import { notifyTransactionListInvalidated } from "../../transaction/lib/transactionPaymentLogic.js";
 import { useLoginLang } from "../../../utils/i18n/useLoginLang.js";
 import { getMaintenanceText, MAINTENANCE_I18N } from "../../../translateFile/pages/maintenanceTranslate.js";
@@ -65,6 +74,23 @@ function consumeNoDataToastDedupeKey(key) {
     bankprocessNoDataToastKeys.delete(first);
   }
   return true;
+}
+
+/** Apply the shared cross-page order (user-global → scope) to fetched currency rows. */
+function orderBankprocessCurrencyRows(list, companyId) {
+  if (!Array.isArray(list) || list.length === 0) return list || [];
+  const n = Number(companyId);
+  const orderKey = Number.isFinite(n) && n > 0 ? n : null;
+  if (orderKey == null) return list;
+  const savedOrder = resolveSavedCurrencyOrder(orderKey, null);
+  if (!savedOrder?.length) return list;
+  const byCode = new Map(list.map((row) => [String(row?.code || "").toUpperCase(), row]));
+  const codes = mergeCurrencyCodesWithSavedOrder(
+    list.map((row) => row?.code),
+    savedOrder,
+  );
+  const ordered = codes.map((code) => byCode.get(code)).filter(Boolean);
+  return ordered.length ? ordered : list;
 }
 
 export default function BankprocessMaintenancePage() {
@@ -106,6 +132,8 @@ export default function BankprocessMaintenancePage() {
   const initialBankprocessSearchDoneRef = useRef(false);
   const searchSeqRef = useRef(0);
   const searchAbortRef = useRef(null);
+  /** True right after the user explicitly picks "All" currencies — tells useCrossPageCurrencySync not to re-apply a persisted/default currency. */
+  const userSelectedAllCurrencyRef = useRef(false);
 
   const notify = useCallback((message, type = "success") => {
     const id = Date.now() + Math.random();
@@ -260,7 +288,7 @@ export default function BankprocessMaintenancePage() {
         setCompanyCode(currentComp?.company_id || "");
 
         const currencyList = await fetchCompanyCurrencies(initialCompanyId).catch(() => []);
-        setCurrencies(currencyList);
+        setCurrencies(orderBankprocessCurrencyRows(currencyList, initialCompanyId));
         if (currencyList.length === 0) {
           setAllCurrenciesSelected(true);
           setSelectedCurrencies([]);
@@ -324,7 +352,7 @@ export default function BankprocessMaintenancePage() {
     (async () => {
       const currencyList = await fetchCompanyCurrencies(companyId).catch(() => []);
       if (cancelled) return;
-      setCurrencies(currencyList);
+      setCurrencies(orderBankprocessCurrencyRows(currencyList, companyId));
       if (currencyList.length === 0) {
         setAllCurrenciesSelected(true);
         setSelectedCurrencies([]);
@@ -561,22 +589,84 @@ export default function BankprocessMaintenancePage() {
     handlePickCompany,
   ]);
 
-  const toggleBankprocessCurrency = useCallback((code) => {
-    if (!code) return;
+  // -- Cross-page currency selection sync (Dashboard / Transaction / Reports / etc.) --
+  const bankprocessCurrencyCodes = useMemo(
+    () => currencies.map((row) => row?.code).filter(Boolean),
+    [currencies],
+  );
+  const applyCrossPageCurrency = useCallback((code) => {
+    userSelectedAllCurrencyRef.current = false;
     setAllCurrenciesSelected(false);
-    setSelectedCurrencies((prev) => {
-      const has = prev.includes(code);
-      if (has) {
-        const next = prev.filter((c) => c !== code);
-        return next.length > 0 ? next : prev;
-      }
-      return [...prev, code];
-    });
+    setSelectedCurrencies([code]);
   }, []);
+  const { persistSelection: persistCrossPageCurrency } = useCrossPageCurrencySync({
+    enabled: bankprocessCurrencyCodes.length > 0 && Boolean(companyId),
+    companyId:
+      Number.isFinite(Number(companyId)) && Number(companyId) > 0 ? Number(companyId) : null,
+    selectedGroup,
+    availableCodes: bankprocessCurrencyCodes,
+    currentCode:
+      !allCurrenciesSelected && selectedCurrencies.length === 1 ? selectedCurrencies[0] : "",
+    onApplyCode: applyCrossPageCurrency,
+    respectEmptyRef: userSelectedAllCurrencyRef,
+  });
+
+  const toggleBankprocessCurrency = useCallback(
+    (code) => {
+      if (!code) return;
+      userSelectedAllCurrencyRef.current = false;
+      setAllCurrenciesSelected(false);
+      const prev = selectedCurrencies;
+      const has = prev.includes(code);
+      let next;
+      if (has) {
+        next = prev.filter((c) => c !== code);
+        next = next.length > 0 ? next : prev;
+      } else {
+        next = [...prev, code];
+      }
+      setSelectedCurrencies(next);
+      // Broadcast so every page follows the currency the user just switched to.
+      if (next.length >= 1) persistCrossPageCurrency(next[next.length - 1]);
+      else clearDashboardSelectedCurrency();
+    },
+    [selectedCurrencies, persistCrossPageCurrency],
+  );
+
+  /** Drag reorder — writes the shared cross-page order so every page follows. */
+  const handleCurrencyDropOn = useCallback(
+    async (e, targetCode) => {
+      e.preventDefault();
+      const dragged = e.dataTransfer?.getData("text/plain");
+      if (!dragged || !targetCode || dragged === targetCode) return;
+      const list = [...currencies];
+      const fromI = list.findIndex((row) => row?.code === dragged);
+      const toI = list.findIndex((row) => row?.code === targetCode);
+      if (fromI < 0 || toI < 0 || fromI === toI) return;
+      const next = [...list];
+      const [moved] = next.splice(fromI, 1);
+      next.splice(toI, 0, moved);
+      setCurrencies(next);
+      const codes = next.map((row) => row?.code).filter(Boolean);
+      persistUserCurrencyDisplayOrder(codes);
+      const cid = Number(companyId);
+      if (Number.isFinite(cid) && cid > 0) {
+        persistCurrencyDisplayOrder(cid, codes);
+        try {
+          await saveUserCurrencyOrder(codes, { companyId: cid });
+        } catch {
+          /* localStorage already updated on drag */
+        }
+      }
+    },
+    [currencies, companyId],
+  );
 
   const selectAllBankprocessCurrencies = useCallback(() => {
+    userSelectedAllCurrencyRef.current = true;
     setAllCurrenciesSelected(true);
     setSelectedCurrencies([]);
+    clearDashboardSelectedCurrency();
   }, []);
 
   const selectableRows = useMemo(() => rows.filter((r) => isBankprocessMaintenanceRowSelectable(r)), [rows]);
@@ -653,6 +743,7 @@ export default function BankprocessMaintenancePage() {
         selectedCurrencies={selectedCurrencies}
         onCurrencyToggle={toggleBankprocessCurrency}
         onCurrencySelectAll={selectAllBankprocessCurrencies}
+        onCurrencyDropOn={handleCurrencyDropOn}
         confirmDelete={confirmDelete}
         setConfirmDelete={setConfirmDelete}
         selectedIds={selectedIds}

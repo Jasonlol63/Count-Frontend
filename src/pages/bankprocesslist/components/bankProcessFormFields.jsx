@@ -351,10 +351,22 @@ export function BankSearchableAccountPick({ value, onChange, accounts, disabled,
   useLayoutEffect(() => {
     if (!open || !usePortal) return undefined;
     positionMenu();
-    const onReflow = () => positionMenu();
+    // Coalesce to one reposition per animation frame — an unthrottled scroll
+    // listener re-measuring + setState on every scroll event is a common
+    // cause of janky scrolling when this dropdown is left open while the
+    // surrounding modal scrolls (e.g. on small screens).
+    let rafId = null;
+    const onReflow = () => {
+      if (rafId != null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        positionMenu();
+      });
+    };
     window.addEventListener("resize", onReflow);
     window.addEventListener("scroll", onReflow, true);
     return () => {
+      if (rafId != null) window.cancelAnimationFrame(rafId);
       window.removeEventListener("resize", onReflow);
       window.removeEventListener("scroll", onReflow, true);
     };

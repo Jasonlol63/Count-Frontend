@@ -76,10 +76,22 @@ export default function BankProcessStatusControl({
   useLayoutEffect(() => {
     if (!open) return undefined;
     updateMenuPos();
-    const onReflow = () => updateMenuPos();
+    // Coalesce to one reposition per animation frame — an unthrottled scroll
+    // listener re-measuring + setState on every scroll event is a common
+    // cause of janky scrolling when this menu is left open while the
+    // surrounding modal/page scrolls (e.g. on weaker devices).
+    let rafId = null;
+    const onReflow = () => {
+      if (rafId != null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        updateMenuPos();
+      });
+    };
     window.addEventListener("resize", onReflow);
     window.addEventListener("scroll", onReflow, true);
     return () => {
+      if (rafId != null) window.cancelAnimationFrame(rafId);
       window.removeEventListener("resize", onReflow);
       window.removeEventListener("scroll", onReflow, true);
     };

@@ -6,6 +6,10 @@ Route: `/bank-process-list` (see `App.jsx`). Entry: `BankProcessListPage.jsx`.
 
 Bank Process 入账金额：**DB 存 6 位**，前端 Half Up **仅展示 2 位**。详见后端 `docs/frontend-springboot-migration.md` 第27节。
 
+## 前端 UI / 效能优化记录
+
+Filter chips 收合行为、窄屏响应式、Date range 跨页面污染、modal 滚动效能，详见 [`docs/bankprocess-list-ui-optimizations.md`](../../../docs/bankprocess-list-ui-optimizations.md)。
+
 ## Where to change what
 
 | Task | Location |

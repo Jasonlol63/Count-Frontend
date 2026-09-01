@@ -33,6 +33,7 @@ export default function BankprocessMaintenanceFilters({
   selectedCurrencies,
   onCurrencyToggle,
   onCurrencySelectAll,
+  onCurrencyDropOn,
   confirmDelete,
   setConfirmDelete,
   selectedIds,
@@ -129,6 +130,8 @@ export default function BankprocessMaintenanceFilters({
               selectedCurrencies={selectedCurrencies}
               toggleAllCurrencies={onCurrencySelectAll}
               toggleCurrency={onCurrencyToggle}
+              currencyDraggable
+              onCurrencyDropOn={onCurrencyDropOn}
               t={(key) => {
                 if (key === "groupId") return m.groupId;
                 if (key === "company") return m.company;

@@ -1168,6 +1168,14 @@ export function ensureMaintenanceDateRangePicker() {
           monthLabels = options.monthLabels;
         }
       }
+      /*
+       * init() means a page is (re)taking over this shared singleton — any preserveDisplayUntilCommit
+       * stash left over from whichever page/binding used it last is stale here and must not leak forward
+       * (e.g. Dashboard's committed range bleeding into Bank Process's toolbar on SPA route switch, even
+       * though calendarStartDate/hidden inputs below correctly resolve to this page's own blank state).
+       */
+      stashedCommittedRange = null;
+      isSelectingRange = false;
       activeRangeBinding = {
         dateFromId: config.dateFromId,
         dateToId: config.dateToId,

@@ -2490,9 +2490,9 @@ body.ec-auth-shell.process-page.process-page--bank #calendar-popup.calendar-popu
 
     body.process-page.process-page--bank .bank-process-toolbar-primary .search-container.userlist-search-bar.bank-process-search-bar.is-expanded,
     body.ec-auth-shell.process-page.process-page--bank .bank-process-toolbar-primary .search-container.userlist-search-bar.bank-process-search-bar.is-expanded {
-        /* <1700px：展开后更长（明显一点，避免“看不出变化”） */
-        width: clamp(220px, 18vw, 320px) !important;
-        max-width: clamp(220px, 18vw, 320px) !important;
+        /* <1700px：展开后短一点，避免挤压其他 toolbar 控件 */
+        width: clamp(150px, 11vw, 210px) !important;
+        max-width: clamp(150px, 11vw, 210px) !important;
     }
 
     /* <1700px：展开后的 Search 更“细”，高度与 Date range 药丸对齐 */

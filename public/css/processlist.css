@@ -1814,6 +1814,16 @@ body.ec-auth-shell .process-page #addBankModal .bank-actions .btn-cancel:hover {
     overflow: hidden !important;
 }
 
+/* .modal (base class) is itself scrollable + backdrop-filter blurred, as a
+   fallback for modals with no internal scroll region of their own. This modal
+   already scrolls internally via .bank-form-fields-scroll, so the outer
+   scroll is redundant here — and on mobile, a scrollable ancestor sitting
+   behind a blurred fixed layer competing with an inner scroll region is a
+   common jank source. Drop the outer scroll for this modal specifically. */
+.bank-modal.modal {
+    overflow: hidden !important;
+}
+
 /* Title bar separator — match Account / Process form modals (not blue) */
 #addBankModal .modal-header {
     border-bottom: 1px solid var(--color-border-muted, #e2e8f0);
@@ -1844,6 +1854,11 @@ body.ec-auth-shell .process-page #addBankModal .bank-actions .btn-cancel:hover {
     overflow-y: auto;
     overflow-x: visible;
     padding-bottom: 10px; /* breathing room above the pinned buttons */
+    /* Smooth momentum scroll on iOS (default is a choppy, non-inertial scroll
+       inside nested overflow containers) and stop the scroll from bubbling
+       into whatever sits behind the modal once it hits the top/bottom edge. */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 /* The action buttons bar: pinned at bottom, never scrolls */
@@ -1870,6 +1885,16 @@ body.ec-auth-shell .process-page #addBankModal .bank-actions .btn-cancel:hover {
     }
     #addBankModal .bank-form > .bank-actions {
         padding: 12px 0 16px 0;
+    }
+    /* Only where this viewport is short enough that the form actually needs
+       to scroll (matches this same breakpoint). Extra runway before the
+       bottom edge — a fast flick on a short scroll region hits the boundary
+       almost immediately, which reads as a jarring stop/stutter even though
+       no frames were actually dropped. On tall/wide screens where everything
+       already fits with no scrollbar, this padding must NOT apply — it would
+       needlessly force a scrollbar to appear where none was needed. */
+    #addBankModal .bank-form-fields-scroll {
+        padding-bottom: 15px;
     }
 }
 
