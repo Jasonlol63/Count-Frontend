@@ -824,6 +824,12 @@ export default function AutoRenewPage() {
                 </div>
                 <div className="userlist-filter-chips auto-renew-filter-chips" role="group" aria-label={t("filterGroupLabel")}>
                     <FilterChip
+                      active={statusFilter === "all"}
+                      label={t("filterShowAll")}
+                      count={counts.total}
+                      onClick={() => handleStatusFilterChange("all")}
+                    />
+                    <FilterChip
                       active={statusFilter === "pending"}
                       label={t("filterPending")}
                       count={counts.pending}
@@ -840,12 +846,6 @@ export default function AutoRenewPage() {
                       label={t("filterRejected")}
                       count={counts.rejected}
                       onClick={() => handleStatusFilterChange("rejected")}
-                    />
-                    <FilterChip
-                      active={statusFilter === "all"}
-                      label={t("filterShowAll")}
-                      count={counts.total}
-                      onClick={() => handleStatusFilterChange("all")}
                     />
                   </div>
                 </div>
