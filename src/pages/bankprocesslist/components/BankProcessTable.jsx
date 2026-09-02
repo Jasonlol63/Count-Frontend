@@ -7,6 +7,8 @@ import {
   bankProcessContractBadgeKey,
   formatBankMoneyFixed2,
   isValidBankMoneyInput,
+  parseBankContractRentalMonthsForDayEnd,
+  contractBillingEndYmdForBankForm,
 } from "../lib/bankProcessHelpers.js";
 import MaintenanceEllipsisText from "../../maintenance/shared/MaintenanceEllipsisText.jsx";
 import BankProcessStatusControl from "./BankProcessStatusControl.jsx";
@@ -31,26 +33,32 @@ function BankSortIcon({ column, sortColumn, sortDirection }) {
   );
 }
 
-function getContractStateClass(dayStart, dayEnd) {
+function getContractStateClass(dayStart, dayEnd, contract, frequency) {
   const now = new Date();
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const hasDayStart = dayStart != null && String(dayStart).trim() !== "";
   if (!hasDayStart) return "contract-pending";
   const start = String(dayStart).substring(0, 10);
-  const end = dayEnd ? String(dayEnd).substring(0, 10) : null;
+  let end = dayEnd ? String(dayEnd).substring(0, 10) : null;
+  if (!end) {
+    // Day end 未填：跟表单自动填一致，用 contract 期限 + day_start 推算隐含到期日，
+    // 而不是把「没填 Day end」当成「已到期」。
+    const termMonths = parseBankContractRentalMonthsForDayEnd(contract);
+    end = termMonths ? contractBillingEndYmdForBankForm(start, termMonths, frequency) : null;
+  }
   if (todayStr < start) return "contract-pending";
   const isDue = end ? todayStr >= end : todayStr >= start;
   return isDue ? "contract-expired" : "contract-active";
 }
 
-function renderBankContract(value, dayStart, dayEnd, lang) {
+function renderBankContract(value, dayStart, dayEnd, lang, frequency) {
   const text = String(value || "").trim();
   if (!text) return "-";
 
   const contractBadgeKey = bankProcessContractBadgeKey(text);
   const displayLabel = formatBankProcessContractLabel(lang, text);
 
-  const baseContractClass = getContractStateClass(dayStart || null, dayEnd || null);
+  const baseContractClass = getContractStateClass(dayStart || null, dayEnd || null, text, frequency);
   const grayContracts = ["1 MONTH", "1+1 MONTH", "1+2 MONTHS", "1+3 MONTHS"];
   const contractClass =
     grayContracts.indexOf(contractBadgeKey) !== -1 && baseContractClass === "contract-active"
@@ -260,7 +268,7 @@ export default function BankProcessTable({
                     <MaintenanceEllipsisText value={r.card_lower} className="bank-owner-text" />
                   </div>
                   <div className={cellClass("contract", "bank-contract-cell")}>
-                    {renderBankContract(r.contract, r.day_start || r.date, r.day_end, lang)}
+                    {renderBankContract(r.contract, r.day_start || r.date, r.day_end, lang, r.day_start_frequency)}
                   </div>
                   <div className={cellClass("insurance")}>{r.insurance || "-"}</div>
                   <div className={cellClass("customer")}>{r.customer || "-"}</div>

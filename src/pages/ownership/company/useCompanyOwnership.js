@@ -194,8 +194,6 @@ export function useCompanyOwnership(shell) {
 
       setLoadingCompanyId(cid);
       try {
-        const compData = allCompanies.find((c) => Number(c.id) === cid);
-        const compGid = compData?.group_id || "";
         const ownersUrl = isHistoricalView
           ? `api/ownership/list?tenant_id=${cid}&month=${encodeURIComponent(selectedMonth)}`
           : `api/ownership/list?tenant_id=${cid}`;
@@ -211,16 +209,6 @@ export function useCompanyOwnership(shell) {
           }).then((r) => r.json()),
         ]);
         const accounts = mapAvailableAccountsForPicker(aRes.status === "success" ? aRes.data : []);
-        if (compGid && !accounts.some((a) => String(a.id) === `G_${compGid}`)) {
-          accounts.push({
-            id: `G_${compGid}`,
-            account_name: `Group: ${compGid}`,
-            name: `Group Equity`,
-            role: "GROUP",
-            type: "group",
-            is_main_owner: 0,
-          });
-        }
         let rows = mapOwnerApiRows(oRes.status === "success" ? oRes.data : []);
         if (preserveDrafts && draftRows) {
           rows = mergeServerRowsPreservingDrafts(draftRows, rows);
@@ -248,7 +236,7 @@ export function useCompanyOwnership(shell) {
         setLoadingCompanyId(null);
       }
     },
-    [allCompanies, isHistoricalView, selectedMonth, setHistoryBanner, lang, showToast],
+    [isHistoricalView, selectedMonth, setHistoryBanner, lang, showToast],
   );
 
   const toggleCard = useCallback(
