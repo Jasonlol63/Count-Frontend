@@ -161,6 +161,23 @@ if (hasMiddleAccount && !hasMiddleRate && !hasMiddleFee && !hasMiddlePlatformFee
 
 ---
 
+## 5.1 从 legacy PHP 前端 port 过来的两处修正（2026-09-05）
+
+来源：`count168test`（legacy PHP 版 React 前端）9/2–9/4 期间对同一份算法文件的修改，随 `port(bank-process)`
+之后的一次后续 merge 一起搬过来（legacy 那边逻辑跟后端无关，纯前端计算/文案，可以直接复用）。
+
+1. **`computeRateMulCommission()` 的 "divide" 模式抽成方向反了**（`transactionSubmitHelpers.js:104-108`）：
+   - 旧：`rateMulCommission = from/newDivisor − from/divisor`
+   - 新：`rateMulCommission = from/divisor − from/newDivisor`（顾客固定金额 − 用 Rate-Mul 重新算出来的值）
+   - 原因：除数越大，客人拿到的越少，Middle-Man 抽得越多，所以要 `newDivisor > divisor` 才应该是正的抽成——
+     跟 multiply 模式方向相反（multiply 是"新汇率越小抽得越多"）。旧公式算出来的符号是反的。
+2. **`buildRatePayload()` 里 leg2（Transfer）的 `transferFromDesc`/`transferToDesc` 引用错了账户**（同文件 `:256-264`）：
+   - 旧：`transferFromDesc` 引用 `transferToCode`，`transferToDesc` 引用 `transferFromCode`（互相引用对方）
+   - 新：`transferFromDesc` 引用自己的 `transferFromCode`，`transferToDesc` 引用自己的 `transferToCode`
+   - 原因：payload 字段命名与 UI 是交叉的（`rate_transfer_from_account_id` 实际存的是 UI"To Account"），
+     legacy 那边来回改了三次（先互相引用改成自身引用，又改回互相引用，最后定案在"自身引用"），这里直接采用
+     legacy 最终收敛的版本。leg1 的 `fromDesc`/`toDesc`（互相引用）**没有改**，legacy 那边也没碰。
+
 ## 6. 已知限制 / 后续
 
 1. **Mobile 未同步**：`c168_mobile/frontend/src/lib/transactionSubmitHelpers.js` 跟桌面共用算法文件的一份拷贝，但本次只改了桌面这份；如果 mobile 也要走 Spring RATE 提交，需要同样加一套 `leg1_*`/`leg2_*` 字段和对应的 `buildSpringSubmitRequest`（如果 mobile 有自己的适配层）。
