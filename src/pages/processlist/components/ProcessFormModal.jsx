@@ -518,6 +518,25 @@ export default function ProcessFormModal({
                 </div>
               </div>
 
+              <div className="form-row">
+                <div className="form-group">
+                  <div className="dc-save-draft-row">
+                    <span className="dc-save-draft-row__label">{t("enableSaveDraft")}</span>
+                    <label className="toggle-switch">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(form.enable_save_draft)}
+                        disabled={ro}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, enable_save_draft: e.target.checked }))
+                        }
+                      />
+                      <span className="toggle-slider" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               </div>
 
               {editMode && (

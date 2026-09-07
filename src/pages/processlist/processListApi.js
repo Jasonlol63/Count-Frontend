@@ -208,6 +208,7 @@ export async function addProcess(tenantId, fields, signal) {
     replaceWordFrom: fields?.replaceWordFrom != null ? String(fields.replaceWordFrom) : "",
     replaceWordTo: fields?.replaceWordTo != null ? String(fields.replaceWordTo) : "",
     remark: fields?.remark != null ? String(fields.remark) : "",
+    enableSaveDraft: Boolean(fields?.enableSaveDraft),
     category: "GAME",
   };
 
@@ -264,6 +265,7 @@ export async function updateProcess(tenantId, fields, signal) {
     replaceWordFrom: fields?.replaceWordFrom != null ? String(fields.replaceWordFrom) : "",
     replaceWordTo: fields?.replaceWordTo != null ? String(fields.replaceWordTo) : "",
     remark: fields?.remark != null ? String(fields.remark) : "",
+    enableSaveDraft: Boolean(fields?.enableSaveDraft),
   };
 
   const res = await fetch(buildApiUrl("api/process/update-process"), {

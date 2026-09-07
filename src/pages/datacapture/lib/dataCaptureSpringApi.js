@@ -230,6 +230,81 @@ export async function getBankCaptureDraft({ tenantId, processCode, currencyId },
   };
 }
 
+/**
+ * POST /api/datacapture/games/draft/save
+ * Body: { tenantId, processId, currencyId, tableData } — server rejects unless the process is
+ * GAME category with enable_save_draft on (no client-side eligibility check duplicated here).
+ */
+export async function saveGameCaptureDraft(
+  { tenantId, processId, currencyId, tableData, cells = null },
+  signal,
+) {
+  const tid = Number(tenantId);
+  const pid = Number(processId);
+  const cid = Number(currencyId);
+  if (!Number.isFinite(tid) || tid <= 0) throw new Error("tenantId is required");
+  if (!Number.isFinite(pid) || pid <= 0) throw new Error("processId is required");
+  if (!Number.isFinite(cid) || cid <= 0) throw new Error("currencyId is required");
+
+  const body = {
+    tenantId: tid,
+    processId: pid,
+    currencyId: cid,
+  };
+  if (Array.isArray(cells) && cells.length) {
+    body.cells = cells;
+  } else {
+    body.tableData = tableData ?? null;
+  }
+
+  const res = await fetch(buildApiUrl("api/datacapture/games/draft/save"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !isApiSuccess(json)) {
+    throw new Error(json?.message || "Failed to save game draft");
+  }
+  return json.data ?? null;
+}
+
+/**
+ * POST /api/datacapture/games/draft/get
+ * Body: { tenantId, processId, currencyId }
+ * @returns {{ tableData, processId, currencyId, cells }|null}
+ */
+export async function getGameCaptureDraft({ tenantId, processId, currencyId }, signal) {
+  const tid = Number(tenantId);
+  const pid = Number(processId);
+  const cid = Number(currencyId);
+  if (!Number.isFinite(tid) || tid <= 0) return null;
+  if (!Number.isFinite(pid) || pid <= 0) return null;
+  if (!Number.isFinite(cid) || cid <= 0) return null;
+
+  const res = await fetch(buildApiUrl("api/datacapture/games/draft/get"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tenantId: tid, processId: pid, currencyId: cid }),
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok || !isApiSuccess(json)) {
+    return null;
+  }
+  const data = json.data;
+  if (!data?.tableData) return null;
+  return {
+    tableData: data.tableData,
+    processId: data.processId ?? pid,
+    currencyId: data.currencyId ?? cid,
+    cells: Array.isArray(data.cells) ? data.cells : [],
+  };
+}
+
 export function resolveScopeTenantId(scope) {
   return resolveDataCaptureTenantId(scope);
 }

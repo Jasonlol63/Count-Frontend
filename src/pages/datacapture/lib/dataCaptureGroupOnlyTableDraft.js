@@ -13,7 +13,12 @@ import {
 import { tableSnapshotHasData } from "./dataCaptureTableSnapshot.js";
 import { applyBridgeCaptureType } from "./dataCaptureBridge.js";
 import { callDataCaptureRuntime, getDataCaptureState } from "./dataCaptureRuntime.js";
-import { getBankCaptureDraft, saveBankCaptureDraft } from "./dataCaptureSpringApi.js";
+import {
+  getBankCaptureDraft,
+  saveBankCaptureDraft,
+  getGameCaptureDraft,
+  saveGameCaptureDraft,
+} from "./dataCaptureSpringApi.js";
 import { resolveDataCaptureTenantId } from "./dataCaptureTenant.js";
 import {
   isGroupPayrollCaptureSession,
@@ -48,15 +53,26 @@ function normalizeBankDraftTableData(tableData) {
 
 /**
  * Both company payroll buckets ("company:{tenantId}") and Group buckets (AP/IG code, tenant
- * resolved from `scope.groupEntityTenantId`) persist drafts via the same Spring
- * `data_capture_draft` table (`POST /api/datacapture/bank/draft/save|get`).
+ * resolved from `scope.groupEntityTenantId`) persist drafts via the Spring `data_capture_draft`
+ * table. Fixed payroll codes (salary/commission/bonus) go through the BANK endpoints
+ * (`/api/datacapture/bank/draft/save|get`, keyed by processCode); a real Games process (numeric
+ * id, gated upstream on its own enable_save_draft flag) goes through the GAMES endpoints
+ * (`/api/datacapture/games/draft/save|get`, keyed by processId). All eligibility checks
+ * (process code whitelist for BANK, enable_save_draft for GAMES) are re-validated server-side —
+ * this layer only routes the call, it does not duplicate that validation.
  */
+function isGamesProcessKey(processKey) {
+  return !isGroupPayrollDraftProcessId(processKey) && /^\d+$/.test(String(processKey || ""));
+}
+
 const draftBackend = {
   async fetch(scope, bucketId, processKey, currencyId) {
     const tenantId = resolveDraftTenantId(bucketId, scope);
     if (!tenantId) return null;
     try {
-      const result = await getBankCaptureDraft({ tenantId, processCode: processKey, currencyId });
+      const result = isGamesProcessKey(processKey)
+        ? await getGameCaptureDraft({ tenantId, processId: processKey, currencyId })
+        : await getBankCaptureDraft({ tenantId, processCode: processKey, currencyId });
       return result?.tableData
         ? { tableData: normalizeBankDraftTableData(result.tableData), captureType: "1.Text" }
         : null;
@@ -68,12 +84,21 @@ const draftBackend = {
     const tenantId = resolveDraftTenantId(bucketId, scope);
     if (!tenantId) return false;
     try {
-      await saveBankCaptureDraft({
-        tenantId,
-        processCode: processKey,
-        currencyId,
-        tableData: payload?.tableData ?? null,
-      });
+      if (isGamesProcessKey(processKey)) {
+        await saveGameCaptureDraft({
+          tenantId,
+          processId: processKey,
+          currencyId,
+          tableData: payload?.tableData ?? null,
+        });
+      } else {
+        await saveBankCaptureDraft({
+          tenantId,
+          processCode: processKey,
+          currencyId,
+          tableData: payload?.tableData ?? null,
+        });
+      }
       return true;
     } catch {
       return false;
@@ -83,7 +108,11 @@ const draftBackend = {
     const tenantId = resolveDraftTenantId(bucketId, scope);
     if (!tenantId) return false;
     try {
-      await saveBankCaptureDraft({ tenantId, processCode: processKey, currencyId, tableData: null });
+      if (isGamesProcessKey(processKey)) {
+        await saveGameCaptureDraft({ tenantId, processId: processKey, currencyId, tableData: null });
+      } else {
+        await saveBankCaptureDraft({ tenantId, processCode: processKey, currencyId, tableData: null });
+      }
       return true;
     } catch {
       return false;

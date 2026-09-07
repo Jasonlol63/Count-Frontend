@@ -103,6 +103,7 @@ export function normalizeProcessListItem(dto) {
     replace_word_from: process.replaceWordFrom ?? "",
     replace_word_to: process.replaceWordTo ?? "",
     remark: process.remark ?? "",
+    enable_save_draft: Boolean(process.enableSaveDraft),
     created_by: process.createdBy ?? "",
     modified_by: process.updatedBy ?? "",
     dts_created: process.createdAt ?? "",

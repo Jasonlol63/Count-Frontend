@@ -281,6 +281,7 @@ export function useDataCaptureFormEngine(
           process_id: p.processId,
           process_display: p.processDisplay,
           description_name: p.descriptionName ?? null,
+          enable_save_draft: Boolean(p.enableSaveDraft),
         }));
       } catch (err) {
         console.warn("Failed to load games process list", err);

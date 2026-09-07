@@ -1413,7 +1413,7 @@ export default function ProcessListPage() {
       replace_word_to: p.replace_word_to || "",
       remark: parseRemarkForForm(p.remark),
       status: p.status || "active",
-      enable_save_draft: false,
+      enable_save_draft: Boolean(p.enable_save_draft),
       dts_modified: dtsModified,
       modified_by: p.modified_by || "",
       dts_created: dtsCreated,
@@ -1465,6 +1465,7 @@ export default function ProcessListPage() {
       replaceWordFrom: toProcessFormUpperInput(form.replace_word_from || ""),
       replaceWordTo: toProcessFormUpperInput(form.replace_word_to || ""),
       remark: toProcessFormUpperInput(form.remark || ""),
+      enableSaveDraft: Boolean(form.enable_save_draft),
     };
     const copyFromProcessId = !editMode && form.copy_from ? Number(form.copy_from) : null;
     if (Number.isFinite(copyFromProcessId) && copyFromProcessId > 0) {
