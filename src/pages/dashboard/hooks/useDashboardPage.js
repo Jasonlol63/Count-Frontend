@@ -45,7 +45,7 @@ import {
   sumConvertedKpiMetrics,
   warmFrankfurterRatesForCurrencies,
 } from "../../../utils/dashboard/frankfurterRates.js";
-import { DASHBOARD_API, DASHBOARD_BOOTSTRAP_API, DASHBOARD_PROFIT_COLOR, isDashboardHistoricalOwnershipMonth } from "../lib/dashboardConstants.js";
+import { DASHBOARD_PROFIT_COLOR, isDashboardHistoricalOwnershipMonth } from "../lib/dashboardConstants.js";
 import {
   buildEmptyDashboardPayload,
   companyCurrencyCacheState,
@@ -64,7 +64,7 @@ import {
   shouldAggregateChartByMonth,
 } from "../lib/dashboardDateUtils.js";
 import { formatI18nTemplate } from "../lib/dashboardFormat.js";
-import { buildKpiCompare, computeKpiMetrics, mergeDashboardOwnershipFields, viewerHasEarningsConfig } from "../lib/dashboardKpi.js";
+import { computeKpiMetrics, mergeDashboardOwnershipFields, viewerHasEarningsConfig } from "../lib/dashboardKpi.js";
 import {
   mergeCompanyBreakdownRowLists,
   normalizeSubsidiaryEarningsByCompany,
@@ -864,64 +864,35 @@ function normalizeBootstrapDedupeKey(queryString) {
   return params.toString();
 }
 
-/** Dedupe concurrent user_currency_order_api GETs (ignore cache-bust `_t`). */
-async function fetchUserCurrencyOrderHttpDeduped(inflightMap, orderCompanyId) {
-  const dedupeKey =
-    orderCompanyId != null && Number.isFinite(Number(orderCompanyId))
-      ? `cid:${Number(orderCompanyId)}`
-      : "cid:none";
-  const existing = inflightMap.get(dedupeKey);
-  if (existing) return existing;
-  const ordParams = new URLSearchParams({ _t: String(Date.now()) });
-  if (orderCompanyId != null && Number.isFinite(Number(orderCompanyId))) {
-    ordParams.set("company_id", String(orderCompanyId));
-  }
-  const promise = fetch(
-    buildApiUrl(`api/transactions/user_currency_order_api.php?${ordParams.toString()}`),
-    { credentials: "include" }
-  )
-    .then(async (res) => {
-      if (!res) return null;
-      try {
-        return await res.json();
-      } catch {
-        return null;
-      }
-    })
-    .catch(() => null)
-    .finally(() => {
-      if (inflightMap.get(dedupeKey) === promise) {
-        inflightMap.delete(dedupeKey);
-      }
-    });
-  inflightMap.set(dedupeKey, promise);
-  return promise;
+/**
+ * `api/transactions/user_currency_order_api.php` has no Spring equivalent — the multi-currency
+ * drag order feature it fed is disabled (no backend). Short-circuit without a network call.
+ */
+async function fetchUserCurrencyOrderHttpDeduped() {
+  return null;
 }
 
-/** HTTP-level dedupe: callers parse json independently (prefetch vs active load). */
-async function fetchBootstrapHttpDeduped(inflightMap, requestKey, init) {
-  const dedupeKey = normalizeBootstrapDedupeKey(requestKey);
-  const existing = inflightMap.get(dedupeKey);
-  if (existing) return existing;
-  const promise = (async () => {
-    // Fetch with normalized query so server + dedupe see the same key.
-    const res = await fetch(
-      buildApiUrl(`${DASHBOARD_BOOTSTRAP_API}?${dedupeKey}`),
-      init ?? { credentials: "include" }
-    );
-    const json = await res.json();
-    return { res, json };
-  })().finally(() => {
-    if (inflightMap.get(dedupeKey) === promise) {
-      inflightMap.delete(dedupeKey);
-    }
-  });
-  inflightMap.set(dedupeKey, promise);
-  return promise;
+/**
+ * `dashboard_bootstrap_api.php` (PHP) has no Spring equivalent — the single-company KPI
+ * card path now calls `/api/dashboard/kpi` directly (see `fetchDashboardKpiSpring`), and the
+ * chart / multi-currency / group-rollup features this fed have no backend yet. Short-circuit
+ * to a benign "no data" shape (same envelope every call site already checks: `res.ok`,
+ * `json.success`, `json.data`) so every existing caller falls into its already-built
+ * empty/loading-cleared fallback instead of crashing or showing an error banner.
+ */
+async function fetchBootstrapHttpDeduped() {
+  return { res: { ok: false, status: 0 }, json: { success: false, data: null } };
 }
 
-/** Dedupe concurrent identical currency-list GETs (scope / company currencies). */
+/**
+ * Dedupe concurrent identical currency-list GETs (scope / company currencies).
+ * `get_scope_account_currencies_api.php` has no Spring equivalent (per this migration's
+ * scope) and feeds the group-ledger / multi-currency scope that is disabled — short-circuit
+ * that one specific endpoint without a network call; other callers (company currencies)
+ * are unaffected.
+ */
 async function fetchCurrencyListHttpDeduped(inflightMap, apiPath, queryString) {
+  if (apiPath === "api/transactions/get_scope_account_currencies_api.php") return null;
   const dedupeKey = `${apiPath}?${String(queryString || "")}`;
   const existing = inflightMap.get(dedupeKey);
   if (existing) return existing;
@@ -940,25 +911,13 @@ async function fetchCurrencyListHttpDeduped(inflightMap, apiPath, queryString) {
   return promise;
 }
 
-/** Dedupe concurrent identical dashboard_api.php GETs (pie secondary currencies). */
-async function fetchDashboardApiHttpDeduped(inflightMap, queryString, init) {
-  const dedupeKey = String(queryString || "");
-  const existing = inflightMap.get(dedupeKey);
-  if (existing) return existing;
-  const promise = (async () => {
-    const res = await fetch(
-      buildApiUrl(`${DASHBOARD_API}?${dedupeKey}`),
-      init ?? { credentials: "include" }
-    );
-    const json = await res.json();
-    return { res, json };
-  })().finally(() => {
-    if (inflightMap.get(dedupeKey) === promise) {
-      inflightMap.delete(dedupeKey);
-    }
-  });
-  inflightMap.set(dedupeKey, promise);
-  return promise;
+/**
+ * `dashboard_api.php` has no Spring equivalent — the per-currency pie / multi-currency
+ * breakdown it fed is disabled (no backend). Short-circuit to the same "no data" envelope
+ * every caller already checks (`res.ok`, `json.success`, `json.data`) instead of hitting PHP.
+ */
+async function fetchDashboardApiHttpDeduped() {
+  return { res: { ok: false, status: 0 }, json: { success: false, data: null } };
 }
 
 /** buildDashboardCacheKey → company|dateFrom|dateTo|… */
@@ -1093,6 +1052,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   const [multiCurrencyKpiPrev, setMultiCurrencyKpiPrev] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
   const [dashboardDataPrev, setDashboardDataPrev] = useState(null);
+  /** `GET /api/dashboard/kpi` response `data` — single-company scope only, see `kpi` useMemo below. */
+  const [springKpiData, setSpringKpiData] = useState(null);
+  const [springKpiLoading, setSpringKpiLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [earningsByCurrency, setEarningsByCurrency] = useState([]);
   const [earningsByCurrencyPrev, setEarningsByCurrencyPrev] = useState([]);
@@ -1307,6 +1269,17 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     (isGroupLogin(me) || companyLoginCanUseGroupsAllLedger(me));
   const groupAggregateMode =
     groupAllMode || groupOnlyDashboard || groupsAllGroupLevel || usesGroupLedgerDashboard;
+  /**
+   * `GET /api/dashboard/kpi` only supports a single COMPANY-type tenant — no group ledger,
+   * no Company-All / group merge, no multi-company subset. Every other scope has no Spring
+   * KPI backend yet and renders the KPI cards cleared (see `kpi` useMemo below).
+   */
+  const isSingleCompanyKpiScope =
+    companyId != null &&
+    !groupAllMode &&
+    !groupsAllMode &&
+    !usesGroupLedgerDashboard &&
+    !(mergedSubsetIds && mergedSubsetIds.length > 1);
   /** All-currency merge: any scope with 2+ currencies (single company or group aggregate). */
   const canShowAllCurrencies = currencies.length > 1;
   const conversionBaseCurrency =
@@ -1413,6 +1386,50 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   );
 
   const dashboardScopeKey = useMemo(() => resolveDashboardScopeKey(), [resolveDashboardScopeKey]);
+
+  /**
+   * Spring KPI cards fetch — single-company scope only (`GET /api/dashboard/kpi`).
+   * No caching/dedup/prefetch here on purpose: this is a brand-new, deliberately simple
+   * endpoint (one lightweight GET per scope/date change) — none of `dashboard_bootstrap_api`'s
+   * heavy machinery applies. Every other scope (group ledger, Company All, multi-company
+   * merge) has no Spring KPI backend yet, so it just clears the KPI state (see below).
+   */
+  useEffect(() => {
+    if (!isSingleCompanyKpiScope || companyId == null || !dateFrom || !dateTo) {
+      setSpringKpiData(null);
+      setSpringKpiLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringKpiLoading(true);
+    (async () => {
+      try {
+        const q = new URLSearchParams({
+          tenant_id: String(companyId),
+          date_from: dateFrom,
+          date_to: dateTo,
+        });
+        const res = await fetch(buildApiUrl(`api/dashboard/kpi?${q.toString()}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        if (!res.ok || !json?.success || !json?.data) {
+          setSpringKpiData(null);
+          return;
+        }
+        setSpringKpiData(json.data);
+      } catch (err) {
+        if (controller.signal.aborted || err?.name === "AbortError") return;
+        setSpringKpiData(null);
+      } finally {
+        if (!controller.signal.aborted) setSpringKpiLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [isSingleCompanyKpiScope, companyId, dateFrom, dateTo]);
+
   const currenciesScopeSig = useMemo(
     () => (currencies.length > 1 ? [...currencies].sort().join(",") : ""),
     [currencies]
@@ -2294,45 +2311,34 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     );
   }, [selectedGroup]);
 
+  /**
+   * `api/session/update_company_session_api.php` (PHP) already has a working Spring
+   * migration shared across the app — `syncCompanySessionApi()` → `POST /auth/switch-tenant`
+   * (see `src/utils/company/companySessionSync.js`, already used elsewhere in this same file
+   * at the boot-time subsidiary sync). Spring's `switch-tenant` has no structured `reason`
+   * field (legacy PHP's `no_set` case — an unconfigured expiration date — has no Spring
+   * equivalent yet and simply succeeds now); detect "expired" from the message text only,
+   * same as `ProcessListPage.jsx`'s already-migrated company switch.
+   */
   const syncCompanySession = useCallback(
     async (id, viewGroup = selectedGroup, syncGen = null) => {
       const gen = syncGen ?? ++companySwitchGenRef.current;
       try {
-        const q = new URLSearchParams({ company_id: String(id) });
-        const vg = viewGroup ? String(viewGroup).trim() : "";
-        if (vg) q.set("view_group", vg);
-        const res = await fetch(
-          buildApiUrl(`api/session/update_company_session_api.php?${q.toString()}`),
-          {
-            credentials: "include",
-          }
-        );
-        const j = await res.json();
+        const j = await syncCompanySessionApi(id, viewGroup);
         if (gen !== companySwitchGenRef.current) return false;
-        if (!res.ok || !j.success) {
-          const reason = String(j?.data?.reason || "").toLowerCase();
+        if (!j?.success) {
           const msg = String(j?.message || j?.error || "");
           const lower = msg.toLowerCase();
-          const shouldShowModal =
-            reason === "expired" ||
-            reason === "no_set" ||
+          const expired =
             lower.includes("company has expired") ||
             lower.includes("group has expired") ||
-            lower.includes("company expiration date is not set") ||
-            lower.includes("date is not set");
-          if (shouldShowModal) {
-            const modalMessage =
-              reason === "expired"
-                ? "This company since login has expired. Please contact the Customer Service."
-                : reason === "no_set"
-                  ? "Please contact the Customer Service to set the expiration date."
-                  : lower.includes("not set")
-                    ? "Please contact the Customer Service to set the expiration date."
-                    : "This company since login has expired. Please contact the Customer Service.";
+            lower.includes("expired");
+          if (expired) {
+            const modalMessage = "This company since login has expired. Please contact the Customer Service.";
             setCompanyAccessModal({ open: true, message: modalMessage });
             setLoadError(modalMessage);
           } else {
-            setLoadError(j.message || j.error || i18n.couldNotSwitchCompany);
+            setLoadError(msg || i18n.couldNotSwitchCompany);
           }
           return false;
         }
@@ -3382,53 +3388,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     [companies]
   );
 
-  const fetchScopeCurrenciesDeduped = useCallback(async (queryString) => {
-    if (!queryString) return null;
-    if (currencyPrefetchFailedRef.current.has(queryString)) return null;
-    const params = new URLSearchParams(queryString);
-    const deniedId = Number(params.get("company_id"));
-    const isSubsidiaryQuery = params.get("subsidiary_accounts_only") === "1";
-    const groupLedgerQuery = scopeCurrencyQueryUsesGroupLedger(queryString);
-    const viewGroup = String(params.get("view_group") || params.get("group_id") || "")
-      .trim()
-      .toUpperCase();
-    if (
-      groupLedgerQuery &&
-      viewGroup &&
-      currencyPrefetchDeniedGroupRef.current.has(viewGroup)
-    ) {
-      return null;
-    }
-    if (
-      isSubsidiaryQuery &&
-      Number.isFinite(deniedId) &&
-      deniedId > 0 &&
-      currencyPrefetchDeniedCompanyRef.current.has(deniedId)
-    ) {
-      return null;
-    }
-    return fetchBootstrapDeduped(currencyPrefetchInflightRef.current, queryString, async () => {
-      const res = await fetch(
-        buildApiUrl(`api/transactions/get_scope_account_currencies_api.php?${queryString}`),
-        { credentials: "include" }
-      );
-      const json = await res.json();
-      if (!res.ok || !json.success || !Array.isArray(json.data)) {
-        const msg = String(json?.message || json?.error || "");
-        const denied = !res.ok || msg.includes("无权访问");
-        if (denied) {
-          currencyPrefetchFailedRef.current.add(queryString);
-          if (groupLedgerQuery && viewGroup) {
-            currencyPrefetchDeniedGroupRef.current.add(viewGroup);
-          } else if (isSubsidiaryQuery && Number.isFinite(deniedId) && deniedId > 0) {
-            currencyPrefetchDeniedCompanyRef.current.add(deniedId);
-          }
-        }
-        return null;
-      }
-      return json.data.map((r) => String(r.code).toUpperCase()).filter(Boolean);
-    });
-  }, []);
+  // `get_scope_account_currencies_api.php` has no Spring equivalent — the group-ledger /
+  // multi-currency scope this fed is disabled (no backend). Short-circuit, no network call.
+  const fetchScopeCurrenciesDeduped = useCallback(async () => null, []);
 
   const buildCompanyCurrencyQuery = useCallback(
     (cid, viewGroup) => {
@@ -7181,6 +7143,13 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       setDashboardCache(cacheKey, { current: empty, previous: null });
       setLoading(false);
     };
+    // Legacy `dashboard_bootstrap_api.php` / `dashboard_api.php` have no Spring equivalent
+    // yet for chart / per-currency pie / multi-currency / group-rollup data — always paint
+    // the empty scope shape (those panels render their existing cleared/zero state) instead
+    // of issuing PHP fetches here. KPI cards get real numbers from a separate, dedicated
+    // Spring fetch for the single-company scope (see `kpi` useMemo / `springKpiData` below).
+    paintEmptyDashboardScope();
+    return;
     // Company switch: wait until currency list is known before atomic paint.
     // Empty [] in the map means "confirmed no currencies" — paint zeros, do not spin forever.
     if (
@@ -8743,74 +8712,36 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     ? paintedSummaryRef.current.exchangeRatesError
     : exchangeRatesError;
 
+  /**
+   * KPI cards: single-company scope reads the new Spring `/api/dashboard/kpi` payload
+   * directly — that endpoint already returns final numbers (no ownership-multiplier /
+   * group-aggregate math needed client-side), and it has no "previous period" concept, so
+   * `comparisons` stays undefined for this path. Every other scope (group ledger, Company
+   * All, multi-company merge, per-currency "All" toggle) has no Spring KPI backend yet —
+   * render the cleared state so the cards show "-"/0 instead of stale or PHP-fed numbers.
+   */
   const kpi = useMemo(() => {
     const empty = {
-      profit: 0,
-      expenses: 0,
-      earnings: 0,
-      netProfit: 0,
+      profit: null,
+      expenses: null,
+      earnings: null,
+      netProfit: null,
+      kpiCardEarnings: null,
       showEarnings: false,
-      comparisons: null,
+      comparisons: undefined,
     };
-    const useAggregated = showAllCurrencies && canShowAllCurrencies && multiCurrencyKpi;
-    const ownershipCurrent = computeKpiMetrics(
-      dashboardData,
-      summarySelectedGroup,
-      resolveKpiOwnershipOpts(summaryCompanyId, summarySelectedGroup)
-    );
-    const ownershipPrevious = computeKpiMetrics(
-      dashboardDataPrev,
-      summarySelectedGroup,
-      resolveKpiOwnershipOpts(summaryCompanyId, summarySelectedGroup)
-    );
-    let current = useAggregated
-      ? multiCurrencyKpi
-      : ownershipCurrent;
-    if (!current) return empty;
-    if (ownershipCurrent) {
-      current = {
-        ...current,
-        profit: ownershipCurrent.profit,
-        netProfit: ownershipCurrent.netProfit,
-        earnings: ownershipCurrent.earnings,
-        kpiCardEarnings: ownershipCurrent.kpiCardEarnings,
-        showEarnings: ownershipCurrent.showEarnings,
-      };
-    }
-    let previous = useAggregated ? multiCurrencyKpiPrev : ownershipPrevious;
-    if (previous && ownershipPrevious) {
-      previous = {
-        ...previous,
-        earnings: ownershipPrevious.earnings,
-        kpiCardEarnings: ownershipPrevious.kpiCardEarnings,
-      };
-    }
-    const comparisons = previous
-      ? {
-          profit: buildKpiCompare(current.profit, previous.profit),
-          expenses: buildKpiCompare(current.expenses, previous.expenses),
-          netProfit: buildKpiCompare(current.netProfit, previous.netProfit),
-          earnings: buildKpiCompare(
-            current.kpiCardEarnings ?? current.earnings,
-            previous.kpiCardEarnings ?? previous.earnings
-          ),
-        }
-      : null;
-    return { ...current, comparisons };
-  }, [
-    dashboardData,
-    dashboardDataPrev,
-    summarySelectedGroup,
-    summaryCompanyId,
-    groupAllMode,
-    groupsAllGroupLevel,
-    usesGroupLedgerDashboard,
-    showAllCurrencies,
-    canShowAllCurrencies,
-    multiCurrencyKpi,
-    multiCurrencyKpiPrev,
-    resolveKpiOwnershipOpts,
-  ]);
+    if (!isSingleCompanyKpiScope) return empty;
+    if (!springKpiData) return empty;
+    return {
+      profit: springKpiData.profit ?? 0,
+      expenses: springKpiData.expenses ?? 0,
+      netProfit: springKpiData.netProfit ?? 0,
+      showEarnings: !!springKpiData.showEarnings,
+      earnings: springKpiData.earnings ?? 0,
+      kpiCardEarnings: springKpiData.earnings ?? 0,
+      comparisons: undefined,
+    };
+  }, [isSingleCompanyKpiScope, springKpiData]);
 
   const chartAggregateByMonth = useMemo(
     () => shouldAggregateChartByMonth(summaryDateFrom, summaryDateTo),
@@ -9283,7 +9214,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     earningsPanelStable,
   ]);
   /** Keep previous paint visible while the next full view loads (no empty hole). */
-  const kpiLoading = Boolean(dashboardData) ? false : loading || !dashboardViewReady;
+  const kpiLoading =
+    isSingleCompanyKpiScope && springKpiLoading
+      ? true
+      : Boolean(dashboardData)
+        ? false
+        : loading || !dashboardViewReady;
 
   useLayoutEffect(() => {
     if (
