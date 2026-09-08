@@ -38,7 +38,8 @@ export function DashboardKpiCard({
         {showCompare && (
           <span className={`kpi-card-badge${badgeUp ? " is-up" : " is-down"}`}>
             <i className={`fas fa-arrow-${badgeUp ? "up" : "down"}`} aria-hidden="true" />
-            {Math.abs(compare.pct).toFixed(1)}%
+            {Math.abs(compare.pct).toFixed(1)}
+            {compare.clamped ? "+" : ""}%
           </span>
         )}
       </div>

@@ -6,6 +6,7 @@ import { formatDmyDash } from "../../../utils/date/dateUtils.js";
 import { useAuthSession } from "../../../context/AuthSessionContext.jsx";
 import { notifyCompanySessionUpdated } from "../../../utils/company/companySessionEvents.js";
 import { syncCompanySessionApi } from "../../../utils/company/companySessionSync.js";
+import { fetchCurrencyListByTenantId } from "../../../utils/api/currencyApi.js";
 import { ymdToDmy } from "../lib/dashboardDateUtils.js";
 import { useRealtimeDomain } from "../../../lib/realtime/useRealtimeDomain.js";
 import { REALTIME_DOMAINS } from "../../../lib/realtime/realtimeEvents.js";
@@ -53,6 +54,7 @@ import {
 import {
   buildChartRows,
   buildSkeletonChartRows,
+  buildSpringTrendChartRows,
   makeDashboardChartXTick,
   resolveDailyChartXAxisTicks,
 } from "../lib/dashboardChart.jsx";
@@ -64,7 +66,7 @@ import {
   shouldAggregateChartByMonth,
 } from "../lib/dashboardDateUtils.js";
 import { formatI18nTemplate } from "../lib/dashboardFormat.js";
-import { computeKpiMetrics, mergeDashboardOwnershipFields, viewerHasEarningsConfig } from "../lib/dashboardKpi.js";
+import { buildKpiCompare, computeKpiMetrics, mergeDashboardOwnershipFields, viewerHasEarningsConfig } from "../lib/dashboardKpi.js";
 import {
   mergeCompanyBreakdownRowLists,
   normalizeSubsidiaryEarningsByCompany,
@@ -244,89 +246,40 @@ async function fetchGroupLedgerCurrencyCodes(companies, groupKey, me) {
   }
 }
 
-/** Currencies from company Currency Setting table (reliable for group-all merge). */
-async function fetchCompanyCurrencySettingCodes(companyId, companyRow, viewGroup, groupIds) {
-  const cid = parseInt(companyId, 10);
-  if (!Number.isFinite(cid) || cid <= 0) return [];
-
-  const vg = viewGroup ? normalizeDashboardViewGroup(viewGroup) : "";
-  const queries = [];
-  if (vg) {
-    const subQ = new URLSearchParams({ company_id: String(cid) });
-    appendDashboardSubsidiaryScopeParams(subQ, vg);
-    queries.push(subQ);
-  }
-  if (!vg || (companyRow && companyRowIsIndependent(companyRow, groupIds))) {
-    queries.push(new URLSearchParams({ company_id: String(cid) }));
-  }
-
-  for (const q of queries) {
-    try {
-      const packed = await fetchCurrencyListHttpDeduped(
-        currencyListHttpInflight,
-        "api/transactions/get_company_currencies_api.php",
-        q.toString()
-      );
-      if (
-        packed?.res?.ok &&
-        packed.json?.success &&
-        Array.isArray(packed.json.data) &&
-        packed.json.data.length
-      ) {
-        return packed.json.data.map((r) => String(r.code).toUpperCase()).filter(Boolean);
-      }
-    } catch {
-      /* try next query shape */
-    }
-  }
-
-  if (vg) {
-    const subQ = buildSubsidiaryCompanyCurrencyQuery(cid, vg);
-    if (subQ) {
-      try {
-        const packed = await fetchCurrencyListHttpDeduped(
-          currencyListHttpInflight,
-          "api/transactions/get_scope_account_currencies_api.php",
-          subQ
-        );
-        if (
-          packed?.res?.ok &&
-          packed.json?.success &&
-          Array.isArray(packed.json.data) &&
-          packed.json.data.length
-        ) {
-          return packed.json.data.map((r) => String(r.code).toUpperCase()).filter(Boolean);
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
+/**
+ * Currencies from company Currency Setting table (reliable for group-all merge).
+ * Every caller of this function is a subsidiary-drill-down or Group/Company-All merge scope —
+ * none of that has a Spring backend yet (see `isSingleCompanyKpiScope`), so this is a no-op:
+ * it used to call `get_company_currencies_api.php` / `get_scope_account_currencies_api.php`,
+ * which just 404s now that those PHP routes are gone. The plain single-company currency picker
+ * does NOT go through this function — see `fetchCompanyAccountCurrencyCodes` (Spring
+ * `POST /api/currency/list`).
+ */
+async function fetchCompanyCurrencySettingCodes() {
   return [];
 }
 
 /**
- * Account-linked currencies for one company (same source as independent single-company dashboard).
- * Does not use bare Currency Setting rows.
+ * Currency Setting rows for one company (Spring `POST /api/currency/list`) — the single-company
+ * Dashboard currency picker's data source. NOT `/api/currency/available` — that endpoint's
+ * `is_linked` flag only means anything when a specific `account_id` is passed (per-account
+ * currency-link UI); called tenant-wide with no account it always comes back false for every
+ * row, which silently emptied the picker. `/api/currency/list` returns the tenant's full
+ * Currency Setting list, which is what the old `get_scope_account_currencies_api.php` picker
+ * chips actually matched (verified against real data: 12 configured currencies == 12 chips).
  */
 async function fetchCompanyAccountCurrencyCodes(companyId) {
   const cid = parseInt(companyId, 10);
   if (!Number.isFinite(cid) || cid <= 0) return [];
   try {
-    const q = new URLSearchParams({ company_id: String(cid) });
-    const packed = await fetchCurrencyListHttpDeduped(
-      currencyListHttpInflight,
-      "api/transactions/get_scope_account_currencies_api.php",
-      q.toString()
-    );
-    if (packed?.res?.ok && packed.json?.success && Array.isArray(packed.json.data)) {
-      return packed.json.data.map((r) => String(r.code).toUpperCase()).filter(Boolean);
-    }
+    const rows = await fetchCurrencyListByTenantId(cid);
+    return rows
+      .filter((row) => String(row?.status ?? "ACTIVE").toUpperCase() !== "INACTIVE")
+      .map((row) => String(row.code).toUpperCase())
+      .filter(Boolean);
   } catch {
-    /* ignore */
+    return [];
   }
-  return [];
 }
 
 /** Union currencies for Company "All" (single group or Group "All" + Company "All"). */
@@ -884,6 +837,19 @@ async function fetchBootstrapHttpDeduped() {
   return { res: { ok: false, status: 0 }, json: { success: false, data: null } };
 }
 
+/** True when [dateFrom, dateTo] is exactly one whole calendar month (day 1 through that month's last day). */
+function isSingleWholeCalendarMonth(dateFrom, dateTo) {
+  if (!dateFrom || !dateTo) return false;
+  const from = String(dateFrom).split("-").map(Number);
+  const to = String(dateTo).split("-").map(Number);
+  const [fy, fm, fd] = from;
+  const [ty, tm, td] = to;
+  if (!fy || !fm || !fd || !ty || !tm || !td) return false;
+  if (fy !== ty || fm !== tm || fd !== 1) return false;
+  const lastDayOfMonth = new Date(ty, tm, 0).getDate();
+  return td === lastDayOfMonth;
+}
+
 /**
  * Dedupe concurrent identical currency-list GETs (scope / company currencies).
  * `get_scope_account_currencies_api.php` has no Spring equivalent (per this migration's
@@ -1055,6 +1021,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   /** `GET /api/dashboard/kpi` response `data` — single-company scope only, see `kpi` useMemo below. */
   const [springKpiData, setSpringKpiData] = useState(null);
   const [springKpiLoading, setSpringKpiLoading] = useState(false);
+  /** `GET /api/dashboard/chart` response `data` (array of {date,profit,expenses,netProfit}) — single-company scope only, see `chartRows` useMemo below. */
+  const [springTrendData, setSpringTrendData] = useState(null);
+  const [springTrendLoading, setSpringTrendLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [earningsByCurrency, setEarningsByCurrency] = useState([]);
   const [earningsByCurrencyPrev, setEarningsByCurrencyPrev] = useState([]);
@@ -1395,7 +1364,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
    * merge) has no Spring KPI backend yet, so it just clears the KPI state (see below).
    */
   useEffect(() => {
-    if (!isSingleCompanyKpiScope || companyId == null || !dateFrom || !dateTo) {
+    if (!isSingleCompanyKpiScope || companyId == null || !dateFrom || !dateTo || !currencyCode) {
       setSpringKpiData(null);
       setSpringKpiLoading(false);
       return undefined;
@@ -1408,6 +1377,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           tenant_id: String(companyId),
           date_from: dateFrom,
           date_to: dateTo,
+          currency: currencyCode,
         });
         const res = await fetch(buildApiUrl(`api/dashboard/kpi?${q.toString()}`), {
           credentials: "include",
@@ -1428,7 +1398,51 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       }
     })();
     return () => controller.abort();
-  }, [isSingleCompanyKpiScope, companyId, dateFrom, dateTo]);
+  }, [isSingleCompanyKpiScope, companyId, dateFrom, dateTo, currencyCode]);
+
+  /**
+   * Trend Chart fetch — single-company scope only (`GET /api/dashboard/chart`), same simple
+   * one-shot GET as the KPI fetch above (no cache/dedup/prefetch machinery). Returns one point
+   * per calendar day in range (missing days already zero-filled server-side); day→month rollup
+   * for long ranges happens client-side in `buildSpringTrendChartRows` (see `chartRows` below),
+   * reusing the existing `shouldAggregateChartByMonth`/`eachMonthInRange` helpers.
+   */
+  useEffect(() => {
+    if (!isSingleCompanyKpiScope || companyId == null || !dateFrom || !dateTo || !currencyCode) {
+      setSpringTrendData(null);
+      setSpringTrendLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringTrendLoading(true);
+    (async () => {
+      try {
+        const q = new URLSearchParams({
+          tenant_id: String(companyId),
+          date_from: dateFrom,
+          date_to: dateTo,
+          currency: currencyCode,
+        });
+        const res = await fetch(buildApiUrl(`api/dashboard/chart?${q.toString()}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+          setSpringTrendData(null);
+          return;
+        }
+        setSpringTrendData(json.data);
+      } catch (err) {
+        if (controller.signal.aborted || err?.name === "AbortError") return;
+        setSpringTrendData(null);
+      } finally {
+        if (!controller.signal.aborted) setSpringTrendLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [isSingleCompanyKpiScope, companyId, dateFrom, dateTo, currencyCode]);
 
   const currenciesScopeSig = useMemo(
     () => (currencies.length > 1 ? [...currencies].sort().join(",") : ""),
@@ -3055,12 +3069,21 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           companiesForPicker,
         });
 
-        const [curPacked, ordJson] = await Promise.all([
-          fetchCurrencyListHttpDeduped(
-            currencyListInflightRef.current,
-            "api/transactions/get_scope_account_currencies_api.php",
-            q.toString()
-          ),
+        // Plain single-company scope (a group tab may still be selected purely for
+        // navigation) — use the Spring-backed per-company linked-currency list instead of
+        // the disabled `get_scope_account_currencies_api.php` PHP call. Group-ledger /
+        // Company-All merge (no singleCid, or groupLedgerOnly) has no Spring backend yet
+        // and still goes through that PHP call below (still returns nothing until migrated).
+        const usesSpringSingleCompanyCurrency = Boolean(singleCid) && !groupLedgerOnly;
+
+        const [codesResult, ordJson] = await Promise.all([
+          usesSpringSingleCompanyCurrency
+            ? fetchCompanyAccountCurrencyCodes(singleCid)
+            : fetchCurrencyListHttpDeduped(
+                currencyListInflightRef.current,
+                "api/transactions/get_scope_account_currencies_api.php",
+                q.toString()
+              ),
           orderCompanyId
             ? fetchUserCurrencyOrderHttpDeduped(
                 userCurrencyOrderInflightRef.current,
@@ -3068,10 +3091,14 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
               )
             : Promise.resolve(null),
         ]);
-        const curRes = curPacked?.res;
-        const curJson = curPacked?.json;
-        if (curRes?.ok && curJson?.success && Array.isArray(curJson.data)) {
-          codes = curJson.data.map((r) => String(r.code).toUpperCase());
+        if (usesSpringSingleCompanyCurrency) {
+          codes = Array.isArray(codesResult) ? codesResult : [];
+        } else {
+          const curRes = codesResult?.res;
+          const curJson = codesResult?.json;
+          if (curRes?.ok && curJson?.success && Array.isArray(curJson.data)) {
+            codes = curJson.data.map((r) => String(r.code).toUpperCase());
+          }
         }
         if (subsidiaryDashboardScope && singleCid) {
           const row = companies.find((c) => parseInt(c.id, 10) === singleCid);
@@ -3133,28 +3160,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
           )
         : null;
 
-      if (!useGroupAccCurrency) {
-        const currencyResults = await Promise.all(
-          companyIds.map(async (cid) => {
-            const row = companies.find((c) => parseInt(c.id, 10) === cid);
-            const vg = groupsAllMode
-              ? resolveViewGroupForCompany(row, selectedGroup)
-              : groupKey;
-            const q = new URLSearchParams({ company_id: String(cid) });
-            if (vg) q.set("view_group", vg);
-            const packed = await fetchCurrencyListHttpDeduped(
-              currencyListInflightRef.current,
-              "api/transactions/get_company_currencies_api.php",
-              q.toString()
-            );
-            const curRes = packed?.res;
-            const curJson = packed?.json;
-            if (!curRes?.ok || !curJson?.success || !Array.isArray(curJson.data)) return [];
-            return curJson.data.map((r) => String(r.code).toUpperCase());
-          })
-        );
-        codes = [...new Set(currencyResults.flat())];
-      }
+      // Company-All / multi-company merge (no single company, no group ledger) has no Spring
+      // KPI backend yet — used to call `get_company_currencies_api.php` per company here, which
+      // just 404s now. Leave `codes` empty (picker renders cleared) instead of firing dead PHP calls.
       if (gen !== currencyLoadGenRef.current || scopeCurrencyKeyRef.current !== scopeKey) return;
 
       codes = [...new Set(codes)];
@@ -8645,7 +8653,20 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     cacheEntryHasFullEarnings,
   ]);
 
-  const kpiCompareLabel = i18n.thanLastMonth;
+  /**
+   * "than last month" only reads correctly when the compared range really is one whole
+   * calendar month. Now that the backend aligns the previous period to whatever range shape
+   * was picked (N whole months, a whole year, or an arbitrary custom range — see
+   * `DashboardServiceImpl#resolvePreviousRange`), fall back to the generic
+   * `thanPreviousPeriod` i18n string (already translated, was unused until now) for anything
+   * that isn't a single calendar month, instead of showing a misleading "than last month".
+   */
+  const kpiCompareLabel = useMemo(() => {
+    if (isSingleCompanyKpiScope && !isSingleWholeCalendarMonth(dateFrom, dateTo)) {
+      return i18n.thanPreviousPeriod;
+    }
+    return i18n.thanLastMonth;
+  }, [isSingleCompanyKpiScope, dateFrom, dateTo, i18n.thanLastMonth, i18n.thanPreviousPeriod]);
 
   /** True while live selection moved but painted KPI/chart/pie still show the previous scope. */
   const scopeDataPending =
@@ -8715,10 +8736,16 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   /**
    * KPI cards: single-company scope reads the new Spring `/api/dashboard/kpi` payload
    * directly — that endpoint already returns final numbers (no ownership-multiplier /
-   * group-aggregate math needed client-side), and it has no "previous period" concept, so
-   * `comparisons` stays undefined for this path. Every other scope (group ledger, Company
-   * All, multi-company merge, per-currency "All" toggle) has no Spring KPI backend yet —
-   * render the cleared state so the cards show "-"/0 instead of stale or PHP-fed numbers.
+   * group-aggregate math needed client-side). It now also returns the same 4 numbers for an
+   * auto-aligned "previous period" (see `DashboardServiceImpl#resolvePreviousRange` — whole
+   * calendar months/years compare to the same number of whole months/years right before;
+   * any other custom range compares to an equal-length window right before it), so
+   * `comparisons` is built here with `buildKpiCompare()` — a `previous*` field of `null`
+   * (e.g. Earnings when the previous period had no ownership row) means "no comparison",
+   * not "0", so it's left out of `comparisons` entirely rather than faked as a 0 baseline.
+   * Every other scope (group ledger, Company All, multi-company merge, per-currency "All"
+   * toggle) has no Spring KPI backend yet — render the cleared state so the cards show
+   * "-"/0 instead of stale or PHP-fed numbers.
    */
   const kpi = useMemo(() => {
     const empty = {
@@ -8732,6 +8759,19 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     };
     if (!isSingleCompanyKpiScope) return empty;
     if (!springKpiData) return empty;
+    const comparisons = {};
+    if (springKpiData.previousProfit != null) {
+      comparisons.profit = buildKpiCompare(springKpiData.profit ?? 0, springKpiData.previousProfit);
+    }
+    if (springKpiData.previousExpenses != null) {
+      comparisons.expenses = buildKpiCompare(springKpiData.expenses ?? 0, springKpiData.previousExpenses);
+    }
+    if (springKpiData.previousNetProfit != null) {
+      comparisons.netProfit = buildKpiCompare(springKpiData.netProfit ?? 0, springKpiData.previousNetProfit);
+    }
+    if (springKpiData.showEarnings && springKpiData.previousEarnings != null) {
+      comparisons.earnings = buildKpiCompare(springKpiData.earnings ?? 0, springKpiData.previousEarnings);
+    }
     return {
       profit: springKpiData.profit ?? 0,
       expenses: springKpiData.expenses ?? 0,
@@ -8739,7 +8779,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       showEarnings: !!springKpiData.showEarnings,
       earnings: springKpiData.earnings ?? 0,
       kpiCardEarnings: springKpiData.earnings ?? 0,
-      comparisons: undefined,
+      comparisons,
     };
   }, [isSingleCompanyKpiScope, springKpiData]);
 
@@ -8748,7 +8788,24 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     [summaryDateFrom, summaryDateTo]
   );
 
+  /**
+   * Trend Chart rows: single-company scope reads the new Spring `/api/dashboard/chart` payload
+   * (`springTrendData`) via `buildSpringTrendChartRows` — already-signed day points, no ownership-
+   * multiplier math needed beyond a flat `netProfit * earningsMultiplier` (same simplification
+   * the old PHP-fed path used: one multiplier for the whole range, not resolved per day). Every
+   * other scope (group ledger, Company All, multi-company merge) has no Spring trend backend yet
+   * and keeps reading `dashboardData` (null for those scopes → empty → zero-skeleton fallback).
+   */
   const chartRows = useMemo(() => {
+    if (isSingleCompanyKpiScope) {
+      const earningsMultiplier =
+        kpi.showEarnings && springKpiData?.earningsPercentage != null
+          ? (parseFloat(springKpiData.earningsPercentage) || 0) / 100
+          : 0;
+      const rows = buildSpringTrendChartRows(springTrendData, dateFrom, dateTo, i18n.locale, earningsMultiplier);
+      if (rows.length > 0) return rows;
+      return buildSkeletonChartRows(dateFrom, dateTo, i18n.locale);
+    }
     if (!dashboardData) return [];
     const rows = buildChartRows(
       dashboardData,
@@ -8761,6 +8818,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     if (rows.length > 0) return rows;
     return buildSkeletonChartRows(summaryDateFrom, summaryDateTo, i18n.locale);
   }, [
+    isSingleCompanyKpiScope,
+    springTrendData,
+    kpi.showEarnings,
+    springKpiData,
+    dateFrom,
+    dateTo,
     dashboardData,
     summaryDateFrom,
     summaryDateTo,

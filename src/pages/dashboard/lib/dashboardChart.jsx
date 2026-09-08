@@ -170,3 +170,58 @@ export function buildChartRows(
     return buildChartMetricRow(date, label, dailyData, earningsMultiplier);
   });
 }
+
+/**
+ * Trend Chart rows from `GET /api/dashboard/chart` (single-company scope) — an array of
+ * `{date, profit, expenses, netProfit}` points, one per calendar day, already signed correctly
+ * (no `expenses > 0 ? -expenses : expenses` flip like `buildChartMetricRow` does for the old
+ * PHP `daily_data` shape — that convention doesn't apply here, see dashboard-springboot-kpi.md).
+ * Day→month rollup for long ranges is done here client-side by summing the day points that
+ * fall in each month, since the backend only ever returns day-level granularity.
+ */
+export function buildSpringTrendChartRows(trendPoints, startYmd, endYmd, locale = "en-US", earningsMultiplier = 0) {
+  if (!Array.isArray(trendPoints) || !trendPoints.length) return [];
+  const byDate = new Map(trendPoints.map((p) => [String(p.date), p]));
+  const rangeStart = parseYmd(startYmd);
+  const rangeEnd = parseYmd(endYmd);
+
+  const rowFor = (profit, expenses) => {
+    const netProfit = profit + expenses;
+    return { profit, expenses, netProfit, earnings: netProfit * earningsMultiplier };
+  };
+
+  if (shouldAggregateChartByMonth(startYmd, endYmd)) {
+    return eachMonthInRange(startYmd, endYmd).map(({ year, month }) => {
+      const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+      const label = formatChartMonthLabel(year, month, locale);
+      const lastDay = new Date(year, month, 0).getDate();
+      let profitSum = 0;
+      let expensesSum = 0;
+      for (let day = 1; day <= lastDay; day += 1) {
+        const dateStr = `${monthKey}-${String(day).padStart(2, "0")}`;
+        const dateObj = parseYmd(dateStr);
+        if (dateObj < rangeStart || dateObj > rangeEnd) continue;
+        const point = byDate.get(dateStr);
+        if (!point) continue;
+        profitSum += parseFloat(point.profit || 0) || 0;
+        expensesSum += parseFloat(point.expenses || 0) || 0;
+      }
+      return { date: monthKey, label, ...rowFor(profitSum, expensesSum) };
+    });
+  }
+
+  const dates = eachDateInRange(startYmd, endYmd);
+  const sameCalendarMonth =
+    rangeStart &&
+    rangeEnd &&
+    rangeStart.getFullYear() === rangeEnd.getFullYear() &&
+    rangeStart.getMonth() === rangeEnd.getMonth();
+  return dates.map((date) => {
+    const d = parseYmd(date);
+    const label = sameCalendarMonth ? String(d.getDate()) : `${d.getDate()}/${d.getMonth() + 1}`;
+    const point = byDate.get(date);
+    const profit = parseFloat(point?.profit || 0) || 0;
+    const expenses = parseFloat(point?.expenses || 0) || 0;
+    return { date, label, ...rowFor(profit, expenses) };
+  });
+}

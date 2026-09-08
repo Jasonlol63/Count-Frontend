@@ -1,6 +1,6 @@
 const KPI_PCT_CAP = 999.9;
 
-/** Month-over-month % vs previous month's equivalent date range. */
+/** Period-over-period % change vs the aligned previous period (see DashboardServiceImpl#resolvePreviousRange). */
 export function kpiPercentChange(current, previous) {
   const c = parseFloat(current) || 0;
   const p = parseFloat(previous) || 0;
@@ -13,6 +13,21 @@ export function kpiPercentChange(current, previous) {
   return Math.max(-KPI_PCT_CAP, Math.min(KPI_PCT_CAP, Math.round(raw * 10) / 10));
 }
 
+/**
+ * True when the previous period's value was small enough (relative to the swing) that
+ * `kpiPercentChange()` had to clamp the real percentage down to ±999.9 — the raw math is a
+ * legitimate huge number (e.g. -1770%), not an error, but showing "999.9%" as if it were the
+ * exact figure is misleading. Callers append a "+" ("999.9+%") to signal "capped, not exact".
+ * `previous === 0` is a *different* case (no baseline at all, not a clamp) and is never flagged.
+ */
+export function kpiPercentChangeIsClamped(current, previous) {
+  const c = parseFloat(current) || 0;
+  const p = parseFloat(previous) || 0;
+  if (p === 0) return false;
+  const raw = ((c - p) / Math.abs(p)) * 100;
+  return Number.isFinite(raw) && Math.abs(raw) > KPI_PCT_CAP;
+}
+
 export function buildKpiCompare(current, previous) {
   const c = parseFloat(current) || 0;
   const p = parseFloat(previous) || 0;
@@ -21,6 +36,7 @@ export function buildKpiCompare(current, previous) {
     delta,
     pct: kpiPercentChange(current, previous),
     isUp: delta >= 0,
+    clamped: kpiPercentChangeIsClamped(current, previous),
   };
 }
 
