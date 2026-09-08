@@ -1024,6 +1024,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   /** `GET /api/dashboard/chart` response `data` (array of {date,profit,expenses,netProfit}) — single-company scope only, see `chartRows` useMemo below. */
   const [springTrendData, setSpringTrendData] = useState(null);
   const [springTrendLoading, setSpringTrendLoading] = useState(false);
+  /** `GET /api/dashboard/kpi-all` response `data` — Company:All within one Group tab only, see `kpi` useMemo below. */
+  const [springKpiAllData, setSpringKpiAllData] = useState(null);
+  const [springKpiAllLoading, setSpringKpiAllLoading] = useState(false);
+  /** `GET /api/dashboard/chart-all` response `data` — Company:All within one Group tab only, see `chartRows` useMemo below. */
+  const [springTrendAllData, setSpringTrendAllData] = useState(null);
+  const [springTrendAllLoading, setSpringTrendAllLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [earningsByCurrency, setEarningsByCurrency] = useState([]);
   const [earningsByCurrencyPrev, setEarningsByCurrencyPrev] = useState([]);
@@ -2271,6 +2277,104 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       groupsAllMode ? null : selectedGroup
     );
   }, [companies, selectedGroup, groupsAllMode, groupIds, ledgerGroupIds]);
+
+  /**
+   * "Company: All" within one selected Group tab (`groupAllMode`) — tenant ids to roll up for
+   * `GET /api/dashboard/kpi-all`. Reuses `resolveMergeCompanyList()`, which already runs the
+   * (just-fixed) `filterCompaniesForDashboardApiAccess()` — so this list only ever contains
+   * companies the current login is actually granted, same access rule as the Company picker.
+   */
+  const groupAllTenantIds = useMemo(() => {
+    if (!groupAllMode) return [];
+    return resolveMergeCompanyList()
+      .map((c) => parseInt(c.id, 10))
+      .filter((id) => Number.isFinite(id) && id > 0);
+  }, [groupAllMode, resolveMergeCompanyList]);
+
+  /**
+   * `GET /api/dashboard/kpi-all` — same simple one-shot GET as the single-company KPI fetch,
+   * summed server-side across every id in `groupAllTenantIds` (see DashboardServiceImpl#getKpiForCompanies).
+   * No Earnings, no "previous period" for this scope (not requested; the backend endpoint doesn't
+   * return them either).
+   */
+  useEffect(() => {
+    if (!groupAllMode || !groupAllTenantIds.length || !dateFrom || !dateTo || !currencyCode) {
+      setSpringKpiAllData(null);
+      setSpringKpiAllLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringKpiAllLoading(true);
+    (async () => {
+      try {
+        const q = new URLSearchParams({
+          tenant_ids: groupAllTenantIds.join(","),
+          date_from: dateFrom,
+          date_to: dateTo,
+          currency: currencyCode,
+        });
+        const res = await fetch(buildApiUrl(`api/dashboard/kpi-all?${q.toString()}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        if (!res.ok || !json?.success || !json?.data) {
+          setSpringKpiAllData(null);
+          return;
+        }
+        setSpringKpiAllData(json.data);
+      } catch (err) {
+        if (controller.signal.aborted || err?.name === "AbortError") return;
+        setSpringKpiAllData(null);
+      } finally {
+        if (!controller.signal.aborted) setSpringKpiAllLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [groupAllMode, groupAllTenantIds, dateFrom, dateTo, currencyCode]);
+
+  /**
+   * Trend Chart for "Company: All" — `GET /api/dashboard/chart-all`, same shape and same
+   * `groupAllTenantIds` scope as the kpi-all fetch above, just the per-day series instead of
+   * one summed total (see DashboardServiceImpl#getTrendForCompanies).
+   */
+  useEffect(() => {
+    if (!groupAllMode || !groupAllTenantIds.length || !dateFrom || !dateTo || !currencyCode) {
+      setSpringTrendAllData(null);
+      setSpringTrendAllLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringTrendAllLoading(true);
+    (async () => {
+      try {
+        const q = new URLSearchParams({
+          tenant_ids: groupAllTenantIds.join(","),
+          date_from: dateFrom,
+          date_to: dateTo,
+          currency: currencyCode,
+        });
+        const res = await fetch(buildApiUrl(`api/dashboard/chart-all?${q.toString()}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+          setSpringTrendAllData(null);
+          return;
+        }
+        setSpringTrendAllData(json.data);
+      } catch (err) {
+        if (controller.signal.aborted || err?.name === "AbortError") return;
+        setSpringTrendAllData(null);
+      } finally {
+        if (!controller.signal.aborted) setSpringTrendAllLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [groupAllMode, groupAllTenantIds, dateFrom, dateTo, currencyCode]);
 
   const applyCompanySelection = useCallback((id, options = {}) => {
     const clearSubset = options.clearSubset !== false;
@@ -8743,9 +8847,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
    * `comparisons` is built here with `buildKpiCompare()` — a `previous*` field of `null`
    * (e.g. Earnings when the previous period had no ownership row) means "no comparison",
    * not "0", so it's left out of `comparisons` entirely rather than faked as a 0 baseline.
-   * Every other scope (group ledger, Company All, multi-company merge, per-currency "All"
-   * toggle) has no Spring KPI backend yet — render the cleared state so the cards show
-   * "-"/0 instead of stale or PHP-fed numbers.
+   * "Company: All" within one Group tab (`groupAllMode`) reads `GET /api/dashboard/kpi-all`
+   * (`springKpiAllData`) the same way — already-final summed numbers, no Earnings, no
+   * "previous period" (that endpoint doesn't compute either). Every other scope (group
+   * ledger, Group-All, multi-company subset merge, per-currency "All" toggle) has no Spring
+   * KPI backend yet — render the cleared state so the cards show "-"/0 instead of stale or
+   * PHP-fed numbers.
    */
   const kpi = useMemo(() => {
     const empty = {
@@ -8757,6 +8864,18 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       showEarnings: false,
       comparisons: undefined,
     };
+    if (groupAllMode) {
+      if (!springKpiAllData) return empty;
+      return {
+        profit: springKpiAllData.profit ?? 0,
+        expenses: springKpiAllData.expenses ?? 0,
+        netProfit: springKpiAllData.netProfit ?? 0,
+        showEarnings: false,
+        earnings: 0,
+        kpiCardEarnings: 0,
+        comparisons: {},
+      };
+    }
     if (!isSingleCompanyKpiScope) return empty;
     if (!springKpiData) return empty;
     const comparisons = {};
@@ -8781,7 +8900,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       kpiCardEarnings: springKpiData.earnings ?? 0,
       comparisons,
     };
-  }, [isSingleCompanyKpiScope, springKpiData]);
+  }, [groupAllMode, springKpiAllData, isSingleCompanyKpiScope, springKpiData]);
 
   const chartAggregateByMonth = useMemo(
     () => shouldAggregateChartByMonth(summaryDateFrom, summaryDateTo),
@@ -8792,11 +8911,19 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
    * Trend Chart rows: single-company scope reads the new Spring `/api/dashboard/chart` payload
    * (`springTrendData`) via `buildSpringTrendChartRows` — already-signed day points, no ownership-
    * multiplier math needed beyond a flat `netProfit * earningsMultiplier` (same simplification
-   * the old PHP-fed path used: one multiplier for the whole range, not resolved per day). Every
-   * other scope (group ledger, Company All, multi-company merge) has no Spring trend backend yet
-   * and keeps reading `dashboardData` (null for those scopes → empty → zero-skeleton fallback).
+   * the old PHP-fed path used: one multiplier for the whole range, not resolved per day).
+   * "Company: All" within one Group tab (`groupAllMode`) reads `springTrendAllData` (`GET
+   * /api/dashboard/chart-all`) through the same builder — no Earnings line for this scope (kpi-all
+   * never returns one), so the multiplier is always 0. Every other scope (group ledger,
+   * Group-All, multi-company subset merge) has no Spring trend backend yet and keeps reading
+   * `dashboardData` (null for those scopes → empty → zero-skeleton fallback).
    */
   const chartRows = useMemo(() => {
+    if (groupAllMode) {
+      const rows = buildSpringTrendChartRows(springTrendAllData, dateFrom, dateTo, i18n.locale, 0);
+      if (rows.length > 0) return rows;
+      return buildSkeletonChartRows(dateFrom, dateTo, i18n.locale);
+    }
     if (isSingleCompanyKpiScope) {
       const earningsMultiplier =
         kpi.showEarnings && springKpiData?.earningsPercentage != null
@@ -8818,6 +8945,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     if (rows.length > 0) return rows;
     return buildSkeletonChartRows(summaryDateFrom, summaryDateTo, i18n.locale);
   }, [
+    groupAllMode,
+    springTrendAllData,
     isSingleCompanyKpiScope,
     springTrendData,
     kpi.showEarnings,
@@ -9278,7 +9407,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   ]);
   /** Keep previous paint visible while the next full view loads (no empty hole). */
   const kpiLoading =
-    isSingleCompanyKpiScope && springKpiLoading
+    (isSingleCompanyKpiScope && springKpiLoading) || (groupAllMode && springKpiAllLoading)
       ? true
       : Boolean(dashboardData)
         ? false

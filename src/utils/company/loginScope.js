@@ -263,8 +263,12 @@ export function canPrefetchCompanyScope(me, companyId, companies = [], viewGroup
 
   if (Number(me.company_id) === id) return true;
 
-  const assignedIds = getAssignedCompanyIds(me);
-  if (assignedIds.includes(id)) return true;
+  // `list` (the `companies` master array) already comes from `/auth/tenant-accessible`, which
+  // INNER JOINs `user_tenant_access` for this exact admin (see `findTenantFeaturesByAdminId`) —
+  // so `row` being present here already means the backend granted this company. There is no
+  // separate `assigned_company_ids` session field (never populated by the backend) to re-check
+  // against; trusting `row` here mirrors how the "owner" branch above already trusts `list`.
+  if (row != null) return true;
 
   if (vg) {
     if (!canAccessGroupLedgerForGroup(me, vg, list)) return false;
