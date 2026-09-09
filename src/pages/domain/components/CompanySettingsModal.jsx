@@ -13,7 +13,9 @@ import {
 import { parseDdMmYyyyToYmd } from "../../../utils/date/dateUtils.js";
 import {
   SINGLE_CATEGORY_MODE,
+  NO_EXPIRY_PERIOD_CODE,
   calculateExpirationDate,
+  isPermanentExpiration,
   formatDate,
   defaultFeeShareAllocations,
   ensureCompanyFeeShare,
@@ -30,6 +32,10 @@ import AddAccountModal from "./AddAccountModal.jsx";
 import { getDomainText } from "../../../translateFile/pages/domainTranslate.js";
 import DomainModalPortal from "./DomainModalPortal.jsx";
 import { validateTenantCodeGlobally, updateTenantSetting, fetchShareAccountsForTenant } from "../domainApi.js";
+import { useOptionalAuthSession } from "../../../context/AuthSessionContext.jsx";
+
+/* Domain page "No Expiry" period — only Admin and above (Owner/Partnership/Admin) may grant it. */
+const PERMANENT_EXPIRATION_ROLES = new Set(["owner", "partnership", "admin"]);
 
 const PERMISSION_LIST = [
   { value: "Games", id: "permGambling", labelSuffix: "Gambling" },
@@ -100,7 +106,15 @@ export default function CompanySettingsModal({
     const ymd = raw.includes("-") ? raw.split("T")[0] : parseDdMmYyyyToYmd(raw);
     return ymd || new Date().toISOString().split("T")[0];
   });
-  const [expDisplay, setExpDisplay] = useState(initCompany.expiration_date ? formatDate(initCompany.expiration_date) : t("notSet"));
+  const auth = useOptionalAuthSession();
+  const canSetPermanentExpiration = PERMANENT_EXPIRATION_ROLES.has(
+    String(auth?.me?.role || "").trim().toLowerCase()
+  );
+  const formatExpirationDisplay = (dateValue) =>
+    isPermanentExpiration(dateValue) ? t("noExpiry") : formatDate(dateValue);
+  const [expDisplay, setExpDisplay] = useState(
+    initCompany.expiration_date ? formatExpirationDisplay(initCompany.expiration_date) : t("notSet")
+  );
   const [permissions, setPermissions] = useState(
     isGroup ? ["Games"] : (Array.isArray(initCompany.permissions) ? initCompany.permissions : [])
   );
@@ -178,12 +192,12 @@ export default function CompanySettingsModal({
   // Recalculate expiration display whenever period/startDate changes
   useEffect(() => {
     if (!period) {
-      setExpDisplay(company.expiration_date ? formatDate(company.expiration_date) : t("notSet"));
+      setExpDisplay(company.expiration_date ? formatExpirationDisplay(company.expiration_date) : t("notSet"));
       return;
     }
     const base = startDate || new Date().toISOString().split("T")[0];
     const exp = calculateExpirationDate(period, base);
-    setExpDisplay(formatDate(exp));
+    setExpDisplay(formatExpirationDisplay(exp));
     setCompany((prev) => {
       if (prev.expiration_date === exp && prev.selectedPeriod === period) return prev;
       return { ...prev, expiration_date: exp, selectedPeriod: period };
@@ -611,6 +625,9 @@ export default function CompanySettingsModal({
                       onChange={(e) => setPeriod(e.target.value)}
                     >
                     <option value="">{t("selectPeriod")}</option>
+                    {canSetPermanentExpiration && (
+                      <option value={NO_EXPIRY_PERIOD_CODE}>{t("noExpiry")}</option>
+                    )}
                     <option value="7days">{t("sevenDays")}</option>
                     <option value="1month">{t("oneMonth")}</option>
                     <option value="3months">{t("threeMonths")}</option>

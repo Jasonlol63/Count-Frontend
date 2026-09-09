@@ -1,5 +1,6 @@
 import { getExpirationReminderText } from "../../translateFile/shell/expirationReminderTranslate.js";
 import { formatDmyDash } from "../date/dateUtils.js";
+import { isPermanentExpiration, PERMANENT_EXPIRATION_DATE } from "../../pages/domain/domainHelpers.js";
 
 const STORAGE_KEY = "ec_exp_reminder_dismissed";
 export const EXPIRATION_REMINDER_WINDOW_DAYS = 30;
@@ -46,6 +47,14 @@ export function buildSidebarExpirationFields(expirationDate) {
     return {
       expiration_date: null,
       expiration_hint: "No expiration date",
+      expiration_status: "normal",
+      days_until_expiration: null,
+    };
+  }
+  if (isPermanentExpiration(expirationDate)) {
+    return {
+      expiration_date: PERMANENT_EXPIRATION_DATE,
+      expiration_hint: "No Expiry",
       expiration_status: "normal",
       days_until_expiration: null,
     };

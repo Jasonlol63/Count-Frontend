@@ -6,6 +6,7 @@ import CompanySettingsModal from "./CompanySettingsModal.jsx";
 import GroupSettingsModal from "./GroupSettingsModal.jsx";
 import {
   formatDate,
+  isPermanentExpiration,
   ensureCompanyFeeShare,
   defaultFeeShareAllocations,
   createEmptyGroup,
@@ -110,6 +111,8 @@ export default function DomainFormModal({
 }) {
   const isZh = lang === "zh";
   const t = (key, params) => getDomainText(lang, key, params);
+  const formatExpirationDisplay = (dateValue) =>
+    isPermanentExpiration(dateValue) ? t("noExpiry") : formatDate(dateValue);
   // Basic fields
   const [ownerCode, setOwnerCode] = useState("");
   const [name, setName] = useState("");
@@ -503,7 +506,7 @@ export default function DomainFormModal({
                 </div>
                 <div className="company-item-right">
                   <span className="exp-date-display">
-                    {c.expiration_date ? formatDate(c.expiration_date) : t("notSet")}
+                    {c.expiration_date ? formatExpirationDisplay(c.expiration_date) : t("notSet")}
                   </span>
                   <button
                     type="button"
@@ -536,7 +539,7 @@ export default function DomainFormModal({
         </div>
         <div className="company-item-right">
           <span className="exp-date-display">
-            {c.expiration_date ? formatDate(c.expiration_date) : t("notSet")}
+            {c.expiration_date ? formatExpirationDisplay(c.expiration_date) : t("notSet")}
           </span>
           <button
             type="button"
@@ -583,7 +586,7 @@ export default function DomainFormModal({
           </div>
           <div className="company-item-right">
             <span className="exp-date-display">
-              {g.expiration_date ? formatDate(g.expiration_date) : t("notSet")}
+              {g.expiration_date ? formatExpirationDisplay(g.expiration_date) : t("notSet")}
             </span>
             <button
               type="button"

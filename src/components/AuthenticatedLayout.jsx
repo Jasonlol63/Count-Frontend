@@ -110,6 +110,7 @@ import "../../public/css/select-unified.css";
 function formatSidebarExpirationHint(hint, i18n) {
   if (!hint || hint === "-") return "-";
   if (hint === "No expiration date") return i18n.expNoDate;
+  if (hint === "No Expiry") return i18n.expNoExpiry;
   if (hint === "Expired") return i18n.expExpired;
   return hint;
 }
@@ -554,16 +555,45 @@ export default function AuthenticatedLayout() {
         // stale/unrelated anchored tenant and hide Payment/Transaction/Formula Maintenance.
         const bootFilter = readPersistedDashboardGcFilter();
         const bootGroupOnly = isDashboardGroupOnlyMode() || bootFilter.groupOnly;
-        const bootMe =
-          bootGroupOnly && bootFilter.selectedGroup
-            ? patchMeFromCompanyContext(u, {
-                companyId: null,
-                companyCode: bootFilter.selectedGroup,
-                hasBank: false,
-                forceGroupGamesCategory: true,
-                hasGambling: resolveGroupOnlySidebarGambling(bootFilter.selectedGroup) ?? true,
-              })
-            : u;
+        // Sidebar "Exp:" would otherwise stay "-" forever on a cold load/refresh: SessionUser
+        // (`/auth/current-user`) has no expiration_hint/expiration_status/days_until_expiration
+        // fields (those are frontend-only, always derived via buildSidebarExpirationFields), and
+        // this boot path used to never compute them at all — only refreshSession() did, and that
+        // only runs once some page fires a company-session-updated/session-refresh-requested
+        // event (the Dashboard GC filter widget does; Ownership/Data Capture/Transaction
+        // Maintenance/etc. don't). Mirror refreshSession()'s per-mode expirationDate resolution
+        // here too so the very first render already has the right value.
+        const bootMe = bootGroupOnly && bootFilter.selectedGroup
+          ? patchMeFromCompanyContext(u, {
+              companyId: null,
+              companyCode: bootFilter.selectedGroup,
+              hasBank: false,
+              forceGroupGamesCategory: true,
+              hasGambling: resolveGroupOnlySidebarGambling(bootFilter.selectedGroup) ?? true,
+              expirationDate: (() => {
+                const groupExp = resolveSidebarExpirationForFilter({
+                  selectedGroup: bootFilter.selectedGroup,
+                  companyId: null,
+                });
+                return groupExp !== undefined ? groupExp : (u.expiration_date ?? null);
+              })(),
+            })
+          : (() => {
+              const bootCompanyId =
+                bootFilter.companyId != null && bootFilter.companyId !== ""
+                  ? Number(bootFilter.companyId)
+                  : null;
+              const bootCategoryCompanyId =
+                Number.isFinite(bootCompanyId) && bootCompanyId > 0 ? bootCompanyId : null;
+              const companyExp = resolveSidebarExpirationForFilter({
+                selectedGroup: bootFilter.selectedGroup,
+                companyId: bootCategoryCompanyId,
+              });
+              return {
+                ...u,
+                ...buildSidebarExpirationFields(companyExp !== undefined ? companyExp : (u.expiration_date ?? null)),
+              };
+            })();
         setMe(bootMe);
         clearChunkReloadFlag();
       } catch (err) {

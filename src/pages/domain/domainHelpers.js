@@ -11,12 +11,32 @@ export const MAX_VISIBLE_CHIPS = 3;
 // ===================== Date Helpers =====================
 
 /**
+ * Sentinel expiration_date meaning "never expires" — a deliberate Admin+ choice via the
+ * Group/Company Settings "No Expiry" period, as opposed to null/"" which means "not yet
+ * configured" and still blocks the Domain page Confirm button. Must match the backend's
+ * Tenant.PERMANENT_EXPIRATION_DATE (java.time.LocalDate.of(9999, 12, 31) serializes to this).
+ */
+export const PERMANENT_EXPIRATION_DATE = "9999-12-31";
+
+/** Period option value that resolves to PERMANENT_EXPIRATION_DATE instead of date math. */
+export const NO_EXPIRY_PERIOD_CODE = "no_expiry";
+
+/** True when an expiration_date value is the "never expires" sentinel. */
+export function isPermanentExpiration(dateValue) {
+  if (!dateValue) return false;
+  return String(dateValue).split(" ")[0].split("T")[0] === PERMANENT_EXPIRATION_DATE;
+}
+
+/**
  * 计算到期日期
- * @param {string} period - '7days'|'1month'|'3months'|'6months'|'1year'
+ * @param {string} period - 'no_expiry'|'7days'|'1month'|'3months'|'6months'|'1year'
  * @param {string|null} startDate - YYYY-MM-DD, null → today
  * @returns {string} YYYY-MM-DD
  */
 export function calculateExpirationDate(period, startDate = null) {
+  if (period === NO_EXPIRY_PERIOD_CODE) {
+    return PERMANENT_EXPIRATION_DATE;
+  }
   let baseDate = null;
   if (startDate) {
     if (typeof startDate === "string") {
