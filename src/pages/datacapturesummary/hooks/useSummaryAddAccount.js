@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { accountModalOverlayZIndex } from "../../../components/ProcessModalPortal.jsx";
-import { fetchOwnerCompaniesAll } from "../../../utils/company/sharedCompanyFilter.js";
 import {
   buildAccountCreateRequest,
   createAccountUser,
@@ -16,60 +15,11 @@ import {
 } from "../../account/accountLogic.js";
 import { getAccountText, translateAccountApiMessage } from "../../../translateFile/pages/accountTranslate.js";
 import { useLoginLang } from "../../../utils/i18n/useLoginLang.js";
-
-function normalizeCompanyRow(row) {
-  if (!row || typeof row !== "object") return row;
-  return {
-    ...row,
-    group_id: row.group_id ?? row.groupId ?? row.group ?? null,
-    company_id: row.company_id ?? row.companyId ?? row.code ?? "",
-  };
-}
-
-function isVirtualGroupLinkCompanyRow(c) {
-  const ls = c?.link_source_group ?? c?.linkSourceGroup;
-  return ls != null && String(ls).trim() !== "";
-}
-
-import { isGroupLedgerCapture } from "../../../utils/company/c168CaptureChannel.js";
-import { resolveDataCaptureTenantId } from "../../datacapture/lib/dataCaptureTenant.js";
-
-/**
- * `groupOnlyAccountMode` only changes the picker UI (single fixed "the group itself" row
- * instead of a multi-company picker) — the Group is a first-class tenant (`tenant.id`,
- * resolved via `groupEntityTenantId`), so both branches call the same Spring `/api/account/*`
- * + `/api/currency/*` endpoints against `ctx.tenantId`.
- */
-function resolveSummaryAddAccountContext(captureScope, processData, companyId) {
-  const isGroupLedger = isGroupLedgerCapture(captureScope, processData);
-
-  const groupId = String(captureScope?.groupId || processData?.captureSelectedGroup || "")
-    .trim()
-    .toUpperCase();
-
-  if (isGroupLedger && groupId) {
-    const tenantId = resolveDataCaptureTenantId(captureScope);
-    return {
-      groupOnlyAccountMode: true,
-      selectedGroup: groupId,
-      companyId: null,
-      tenantId,
-    };
-  }
-
-  const cid = companyId != null && Number(companyId) > 0 ? Number(companyId) : null;
-  return {
-    groupOnlyAccountMode: false,
-    selectedGroup: groupId || null,
-    companyId: cid,
-    tenantId: cid,
-  };
-}
-
-function canOpenAddAccount(ctx) {
-  if (ctx.groupOnlyAccountMode) return Boolean(ctx.tenantId);
-  return ctx.companyId != null && Number(ctx.companyId) > 0;
-}
+import {
+  canOpenSummaryAccountModal,
+  resolveSummaryAccountLedgerContext,
+  useSummaryAccountPickerCompanies,
+} from "./summaryAccountLedgerContext.js";
 
 /** Remove stale #addModal if present from an older page shell. */
 function purgeLegacySummaryAddAccountModal() {
@@ -103,7 +53,7 @@ export function useSummaryAddAccount({
   );
 
   const ledgerCtx = useMemo(
-    () => resolveSummaryAddAccountContext(captureScope, processData, companyId),
+    () => resolveSummaryAccountLedgerContext(captureScope, processData, companyId),
     [captureScope, processData, companyId],
   );
   const ledgerCtxRef = useRef(ledgerCtx);
@@ -111,7 +61,6 @@ export function useSummaryAddAccount({
 
   const [open, setOpen] = useState(false);
   const [roles] = useState([]);
-  const [companies, setCompanies] = useState([]);
   const [currencies, setCurrencies] = useState([]);
   const [form, setForm] = useState({ ...DEFAULT_FORM, payment_alert: "0" });
   const [selectedCurrencyIds, setSelectedCurrencyIds] = useState([]);
@@ -130,46 +79,10 @@ export function useSummaryAddAccount({
     [t],
   );
 
-  const groupPickerCompanies = useMemo(() => {
-    if (!ledgerCtx.groupOnlyAccountMode || !ledgerCtx.tenantId) return [];
-    // `id` is the group code (matches AccountModal's groupPickerMode picker_value, which reads
-    // group_id/id — same shape AccountListPage.jsx uses for its own group picker rows), so the
-    // preset selection in resetToAdd() actually matches this row instead of showing "none
-    // selected". submitAddAccount() resolves the real numeric tenantId from ctx.tenantId
-    // directly, not from this code.
-    return [{ id: ledgerCtx.selectedGroup, company_id: ledgerCtx.selectedGroup, group_id: ledgerCtx.selectedGroup }];
-  }, [ledgerCtx]);
-
-  const companyButtons = useMemo(
-    () =>
-      companies.filter(
-        (c) => c.company_id && String(c.company_id).trim() !== "" && !isVirtualGroupLinkCompanyRow(c),
-      ),
-    [companies],
-  );
-
-  const modalPickerCompanies = ledgerCtx.groupOnlyAccountMode ? groupPickerCompanies : companyButtons;
+  const { modalPickerCompanies } = useSummaryAccountPickerCompanies(ledgerCtx);
   // No roles endpoint (Account List page doesn't call one either — DB-未建 role 时的
   // fallback list in getAccountModalOrderedRoles([]) already covers the full role set).
   const orderedRoles = useMemo(() => getAccountModalOrderedRoles(roles), [roles]);
-
-  useEffect(() => {
-    if (ledgerCtx.groupOnlyAccountMode || !ledgerCtx.companyId) return undefined;
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await fetchOwnerCompaniesAll();
-        if (!cancelled && rows.length) {
-          setCompanies(rows.map(normalizeCompanyRow));
-        }
-      } catch {
-        /* silent */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [ledgerCtx.groupOnlyAccountMode, ledgerCtx.companyId]);
 
   /** New account has nothing linked yet — currency catalog only, no per-account lookup needed. */
   const loadSelectionMeta = useCallback(async () => {
@@ -211,7 +124,7 @@ export function useSummaryAddAccount({
 
   const showAddAccount = useCallback(async () => {
     const ctx = ledgerCtxRef.current;
-    if (!canOpenAddAccount(ctx)) {
+    if (!canOpenSummaryAccountModal(ctx)) {
       emitNotify(t("pleaseSelectCompanyFirst"), "danger");
       return;
     }

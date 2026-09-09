@@ -33,6 +33,8 @@ import { useSummaryEditFormulaPure } from "./hooks/useSummaryEditFormulaPure.js"
 
 import { useSummaryAddAccount } from "./hooks/useSummaryAddAccount.js";
 
+import { useSummaryEditAccount } from "./hooks/useSummaryEditAccount.js";
+
 import SummaryConfirmDeleteModal from "./components/SummaryConfirmDeleteModal.jsx";
 
 import { SummaryProvider, useSummaryContext } from "./context/SummaryContext.jsx";
@@ -284,6 +286,26 @@ function DataCaptureSummaryPureInner() {
     notify: overlays.showNotification,
 
     onAccountCreated: handleAccountCreated,
+
+  });
+
+
+
+  const editAccount = useSummaryEditAccount({
+
+    companyId: effectiveCompanyId,
+
+    captureScope,
+
+    processData: capture.processData,
+
+    accounts: editFormula.accounts,
+
+    notify: overlays.showNotification,
+
+    // Same refresh as after Add — reload the catalog and re-sync the open Edit Formula form
+    // (accountText / currency) to this account id, since the edit may have changed either.
+    onAccountUpdated: handleAccountCreated,
 
   });
 
@@ -693,6 +715,8 @@ function DataCaptureSummaryPureInner() {
 
         onOpenAddAccount={addAccount.showAddAccount}
 
+        onOpenEditAccount={() => editAccount.showEditAccount(editFormula.form?.accountId)}
+
         onAddSelectedData={editFormula.onAddSelectedData}
 
         onFormulaGridItemClick={editFormula.onFormulaGridItemClick}
@@ -702,6 +726,8 @@ function DataCaptureSummaryPureInner() {
 
 
       <AccountModal {...addAccount.accountModalProps} />
+
+      <AccountModal {...editAccount.accountModalProps} />
 
 
 

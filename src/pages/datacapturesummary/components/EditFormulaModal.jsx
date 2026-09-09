@@ -43,6 +43,7 @@ export default function EditFormulaModal({
   onFormChange,
   onAccountSelect,
   onOpenAddAccount,
+  onOpenEditAccount,
   onAddSelectedData,
   onFormulaGridItemClick,
   onCalculatorPress,
@@ -161,6 +162,12 @@ export default function EditFormulaModal({
     e.preventDefault();
     e.stopPropagation();
     onOpenAddAccount?.();
+  };
+
+  const handleOpenEditAccount = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onOpenEditAccount?.();
   };
 
   const selectAccount = (acc) => {
@@ -306,6 +313,16 @@ export default function EditFormulaModal({
                           </div>
                         </div>
                       </div>
+                      {form.accountId ? (
+                        <button
+                          type="button"
+                          className="account-edit-btn"
+                          onClick={handleOpenEditAccount}
+                          title={t("editAccountTitle")}
+                        >
+                          ✏️
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="account-add-btn"

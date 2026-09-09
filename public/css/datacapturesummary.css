@@ -1978,6 +1978,51 @@ body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
             transform: scale(0.95);
         }
 
+        .account-edit-btn {
+            background: linear-gradient(135deg, #6c757d, #5a6268);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: clamp(16px, 1.25vw, 24px);
+            height: clamp(16px, 1.25vw, 24px);
+            font-size: clamp(10px, 0.7vw, 13px);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 10003;
+            pointer-events: auto;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        #editFormulaModal .account-edit-btn {
+            pointer-events: auto;
+            position: relative;
+            z-index: 6;
+            min-width: 28px;
+            min-height: 28px;
+            width: 28px;
+            height: 28px;
+            font-size: 0.9rem !important;
+            line-height: 1 !important;
+        }
+
+        .account-edit-btn:hover {
+            background: linear-gradient(135deg, #5a6268, #4b5157);
+            transform: scale(1.05);
+        }
+
+        #editFormulaModal .account-edit-btn:hover {
+            transform: scale(1) !important;
+        }
+
+        .account-edit-btn:active {
+            transform: scale(0.95);
+        }
+
         /* Description Select with Buttons Styles */
         .description-select-with-buttons {
             display: flex;
