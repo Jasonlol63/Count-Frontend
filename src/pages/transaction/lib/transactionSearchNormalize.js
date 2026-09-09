@@ -33,7 +33,7 @@ export function normalizeSpringSearchToGrid(data) {
       has_win_loss_transactions: row.hasWinLossInPeriod ? 1 : 0,
       has_win_loss_history: 0,
       has_period_id_product_rows: row.hasWinLossInPeriod ? 1 : 0,
-      is_alert: 0,
+      is_alert: row.alertActive ? 1 : 0,
       is_rate_middleman: 0,
       never_transacted: row.neverTransacted ? 1 : 0,
     };

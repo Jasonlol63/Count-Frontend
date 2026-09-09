@@ -1,6 +1,7 @@
 /** Account list — Spring Boot `/api/account/*` (tenant-scoped member rows). */
 
 import { buildApiUrl } from "../../utils/core/apiUrl.js";
+import { normalizeAlertAmount } from "./accountLogic.js";
 
 /** company.id in the picker === tenant.id in the backend. */
 export function resolveAccountListTenantId(companyId) {
@@ -121,8 +122,10 @@ export function buildAccountCreateRequest(form, scopeTenantId, currencyIds = [],
     paymentAlert: Number(form.payment_alert) === 1 ? 1 : 0,
     alertDay: form.alert_type || form.alert_day || null,
     alertSpecificDate: form.alert_start_date || form.alert_specific_date || null,
-    alertAmount:
-      form.alert_amount !== "" && form.alert_amount != null ? form.alert_amount : null,
+    alertAmount: (() => {
+      const normalized = normalizeAlertAmount(form.alert_amount);
+      return normalized !== "" ? normalized : null;
+    })(),
     scopeTenantId: Number(scopeTenantId),
     currencyIds: normalizeAccountCurrencyIds(currencyIds),
     tenantIds: normalizeAccountTenantIds(tenantIds),
