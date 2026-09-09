@@ -155,6 +155,7 @@ export function getRowDraftValues(row, drafts) {
     period: draft.period ?? row.period ?? "",
     fromAccountId: draft.fromAccountId ?? row.from_account_id ?? row.default_from_account_id ?? "",
     toAccountId: draft.toAccountId ?? row.to_account_id ?? row.default_to_account_id ?? "",
+    chargeOnApprove: draft.chargeOnApprove ?? true,
   };
 }
 

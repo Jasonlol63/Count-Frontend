@@ -36,8 +36,12 @@ export async function fetchAutoRenewApprovals(
   return postJson("api/auto-renew/list", body, { signal });
 }
 
-export async function approveAutoRenew({ requestId, period }) {
-  return postJson("api/auto-renew/approve", { request_id: requestId, period });
+export async function approveAutoRenew({ requestId, period, chargeOnApprove = true }) {
+  return postJson("api/auto-renew/approve", {
+    request_id: requestId,
+    period,
+    charge_on_approve: chargeOnApprove,
+  });
 }
 
 export async function rejectAutoRenew({ requestId }) {

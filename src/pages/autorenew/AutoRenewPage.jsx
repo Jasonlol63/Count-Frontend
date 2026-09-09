@@ -475,13 +475,14 @@ export default function AutoRenewPage() {
     if (!row || !canEditGlobal || busyRequestId) return;
     if (!canApproveRow(row, rowDrafts, feeSettings)) return;
 
-    const { period } = getRowDraftValues(row, rowDrafts);
+    const { period, chargeOnApprove } = getRowDraftValues(row, rowDrafts);
     setApproveConfirmRow(null);
     setBusyRequestId(row.request_id);
     try {
       await approveAutoRenew({
         requestId: row.request_id,
         period,
+        chargeOnApprove,
       });
       invalidateTransactionListCache("auto_renew_approve");
       notifySessionRefreshRequested();
@@ -871,6 +872,9 @@ export default function AutoRenewPage() {
                 {renderHeader("expiration", t("colExpiration"))}
                 {renderHeader("remaining", t("colRemaining"))}
                 {renderHeader("period", t("colPeriod"), { controlCol: true })}
+                <div className="header-item auto-renew-col-control-header">
+                  <span className="header-item__label">{t("colCharge")}</span>
+                </div>
                 {renderHeader("status", t("colStatus"), { controlCol: true })}
                 {showSubmitterColumn ? renderHeader("submitter", t("colSubmitter")) : null}
               </div>
@@ -928,6 +932,35 @@ export default function AutoRenewPage() {
                             </select>
                           ) : row.period ? (
                             <span className="auto-renew-period-badge">{t(periodToLabelKey(row.period))}</span>
+                          ) : (
+                            <span className="auto-renew-table-muted">—</span>
+                          )}
+                        </div>
+                        <div className="card-item auto-renew-col-control auto-renew-col-charge">
+                          {isPendingEditable ? (
+                            <div className="company-share-charge-on-save">
+                              <span
+                                className={`company-share-charge-on-save__state${draft.chargeOnApprove ? " company-share-charge-on-save__state--on" : ""}`}
+                                aria-hidden="true"
+                              >
+                                {draft.chargeOnApprove ? t("on") : t("off")}
+                              </span>
+                              <label className="company-share-charge-switch">
+                                <input
+                                  type="checkbox"
+                                  className="company-share-charge-switch__input"
+                                  role="switch"
+                                  aria-label={t("chargeToggleAria")}
+                                  aria-checked={draft.chargeOnApprove}
+                                  checked={draft.chargeOnApprove}
+                                  disabled={rowBusy}
+                                  onChange={(e) => updateDraft(row.request_id, { chargeOnApprove: e.target.checked })}
+                                />
+                                <span className="company-share-charge-switch__track" aria-hidden="true">
+                                  <span className="company-share-charge-switch__thumb" />
+                                </span>
+                              </label>
+                            </div>
                           ) : (
                             <span className="auto-renew-table-muted">—</span>
                           )}
@@ -1009,7 +1042,12 @@ export default function AutoRenewPage() {
         <ConfirmDeleteModal
           open
           title={t("confirmApproveTitle")}
-          message={t("confirmApprove", { company: approveConfirmRow.company_code })}
+          message={t(
+            getRowDraftValues(approveConfirmRow, rowDrafts).chargeOnApprove
+              ? "confirmApprove"
+              : "confirmApproveNoCharge",
+            { company: approveConfirmRow.company_code },
+          )}
           cancelLabel={t("cancel")}
           confirmLabel={t("approve")}
           confirmClassName="btn confirm-approve"

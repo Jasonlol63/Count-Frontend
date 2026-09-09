@@ -207,7 +207,7 @@ body.auto-renew-page-body .auto-renew-date-range-group .date-range-picker:hover 
   transform: translate(0, calc(-50% + 1px));
 }
 
-/* 8-column grid (default — no Submitter) */
+/* 9-column grid (default — no Submitter; adds Charge toggle col) */
 body.ec-auth-shell.user-page.auto-renew-page-body .user-list-table.auto-renew-table,
 body.auto-renew-page-body .user-list-table.auto-renew-table {
   --user-list-grid-cols:
@@ -218,6 +218,7 @@ body.auto-renew-page-body .user-list-table.auto-renew-table {
     minmax(92px, 0.82fr)
     minmax(108px, 0.86fr)
     minmax(108px, 1fr)
+    minmax(88px, 0.78fr)
     minmax(168px, 1.55fr);
 }
 
@@ -231,10 +232,11 @@ body.lang-zh.auto-renew-page-body .user-list-table.auto-renew-table {
     minmax(92px, 0.82fr)
     minmax(108px, 0.86fr)
     minmax(108px, 1fr)
+    minmax(88px, 0.78fr)
     minmax(168px, 1.55fr);
 }
 
-/* 9-column grid — Approved chip only (adds Submitter) */
+/* 10-column grid — Approved chip only (adds Submitter) */
 body.ec-auth-shell.user-page.auto-renew-page-body .user-list-table.auto-renew-table.auto-renew-table--with-submitter,
 body.auto-renew-page-body .user-list-table.auto-renew-table.auto-renew-table--with-submitter {
   --user-list-grid-cols:
@@ -245,6 +247,7 @@ body.auto-renew-page-body .user-list-table.auto-renew-table.auto-renew-table--wi
     minmax(92px, 0.82fr)
     minmax(108px, 0.86fr)
     minmax(108px, 1fr)
+    minmax(88px, 0.78fr)
     minmax(168px, 1.55fr)
     minmax(88px, 0.82fr);
 }
@@ -259,6 +262,7 @@ body.lang-zh.auto-renew-page-body .user-list-table.auto-renew-table.auto-renew-t
     minmax(92px, 0.82fr)
     minmax(108px, 0.86fr)
     minmax(108px, 1fr)
+    minmax(88px, 0.78fr)
     minmax(168px, 1.55fr)
     minmax(88px, 0.82fr);
 }
@@ -273,7 +277,7 @@ body.auto-renew-page-body .user-table-wrapper.auto-renew-table .user-list-table-
 }
 
 body.auto-renew-page-body .user-list-table.auto-renew-table {
-  --auto-renew-table-min-width: 980px;
+  --auto-renew-table-min-width: 1070px;
   --user-list-row-min-height: var(--auto-renew-row-min-height);
 }
 
@@ -994,7 +998,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
   }
 
   body.auto-renew-page-body .auto-renew-table-hscroll__track {
-    min-width: max(100%, 1120px);
+    min-width: max(100%, 1210px);
   }
 
   body.ec-auth-shell.user-page.auto-renew-page-body .user-list-table.auto-renew-table,
@@ -1007,6 +1011,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
       84px
       96px
       96px
+      76px
       148px !important;
   }
 
@@ -1020,6 +1025,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
       84px
       96px
       96px
+      76px
       148px
       84px !important;
   }
@@ -1036,6 +1042,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
       minmax(92px, 0.82fr)
       minmax(108px, 0.86fr)
       minmax(108px, 1fr)
+      minmax(88px, 0.78fr)
       minmax(168px, 1.55fr) !important;
     --user-list-grid-cols-bulk:
       44px
@@ -1045,6 +1052,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
       minmax(92px, 0.82fr)
       minmax(108px, 0.86fr)
       minmax(108px, 1fr)
+      minmax(88px, 0.78fr)
       minmax(168px, 1.55fr) !important;
   }
 
@@ -1057,6 +1065,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
       minmax(92px, 0.82fr)
       minmax(108px, 0.86fr)
       minmax(108px, 1fr)
+      minmax(88px, 0.78fr)
       minmax(168px, 1.55fr) !important;
   }
 
@@ -1069,6 +1078,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
       minmax(92px, 0.82fr)
       minmax(108px, 0.86fr)
       minmax(108px, 1fr)
+      minmax(88px, 0.78fr)
       minmax(168px, 1.55fr)
       minmax(88px, 0.82fr) !important;
   }
@@ -1082,6 +1092,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
       minmax(92px, 0.82fr)
       minmax(108px, 0.86fr)
       minmax(108px, 1fr)
+      minmax(88px, 0.78fr)
       minmax(168px, 1.55fr)
       minmax(88px, 0.82fr) !important;
   }
@@ -1155,7 +1166,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
   }
 
   body.auto-renew-page-body .auto-renew-table-hscroll__track {
-    min-width: max(100%, 1000px);
+    min-width: max(100%, 1080px);
   }
 
   body.ec-auth-shell.user-page.auto-renew-page-body .user-list-table.auto-renew-table,
@@ -1168,6 +1179,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
       minmax(72px, 0.72fr)
       minmax(68px, 0.68fr)
       minmax(96px, 1fr)
+      minmax(72px, 0.66fr)
       minmax(132px, 1.28fr) !important;
   }
 
@@ -1181,6 +1193,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
       minmax(72px, 0.72fr)
       minmax(68px, 0.68fr)
       minmax(96px, 1fr)
+      minmax(72px, 0.66fr)
       minmax(132px, 1.28fr)
       minmax(84px, 0.82fr) !important;
   }
@@ -1195,6 +1208,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
       minmax(72px, 0.72fr)
       minmax(68px, 0.68fr)
       minmax(96px, 1fr)
+      minmax(72px, 0.66fr)
       minmax(132px, 1.28fr) !important;
   }
 
@@ -1208,6 +1222,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
       minmax(72px, 0.72fr)
       minmax(68px, 0.68fr)
       minmax(96px, 1fr)
+      minmax(72px, 0.66fr)
       minmax(132px, 1.28fr)
       minmax(84px, 0.82fr) !important;
   }
@@ -1288,7 +1303,7 @@ body.auto-renew-page-body .auto-renew-filter-chips .user-filter-chip:active:not(
   }
 
   body.auto-renew-page-body .auto-renew-table-hscroll__track {
-    min-width: max(100%, 880px);
+    min-width: max(100%, 950px);
   }
 
   body.auto-renew-page-body .user-list-table.auto-renew-table .table-header.user-list-table-header.auto-renew-table-header,
