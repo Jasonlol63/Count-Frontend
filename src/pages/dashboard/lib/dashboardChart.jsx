@@ -172,23 +172,29 @@ export function buildChartRows(
 }
 
 /**
- * Trend Chart rows from `GET /api/dashboard/chart` (single-company scope) — an array of
- * `{date, profit, expenses, netProfit}` points, one per calendar day, already signed correctly
- * (no `expenses > 0 ? -expenses : expenses` flip like `buildChartMetricRow` does for the old
- * PHP `daily_data` shape — that convention doesn't apply here, see dashboard-springboot-kpi.md).
+ * Trend Chart rows from `GET /api/dashboard/chart` / `GET /api/dashboard/chart-group` — an array
+ * of `{date, profit, expenses, netProfit, earnings}` points, one per calendar day, already signed
+ * correctly (no `expenses > 0 ? -expenses : expenses` flip like `buildChartMetricRow` does for the
+ * old PHP `daily_data` shape — that convention doesn't apply here, see dashboard-springboot-kpi.md).
+ * `earnings` is now computed backend-side per day (per-month ownership %, not one flat multiplier
+ * for the whole range — see dashboard-springboot-kpi.md §7/§10), so it's read straight off each
+ * point instead of `netProfit * earningsMultiplier` — `earnings: null` on every point (identity
+ * doesn't qualify for Earnings at all) rolls up to `null` for the month too, not a fake 0.
  * Day→month rollup for long ranges is done here client-side by summing the day points that
  * fall in each month, since the backend only ever returns day-level granularity.
  */
-export function buildSpringTrendChartRows(trendPoints, startYmd, endYmd, locale = "en-US", earningsMultiplier = 0) {
+export function buildSpringTrendChartRows(trendPoints, startYmd, endYmd, locale = "en-US") {
   if (!Array.isArray(trendPoints) || !trendPoints.length) return [];
   const byDate = new Map(trendPoints.map((p) => [String(p.date), p]));
   const rangeStart = parseYmd(startYmd);
   const rangeEnd = parseYmd(endYmd);
 
-  const rowFor = (profit, expenses) => {
-    const netProfit = profit + expenses;
-    return { profit, expenses, netProfit, earnings: netProfit * earningsMultiplier };
-  };
+  const rowFor = (profit, expenses, earnings) => ({
+    profit,
+    expenses,
+    netProfit: profit + expenses,
+    earnings,
+  });
 
   if (shouldAggregateChartByMonth(startYmd, endYmd)) {
     return eachMonthInRange(startYmd, endYmd).map(({ year, month }) => {
@@ -197,6 +203,8 @@ export function buildSpringTrendChartRows(trendPoints, startYmd, endYmd, locale 
       const lastDay = new Date(year, month, 0).getDate();
       let profitSum = 0;
       let expensesSum = 0;
+      let earningsSum = 0;
+      let hasEarnings = false;
       for (let day = 1; day <= lastDay; day += 1) {
         const dateStr = `${monthKey}-${String(day).padStart(2, "0")}`;
         const dateObj = parseYmd(dateStr);
@@ -205,8 +213,12 @@ export function buildSpringTrendChartRows(trendPoints, startYmd, endYmd, locale 
         if (!point) continue;
         profitSum += parseFloat(point.profit || 0) || 0;
         expensesSum += parseFloat(point.expenses || 0) || 0;
+        if (point.earnings != null) {
+          earningsSum += parseFloat(point.earnings) || 0;
+          hasEarnings = true;
+        }
       }
-      return { date: monthKey, label, ...rowFor(profitSum, expensesSum) };
+      return { date: monthKey, label, ...rowFor(profitSum, expensesSum, hasEarnings ? earningsSum : null) };
     });
   }
 
@@ -222,6 +234,7 @@ export function buildSpringTrendChartRows(trendPoints, startYmd, endYmd, locale 
     const point = byDate.get(date);
     const profit = parseFloat(point?.profit || 0) || 0;
     const expenses = parseFloat(point?.expenses || 0) || 0;
-    return { date, label, ...rowFor(profit, expenses) };
+    const earnings = point?.earnings != null ? parseFloat(point.earnings) || 0 : null;
+    return { date, label, ...rowFor(profit, expenses, earnings) };
   });
 }

@@ -382,6 +382,36 @@ function mayWarmGroupLedgerCurrencies(me, groupCode, companies) {
   return canAccessGroupLedgerForGroup(me, groupCode, companies);
 }
 
+/**
+ * `GET /api/dashboard/kpi` 和 `GET /api/dashboard/group-kpi` 返回的数据形状完全一样
+ * （profit/expenses/netProfit/showEarnings/earnings + previous* 一整套），KPI 卡片的拼装
+ * 逻辑也就能直接共用，不用给 Group 模式再写一遍。
+ */
+function buildKpiFromSpringPayload(payload) {
+  const comparisons = {};
+  if (payload.previousProfit != null) {
+    comparisons.profit = buildKpiCompare(payload.profit ?? 0, payload.previousProfit);
+  }
+  if (payload.previousExpenses != null) {
+    comparisons.expenses = buildKpiCompare(payload.expenses ?? 0, payload.previousExpenses);
+  }
+  if (payload.previousNetProfit != null) {
+    comparisons.netProfit = buildKpiCompare(payload.netProfit ?? 0, payload.previousNetProfit);
+  }
+  if (payload.showEarnings && payload.previousEarnings != null) {
+    comparisons.earnings = buildKpiCompare(payload.earnings ?? 0, payload.previousEarnings);
+  }
+  return {
+    profit: payload.profit ?? 0,
+    expenses: payload.expenses ?? 0,
+    netProfit: payload.netProfit ?? 0,
+    showEarnings: !!payload.showEarnings,
+    earnings: payload.earnings ?? 0,
+    kpiCardEarnings: payload.earnings ?? 0,
+    comparisons,
+  };
+}
+
 /** Group All + no company pill: AP+IG group-ledger KPI/currency scope (group login or privileged company login). */
 function isGroupsAllLedgerDataScope({ groupsAllMode, groupAllMode, companyId, me }) {
   const singleCid = companyId != null && companyId !== "" ? parseInt(companyId, 10) : Number.NaN;
@@ -1030,6 +1060,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   /** `GET /api/dashboard/chart-all` response `data` — Company:All within one Group tab only, see `chartRows` useMemo below. */
   const [springTrendAllData, setSpringTrendAllData] = useState(null);
   const [springTrendAllLoading, setSpringTrendAllLoading] = useState(false);
+  /** `GET /api/dashboard/group-kpi` response `data` — viewing a Group's own KPI (AP/IG tab itself), see `kpi` useMemo below. */
+  const [springKpiGroupData, setSpringKpiGroupData] = useState(null);
+  const [springKpiGroupLoading, setSpringKpiGroupLoading] = useState(false);
+  /** `GET /api/dashboard/chart-group` response `data` — Group 自己视角的 Trend Chart，见 `chartRows` useMemo。 */
+  const [springTrendGroupData, setSpringTrendGroupData] = useState(null);
+  const [springTrendGroupLoading, setSpringTrendGroupLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [earningsByCurrency, setEarningsByCurrency] = useState([]);
   const [earningsByCurrencyPrev, setEarningsByCurrencyPrev] = useState([]);
@@ -2376,6 +2412,134 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     return () => controller.abort();
   }, [groupAllMode, groupAllTenantIds, dateFrom, dateTo, currencyCode]);
 
+  /**
+   * 正在看某一个 Group 自己的 KPI（AP 或 IG 这个 tab 本身，不是 "Company: All" 汇总）——
+   * 对应新的 `GET /api/dashboard/group-kpi`。groupsAllGroupLevel（同时看 AP+IG 所有 Group 合并）
+   * 没有单一的 groupTenantId，这个新接口还不支持，先不处理（KPI 卡片继续显示 "-"）。
+   */
+  const groupKpiScope = Boolean(
+    selectedGroup && !groupAllMode && (usesGroupLedgerDashboard || groupOnlyDashboard)
+  );
+
+  /** Group 自己的 tenant id：companies 列表里那一行 company_id/code 等于 Group 代码本身的行。 */
+  const groupKpiTenantId = useMemo(() => {
+    if (!groupKpiScope) return null;
+    const row = companies.find((c) => companyRowIsGroupEntity(c, selectedGroup));
+    const id = row ? parseInt(row.id, 10) : NaN;
+    return Number.isFinite(id) && id > 0 ? id : null;
+  }, [groupKpiScope, companies, selectedGroup]);
+
+  /**
+   * 这个 Group 下面（当前登录有权限看的）子公司 id 列表，喂给 Group Profit 的加权汇总。
+   *
+   * 踩过的坑：这里**不能**直接复用 groupAllTenantIds 那套 `resolveMergeCompanyList()`——那背后调
+   * 用的 `resolveGroupAllMergeCompanyList()` 是专门给"Company: All"这个功能写的，里面写死了
+   * `allowC168: false`，会把 C168 这家公司排除在外（那是 Company: All 自己的业务规则，历史原因）。
+   * Group Profit 这边不能继承这条排除规则——只要 C168 在 Ownership 页面配置了分给这个 Group 的
+   * 股权比例，就必须算进来，不能因为它是 C168 就跳过。之前直接复用 resolveMergeCompanyList() 导致
+   * AP 底下只有 C168 一家子公司时，列表被过滤成空的，Group Profit 永远算出 0——就是这个原因。
+   * 改成直接用不带这条排除规则的 `companiesForCompanyPicker()`（跟 Company 选择器那排 chip 用的
+   * 是同一个函数，C168 在那边本来就是正常可选的一家公司），再过一遍标准的权限过滤。
+   */
+  const groupKpiCompanyTenantIds = useMemo(() => {
+    if (!groupKpiScope || !selectedGroup) return [];
+    const list = filterCompaniesForDashboardApiAccess(
+      meRef.current,
+      companiesForCompanyPicker(companies, selectedGroup, groupIds),
+      companies,
+      selectedGroup
+    );
+    return list
+      .map((c) => parseInt(c.id, 10))
+      .filter((id) => Number.isFinite(id) && id > 0);
+  }, [groupKpiScope, selectedGroup, companies, groupIds]);
+
+  /**
+   * `GET /api/dashboard/group-kpi` —— 跟单公司 `/kpi` 一样是一次 GET 拿到全部数字（Profit/
+   * Expenses/NetProfit/Earnings + 上一期对比），后端已经把 Group Profit 的加权汇总和 Group
+   * Earnings 都算好了，前端不用再做任何二次计算。
+   */
+  useEffect(() => {
+    if (!groupKpiScope || !groupKpiTenantId || !dateFrom || !dateTo || !currencyCode) {
+      setSpringKpiGroupData(null);
+      setSpringKpiGroupLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringKpiGroupLoading(true);
+    (async () => {
+      try {
+        const q = new URLSearchParams({
+          group_tenant_id: String(groupKpiTenantId),
+          company_tenant_ids: groupKpiCompanyTenantIds.join(","),
+          date_from: dateFrom,
+          date_to: dateTo,
+          currency: currencyCode,
+        });
+        const res = await fetch(buildApiUrl(`api/dashboard/group-kpi?${q.toString()}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        if (!res.ok || !json?.success || !json?.data) {
+          setSpringKpiGroupData(null);
+          return;
+        }
+        setSpringKpiGroupData(json.data);
+      } catch (err) {
+        if (controller.signal.aborted || err?.name === "AbortError") return;
+        setSpringKpiGroupData(null);
+      } finally {
+        if (!controller.signal.aborted) setSpringKpiGroupLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [groupKpiScope, groupKpiTenantId, groupKpiCompanyTenantIds, dateFrom, dateTo, currencyCode]);
+
+  /**
+   * `GET /api/dashboard/chart-group` —— Group 自己视角的 Trend Chart，参数跟 `/group-kpi` 一样
+   * 复用 `groupKpiTenantId`/`groupKpiCompanyTenantIds`。每个点已经是后端按天算好的最终数字
+   * （包含 Earnings，按当月股权% 算的，不是前端再乘一个百分比），前端不用做任何二次计算。
+   */
+  useEffect(() => {
+    if (!groupKpiScope || !groupKpiTenantId || !dateFrom || !dateTo || !currencyCode) {
+      setSpringTrendGroupData(null);
+      setSpringTrendGroupLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringTrendGroupLoading(true);
+    (async () => {
+      try {
+        const q = new URLSearchParams({
+          group_tenant_id: String(groupKpiTenantId),
+          company_tenant_ids: groupKpiCompanyTenantIds.join(","),
+          date_from: dateFrom,
+          date_to: dateTo,
+          currency: currencyCode,
+        });
+        const res = await fetch(buildApiUrl(`api/dashboard/chart-group?${q.toString()}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+          setSpringTrendGroupData(null);
+          return;
+        }
+        setSpringTrendGroupData(json.data);
+      } catch (err) {
+        if (controller.signal.aborted || err?.name === "AbortError") return;
+        setSpringTrendGroupData(null);
+      } finally {
+        if (!controller.signal.aborted) setSpringTrendGroupLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [groupKpiScope, groupKpiTenantId, groupKpiCompanyTenantIds, dateFrom, dateTo, currencyCode]);
+
   const applyCompanySelection = useCallback((id, options = {}) => {
     const clearSubset = options.clearSubset !== false;
     const clearGroupAll = options.clearGroupAll !== false;
@@ -3175,19 +3339,31 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
         // Plain single-company scope (a group tab may still be selected purely for
         // navigation) — use the Spring-backed per-company linked-currency list instead of
-        // the disabled `get_scope_account_currencies_api.php` PHP call. Group-ledger /
-        // Company-All merge (no singleCid, or groupLedgerOnly) has no Spring backend yet
-        // and still goes through that PHP call below (still returns nothing until migrated).
+        // the disabled `get_scope_account_currencies_api.php` PHP call.
         const usesSpringSingleCompanyCurrency = Boolean(singleCid) && !groupLedgerOnly;
+
+        // 正在看 Group 自己的 KPI（group-kpi 那个 tab 本身，没选任何子公司）——Group 在
+        // tenant 表里也是自己一行，跟公司一样可以直接查 `/api/currency/list?tenant_id=`，
+        // 不用再走那条已经废弃的 `get_scope_account_currencies_api.php`。
+        const groupLedgerTenantId = groupOnlyCurrencyScope && groupKey
+          ? (() => {
+              const row = companies.find((c) => companyRowIsGroupEntity(c, groupKey));
+              const id = row ? parseInt(row.id, 10) : NaN;
+              return Number.isFinite(id) && id > 0 ? id : null;
+            })()
+          : null;
+        const usesSpringGroupLedgerCurrency = Boolean(groupLedgerTenantId);
 
         const [codesResult, ordJson] = await Promise.all([
           usesSpringSingleCompanyCurrency
             ? fetchCompanyAccountCurrencyCodes(singleCid)
-            : fetchCurrencyListHttpDeduped(
-                currencyListInflightRef.current,
-                "api/transactions/get_scope_account_currencies_api.php",
-                q.toString()
-              ),
+            : usesSpringGroupLedgerCurrency
+              ? fetchCompanyAccountCurrencyCodes(groupLedgerTenantId)
+              : fetchCurrencyListHttpDeduped(
+                  currencyListInflightRef.current,
+                  "api/transactions/get_scope_account_currencies_api.php",
+                  q.toString()
+                ),
           orderCompanyId
             ? fetchUserCurrencyOrderHttpDeduped(
                 userCurrencyOrderInflightRef.current,
@@ -3195,7 +3371,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
               )
             : Promise.resolve(null),
         ]);
-        if (usesSpringSingleCompanyCurrency) {
+        if (usesSpringSingleCompanyCurrency || usesSpringGroupLedgerCurrency) {
           codes = Array.isArray(codesResult) ? codesResult : [];
         } else {
           const curRes = codesResult?.res;
@@ -8864,6 +9040,10 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       showEarnings: false,
       comparisons: undefined,
     };
+    if (groupKpiScope) {
+      if (!springKpiGroupData) return empty;
+      return buildKpiFromSpringPayload(springKpiGroupData);
+    }
     if (groupAllMode) {
       if (!springKpiAllData) return empty;
       return {
@@ -8878,29 +9058,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     }
     if (!isSingleCompanyKpiScope) return empty;
     if (!springKpiData) return empty;
-    const comparisons = {};
-    if (springKpiData.previousProfit != null) {
-      comparisons.profit = buildKpiCompare(springKpiData.profit ?? 0, springKpiData.previousProfit);
-    }
-    if (springKpiData.previousExpenses != null) {
-      comparisons.expenses = buildKpiCompare(springKpiData.expenses ?? 0, springKpiData.previousExpenses);
-    }
-    if (springKpiData.previousNetProfit != null) {
-      comparisons.netProfit = buildKpiCompare(springKpiData.netProfit ?? 0, springKpiData.previousNetProfit);
-    }
-    if (springKpiData.showEarnings && springKpiData.previousEarnings != null) {
-      comparisons.earnings = buildKpiCompare(springKpiData.earnings ?? 0, springKpiData.previousEarnings);
-    }
-    return {
-      profit: springKpiData.profit ?? 0,
-      expenses: springKpiData.expenses ?? 0,
-      netProfit: springKpiData.netProfit ?? 0,
-      showEarnings: !!springKpiData.showEarnings,
-      earnings: springKpiData.earnings ?? 0,
-      kpiCardEarnings: springKpiData.earnings ?? 0,
-      comparisons,
-    };
-  }, [groupAllMode, springKpiAllData, isSingleCompanyKpiScope, springKpiData]);
+    return buildKpiFromSpringPayload(springKpiData);
+  }, [groupKpiScope, springKpiGroupData, groupAllMode, springKpiAllData, isSingleCompanyKpiScope, springKpiData]);
 
   const chartAggregateByMonth = useMemo(
     () => shouldAggregateChartByMonth(summaryDateFrom, summaryDateTo),
@@ -8909,27 +9068,30 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
   /**
    * Trend Chart rows: single-company scope reads the new Spring `/api/dashboard/chart` payload
-   * (`springTrendData`) via `buildSpringTrendChartRows` — already-signed day points, no ownership-
-   * multiplier math needed beyond a flat `netProfit * earningsMultiplier` (same simplification
-   * the old PHP-fed path used: one multiplier for the whole range, not resolved per day).
-   * "Company: All" within one Group tab (`groupAllMode`) reads `springTrendAllData` (`GET
-   * /api/dashboard/chart-all`) through the same builder — no Earnings line for this scope (kpi-all
-   * never returns one), so the multiplier is always 0. Every other scope (group ledger,
-   * Group-All, multi-company subset merge) has no Spring trend backend yet and keeps reading
-   * `dashboardData` (null for those scopes → empty → zero-skeleton fallback).
+   * (`springTrendData`) via `buildSpringTrendChartRows` — already-signed day points, Earnings
+   * included per day (backend resolves each day's own month's ownership %, see
+   * dashboard-springboot-kpi.md §7/§10 — no flat "one multiplier for the whole range" simplification
+   * anymore). Group's own KPI scope (`groupKpiScope`) reads `springTrendGroupData` (`GET
+   * /api/dashboard/chart-group`) through the same builder — same Group Profit/Expenses/NetProfit/
+   * Earnings algorithm as `/group-kpi`, just one point per day. "Company: All" within one Group tab
+   * (`groupAllMode`) reads `springTrendAllData` (`GET /api/dashboard/chart-all`) — no Earnings line
+   * for this scope (kpi-all never returns one). Every other scope (Group-All, multi-company subset
+   * merge) has no Spring trend backend yet and keeps reading `dashboardData` (null for those scopes
+   * → empty → zero-skeleton fallback).
    */
   const chartRows = useMemo(() => {
+    if (groupKpiScope) {
+      const rows = buildSpringTrendChartRows(springTrendGroupData, dateFrom, dateTo, i18n.locale);
+      if (rows.length > 0) return rows;
+      return buildSkeletonChartRows(dateFrom, dateTo, i18n.locale);
+    }
     if (groupAllMode) {
-      const rows = buildSpringTrendChartRows(springTrendAllData, dateFrom, dateTo, i18n.locale, 0);
+      const rows = buildSpringTrendChartRows(springTrendAllData, dateFrom, dateTo, i18n.locale);
       if (rows.length > 0) return rows;
       return buildSkeletonChartRows(dateFrom, dateTo, i18n.locale);
     }
     if (isSingleCompanyKpiScope) {
-      const earningsMultiplier =
-        kpi.showEarnings && springKpiData?.earningsPercentage != null
-          ? (parseFloat(springKpiData.earningsPercentage) || 0) / 100
-          : 0;
-      const rows = buildSpringTrendChartRows(springTrendData, dateFrom, dateTo, i18n.locale, earningsMultiplier);
+      const rows = buildSpringTrendChartRows(springTrendData, dateFrom, dateTo, i18n.locale);
       if (rows.length > 0) return rows;
       return buildSkeletonChartRows(dateFrom, dateTo, i18n.locale);
     }
@@ -8945,12 +9107,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     if (rows.length > 0) return rows;
     return buildSkeletonChartRows(summaryDateFrom, summaryDateTo, i18n.locale);
   }, [
+    groupKpiScope,
+    springTrendGroupData,
     groupAllMode,
     springTrendAllData,
     isSingleCompanyKpiScope,
     springTrendData,
-    kpi.showEarnings,
-    springKpiData,
     dateFrom,
     dateTo,
     dashboardData,
@@ -9407,7 +9569,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   ]);
   /** Keep previous paint visible while the next full view loads (no empty hole). */
   const kpiLoading =
-    (isSingleCompanyKpiScope && springKpiLoading) || (groupAllMode && springKpiAllLoading)
+    (isSingleCompanyKpiScope && springKpiLoading) ||
+    (groupAllMode && springKpiAllLoading) ||
+    (groupKpiScope && springKpiGroupLoading)
       ? true
       : Boolean(dashboardData)
         ? false
