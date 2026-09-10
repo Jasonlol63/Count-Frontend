@@ -1979,7 +1979,7 @@ body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
         }
 
         .account-edit-btn {
-            background: linear-gradient(135deg, #6c757d, #5a6268);
+            background: var(--btn-add-gradient);
             color: white;
             border: none;
             border-radius: 4px;
@@ -1995,7 +1995,7 @@ body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
             position: relative;
             z-index: 10003;
             pointer-events: auto;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 1px 3px rgba(0, 123, 255, 0.3);
         }
 
         #editFormulaModal .account-edit-btn {
@@ -2011,7 +2011,7 @@ body.dashboard-page.datacapture-summary-page .summary-table-x-scroll {
         }
 
         .account-edit-btn:hover {
-            background: linear-gradient(135deg, #5a6268, #4b5157);
+            background: var(--btn-add-gradient-hover);
             transform: scale(1.05);
         }
 
