@@ -1,6 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
-import { formatFrankfurterUnitRate } from "../../../utils/dashboard/frankfurterRates.js";
+import {
+  formatFrankfurterUnitRate,
+  formatUnitRateNumber,
+} from "../../../utils/dashboard/frankfurterRates.js";
 import {
   buildEarningsPieSlices,
   buildEarningsShareByCode,
@@ -24,6 +27,18 @@ import { EarningsPieSectorTooltip } from "./EarningsPieSectorTooltip.jsx";
  * scopes land already-fully-loaded by the time this timer opens the gate.
  */
 const CURRENCY_CARD_MIN_GAP_AFTER_KPI_MS = 450;
+
+/**
+ * Rate column value: prefer the row's own server-supplied rate (single-company scope's
+ * currency-breakdown endpoint, pivoted off `exchange_rate`) over the client Frankfurter
+ * fetch. Frankfurter only quotes fiat, so a stablecoin like USDT has no entry in
+ * `exchangeRates.rates` and would otherwise always show "—" even though the backend
+ * resolves it (pegged 1:1 to USD).
+ */
+function resolveUnitRateLabel(row, code, baseCode, rates) {
+  if (row?.rate != null) return formatUnitRateNumber(Number(row.rate));
+  return formatFrankfurterUnitRate(code, baseCode, rates);
+}
 
 /** Debounce layout sync so resize/ResizeObserver bursts re-render the pie shell at most
  *  once per frame — previously every resize event setState'd and re-rendered the card.
@@ -245,7 +260,7 @@ export const DashboardEarningsSummary = memo(function DashboardEarningsSummary({
     const sharePct = row ? computeCurrencySharePct(row, earningsShareByCode) : null;
     const unitRateLabel = isCompanyBreakdownView
       ? null
-      : formatFrankfurterUnitRate(slice?.code, currencyCode, exchangeRates.rates);
+      : resolveUnitRateLabel(row, slice?.code, currencyCode, exchangeRates.rates);
     return {
       slice,
       displayAmount: amounts.primary,
@@ -467,7 +482,7 @@ export const DashboardEarningsSummary = memo(function DashboardEarningsSummary({
                 pieUseConverted
               );
               const unitRateLabel = earningsBreakdownShowsRate
-                ? formatFrankfurterUnitRate(row.code, currencyCode, exchangeRates.rates)
+                ? resolveUnitRateLabel(row, row.code, currencyCode, exchangeRates.rates)
                 : null;
               const unitRateTitle =
                 unitRateLabel && unitRateLabel !== "—"

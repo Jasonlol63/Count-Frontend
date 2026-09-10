@@ -1054,6 +1054,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   /** `GET /api/dashboard/chart` response `data` (array of {date,profit,expenses,netProfit}) — single-company scope only, see `chartRows` useMemo below. */
   const [springTrendData, setSpringTrendData] = useState(null);
   const [springTrendLoading, setSpringTrendLoading] = useState(false);
+  /** `GET /api/dashboard/kpi/currency-breakdown` response `data` (array of {code,originalAmount,amount,rate})
+   *  — single-company scope only, see `earningsCurrencyRows` useMemo below. Replaces the disabled
+   *  `dashboard_api.php` per-currency pie feed for this scope: one batched, already-converted read,
+   *  not one round-trip per currency. */
+  const [springCurrencyBreakdownData, setSpringCurrencyBreakdownData] = useState(null);
+  const [springCurrencyBreakdownLoading, setSpringCurrencyBreakdownLoading] = useState(false);
   /** `GET /api/dashboard/kpi-all` response `data` — Company:All within one Group tab only, see `kpi` useMemo below. */
   const [springKpiAllData, setSpringKpiAllData] = useState(null);
   const [springKpiAllLoading, setSpringKpiAllLoading] = useState(false);
@@ -1066,6 +1072,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   /** `GET /api/dashboard/chart-group` response `data` — Group 自己视角的 Trend Chart，见 `chartRows` useMemo。 */
   const [springTrendGroupData, setSpringTrendGroupData] = useState(null);
   const [springTrendGroupLoading, setSpringTrendGroupLoading] = useState(false);
+  /** `GET /api/dashboard/group-kpi/company-breakdown` response `data` (array of {code,netProfit,group})
+   *  — Group-only "Net Profit" tab: each member company's own Net Profit. Only fetched when
+   *  `groupOnlyDashboard` and there's at least one member company — see `showNetProfitForTab` below. */
+  const [springGroupCompanyBreakdownData, setSpringGroupCompanyBreakdownData] = useState(null);
+  const [springGroupCompanyBreakdownLoading, setSpringGroupCompanyBreakdownLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [earningsByCurrency, setEarningsByCurrency] = useState([]);
   const [earningsByCurrencyPrev, setEarningsByCurrencyPrev] = useState([]);
@@ -1441,6 +1452,56 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     })();
     return () => controller.abort();
   }, [isSingleCompanyKpiScope, companyId, dateFrom, dateTo, currencyCode]);
+
+  /**
+   * Currency-tab breakdown fetch — single-company scope only (`GET /api/dashboard/kpi/currency-breakdown`).
+   * Same deliberately simple one-shot GET as the KPI fetch above. Only fires when there's more
+   * than one currency to break down — a single-currency scope has nothing for this table to add
+   * over the KPI card itself.
+   */
+  useEffect(() => {
+    if (
+      !isSingleCompanyKpiScope ||
+      companyId == null ||
+      !dateFrom ||
+      !dateTo ||
+      !currencyCode ||
+      currencies.length <= 1
+    ) {
+      setSpringCurrencyBreakdownData(null);
+      setSpringCurrencyBreakdownLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringCurrencyBreakdownLoading(true);
+    (async () => {
+      try {
+        const q = new URLSearchParams({
+          tenant_id: String(companyId),
+          date_from: dateFrom,
+          date_to: dateTo,
+          base_currency: currencyCode,
+        });
+        const res = await fetch(buildApiUrl(`api/dashboard/kpi/currency-breakdown?${q.toString()}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+          setSpringCurrencyBreakdownData(null);
+          return;
+        }
+        setSpringCurrencyBreakdownData(json.data);
+      } catch (err) {
+        if (controller.signal.aborted || err?.name === "AbortError") return;
+        setSpringCurrencyBreakdownData(null);
+      } finally {
+        if (!controller.signal.aborted) setSpringCurrencyBreakdownLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [isSingleCompanyKpiScope, companyId, dateFrom, dateTo, currencyCode, currencies.length]);
 
   /**
    * Trend Chart fetch — single-company scope only (`GET /api/dashboard/chart`), same simple
@@ -2539,6 +2600,52 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     })();
     return () => controller.abort();
   }, [groupKpiScope, groupKpiTenantId, groupKpiCompanyTenantIds, dateFrom, dateTo, currencyCode]);
+
+  /**
+   * `GET /api/dashboard/group-kpi/company-breakdown` —— Group-only 场景下 Currency 卡片的
+   * "Net Profit" tab：只在 `groupOnlyDashboard`（单独看某个 Group、没选具体公司）且这个 Group
+   * 下面至少有一家子公司时才发请求（对应 `showNetProfitForTab` 那个显示条件）——不是
+   * `groupKpiScope` 那么宽（`groupKpiScope` 还包含纯 Group 账本场景，那种场景没有"旗下公司"
+   * 概念，不需要这张表）。单一货币，跟 `/group-kpi` 一样不做 FX 换算。
+   */
+  useEffect(() => {
+    if (!groupOnlyDashboard || !groupKpiTenantId || !groupKpiCompanyTenantIds.length
+        || !dateFrom || !dateTo || !currencyCode) {
+      setSpringGroupCompanyBreakdownData(null);
+      setSpringGroupCompanyBreakdownLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringGroupCompanyBreakdownLoading(true);
+    (async () => {
+      try {
+        const q = new URLSearchParams({
+          group_tenant_id: String(groupKpiTenantId),
+          company_tenant_ids: groupKpiCompanyTenantIds.join(","),
+          date_from: dateFrom,
+          date_to: dateTo,
+          currency: currencyCode,
+        });
+        const res = await fetch(buildApiUrl(`api/dashboard/group-kpi/net-profit?${q.toString()}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+          setSpringGroupCompanyBreakdownData(null);
+          return;
+        }
+        setSpringGroupCompanyBreakdownData(json.data);
+      } catch (err) {
+        if (controller.signal.aborted || err?.name === "AbortError") return;
+        setSpringGroupCompanyBreakdownData(null);
+      } finally {
+        if (!controller.signal.aborted) setSpringGroupCompanyBreakdownLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [groupOnlyDashboard, groupKpiTenantId, groupKpiCompanyTenantIds, dateFrom, dateTo, currencyCode]);
 
   const applyCompanySelection = useCallback((id, options = {}) => {
     const clearSubset = options.clearSubset !== false;
@@ -9199,6 +9306,30 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   }, [i18n, kpi.showEarnings]);
 
   const earningsCurrencyRows = useMemo(() => {
+    // Single-company scope: the Spring currency-breakdown endpoint already returns each
+    // currency's Net Profit AND the current login's ownership-weighted Earnings, both
+    // converted into the display currency server-side (pivoted off `exchange_rate` — see
+    // ExchangeRateService) — use it directly instead of the disabled `dashboard_api.php`
+    // per-currency feed below.
+    if (isSingleCompanyKpiScope && Array.isArray(springCurrencyBreakdownData)) {
+      return springCurrencyBreakdownData.map((row) => {
+        const netProfit = row.originalAmount != null ? parseFloat(row.originalAmount) : null;
+        const netProfitConverted = row.amount != null ? parseFloat(row.amount) : null;
+        const rate = row.rate != null ? parseFloat(row.rate) : null;
+        // Earnings is 0 (not null) whenever the backend resolved it — a currency with no
+        // activity or a login with no ownership stake still gets a real 0, not "—".
+        const earnings = row.earnings != null ? parseFloat(row.earnings) : null;
+        const earningsConverted = row.earningsConverted != null ? parseFloat(row.earningsConverted) : null;
+        return {
+          code: row.code,
+          netProfit,
+          netProfitConverted,
+          rate,
+          earnings,
+          earningsConverted,
+        };
+      });
+    }
     const earningsRows = Array.isArray(summaryEarningsByCurrency)
       ? summaryEarningsByCurrency
       : [];
@@ -9258,6 +9389,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       };
     });
   }, [
+    isSingleCompanyKpiScope,
+    springCurrencyBreakdownData,
     summaryEarningsByCurrency,
     summaryCurrencies,
     summaryCurrencyCode,
@@ -9269,39 +9402,65 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     summaryExchangeRatesLoading,
   ]);
 
-  const allCurrencyEarningsReady = useMemo(
-    () =>
-      summaryCurrencies.length <= 1 ||
-      (earningsCurrencyRows.length === summaryCurrencies.length &&
-        earningsCurrencyRows.every(
-          (row) =>
-            row.netProfit != null && (!kpi.showEarnings || row.earnings != null)
-        )),
-    [summaryCurrencies.length, earningsCurrencyRows, kpi.showEarnings]
-  );
+  const allCurrencyEarningsReady = useMemo(() => {
+    if (summaryCurrencies.length <= 1) return true;
+    // Single-company scope resolves every row in one batched response — a currency with
+    // no transactions this period legitimately comes back with netProfit=null ("—" in the
+    // table), so readiness here means "the response landed", not "every value is non-null".
+    if (isSingleCompanyKpiScope) {
+      return Array.isArray(springCurrencyBreakdownData);
+    }
+    return (
+      earningsCurrencyRows.length === summaryCurrencies.length &&
+      earningsCurrencyRows.every(
+        (row) => row.netProfit != null && (!kpi.showEarnings || row.earnings != null)
+      )
+    );
+  }, [
+    summaryCurrencies.length,
+    isSingleCompanyKpiScope,
+    springCurrencyBreakdownData,
+    earningsCurrencyRows,
+    kpi.showEarnings,
+  ]);
 
-  const useConvertedEarnings = useMemo(
-    () =>
+  const useConvertedEarnings = useMemo(() => {
+    // Single-company scope's rows are already converted server-side (see earningsCurrencyRows
+    // above) — no client Frankfurter usability check applies to that source.
+    if (isSingleCompanyKpiScope) {
+      return Array.isArray(springCurrencyBreakdownData) && springCurrencyBreakdownData.length > 0;
+    }
+    return (
       summaryCurrencies.length > 1 &&
       frankfurterRatesPartiallyUsable(
         summaryCurrencyCode || displayCurrencyCode,
         summaryCurrencies,
         summaryExchangeRates.rates || {}
-      ),
-    [
-      summaryCurrencies.length,
-      summaryCurrencyCode,
-      displayCurrencyCode,
-      summaryExchangeRates.rates,
-    ]
-  );
+      )
+    );
+  }, [
+    isSingleCompanyKpiScope,
+    springCurrencyBreakdownData,
+    summaryCurrencies.length,
+    summaryCurrencyCode,
+    displayCurrencyCode,
+    summaryExchangeRates.rates,
+  ]);
 
   const panelCurrencyRows = useMemo(
     () => {
       if (earningsPanelView === "netProfitFor") {
-        const companyRows = normalizeSubsidiaryEarningsByCompany(
-          dashboardData?.subsidiary_earnings_by_company
-        );
+        // Group-only scope: real data from the Spring company-breakdown endpoint (see the
+        // `springGroupCompanyBreakdownData` fetch above). `dashboardData?.subsidiary_earnings_by_company`
+        // is the old PHP-era field this replaces — it has no Spring backend and stays empty.
+        const apiRows = Array.isArray(springGroupCompanyBreakdownData)
+          ? springGroupCompanyBreakdownData.map((row) => ({
+              company_id: row.code,
+              group_id: row.group,
+              net_profit: row.netProfit,
+            }))
+          : dashboardData?.subsidiary_earnings_by_company;
+        const companyRows = normalizeSubsidiaryEarningsByCompany(apiRows);
         return companyRows.map((row) => ({
           code: row.company_id,
           group: row.group_id,
@@ -9315,7 +9474,13 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         useConverted: useConvertedEarnings,
       });
     },
-    [earningsCurrencyRows, earningsPanelView, useConvertedEarnings, dashboardData]
+    [
+      earningsCurrencyRows,
+      earningsPanelView,
+      useConvertedEarnings,
+      dashboardData,
+      springGroupCompanyBreakdownData,
+    ]
   );
 
   const convertedPanelTotal = useMemo(() => {
@@ -9379,10 +9544,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   ]);
 
   const showNetProfitForTab = useMemo(
-    () =>
-      Boolean(groupOnlyDashboard) &&
-      normalizeSubsidiaryEarningsByCompany(dashboardData?.subsidiary_earnings_by_company).length > 0,
-    [groupOnlyDashboard, dashboardData]
+    () => Boolean(groupOnlyDashboard) && Array.isArray(springGroupCompanyBreakdownData)
+      && springGroupCompanyBreakdownData.length > 0,
+    [groupOnlyDashboard, springGroupCompanyBreakdownData]
   );
 
   const showEarningPanelTab = kpi.showEarnings;

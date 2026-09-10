@@ -223,7 +223,11 @@ export function computePieCenterRateMetrics(selectedCode, baseCode, rates) {
 export function resolveEarningsRowDisplayAmounts(row, baseCode, rates, useConverted) {
   const code = String(row?.code || "").toUpperCase();
   const base = String(baseCode || "").toUpperCase();
-  const native = row?.earnings;
+  // `row` here is a mapPanelCurrencyRows() output: `.earnings` already holds the *display*
+  // amount (native or converted, per that function's own useConverted branch), while
+  // `.originalEarnings` holds the true un-converted native value — read that one, or this
+  // ends up converting an already-converted number / showing it back as "native".
+  const native = row?.originalEarnings ?? row?.earnings;
   if (native == null) return { primary: null, native: null };
   if (!useConverted || code === base) {
     return { primary: native, native: null };

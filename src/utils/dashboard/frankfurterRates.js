@@ -659,9 +659,10 @@ export function frankfurterUnitRate(fromCode, baseCode, rates) {
   return 1 / rate;
 }
 
-export function formatFrankfurterUnitRate(fromCode, baseCode, rates) {
-  const unitRate = frankfurterUnitRate(fromCode, baseCode, rates);
-  if (unitRate == null) return "—";
+/** Shared number formatting for a unit rate, regardless of source (client Frankfurter fetch
+ *  or a server-supplied rate, e.g. the Spring currency-breakdown endpoint). */
+export function formatUnitRateNumber(unitRate) {
+  if (unitRate == null || !Number.isFinite(unitRate)) return "—";
   if (unitRate === 1) return "1";
   const abs = Math.abs(unitRate);
   if (abs >= 1000) return unitRate.toFixed(2);
@@ -670,6 +671,12 @@ export function formatFrankfurterUnitRate(fromCode, baseCode, rates) {
   if (abs >= 0.01) return unitRate.toFixed(6);
   if (abs >= 0.0001) return unitRate.toFixed(6);
   return unitRate.toExponential(4);
+}
+
+export function formatFrankfurterUnitRate(fromCode, baseCode, rates) {
+  const unitRate = frankfurterUnitRate(fromCode, baseCode, rates);
+  if (unitRate == null) return "—";
+  return formatUnitRateNumber(unitRate);
 }
 
 /**
