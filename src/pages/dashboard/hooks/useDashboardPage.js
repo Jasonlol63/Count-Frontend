@@ -1063,6 +1063,13 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   /** `GET /api/dashboard/kpi-all` response `data` — Company:All within one Group tab only, see `kpi` useMemo below. */
   const [springKpiAllData, setSpringKpiAllData] = useState(null);
   const [springKpiAllLoading, setSpringKpiAllLoading] = useState(false);
+  /** `GET /api/dashboard/kpi-all/currency-breakdown` response `data` — Company:All Currency tab:
+   *  same shape as `springCurrencyBreakdownData`, but originalAmount is summed across every
+   *  company in `groupAllTenantIds` per currency (no equity weighting). earnings/earningsConverted
+   *  are each company's own Net Profit × its own effective ownership %, summed per currency —
+   *  same rule as the /kpi-all KPI card's Earnings figure. */
+  const [springCompaniesCurrencyBreakdownData, setSpringCompaniesCurrencyBreakdownData] = useState(null);
+  const [springCompaniesCurrencyBreakdownLoading, setSpringCompaniesCurrencyBreakdownLoading] = useState(false);
   /** `GET /api/dashboard/chart-all` response `data` — Company:All within one Group tab only, see `chartRows` useMemo below. */
   const [springTrendAllData, setSpringTrendAllData] = useState(null);
   const [springTrendAllLoading, setSpringTrendAllLoading] = useState(false);
@@ -1077,6 +1084,13 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
    *  `groupOnlyDashboard` and there's at least one member company — see `showNetProfitForTab` below. */
   const [springGroupCompanyBreakdownData, setSpringGroupCompanyBreakdownData] = useState(null);
   const [springGroupCompanyBreakdownLoading, setSpringGroupCompanyBreakdownLoading] = useState(false);
+  /** `GET /api/dashboard/group-kpi/currency-breakdown` response `data` (array of
+   *  {code,originalAmount,amount,rate,earnings,earningsConverted}) — Group's Currency tab:
+   *  same shape as the single-company `springCurrencyBreakdownData`, but each row is this
+   *  Group's own weighted Net Profit in that currency. Fetched for the same scope as the
+   *  Group KPI card itself (`groupKpiScope`), not just `groupOnlyDashboard`. */
+  const [springGroupCurrencyBreakdownData, setSpringGroupCurrencyBreakdownData] = useState(null);
+  const [springGroupCurrencyBreakdownLoading, setSpringGroupCurrencyBreakdownLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [earningsByCurrency, setEarningsByCurrency] = useState([]);
   const [earningsByCurrencyPrev, setEarningsByCurrencyPrev] = useState([]);
@@ -2432,6 +2446,48 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   }, [groupAllMode, groupAllTenantIds, dateFrom, dateTo, currencyCode]);
 
   /**
+   * `GET /api/dashboard/kpi-all/currency-breakdown` — Company:All Currency tab. Same
+   * `groupAllMode`/`groupAllTenantIds` scope as the `/kpi-all` KPI fetch above — the backend
+   * sums every company's activity per currency in one batched query (no per-company loop).
+   */
+  useEffect(() => {
+    if (!groupAllMode || !groupAllTenantIds.length || !dateFrom || !dateTo || !currencyCode) {
+      setSpringCompaniesCurrencyBreakdownData(null);
+      setSpringCompaniesCurrencyBreakdownLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringCompaniesCurrencyBreakdownLoading(true);
+    (async () => {
+      try {
+        const q = new URLSearchParams({
+          tenant_ids: groupAllTenantIds.join(","),
+          date_from: dateFrom,
+          date_to: dateTo,
+          base_currency: currencyCode,
+        });
+        const res = await fetch(buildApiUrl(`api/dashboard/kpi-all/currency-breakdown?${q.toString()}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+          setSpringCompaniesCurrencyBreakdownData(null);
+          return;
+        }
+        setSpringCompaniesCurrencyBreakdownData(json.data);
+      } catch (err) {
+        if (controller.signal.aborted || err?.name === "AbortError") return;
+        setSpringCompaniesCurrencyBreakdownData(null);
+      } finally {
+        if (!controller.signal.aborted) setSpringCompaniesCurrencyBreakdownLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [groupAllMode, groupAllTenantIds, dateFrom, dateTo, currencyCode]);
+
+  /**
    * Trend Chart for "Company: All" — `GET /api/dashboard/chart-all`, same shape and same
    * `groupAllTenantIds` scope as the kpi-all fetch above, just the per-day series instead of
    * one summed total (see DashboardServiceImpl#getTrendForCompanies).
@@ -2646,6 +2702,50 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     })();
     return () => controller.abort();
   }, [groupOnlyDashboard, groupKpiTenantId, groupKpiCompanyTenantIds, dateFrom, dateTo, currencyCode]);
+
+  /**
+   * `GET /api/dashboard/group-kpi/currency-breakdown` —— Group 的 Currency 卡片："Currency" tab。
+   * 跟 Group KPI 卡片本身用同一个 scope（`groupKpiScope`，比 `groupOnlyDashboard` 宽，还覆盖纯
+   * Group 账本场景）——不要求旗下有子公司（没有子公司时后端只返回 Group 自己账本那部分，仍然有效）。
+   * base_currency 用当前选中的 currencyCode，跟单公司版 `/kpi/currency-breakdown` 参数含义一致。
+   */
+  useEffect(() => {
+    if (!groupKpiScope || !groupKpiTenantId || !dateFrom || !dateTo || !currencyCode) {
+      setSpringGroupCurrencyBreakdownData(null);
+      setSpringGroupCurrencyBreakdownLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringGroupCurrencyBreakdownLoading(true);
+    (async () => {
+      try {
+        const q = new URLSearchParams({
+          group_tenant_id: String(groupKpiTenantId),
+          company_tenant_ids: groupKpiCompanyTenantIds.join(","),
+          date_from: dateFrom,
+          date_to: dateTo,
+          base_currency: currencyCode,
+        });
+        const res = await fetch(buildApiUrl(`api/dashboard/group-kpi/currency-breakdown?${q.toString()}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+          setSpringGroupCurrencyBreakdownData(null);
+          return;
+        }
+        setSpringGroupCurrencyBreakdownData(json.data);
+      } catch (err) {
+        if (controller.signal.aborted || err?.name === "AbortError") return;
+        setSpringGroupCurrencyBreakdownData(null);
+      } finally {
+        if (!controller.signal.aborted) setSpringGroupCurrencyBreakdownLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [groupKpiScope, groupKpiTenantId, groupKpiCompanyTenantIds, dateFrom, dateTo, currencyCode]);
 
   const applyCompanySelection = useCallback((id, options = {}) => {
     const clearSubset = options.clearSubset !== false;
@@ -9153,15 +9253,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     }
     if (groupAllMode) {
       if (!springKpiAllData) return empty;
-      return {
-        profit: springKpiAllData.profit ?? 0,
-        expenses: springKpiAllData.expenses ?? 0,
-        netProfit: springKpiAllData.netProfit ?? 0,
-        showEarnings: false,
-        earnings: 0,
-        kpiCardEarnings: 0,
-        comparisons: {},
-      };
+      // showEarnings/earnings are real now (§17 — each company's own direct-or-cascaded
+      // percentage, summed); previousProfit/etc aren't computed by this endpoint yet, so
+      // buildKpiFromSpringPayload's per-field null checks naturally leave `comparisons` empty
+      // for those instead of faking a baseline.
+      return buildKpiFromSpringPayload(springKpiAllData);
     }
     if (!isSingleCompanyKpiScope) return empty;
     if (!springKpiData) return empty;
@@ -9181,10 +9277,14 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
    * anymore). Group's own KPI scope (`groupKpiScope`) reads `springTrendGroupData` (`GET
    * /api/dashboard/chart-group`) through the same builder — same Group Profit/Expenses/NetProfit/
    * Earnings algorithm as `/group-kpi`, just one point per day. "Company: All" within one Group tab
-   * (`groupAllMode`) reads `springTrendAllData` (`GET /api/dashboard/chart-all`) — no Earnings line
-   * for this scope (kpi-all never returns one). Every other scope (Group-All, multi-company subset
-   * merge) has no Spring trend backend yet and keeps reading `dashboardData` (null for those scopes
-   * → empty → zero-skeleton fallback).
+   * (`groupAllMode`) reads `springTrendAllData` (`GET /api/dashboard/chart-all`) through the same
+   * builder — Earnings line included per day now too (§18 in dashboard-springboot-kpi.md: each
+   * company independently resolves direct-or-cascaded ownership for that day's month, summed).
+   * The Earnings series itself only renders when `kpi.showEarnings` is true (see `chartSeries`
+   * below) — that flag already reflects this scope correctly (see the `kpi` useMemo above), so no
+   * extra gating is needed here. Every other scope (Group-All, multi-company subset merge) has no
+   * Spring trend backend yet and keeps reading `dashboardData` (null for those scopes → empty →
+   * zero-skeleton fallback).
    */
   const chartRows = useMemo(() => {
     if (groupKpiScope) {
@@ -9330,6 +9430,33 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
         };
       });
     }
+    // Group scope: same shape as above, sourced from the Group's own weighted per-currency
+    // Net Profit. Per-currency Earnings isn't wired up for Group yet, so earnings/earningsConverted
+    // stay null (renders "—" — a follow-up, not the same 0-fallback Company uses).
+    if (groupKpiScope && Array.isArray(springGroupCurrencyBreakdownData)) {
+      return springGroupCurrencyBreakdownData.map((row) => ({
+        code: row.code,
+        netProfit: row.originalAmount != null ? parseFloat(row.originalAmount) : null,
+        netProfitConverted: row.amount != null ? parseFloat(row.amount) : null,
+        rate: row.rate != null ? parseFloat(row.rate) : null,
+        earnings: row.earnings != null ? parseFloat(row.earnings) : null,
+        earningsConverted: row.earningsConverted != null ? parseFloat(row.earningsConverted) : null,
+      }));
+    }
+    // Company: All scope — same shape, sourced from the sum across every company in
+    // `groupAllTenantIds` per currency. earnings/earningsConverted are each company's own
+    // Net Profit × its own effective ownership %, summed per currency (same rule as the
+    // /kpi-all KPI card's Earnings figure) — real 0, not null, when nothing was earned.
+    if (groupAllMode && Array.isArray(springCompaniesCurrencyBreakdownData)) {
+      return springCompaniesCurrencyBreakdownData.map((row) => ({
+        code: row.code,
+        netProfit: row.originalAmount != null ? parseFloat(row.originalAmount) : null,
+        netProfitConverted: row.amount != null ? parseFloat(row.amount) : null,
+        rate: row.rate != null ? parseFloat(row.rate) : null,
+        earnings: row.earnings != null ? parseFloat(row.earnings) : null,
+        earningsConverted: row.earningsConverted != null ? parseFloat(row.earningsConverted) : null,
+      }));
+    }
     const earningsRows = Array.isArray(summaryEarningsByCurrency)
       ? summaryEarningsByCurrency
       : [];
@@ -9391,6 +9518,10 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   }, [
     isSingleCompanyKpiScope,
     springCurrencyBreakdownData,
+    groupKpiScope,
+    springGroupCurrencyBreakdownData,
+    groupAllMode,
+    springCompaniesCurrencyBreakdownData,
     summaryEarningsByCurrency,
     summaryCurrencies,
     summaryCurrencyCode,
@@ -9404,11 +9535,17 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
   const allCurrencyEarningsReady = useMemo(() => {
     if (summaryCurrencies.length <= 1) return true;
-    // Single-company scope resolves every row in one batched response — a currency with
-    // no transactions this period legitimately comes back with netProfit=null ("—" in the
-    // table), so readiness here means "the response landed", not "every value is non-null".
+    // Single-company / Group scope resolves every row in one batched response — a currency
+    // with no transactions this period legitimately comes back with netProfit=null ("—" in
+    // the table), so readiness here means "the response landed", not "every value is non-null".
     if (isSingleCompanyKpiScope) {
       return Array.isArray(springCurrencyBreakdownData);
+    }
+    if (groupKpiScope) {
+      return Array.isArray(springGroupCurrencyBreakdownData);
+    }
+    if (groupAllMode) {
+      return Array.isArray(springCompaniesCurrencyBreakdownData);
     }
     return (
       earningsCurrencyRows.length === summaryCurrencies.length &&
@@ -9420,15 +9557,25 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     summaryCurrencies.length,
     isSingleCompanyKpiScope,
     springCurrencyBreakdownData,
+    groupKpiScope,
+    springGroupCurrencyBreakdownData,
+    groupAllMode,
+    springCompaniesCurrencyBreakdownData,
     earningsCurrencyRows,
     kpi.showEarnings,
   ]);
 
   const useConvertedEarnings = useMemo(() => {
-    // Single-company scope's rows are already converted server-side (see earningsCurrencyRows
-    // above) — no client Frankfurter usability check applies to that source.
+    // Single-company / Group / Company:All scope's rows are already converted server-side
+    // (see earningsCurrencyRows above) — no client Frankfurter usability check applies to those.
     if (isSingleCompanyKpiScope) {
       return Array.isArray(springCurrencyBreakdownData) && springCurrencyBreakdownData.length > 0;
+    }
+    if (groupKpiScope) {
+      return Array.isArray(springGroupCurrencyBreakdownData) && springGroupCurrencyBreakdownData.length > 0;
+    }
+    if (groupAllMode) {
+      return Array.isArray(springCompaniesCurrencyBreakdownData) && springCompaniesCurrencyBreakdownData.length > 0;
     }
     return (
       summaryCurrencies.length > 1 &&
@@ -9441,6 +9588,10 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   }, [
     isSingleCompanyKpiScope,
     springCurrencyBreakdownData,
+    groupKpiScope,
+    springGroupCurrencyBreakdownData,
+    groupAllMode,
+    springCompaniesCurrencyBreakdownData,
     summaryCurrencies.length,
     summaryCurrencyCode,
     displayCurrencyCode,
