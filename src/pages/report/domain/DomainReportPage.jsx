@@ -366,6 +366,9 @@ export default function DomainReportPage() {
     onClearCompany: handleClearCompany,
     switchingCompany: false,
     preferredCompanyId: companyId,
+    onGroupAccessDenied: useCallback(() => {
+      notify(t("groupAccessDenied"), "danger");
+    }, [notify, t]),
   });
 
   const scopeCompanyId = useMemo(() => {

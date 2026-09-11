@@ -64,6 +64,8 @@ export function useDashboardStyleGcFilter({
   broadcastFilterToLayout = true,
   /** Current user from AuthSessionContext — enforces group vs company login rules. */
   me = null,
+  /** Called instead of switching when the target group has zero accessible companies (no silent fallback). */
+  onGroupAccessDenied = null,
 }) {
   const activeGroup = selectedGroup ? String(selectedGroup).trim().toUpperCase() : null;
   /** Per active group — group+company must not enter group-only without assignment for that group. */
@@ -207,8 +209,11 @@ export function useDashboardStyleGcFilter({
         return;
       }
 
-      persistDashboardGroupFilter(g);
-      setSelectedGroup(g);
+      // No group-only permission and no accessible subsidiary under this group either —
+      // the account has zero access to it. Do not silently land selectedGroup on a group
+      // it can't see (that state is indistinguishable from a legit group-only scope
+      // downstream and surfaces as a bare tenantIdRequired instead of a real permission error).
+      onGroupAccessDenied?.(g);
     },
     [
       switchingCompany,
@@ -228,6 +233,7 @@ export function useDashboardStyleGcFilter({
       companyId,
       me,
       markAnchorSynced,
+      onGroupAccessDenied,
     ]
   );
 

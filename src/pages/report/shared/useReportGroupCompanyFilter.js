@@ -44,6 +44,7 @@ export function useReportGroupCompanyFilter({
   autoPickCompanyWhenEmpty = false,
   enableGroupAnchorSession = true,
   broadcastFilterToLayout = true,
+  onGroupAccessDenied = null,
 }) {
   const { me } = useAuthSession();
   const [groupFilterOptOutTick, setGroupFilterOptOutTick] = useState(0);
@@ -65,6 +66,7 @@ export function useReportGroupCompanyFilter({
     forceAllowGroupOnly: canUseGroupOnlyMode(me),
     // Re-click active Group while a company is selected → enter group-only (clear company).
     clearCompanyOnActiveGroupReselect: true,
+    onGroupAccessDenied,
   });
 
   const {

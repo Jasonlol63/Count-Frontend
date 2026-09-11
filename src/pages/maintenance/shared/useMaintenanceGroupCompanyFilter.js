@@ -51,6 +51,7 @@ export function useMaintenanceGroupCompanyFilter({
   enableGroupAnchorSession = true,
   /** "games" — hide bank-only (CX); "datacapture" — Games + bank-only; "bank" — hide games-only; payment/process list omit this. */
   pillCategory = null,
+  onGroupAccessDenied = null,
 }) {
   const { me } = useAuthSession();
   const [groupFilterOptOutTick, setGroupFilterOptOutTick] = useState(0);
@@ -70,6 +71,7 @@ export function useMaintenanceGroupCompanyFilter({
     forceAllowGroupOnly: canUseGroupOnlyMode(me),
     clearCompanyOnActiveGroupReselect: false,
     enableGroupAnchorSession,
+    onGroupAccessDenied,
   });
 
   const {

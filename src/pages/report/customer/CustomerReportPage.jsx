@@ -397,6 +397,9 @@ export default function CustomerReportPage() {
     onClearCompany: handleClearCompany,
     switchingCompany: false,
     preferredCompanyId: companyId,
+    onGroupAccessDenied: useCallback(() => {
+      notify(t("groupAccessDenied"), "danger");
+    }, [notify, t]),
   });
 
   /** Stale company (e.g. Bank TK1) with empty/mismatched pills must not drive Games report scope. */

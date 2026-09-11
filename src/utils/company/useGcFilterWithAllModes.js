@@ -49,6 +49,8 @@ export function useGcFilterWithAllModes({
   /** Re-click active Group closes it and picks a company (Data Capture / Transaction). */
   closeActiveGroupOnReselect = false,
   allowClearCompany: allowClearCompanyOverride = undefined,
+  /** Called instead of switching when the target group has zero accessible companies. */
+  onGroupAccessDenied = null,
 }) {
   const [groupsAllMode, setGroupsAllMode] = useState(false);
   const [groupAllMode, setGroupAllMode] = useState(false);
@@ -74,6 +76,7 @@ export function useGcFilterWithAllModes({
       clearCompanyOnActiveGroupReselect ?? !forceAllowGroupOnly,
     closeActiveGroupOnReselect,
     allowClearCompany: allowClearCompanyOverride,
+    onGroupAccessDenied,
   });
 
   const groupIds = base.groupIds;

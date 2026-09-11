@@ -5,6 +5,7 @@ export const REPORT_I18N = {
     customerReportTitle: "Customer Report",
     domainReportTitle: "Domain Report",
     switchFailed: "Switch failed",
+    groupAccessDenied: "You don't have access to this group",
 
     account: "Account",
     allAccounts: "All Accounts",
@@ -68,6 +69,7 @@ export const REPORT_I18N = {
     customerReportTitle: "客户报表",
     domainReportTitle: "域名报表",
     switchFailed: "切换失败",
+    groupAccessDenied: "您没有该 Group 的权限",
 
     account: "账号",
     allAccounts: "全部账号",
