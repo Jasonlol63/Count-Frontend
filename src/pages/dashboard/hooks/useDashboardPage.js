@@ -1076,6 +1076,14 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   /** `GET /api/dashboard/group-kpi` response `data` — viewing a Group's own KPI (AP/IG tab itself), see `kpi` useMemo below. */
   const [springKpiGroupData, setSpringKpiGroupData] = useState(null);
   const [springKpiGroupLoading, setSpringKpiGroupLoading] = useState(false);
+  /** `GET /api/dashboard/kpi-all-groups` response `data` — "Group ID: All" ledger KPI (every
+   *  accessible Group's own Profit/Expenses/NetProfit/Earnings, summed), see `kpi` useMemo below. */
+  const [springKpiGroupsAllData, setSpringKpiGroupsAllData] = useState(null);
+  const [springKpiGroupsAllLoading, setSpringKpiGroupsAllLoading] = useState(false);
+  /** `GET /api/dashboard/chart-all-groups` response `data` — "Group ID: All" ledger Trend Chart,
+   *  see `chartRows` useMemo below. */
+  const [springTrendGroupsAllData, setSpringTrendGroupsAllData] = useState(null);
+  const [springTrendGroupsAllLoading, setSpringTrendGroupsAllLoading] = useState(false);
   /** `GET /api/dashboard/chart-group` response `data` — Group 自己视角的 Trend Chart，见 `chartRows` useMemo。 */
   const [springTrendGroupData, setSpringTrendGroupData] = useState(null);
   const [springTrendGroupLoading, setSpringTrendGroupLoading] = useState(false);
@@ -1091,6 +1099,11 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
    *  Group KPI card itself (`groupKpiScope`), not just `groupOnlyDashboard`. */
   const [springGroupCurrencyBreakdownData, setSpringGroupCurrencyBreakdownData] = useState(null);
   const [springGroupCurrencyBreakdownLoading, setSpringGroupCurrencyBreakdownLoading] = useState(false);
+  /** `GET /api/dashboard/kpi-all-groups/currency-breakdown` response `data` — "Group ID: All"
+   *  Currency tab: same shape as `springGroupCurrencyBreakdownData`, but each row is every
+   *  accessible Group's own weighted Net Profit in that currency, summed across Groups. */
+  const [springGroupsAllCurrencyBreakdownData, setSpringGroupsAllCurrencyBreakdownData] = useState(null);
+  const [springGroupsAllCurrencyBreakdownLoading, setSpringGroupsAllCurrencyBreakdownLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [earningsByCurrency, setEarningsByCurrency] = useState([]);
   const [earningsByCurrencyPrev, setEarningsByCurrencyPrev] = useState([]);
@@ -1309,11 +1322,21 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
    * `GET /api/dashboard/kpi` only supports a single COMPANY-type tenant — no group ledger,
    * no Company-All / group merge, no multi-company subset. Every other scope has no Spring
    * KPI backend yet and renders the KPI cards cleared (see `kpi` useMemo below).
+   *
+   * `groupsAllMode` is excluded by default (Group ID: All has its own scopes — no company
+   * picked → `groupsAllGroupLevel`, Company: All picked → `groupAllMode`), **except** when
+   * `subsidiaryDashboardScope` says the picked company is a real subsidiary under one of the
+   * ledger Groups (e.g. "Group ID: All" + pick "C168" directly, without going through that
+   * Group's own tab) — that's just this one company's own data, same as picking it any other
+   * way; it doesn't care which Group filter was active when you clicked it. Previously this
+   * combination fell through every scope check and rendered the cleared "-"/0 state even
+   * though the Spring `/kpi` endpoint has always supported it — `subsidiaryDashboardScope`
+   * already existed to detect exactly this case, it just wasn't wired into this gate.
    */
   const isSingleCompanyKpiScope =
     companyId != null &&
     !groupAllMode &&
-    !groupsAllMode &&
+    (!groupsAllMode || subsidiaryDashboardScope) &&
     !usesGroupLedgerDashboard &&
     !(mergedSubsetIds && mergedSubsetIds.length > 1);
   /** All-currency merge: any scope with 2+ currencies (single company or group aggregate). */
@@ -2405,8 +2428,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   /**
    * `GET /api/dashboard/kpi-all` — same simple one-shot GET as the single-company KPI fetch,
    * summed server-side across every id in `groupAllTenantIds` (see DashboardServiceImpl#getKpiForCompanies).
-   * No Earnings, no "previous period" for this scope (not requested; the backend endpoint doesn't
-   * return them either).
+   * Earnings and "previous period" are both real now (each company's own effective %, summed;
+   * previous period via the same `resolvePreviousRange` logic single-company/Group use) — read
+   * generically by `buildKpiFromSpringPayload` below, no scope-specific handling needed here.
    */
   useEffect(() => {
     if (!groupAllMode || !groupAllTenantIds.length || !dateFrom || !dateTo || !currencyCode) {
@@ -2531,12 +2555,40 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
 
   /**
    * 正在看某一个 Group 自己的 KPI（AP 或 IG 这个 tab 本身，不是 "Company: All" 汇总）——
-   * 对应新的 `GET /api/dashboard/group-kpi`。groupsAllGroupLevel（同时看 AP+IG 所有 Group 合并）
-   * 没有单一的 groupTenantId，这个新接口还不支持，先不处理（KPI 卡片继续显示 "-"）。
+   * 对应新的 `GET /api/dashboard/group-kpi`。groupsAllGroupLevel（同时看 AP+IG 所有 Group 合并，
+   * 没有单一的 groupTenantId）走的是另一个专门的批量端点 `GET /api/dashboard/kpi-all-groups`，
+   * 见下面 `groupsAllLedgerGroupTenantIds`/`groupsAllLedgerCompanyTenantIds` 那两个 memo。
    */
   const groupKpiScope = Boolean(
     selectedGroup && !groupAllMode && (usesGroupLedgerDashboard || groupOnlyDashboard)
   );
+
+  /**
+   * These four scopes each already have their own Spring `currency-breakdown` endpoint
+   * (springCurrencyBreakdownData / springGroupCurrencyBreakdownData /
+   * springGroupsAllCurrencyBreakdownData / springCompaniesCurrencyBreakdownData — see the
+   * fetch effects and `earningsCurrencyRows` above) that returns every currency's
+   * amount/rate/earnings already converted server-side off `exchange_rate`. Running the
+   * legacy per-currency `earningsByCurrency` fetch (`loadEarningsByCurrency` /
+   * `upgradeActiveScopeEarnings`) for them too was pure duplicate network work — and worse,
+   * its own independent `earningsByCurrencyLoading` flag (not the Spring fetch's) was what
+   * actually gated the Currency card's reveal (`currencyCardReady` in
+   * DashboardEarningsSummary.jsx), so the card kept showing its loading state after the real
+   * Spring-sourced data had already rendered, until this redundant fetch also happened to
+   * finish — the visible "flicker" when switching company.
+   */
+  const springCurrencyBreakdownScopeActive =
+    isSingleCompanyKpiScope || groupKpiScope || groupsAllGroupLevel || groupAllMode;
+  const springCurrencyBreakdownActiveLoading = isSingleCompanyKpiScope
+    ? springCurrencyBreakdownLoading
+    : groupKpiScope
+      ? springGroupCurrencyBreakdownLoading
+      : groupsAllGroupLevel
+        ? springGroupsAllCurrencyBreakdownLoading
+        : springCompaniesCurrencyBreakdownLoading;
+  const effectiveEarningsByCurrencyLoading = springCurrencyBreakdownScopeActive
+    ? springCurrencyBreakdownActiveLoading
+    : earningsByCurrencyLoading;
 
   /** Group 自己的 tenant id：companies 列表里那一行 company_id/code 等于 Group 代码本身的行。 */
   const groupKpiTenantId = useMemo(() => {
@@ -2584,35 +2636,130 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     }
     const controller = new AbortController();
     setSpringKpiGroupLoading(true);
-    (async () => {
-      try {
-        const q = new URLSearchParams({
-          group_tenant_id: String(groupKpiTenantId),
-          company_tenant_ids: groupKpiCompanyTenantIds.join(","),
-          date_from: dateFrom,
-          date_to: dateTo,
-          currency: currencyCode,
-        });
-        const res = await fetch(buildApiUrl(`api/dashboard/group-kpi?${q.toString()}`), {
-          credentials: "include",
-          signal: controller.signal,
-        });
-        const json = await res.json().catch(() => null);
-        if (controller.signal.aborted) return;
-        if (!res.ok || !json?.success || !json?.data) {
+    // Debounced like `loadDashboard`'s own trigger (LOAD_DASHBOARD_DEBOUNCE_MS) — right after a
+    // Company→Group switch, `currencyCode`/`groupKpiCompanyTenantIds` land in two waves (an
+    // instant cache-primed value, then the live currency-list fetch correcting it moments
+    // later). Firing on each wave duplicated every Group request (one aborted, one real) on
+    // every switch; waiting out this window lets only the settled value ever reach `fetch`.
+    const timer = window.setTimeout(() => {
+      (async () => {
+        try {
+          const q = new URLSearchParams({
+            group_tenant_id: String(groupKpiTenantId),
+            company_tenant_ids: groupKpiCompanyTenantIds.join(","),
+            date_from: dateFrom,
+            date_to: dateTo,
+            currency: currencyCode,
+          });
+          const res = await fetch(buildApiUrl(`api/dashboard/group-kpi?${q.toString()}`), {
+            credentials: "include",
+            signal: controller.signal,
+          });
+          const json = await res.json().catch(() => null);
+          if (controller.signal.aborted) return;
+          if (!res.ok || !json?.success || !json?.data) {
+            setSpringKpiGroupData(null);
+            return;
+          }
+          setSpringKpiGroupData(json.data);
+        } catch (err) {
+          if (controller.signal.aborted || err?.name === "AbortError") return;
           setSpringKpiGroupData(null);
-          return;
+        } finally {
+          if (!controller.signal.aborted) setSpringKpiGroupLoading(false);
         }
-        setSpringKpiGroupData(json.data);
-      } catch (err) {
-        if (controller.signal.aborted || err?.name === "AbortError") return;
-        setSpringKpiGroupData(null);
-      } finally {
-        if (!controller.signal.aborted) setSpringKpiGroupLoading(false);
-      }
-    })();
-    return () => controller.abort();
+      })();
+    }, LOAD_DASHBOARD_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [groupKpiScope, groupKpiTenantId, groupKpiCompanyTenantIds, dateFrom, dateTo, currencyCode]);
+
+  /** Every ledger-accessible Group's own tenant id (its self-referencing row in `companies`),
+   *  for `GET /api/dashboard/kpi-all-groups`'s `group_tenant_ids` param. */
+  const groupsAllLedgerGroupTenantIds = useMemo(() => {
+    if (!groupsAllGroupLevel) return [];
+    return ledgerGroupIds
+      .map((code) => companies.find((c) => companyRowIsGroupEntity(c, code)))
+      .filter(Boolean)
+      .map((row) => parseInt(row.id, 10))
+      .filter((id) => Number.isFinite(id) && id > 0);
+  }, [groupsAllGroupLevel, ledgerGroupIds, companies]);
+
+  /** Union of every member company across those Groups (for the weighted Group Profit rollup
+   *  each Group runs on its own side) — same resolver `groupAllTenantIds` uses when Company:
+   *  All is also active, just not gated behind `groupAllMode` here. */
+  const groupsAllLedgerCompanyTenantIds = useMemo(() => {
+    if (!groupsAllGroupLevel) return [];
+    return filterCompaniesForDashboardApiAccess(
+      meRef.current,
+      resolveGroupsAllMergeCompanyList(companies, ledgerGroupIds),
+      companies,
+      null
+    )
+      .map((c) => parseInt(c.id, 10))
+      .filter((id) => Number.isFinite(id) && id > 0);
+  }, [groupsAllGroupLevel, companies, ledgerGroupIds]);
+
+  /**
+   * `GET /api/dashboard/kpi-all-groups` — "Group ID: All" ledger KPI: every accessible Group
+   * independently computes its own Profit (member companies weighted by equity %) + Expenses
+   * (its own ledger), summed; Earnings = Σ each Group's own NetProfit × its own direct
+   * ownership % (no cascade — Groups never borrow through another Group). One GET, backend
+   * already does all of this — front end just reads the numbers.
+   */
+  useEffect(() => {
+    if (!groupsAllGroupLevel || !groupsAllLedgerGroupTenantIds.length || !dateFrom || !dateTo || !currencyCode) {
+      setSpringKpiGroupsAllData(null);
+      setSpringKpiGroupsAllLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringKpiGroupsAllLoading(true);
+    // Same debounce reasoning as the `/group-kpi` effect above — coalesce the cache-primed vs.
+    // live-fetched `currencyCode`/tenant-id-list settling into one request.
+    const timer = window.setTimeout(() => {
+      (async () => {
+        try {
+          const q = new URLSearchParams({
+            group_tenant_ids: groupsAllLedgerGroupTenantIds.join(","),
+            company_tenant_ids: groupsAllLedgerCompanyTenantIds.join(","),
+            date_from: dateFrom,
+            date_to: dateTo,
+            currency: currencyCode,
+          });
+          const res = await fetch(buildApiUrl(`api/dashboard/kpi-all-groups?${q.toString()}`), {
+            credentials: "include",
+            signal: controller.signal,
+          });
+          const json = await res.json().catch(() => null);
+          if (controller.signal.aborted) return;
+          if (!res.ok || !json?.success || !json?.data) {
+            setSpringKpiGroupsAllData(null);
+            return;
+          }
+          setSpringKpiGroupsAllData(json.data);
+        } catch (err) {
+          if (controller.signal.aborted || err?.name === "AbortError") return;
+          setSpringKpiGroupsAllData(null);
+        } finally {
+          if (!controller.signal.aborted) setSpringKpiGroupsAllLoading(false);
+        }
+      })();
+    }, LOAD_DASHBOARD_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    groupsAllGroupLevel,
+    groupsAllLedgerGroupTenantIds,
+    groupsAllLedgerCompanyTenantIds,
+    dateFrom,
+    dateTo,
+    currencyCode,
+  ]);
 
   /**
    * `GET /api/dashboard/chart-group` —— Group 自己视角的 Trend Chart，参数跟 `/group-kpi` 一样
@@ -2627,35 +2774,98 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     }
     const controller = new AbortController();
     setSpringTrendGroupLoading(true);
-    (async () => {
-      try {
-        const q = new URLSearchParams({
-          group_tenant_id: String(groupKpiTenantId),
-          company_tenant_ids: groupKpiCompanyTenantIds.join(","),
-          date_from: dateFrom,
-          date_to: dateTo,
-          currency: currencyCode,
-        });
-        const res = await fetch(buildApiUrl(`api/dashboard/chart-group?${q.toString()}`), {
-          credentials: "include",
-          signal: controller.signal,
-        });
-        const json = await res.json().catch(() => null);
-        if (controller.signal.aborted) return;
-        if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+    // Same debounce reasoning as the `/group-kpi` effect above.
+    const timer = window.setTimeout(() => {
+      (async () => {
+        try {
+          const q = new URLSearchParams({
+            group_tenant_id: String(groupKpiTenantId),
+            company_tenant_ids: groupKpiCompanyTenantIds.join(","),
+            date_from: dateFrom,
+            date_to: dateTo,
+            currency: currencyCode,
+          });
+          const res = await fetch(buildApiUrl(`api/dashboard/chart-group?${q.toString()}`), {
+            credentials: "include",
+            signal: controller.signal,
+          });
+          const json = await res.json().catch(() => null);
+          if (controller.signal.aborted) return;
+          if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+            setSpringTrendGroupData(null);
+            return;
+          }
+          setSpringTrendGroupData(json.data);
+        } catch (err) {
+          if (controller.signal.aborted || err?.name === "AbortError") return;
           setSpringTrendGroupData(null);
-          return;
+        } finally {
+          if (!controller.signal.aborted) setSpringTrendGroupLoading(false);
         }
-        setSpringTrendGroupData(json.data);
-      } catch (err) {
-        if (controller.signal.aborted || err?.name === "AbortError") return;
-        setSpringTrendGroupData(null);
-      } finally {
-        if (!controller.signal.aborted) setSpringTrendGroupLoading(false);
-      }
-    })();
-    return () => controller.abort();
+      })();
+    }, LOAD_DASHBOARD_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [groupKpiScope, groupKpiTenantId, groupKpiCompanyTenantIds, dateFrom, dateTo, currencyCode]);
+
+  /**
+   * `GET /api/dashboard/chart-all-groups` — "Group ID: All" ledger Trend Chart, params reuse
+   * `groupsAllLedgerGroupTenantIds`/`groupsAllLedgerCompanyTenantIds` (same lists the KPI card
+   * fetch above uses). Each point is already the final per-day number (Earnings included, each
+   * Group weighted by its own ownership % for that day's month) — no client-side math needed.
+   */
+  useEffect(() => {
+    if (!groupsAllGroupLevel || !groupsAllLedgerGroupTenantIds.length || !dateFrom || !dateTo || !currencyCode) {
+      setSpringTrendGroupsAllData(null);
+      setSpringTrendGroupsAllLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringTrendGroupsAllLoading(true);
+    // Same debounce reasoning as the `/group-kpi` effect above.
+    const timer = window.setTimeout(() => {
+      (async () => {
+        try {
+          const q = new URLSearchParams({
+            group_tenant_ids: groupsAllLedgerGroupTenantIds.join(","),
+            company_tenant_ids: groupsAllLedgerCompanyTenantIds.join(","),
+            date_from: dateFrom,
+            date_to: dateTo,
+            currency: currencyCode,
+          });
+          const res = await fetch(buildApiUrl(`api/dashboard/chart-all-groups?${q.toString()}`), {
+            credentials: "include",
+            signal: controller.signal,
+          });
+          const json = await res.json().catch(() => null);
+          if (controller.signal.aborted) return;
+          if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+            setSpringTrendGroupsAllData(null);
+            return;
+          }
+          setSpringTrendGroupsAllData(json.data);
+        } catch (err) {
+          if (controller.signal.aborted || err?.name === "AbortError") return;
+          setSpringTrendGroupsAllData(null);
+        } finally {
+          if (!controller.signal.aborted) setSpringTrendGroupsAllLoading(false);
+        }
+      })();
+    }, LOAD_DASHBOARD_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    groupsAllGroupLevel,
+    groupsAllLedgerGroupTenantIds,
+    groupsAllLedgerCompanyTenantIds,
+    dateFrom,
+    dateTo,
+    currencyCode,
+  ]);
 
   /**
    * `GET /api/dashboard/group-kpi/company-breakdown` —— Group-only 场景下 Currency 卡片的
@@ -2673,34 +2883,40 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     }
     const controller = new AbortController();
     setSpringGroupCompanyBreakdownLoading(true);
-    (async () => {
-      try {
-        const q = new URLSearchParams({
-          group_tenant_id: String(groupKpiTenantId),
-          company_tenant_ids: groupKpiCompanyTenantIds.join(","),
-          date_from: dateFrom,
-          date_to: dateTo,
-          currency: currencyCode,
-        });
-        const res = await fetch(buildApiUrl(`api/dashboard/group-kpi/net-profit?${q.toString()}`), {
-          credentials: "include",
-          signal: controller.signal,
-        });
-        const json = await res.json().catch(() => null);
-        if (controller.signal.aborted) return;
-        if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+    // Same debounce reasoning as the `/group-kpi` effect above.
+    const timer = window.setTimeout(() => {
+      (async () => {
+        try {
+          const q = new URLSearchParams({
+            group_tenant_id: String(groupKpiTenantId),
+            company_tenant_ids: groupKpiCompanyTenantIds.join(","),
+            date_from: dateFrom,
+            date_to: dateTo,
+            currency: currencyCode,
+          });
+          const res = await fetch(buildApiUrl(`api/dashboard/group-kpi/net-profit?${q.toString()}`), {
+            credentials: "include",
+            signal: controller.signal,
+          });
+          const json = await res.json().catch(() => null);
+          if (controller.signal.aborted) return;
+          if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+            setSpringGroupCompanyBreakdownData(null);
+            return;
+          }
+          setSpringGroupCompanyBreakdownData(json.data);
+        } catch (err) {
+          if (controller.signal.aborted || err?.name === "AbortError") return;
           setSpringGroupCompanyBreakdownData(null);
-          return;
+        } finally {
+          if (!controller.signal.aborted) setSpringGroupCompanyBreakdownLoading(false);
         }
-        setSpringGroupCompanyBreakdownData(json.data);
-      } catch (err) {
-        if (controller.signal.aborted || err?.name === "AbortError") return;
-        setSpringGroupCompanyBreakdownData(null);
-      } finally {
-        if (!controller.signal.aborted) setSpringGroupCompanyBreakdownLoading(false);
-      }
-    })();
-    return () => controller.abort();
+      })();
+    }, LOAD_DASHBOARD_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [groupOnlyDashboard, groupKpiTenantId, groupKpiCompanyTenantIds, dateFrom, dateTo, currencyCode]);
 
   /**
@@ -2717,35 +2933,98 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     }
     const controller = new AbortController();
     setSpringGroupCurrencyBreakdownLoading(true);
-    (async () => {
-      try {
-        const q = new URLSearchParams({
-          group_tenant_id: String(groupKpiTenantId),
-          company_tenant_ids: groupKpiCompanyTenantIds.join(","),
-          date_from: dateFrom,
-          date_to: dateTo,
-          base_currency: currencyCode,
-        });
-        const res = await fetch(buildApiUrl(`api/dashboard/group-kpi/currency-breakdown?${q.toString()}`), {
-          credentials: "include",
-          signal: controller.signal,
-        });
-        const json = await res.json().catch(() => null);
-        if (controller.signal.aborted) return;
-        if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+    // Same debounce reasoning as the `/group-kpi` effect above.
+    const timer = window.setTimeout(() => {
+      (async () => {
+        try {
+          const q = new URLSearchParams({
+            group_tenant_id: String(groupKpiTenantId),
+            company_tenant_ids: groupKpiCompanyTenantIds.join(","),
+            date_from: dateFrom,
+            date_to: dateTo,
+            base_currency: currencyCode,
+          });
+          const res = await fetch(buildApiUrl(`api/dashboard/group-kpi/currency-breakdown?${q.toString()}`), {
+            credentials: "include",
+            signal: controller.signal,
+          });
+          const json = await res.json().catch(() => null);
+          if (controller.signal.aborted) return;
+          if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+            setSpringGroupCurrencyBreakdownData(null);
+            return;
+          }
+          setSpringGroupCurrencyBreakdownData(json.data);
+        } catch (err) {
+          if (controller.signal.aborted || err?.name === "AbortError") return;
           setSpringGroupCurrencyBreakdownData(null);
-          return;
+        } finally {
+          if (!controller.signal.aborted) setSpringGroupCurrencyBreakdownLoading(false);
         }
-        setSpringGroupCurrencyBreakdownData(json.data);
-      } catch (err) {
-        if (controller.signal.aborted || err?.name === "AbortError") return;
-        setSpringGroupCurrencyBreakdownData(null);
-      } finally {
-        if (!controller.signal.aborted) setSpringGroupCurrencyBreakdownLoading(false);
-      }
-    })();
-    return () => controller.abort();
+      })();
+    }, LOAD_DASHBOARD_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [groupKpiScope, groupKpiTenantId, groupKpiCompanyTenantIds, dateFrom, dateTo, currencyCode]);
+
+  /**
+   * `GET /api/dashboard/kpi-all-groups/currency-breakdown` — "Group ID: All" Currency tab.
+   * Params reuse `groupsAllLedgerGroupTenantIds`/`groupsAllLedgerCompanyTenantIds` (same lists
+   * the KPI card and Trend Chart fetches above use). Each row is already every accessible
+   * Group's own weighted Net Profit in that currency, summed — no client-side math needed.
+   */
+  useEffect(() => {
+    if (!groupsAllGroupLevel || !groupsAllLedgerGroupTenantIds.length || !dateFrom || !dateTo || !currencyCode) {
+      setSpringGroupsAllCurrencyBreakdownData(null);
+      setSpringGroupsAllCurrencyBreakdownLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSpringGroupsAllCurrencyBreakdownLoading(true);
+    // Same debounce reasoning as the `/group-kpi` effect above.
+    const timer = window.setTimeout(() => {
+      (async () => {
+        try {
+          const q = new URLSearchParams({
+            group_tenant_ids: groupsAllLedgerGroupTenantIds.join(","),
+            company_tenant_ids: groupsAllLedgerCompanyTenantIds.join(","),
+            date_from: dateFrom,
+            date_to: dateTo,
+            base_currency: currencyCode,
+          });
+          const res = await fetch(buildApiUrl(`api/dashboard/kpi-all-groups/currency-breakdown?${q.toString()}`), {
+            credentials: "include",
+            signal: controller.signal,
+          });
+          const json = await res.json().catch(() => null);
+          if (controller.signal.aborted) return;
+          if (!res.ok || !json?.success || !Array.isArray(json?.data)) {
+            setSpringGroupsAllCurrencyBreakdownData(null);
+            return;
+          }
+          setSpringGroupsAllCurrencyBreakdownData(json.data);
+        } catch (err) {
+          if (controller.signal.aborted || err?.name === "AbortError") return;
+          setSpringGroupsAllCurrencyBreakdownData(null);
+        } finally {
+          if (!controller.signal.aborted) setSpringGroupsAllCurrencyBreakdownLoading(false);
+        }
+      })();
+    }, LOAD_DASHBOARD_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    groupsAllGroupLevel,
+    groupsAllLedgerGroupTenantIds,
+    groupsAllLedgerCompanyTenantIds,
+    dateFrom,
+    dateTo,
+    currencyCode,
+  ]);
 
   const applyCompanySelection = useCallback((id, options = {}) => {
     const clearSubset = options.clearSubset !== false;
@@ -6762,6 +7041,13 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   );
 
   const loadEarningsByCurrency = useCallback(async () => {
+    // Spring's own currency-breakdown endpoint already fully serves this scope (see
+    // `springCurrencyBreakdownScopeActive` above) — this legacy per-currency fetch would just
+    // duplicate that request and fight its loading flag against the Spring fetch's own.
+    if (springCurrencyBreakdownScopeActive) {
+      setEarningsByCurrencyLoading(false);
+      return;
+    }
     const canLoadEarnings =
       (companyId != null || groupAggregateMode || groupAllMode) && currencies.length > 1;
     if (!canLoadEarnings) {
@@ -6925,6 +7211,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     groupAllMode,
     mergedSubsetIds,
     deferActiveScopeEarningsUpgrade,
+    springCurrencyBreakdownScopeActive,
   ]);
 
   /** Invalidate in-flight per-currency earnings when scope/date changes (not on currency list hydrate). */
@@ -7216,6 +7503,12 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   );
 
   const upgradeActiveScopeEarnings = useCallback(async () => {
+    // Same reasoning as the guard in `loadEarningsByCurrency` — Spring's own
+    // currency-breakdown endpoint already fully serves this scope.
+    if (springCurrencyBreakdownScopeActive) {
+      setEarningsByCurrencyLoading(false);
+      return;
+    }
     const cacheKey = dashboardScopeKey;
     if (!cacheKey || currencies.length <= 1) return;
     // Group All: dashboardDataRef may not be ready yet but fetchGroupAllEarningsRowsForRange
@@ -7502,6 +7795,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     fetchGroupAllEarningsRowsForRange,
     dateFrom,
     dateTo,
+    springCurrencyBreakdownScopeActive,
   ]);
   upgradeActiveScopeEarningsRef.current = upgradeActiveScopeEarnings;
 
@@ -9231,11 +9525,18 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
    * (e.g. Earnings when the previous period had no ownership row) means "no comparison",
    * not "0", so it's left out of `comparisons` entirely rather than faked as a 0 baseline.
    * "Company: All" within one Group tab (`groupAllMode`) reads `GET /api/dashboard/kpi-all`
-   * (`springKpiAllData`) the same way — already-final summed numbers, no Earnings, no
-   * "previous period" (that endpoint doesn't compute either). Every other scope (group
-   * ledger, Group-All, multi-company subset merge, per-currency "All" toggle) has no Spring
-   * KPI backend yet — render the cleared state so the cards show "-"/0 instead of stale or
-   * PHP-fed numbers.
+   * (`springKpiAllData`) the same way — Earnings is real (§17: each company's own direct-or-
+   * cascaded percentage, summed), and "previous period" is now real too (§20 follow-up: same
+   * `resolvePreviousRange` alignment as single-company/Group, just summed across companies).
+   * "Group ID: All" with no company drilled into (`groupsAllGroupLevel`) reads
+   * `GET /api/dashboard/kpi-all-groups` (`springKpiGroupsAllData`) — every accessible Group
+   * independently weights its own member companies then sums; Earnings is Σ each Group's own
+   * NetProfit × its own direct ownership % (Groups never cascade); "previous period" same as
+   * `groupAllMode`. All four scopes read through the same generic `buildKpiFromSpringPayload`
+   * (below), which already builds `comparisons` off whichever `previous*` fields are present —
+   * no per-scope branching needed for that part. Every other scope (multi-company subset merge,
+   * per-currency "All" toggle) has no Spring KPI backend yet — render the cleared state so the
+   * cards show "-"/0 instead of stale or PHP-fed numbers.
    */
   const kpi = useMemo(() => {
     const empty = {
@@ -9251,18 +9552,33 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       if (!springKpiGroupData) return empty;
       return buildKpiFromSpringPayload(springKpiGroupData);
     }
+    if (groupsAllGroupLevel) {
+      if (!springKpiGroupsAllData) return empty;
+      // Earnings here is Σ each Group's own NetProfit × its own direct ownership % (no
+      // cascade — see DashboardServiceImpl#getKpiForGroups), NOT one shared percentage over
+      // the combined total.
+      return buildKpiFromSpringPayload(springKpiGroupsAllData);
+    }
     if (groupAllMode) {
       if (!springKpiAllData) return empty;
       // showEarnings/earnings are real now (§17 — each company's own direct-or-cascaded
-      // percentage, summed); previousProfit/etc aren't computed by this endpoint yet, so
-      // buildKpiFromSpringPayload's per-field null checks naturally leave `comparisons` empty
-      // for those instead of faking a baseline.
+      // percentage, summed); previous* fields are real too, read generically by
+      // buildKpiFromSpringPayload above.
       return buildKpiFromSpringPayload(springKpiAllData);
     }
     if (!isSingleCompanyKpiScope) return empty;
     if (!springKpiData) return empty;
     return buildKpiFromSpringPayload(springKpiData);
-  }, [groupKpiScope, springKpiGroupData, groupAllMode, springKpiAllData, isSingleCompanyKpiScope, springKpiData]);
+  }, [
+    groupKpiScope,
+    springKpiGroupData,
+    groupsAllGroupLevel,
+    springKpiGroupsAllData,
+    groupAllMode,
+    springKpiAllData,
+    isSingleCompanyKpiScope,
+    springKpiData,
+  ]);
 
   const chartAggregateByMonth = useMemo(
     () => shouldAggregateChartByMonth(summaryDateFrom, summaryDateTo),
@@ -9280,15 +9596,23 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
    * (`groupAllMode`) reads `springTrendAllData` (`GET /api/dashboard/chart-all`) through the same
    * builder — Earnings line included per day now too (§18 in dashboard-springboot-kpi.md: each
    * company independently resolves direct-or-cascaded ownership for that day's month, summed).
-   * The Earnings series itself only renders when `kpi.showEarnings` is true (see `chartSeries`
-   * below) — that flag already reflects this scope correctly (see the `kpi` useMemo above), so no
-   * extra gating is needed here. Every other scope (Group-All, multi-company subset merge) has no
-   * Spring trend backend yet and keeps reading `dashboardData` (null for those scopes → empty →
-   * zero-skeleton fallback).
+   * "Group ID: All" ledger scope (`groupsAllGroupLevel`) reads `springTrendGroupsAllData` (`GET
+   * /api/dashboard/chart-all-groups`) through the same builder — each Group independently
+   * weights its own member companies then sums, Earnings is each Group's own NetProfit that day
+   * × its own direct ownership % for that month (no cascade). The Earnings series itself only
+   * renders when `kpi.showEarnings` is true (see `chartSeries` below) — that flag already
+   * reflects this scope correctly (see the `kpi` useMemo above), so no extra gating is needed
+   * here. Every other scope (multi-company subset merge) has no Spring trend backend yet and
+   * keeps reading `dashboardData` (null for those scopes → empty → zero-skeleton fallback).
    */
   const chartRows = useMemo(() => {
     if (groupKpiScope) {
       const rows = buildSpringTrendChartRows(springTrendGroupData, dateFrom, dateTo, i18n.locale);
+      if (rows.length > 0) return rows;
+      return buildSkeletonChartRows(dateFrom, dateTo, i18n.locale);
+    }
+    if (groupsAllGroupLevel) {
+      const rows = buildSpringTrendChartRows(springTrendGroupsAllData, dateFrom, dateTo, i18n.locale);
       if (rows.length > 0) return rows;
       return buildSkeletonChartRows(dateFrom, dateTo, i18n.locale);
     }
@@ -9316,6 +9640,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   }, [
     groupKpiScope,
     springTrendGroupData,
+    groupsAllGroupLevel,
+    springTrendGroupsAllData,
     groupAllMode,
     springTrendAllData,
     isSingleCompanyKpiScope,
@@ -9431,10 +9757,24 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
       });
     }
     // Group scope: same shape as above, sourced from the Group's own weighted per-currency
-    // Net Profit. Per-currency Earnings isn't wired up for Group yet, so earnings/earningsConverted
-    // stay null (renders "—" — a follow-up, not the same 0-fallback Company uses).
+    // Net Profit. earnings/earningsConverted are this Group's own direct ownership % (no
+    // cascade) applied to that currency's weighted Net Profit — real 0, not null, like Company.
     if (groupKpiScope && Array.isArray(springGroupCurrencyBreakdownData)) {
       return springGroupCurrencyBreakdownData.map((row) => ({
+        code: row.code,
+        netProfit: row.originalAmount != null ? parseFloat(row.originalAmount) : null,
+        netProfitConverted: row.amount != null ? parseFloat(row.amount) : null,
+        rate: row.rate != null ? parseFloat(row.rate) : null,
+        earnings: row.earnings != null ? parseFloat(row.earnings) : null,
+        earningsConverted: row.earningsConverted != null ? parseFloat(row.earningsConverted) : null,
+      }));
+    }
+    // "Group ID: All" ledger scope — same shape, sourced from every accessible Group's own
+    // weighted per-currency Net Profit, summed. earnings/earningsConverted = Σ each Group's own
+    // NetProfit in that currency × its own direct ownership % (no cascade), same rule as the
+    // /kpi-all-groups KPI card's Earnings figure — real 0, not null, when nothing was earned.
+    if (groupsAllGroupLevel && Array.isArray(springGroupsAllCurrencyBreakdownData)) {
+      return springGroupsAllCurrencyBreakdownData.map((row) => ({
         code: row.code,
         netProfit: row.originalAmount != null ? parseFloat(row.originalAmount) : null,
         netProfitConverted: row.amount != null ? parseFloat(row.amount) : null,
@@ -9520,6 +9860,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     springCurrencyBreakdownData,
     groupKpiScope,
     springGroupCurrencyBreakdownData,
+    groupsAllGroupLevel,
+    springGroupsAllCurrencyBreakdownData,
     groupAllMode,
     springCompaniesCurrencyBreakdownData,
     summaryEarningsByCurrency,
@@ -9544,6 +9886,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     if (groupKpiScope) {
       return Array.isArray(springGroupCurrencyBreakdownData);
     }
+    if (groupsAllGroupLevel) {
+      return Array.isArray(springGroupsAllCurrencyBreakdownData);
+    }
     if (groupAllMode) {
       return Array.isArray(springCompaniesCurrencyBreakdownData);
     }
@@ -9559,6 +9904,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     springCurrencyBreakdownData,
     groupKpiScope,
     springGroupCurrencyBreakdownData,
+    groupsAllGroupLevel,
+    springGroupsAllCurrencyBreakdownData,
     groupAllMode,
     springCompaniesCurrencyBreakdownData,
     earningsCurrencyRows,
@@ -9573,6 +9920,9 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     }
     if (groupKpiScope) {
       return Array.isArray(springGroupCurrencyBreakdownData) && springGroupCurrencyBreakdownData.length > 0;
+    }
+    if (groupsAllGroupLevel) {
+      return Array.isArray(springGroupsAllCurrencyBreakdownData) && springGroupsAllCurrencyBreakdownData.length > 0;
     }
     if (groupAllMode) {
       return Array.isArray(springCompaniesCurrencyBreakdownData) && springCompaniesCurrencyBreakdownData.length > 0;
@@ -9590,6 +9940,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     springCurrencyBreakdownData,
     groupKpiScope,
     springGroupCurrencyBreakdownData,
+    groupsAllGroupLevel,
+    springGroupsAllCurrencyBreakdownData,
     groupAllMode,
     springCompaniesCurrencyBreakdownData,
     summaryCurrencies.length,
@@ -9851,7 +10203,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     summaryScopeLoading ||
     (!scopeDataPending &&
       summaryCurrencies.length > 1 &&
-      (earningsByCurrencyLoading ||
+      (effectiveEarningsByCurrencyLoading ||
         !allCurrencyEarningsReady ||
         (!useConvertedEarnings && summaryExchangeRatesLoading) ||
         (showAllCurrencies &&
@@ -9886,7 +10238,8 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
   const kpiLoading =
     (isSingleCompanyKpiScope && springKpiLoading) ||
     (groupAllMode && springKpiAllLoading) ||
-    (groupKpiScope && springKpiGroupLoading)
+    (groupKpiScope && springKpiGroupLoading) ||
+    (groupsAllGroupLevel && springKpiGroupsAllLoading)
       ? true
       : Boolean(dashboardData)
         ? false
@@ -10714,7 +11067,7 @@ export function useDashboardPage({ i18n, dateFrom, dateTo }) {
     summaryConversionNote,
     summaryEarningsLoading,
     earningsPanelStable,
-    earningsByCurrencyLoading,
+    earningsByCurrencyLoading: effectiveEarningsByCurrencyLoading,
     exchangeRates: summaryExchangeRates,
     exchangeRatesError: summaryExchangeRatesError,
     exchangeRatesLoading: summaryExchangeRatesLoading,
