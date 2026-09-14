@@ -37,7 +37,6 @@ import {
   canAccessDashboard,
   canAccessCaptureMaintenance,
   canAccessFullMaintenance,
-  canAccessLimitedMaintenance,
   canAccessPermission,
   canShowDataCaptureInSidebar,
   canShowReportInSidebar,
@@ -1315,7 +1314,6 @@ export default function AuthenticatedLayout() {
 
   const canAccess = (key) => canAccessPermission(me, key);
   const showFullMaintenanceMenu = canAccessFullMaintenance(me);
-  const showLimitedMaintenanceMenu = canAccessLimitedMaintenance(me);
   const showMaintenanceMenu = showMaintenanceInSidebar(me);
   const isBankOnlyCategory = Boolean(me?.company_has_bank) && !me?.company_has_gambling;
   const showCaptureMaintenance = useMemo(() => {
@@ -1736,7 +1734,7 @@ export default function AuthenticatedLayout() {
                       </a>
                     )}
                     {(me?.company_has_gambling || me?.company_has_bank) &&
-                      (showFullMaintenanceMenu || showLimitedMaintenanceMenu) &&
+                      showFullMaintenanceMenu &&
                       !isBankOnlyCategory && (
                       <a
                         {...sidebarSubmenuLinkProps("/transaction-maintenance", goTo)}
@@ -1756,7 +1754,7 @@ export default function AuthenticatedLayout() {
                       </a>
                     )}
                     {(me?.company_has_gambling || me?.company_has_bank) &&
-                      (showFullMaintenanceMenu || showLimitedMaintenanceMenu) &&
+                      showFullMaintenanceMenu &&
                       !isBankOnlyCategory && (
                       <a
                         {...sidebarSubmenuLinkProps("/formula-maintenance", goTo)}
