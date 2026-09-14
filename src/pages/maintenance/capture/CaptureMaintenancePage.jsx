@@ -13,7 +13,7 @@ import "../../../../public/css/capture_maintenance.css";
 import "../../../../public/css/maintenance_unified_filters.css";
 import { removeOtherMaintenanceStylesheets, waitForStylesheet } from "../../../utils/maintenance/maintenanceStylesheets.js";
 import { useMaintenanceGroupCompanyFilter } from "../shared/useMaintenanceGroupCompanyFilter.js";
-import { runMaintenanceCompanySwitch } from "../shared/maintenanceCompanySwitch.js";
+import { runMaintenanceCompanySwitch, syncMaintenanceBootSidebar } from "../shared/maintenanceCompanySwitch.js";
 import { useMaintenancePageScrollLock } from "../shared/useMaintenancePageScrollLock.js";
 import {
   isMaintenanceGroupOnlyBoot,
@@ -140,6 +140,7 @@ export default function CaptureMaintenancePage() {
   const switchCompanyRef = useRef(async () => {});
   const onPrepareCompanySelectRef = useRef(() => {});
   const onClearCompanyRef = useRef(() => {});
+  const sidebarSyncedCompanyIdRef = useRef(null);
 
   const {
     snapGroupIds,
@@ -377,6 +378,39 @@ export default function CaptureMaintenancePage() {
       cancelled = true;
     };
   }, [sessionReady, me, navigate]);
+
+  // Sync sidebar category flags after boot (once per company id) — without this, a company's
+  // has_bank/has_gambling flags stay unknown until the user manually switches company, and
+  // captureMaintenanceUsesGroupProcesses/isBankOnlyCompanyRow silently default to "Games" for a
+  // bank-only tenant on first load, returning zero rows. Mirrors PaymentMaintenancePage.jsx.
+  useEffect(() => {
+    if (bootLoading || !companyId || !companies.length) return;
+    const id = Number(companyId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    if (sidebarSyncedCompanyIdRef.current === id) return;
+
+    const row = companies.find((c) => Number(c.id) === id);
+    if (!row?.id) return;
+
+    let cancelled = false;
+    sidebarSyncedCompanyIdRef.current = id;
+    void (async () => {
+      try {
+        await syncMaintenanceBootSidebar({
+          companyRow: row,
+          viewGroup: selectedGroup,
+          updateSessionCompany,
+          sessionCompanyId: me?.company_id,
+        });
+      } finally {
+        if (cancelled) sidebarSyncedCompanyIdRef.current = null;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bootLoading, companyId, companies, selectedGroup, me?.company_id]);
 
   // -- Load Meta Data (Processes & Permissions) --
   useEffect(() => {

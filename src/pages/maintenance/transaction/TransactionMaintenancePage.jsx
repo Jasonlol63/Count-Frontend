@@ -6,6 +6,7 @@ import { removeOtherMaintenanceStylesheets } from "../../../utils/maintenance/ma
 import { ensureMaintenanceDateRangePicker } from "../../../utils/date/dateRangePicker.js";
 import { useMaintenanceGroupCompanyFilter } from "../shared/useMaintenanceGroupCompanyFilter.js";
 import { runMaintenanceCompanySwitch } from "../shared/maintenanceCompanySwitch.js";
+import { applySidebarForCompanySwitch } from "../../../utils/company/sidebarCompanySwitch.js";
 import { companyPermsAllowDataCaptureMaintenance } from "../shared/maintenanceCompanyApi.js";
 import { spaPath } from "../../../utils/routing/pageRoutes.js";
 import {
@@ -723,6 +724,15 @@ export default function TransactionMaintenancePage() {
             console.error("Session company sync error:", err);
           }
           if (cancelled) return;
+
+          // Propagate has_bank/has_gambling into the shared category-flags cache so
+          // isBankOnlyCompanyRow/resolveCompanyCategoryFlagsFromRow (read further below via
+          // resolveTransactionMaintenanceScope) don't fall back to a cold cache on first boot —
+          // without this, a bank-only tenant's category silently defaults to "Games" and the
+          // search returns zero rows until the user manually switches company.
+          if (sessionData) {
+            applySidebarForCompanySwitch(bootGroup, currentComp, sessionData);
+          }
 
           // Access guard: Data Capture maintenance requires eligible company permissions.
           const companyPerms = fetchCompanyPermissions(code, {
