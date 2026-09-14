@@ -310,17 +310,57 @@ export async function getHistory({
 }
 
 /**
- * CONTRA submit is immediately APPROVED on Spring — there is no pending inbox API.
+ * Contra Inbox: one row of `POST api/pending` → the snake_case shape TransactionHeader.jsx renders
+ * (see its `it.from_account_code` / `it.to_account_code` / `it.submitted_by` usage).
  */
-export async function loadContraInbox() {
-  return { success: true, data: [] };
+function normalizeContraInboxRow(row) {
+  const r = row && typeof row === "object" ? row : {};
+  return {
+    id: r.id ?? null,
+    transaction_id: r.id ?? null,
+    transaction_type: String(r.transactionType || "").toUpperCase(),
+    transaction_date: r.transactionDate ?? "",
+    from_account_code: r.fromAccountCode ?? "",
+    to_account_code: r.toAccountCode ?? "",
+    currency: String(r.currencyCode || "").toUpperCase(),
+    amount: r.amount ?? "",
+    description: r.description ?? "",
+    remark: r.remark ?? "",
+    created_by: r.createdBy ?? "",
+    submitted_by: r.createdBy ?? "",
+  };
 }
 
-export async function approveContra() {
-  return { success: false, message: "Contra approval is not available", data: null };
+/** PENDING manual transactions awaiting Owner/Admin/Manager approval — backs the Contra Inbox badge/popover. */
+export async function loadContraInbox({ companyId, groupId, signal } = {}) {
+  const tenantId = resolveTransactionSpringTenantId({ companyId, groupId });
+  if (!tenantId) {
+    return { success: true, data: [] };
+  }
+  const json = await postSpringJson("api/pending", { tenantId }, signal);
+  if (!isSpringOk(json)) {
+    return { success: false, message: json?.message || "loadContraInboxFailed", data: [] };
+  }
+  return { success: true, data: (Array.isArray(json.data) ? json.data : []).map(normalizeContraInboxRow) };
 }
 
-export async function rejectContra() {
-  return { success: false, message: "Contra rejection is not available", data: null };
+export async function approveContra({ transactionId, companyId, groupId } = {}) {
+  const tenantId = resolveTransactionSpringTenantId({ companyId, groupId });
+  const id = Number(transactionId);
+  if (!tenantId || !Number.isFinite(id) || id <= 0) {
+    return { success: false, message: "invalidRequest", data: null };
+  }
+  const json = await postSpringJson("api/approved", { tenantId, id });
+  return { success: isSpringOk(json), message: json?.message || "", data: null };
+}
+
+export async function rejectContra({ transactionId, companyId, groupId } = {}) {
+  const tenantId = resolveTransactionSpringTenantId({ companyId, groupId });
+  const id = Number(transactionId);
+  if (!tenantId || !Number.isFinite(id) || id <= 0) {
+    return { success: false, message: "invalidRequest", data: null };
+  }
+  const json = await postSpringJson("api/rejected", { tenantId, id });
+  return { success: isSpringOk(json), message: json?.message || "", data: null };
 }
 

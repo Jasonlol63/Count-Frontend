@@ -262,7 +262,9 @@ export function normalizeSpringSubmitResponse(json) {
     data: {
       id: d.id ?? null,
       transaction_type: transactionType,
-      approval_status: "APPROVED",
+      // Contra Inbox: backend decides APPROVED vs PENDING (role + transaction date) — see
+      // AccessControlUtils.isManualTransactionApprovalExempt / TransactionSubmitServiceImpl.isAutoApproved.
+      approval_status: String(d.approvalStatus || "APPROVED").toUpperCase(),
       to_account_id: d.toAccountId ?? null,
       from_account_id: d.fromAccountId ?? null,
       currency: String(d.currencyCode || "").toUpperCase(),
