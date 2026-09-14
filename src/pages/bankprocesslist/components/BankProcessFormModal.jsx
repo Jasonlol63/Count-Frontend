@@ -32,6 +32,9 @@ export default function BankProcessFormModal({
   onOpenProfitShareModal,
   onOpenBankFormNoteModal,
   onOpenAddAccountForField,
+  bankBalanceLocked = false,
+  bankBalanceDeleting = false,
+  onDeleteBankBalance,
   lang,
   t,
   calendarI18n,
@@ -458,10 +461,50 @@ export default function BankProcessFormModal({
                       <input id="bank_insurance" name="insurance" type="text" className="bank-input" inputMode="decimal" autoComplete="off" placeholder={t("enterAmount")} value={form.insurance} disabled={isOnce} onChange={(ev) => setForm((prev) => ({ ...prev, insurance: ev.target.value }))} />
                     </div>
                   </div>
-                  <div className="form-group bank-remark-wrap" style={{ marginTop: 12 }}>
-                    <div className="bank-remark-actions">
-                      <button type="button" id="bank_sop_btn" className="btn btn-save bank-note-open-btn" onClick={() => onOpenBankFormNoteModal("sop")}>{t("sop")}</button>
-                      <button type="button" id="bank_remark_btn" className="btn btn-save bank-note-open-btn" onClick={() => onOpenBankFormNoteModal("remark")}>{t("remark")}</button>
+                  <div className="form-group bank-remark-wrap" >
+                    <div className="bank-remark-balance-row">
+                      <div className="bank-remark-actions">
+                        <button type="button" id="bank_sop_btn" className="btn btn-save bank-note-open-btn" onClick={() => onOpenBankFormNoteModal("sop")}>{t("sop")}</button>
+                        <button type="button" id="bank_remark_btn" className="btn btn-save bank-note-open-btn" onClick={() => onOpenBankFormNoteModal("remark")}>{t("remark")}</button>
+                      </div>
+                      <div className="bank-balance-field">
+                        <label htmlFor="bank_balance">{t("bankBalance")}</label>
+                        <div className="bank-balance-input-wrap">
+                          <input
+                            id="bank_balance"
+                            name="bank_balance"
+                            type="text"
+                            className={`bank-input${bankBalanceLocked ? " bank-balance-input--locked" : ""}`}
+                            inputMode="decimal"
+                            autoComplete="off"
+                            placeholder="0.00"
+                            value={form.bank_balance}
+                            readOnly={bankBalanceLocked}
+                            tabIndex={bankBalanceLocked ? -1 : 0}
+                            aria-readonly={bankBalanceLocked}
+                            onChange={(ev) => {
+                              if (bankBalanceLocked) return;
+                              setForm((prev) => ({ ...prev, bank_balance: sanitizeBankMoneyTyping(ev.target.value) }));
+                            }}
+                            onBlur={bankBalanceLocked ? undefined : blurMoneyField("bank_balance")}
+                          />
+                          {bankBalanceLocked ? (
+                            <button
+                              type="button"
+                              className="bank-balance-delete-btn"
+                              title={t("deleteBankBalance")}
+                              aria-label={t("deleteBankBalance")}
+                              disabled={bankBalanceDeleting}
+                              onClick={onDeleteBankBalance}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" strokeLinecap="round" strokeLinejoin="round" />
+                                <path d="M10 11v6M14 11v6" strokeLinecap="round" />
+                              </svg>
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
                     {(form.sop || form.remark) ? (
                       <p className="bank-remark-filled-hint">{[form.sop && t("sopFilled"), form.remark && t("remarkFilled")].filter(Boolean).join(" · ")}</p>

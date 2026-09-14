@@ -98,6 +98,9 @@ function buildBankProcessMutableWriteFields({ form, accounts = [] }) {
     insurancePrice: isOnce ? null : toOptionalMoney(form?.insurance),
     sop: String(form?.sop || "").trim() || null,
     remark: String(form?.remark || "").trim() || null,
+    // Only meaningful when the field is unlocked (no bank_balance_transaction_id yet) — backend
+    // creates the one-off Contra transaction from this on Add/Update, see BankProcessFormModal.
+    bankBalance: toOptionalMoney(form?.bank_balance),
     shares,
   };
 }
@@ -278,6 +281,32 @@ export async function updateBankProcess(request, signal) {
   const json = await res.json().catch(() => ({}));
   if (!res.ok || !isApiSuccess(json)) {
     throw new Error(json?.message || "saveFailed");
+  }
+  return json.data ?? null;
+}
+
+/**
+ * POST /api/bank-process/delete-bank-balance
+ * Body: `{ id, tenantId }`. Deletes the process's linked Bank Balance Contra transaction so the
+ * field unlocks for a new value. Backend endpoint not implemented yet — wired ahead of it so the
+ * frontend interaction (BankProcessFormModal delete button + confirm) is ready to plug in.
+ */
+export async function deleteBankBalance({ id, tenantId }, signal) {
+  const processId = toOptionalInt(id);
+  const tid = resolveBankProcessListTenantId(tenantId);
+  if (!processId) throw new Error("Invalid bank process ID");
+  if (!tid) throw new Error("tenantIdRequired");
+
+  const res = await fetch(buildApiUrl("api/bank-process/delete-bank-balance"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: processId, tenantId: tid }),
+    signal,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !isApiSuccess(json)) {
+    throw new Error(json?.message || "deleteBankBalanceFailed");
   }
   return json.data ?? null;
 }

@@ -1,0 +1,102 @@
+/*
+ * Add/Edit Process — "Bank Balance" one-off Contra settlement field (BankProcessFormModal.jsx).
+ * Kept in its own file rather than mixed into processlist.css.
+ */
+
+.bank-remark-balance-row {
+    display: flex;
+    /* Bottom-align instead of a fixed pixel offset: SOP/Remark have no label above them so they're
+       naturally shorter than the Bank Balance column (label + input). flex-end lines up both
+       columns' bottom edges using their actual rendered heights, so it stays correct at any
+       viewport width / font-size instead of a magic-number margin tuned for one window size. */
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.bank-balance-field {
+    /* Same width as the other Detail-column fields (Insurance etc.) — only the input's own height
+       is reduced, not its length. */
+    flex: 1 1 200px;
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.bank-balance-field label {
+    font-size: var(--text-small, 13px);
+    font-weight: 600;
+    color: #374151;
+}
+
+.bank-balance-input-wrap {
+    display: flex;
+    /* flex-end, not center: the delete button (34px) is taller than the shortened input, so
+       center-aligning would leave a gap under the input instead of it sitting flush with the
+       button's — and the row's — bottom edge. */
+    align-items: center;
+    gap: 8px;
+}
+
+.bank-balance-input-wrap .bank-input {
+    flex: 1;
+    min-width: 0;
+}
+
+/* processlist.css has `#addBankModal .bank-form .bank-input { min-height: 4rem !important;
+   padding: 0.625rem 0.875rem !important; }` — an !important rule with an #addBankModal id, which
+   beats any plain-class override. Matching its id + beating its class count (with !important too)
+   is the only way to actually shrink this one field without touching that shared rule (used by
+   every other .bank-input on this form) — length (width) unchanged, only height. */
+#addBankModal .bank-form-row-last .bank-form-cell-right .bank-remark-wrap .bank-balance-input-wrap .bank-input {
+    min-height: 1.9rem !important;
+    padding-top: 0.6rem !important;
+    padding-bottom: 0.6rem !important;
+}
+
+.bank-balance-input--locked {
+    background-color: #f5f5f5;
+    color: #6b7280;
+    cursor: not-allowed;
+}
+
+.bank-balance-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    background: #fef2f2;
+    color: #dc2626;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.bank-balance-delete-btn:hover:not(:disabled) {
+    background: #fee2e2;
+    border-color: #fca5a5;
+}
+
+.bank-balance-delete-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.bank-balance-delete-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+@media (max-width: 900px) {
+    .bank-remark-balance-row {
+        flex-direction: column;
+    }
+
+    .bank-balance-field {
+        width: 100%;
+    }
+}

@@ -10,9 +10,13 @@ export default function ProcessDeleteConfirmModal({
   confirmDisabled,
   errorMessage = "",
   t,
+  titleKey = "confirmDeleteTitle",
+  messageKey = "confirmDeleteMessage",
+  messageParams,
 }) {
   if (!open) return null;
   const disableConfirm = Boolean(deleting || confirmDisabled);
+  const params = messageParams ?? { count };
   return (
     <ProcessModalPortal>
     <div className="process-modal" style={processModalBackdropStyle} role="dialog" aria-modal="true">
@@ -27,9 +31,9 @@ export default function ProcessDeleteConfirmModal({
             />
           </svg>
         </div>
-        <h2 className="process-confirm-title">{t("confirmDeleteTitle")}</h2>
+        <h2 className="process-confirm-title">{t(titleKey)}</h2>
         <p className="process-confirm-message">
-          {t("confirmDeleteMessage", { count })}
+          {t(messageKey, params)}
         </p>
         {errorMessage ? (
           <div className="process-confirm-error" role="alert">

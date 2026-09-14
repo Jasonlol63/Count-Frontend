@@ -192,6 +192,8 @@ export function normalizeBankProcessListItem(dto) {
     issue_flag: normalizeBankIssueFlag(statusSource),
     sop: bp.sop || "",
     remark: bp.remark || "",
+    bank_balance: dto.bankBalance != null ? dto.bankBalance : null,
+    bank_balance_transaction_id: dto.bankBalanceTransactionId ?? null,
     card_merchant_id: bp.supplierAccountId ?? null,
     customer_id: bp.customerAccountId ?? null,
     profit_account_id: bp.companyAccountId ?? null,
@@ -674,6 +676,11 @@ export const EMPTY_BANK_FORM = {
   status: "active",
   remark: "",
   sop: "",
+  /** Optional one-off Contra settlement amount; `bank_balance_transaction_id` set = a Contra
+   * transaction already exists for this process, so the field is shown locked (see
+   * BankProcessFormModal's bank-balance field). */
+  bank_balance: "",
+  bank_balance_transaction_id: null,
   dts_modified: "",
   modified_by: "",
   dts_created: "",
@@ -742,6 +749,8 @@ export function bankProcessListRowToEditForm(row, accounts = []) {
     status: row.status || "active",
     remark: row.remark || "",
     sop: row.sop || "",
+    bank_balance: row.bank_balance != null ? String(row.bank_balance) : "",
+    bank_balance_transaction_id: row.bank_balance_transaction_id ?? null,
     ...buildBankDtsFormFields(row),
   };
 }

@@ -1,13 +1,28 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import ProcessModalPortal, { processModalBackdropStyle } from "../../../components/ProcessModalPortal.jsx";
 import {
   formatBankProcessContractLabel,
   formatAccountingDueBillingPeriod,
+  formatAccountingDueDisplayDate,
   formatAccountingDueFrequency,
   formatAccountingDueProcessDayStart,
   accountingDueRowKey,
 } from "../lib/bankProcessHelpers.js";
+import { formatYmd } from "../../../utils/date/dateUtils.js";
 import MaintenanceEllipsisText from "../../maintenance/shared/MaintenanceEllipsisText.jsx";
+import AccountingDueDatePicker from "./AccountingDueDatePicker.jsx";
+
+function addDaysIso(base, days) {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return formatYmd(d);
+}
+
+/** Dec 31 of `base`'s calendar year — the preview window always runs to the end of the current year. */
+function endOfYearIso(base) {
+  const d = new Date(base);
+  return formatYmd(new Date(d.getFullYear(), 11, 31));
+}
 
 export default function AccountingDueModal({
   isOpen,
@@ -18,6 +33,8 @@ export default function AccountingDueModal({
   setAccountingSelected,
   accountingDeleteSelected,
   setAccountingDeleteSelected,
+  accountingAsOfDate,
+  onAccountingAsOfChange,
   onPostToTransaction,
   onDismissRows,
   loadAccountingInbox,
@@ -25,6 +42,7 @@ export default function AccountingDueModal({
   t,
 }) {
   const refreshRef = useRef(loadAccountingInbox);
+  const asOfChangeRef = useRef(onAccountingAsOfChange);
   const wasOpenRef = useRef(false);
 
   const postableRows = accountingRows.filter((r) => !r.already_posted_today);
@@ -33,13 +51,35 @@ export default function AccountingDueModal({
   const deleteAllChecked = accountingRows.length > 0 && accountingRows.every((r) => accountingDeleteSelected.has(accountingDueRowKey(r)));
 
   refreshRef.current = loadAccountingInbox;
+  asOfChangeRef.current = onAccountingAsOfChange;
 
   const closeInbox = useCallback(() => setOpen(false), [setOpen]);
   const openInbox = useCallback(() => setOpen(true), [setOpen]);
 
+  const { todayIso, maxAsOfIso, effectiveAsOfIso, isPreview, asOfChips } = useMemo(() => {
+    const today = formatYmd(new Date());
+    const maxIso = endOfYearIso(today);
+    const effective = accountingAsOfDate || today;
+    const chips = [
+      { key: "today", label: t("today"), iso: today },
+      { key: "1w", label: t("accountingDueChip1Week"), iso: addDaysIso(today, 7) },
+      { key: "2w", label: t("accountingDueChip2Week"), iso: addDaysIso(today, 14) },
+      { key: "1m", label: t("accountingDueChip1Month"), iso: addDaysIso(today, 30) },
+      { key: "yearEnd", label: t("accountingDueChipYearEnd"), iso: maxIso },
+    ];
+    return {
+      todayIso: today,
+      maxAsOfIso: maxIso,
+      effectiveAsOfIso: effective,
+      isPreview: effective !== today,
+      asOfChips: chips,
+    };
+  }, [accountingAsOfDate, t]);
+
+  // Open the modal fresh: reset any leftover preview date from a prior session and reload today's inbox.
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
-      refreshRef.current?.();
+      asOfChangeRef.current?.(null);
     }
     wasOpenRef.current = isOpen;
   }, [isOpen]);
@@ -64,7 +104,9 @@ export default function AccountingDueModal({
     accountingLoading && accountingRows.length === 0 ? (
       <div className="accounting-due-inbox-loading">{t("loading")}</div>
     ) : !accountingLoading && accountingRows.length === 0 ? (
-      <div className="accounting-due-inbox-empty">{t("noDueToday")}</div>
+      <div className="accounting-due-inbox-empty">
+        {isPreview ? t("noDueForDate", { date: formatAccountingDueDisplayDate(effectiveAsOfIso) }) : t("noDueToday")}
+      </div>
     ) : accountingRows.length > 0 ? (
       <div className="accounting-due-inbox-table-wrap">
         <div className="accounting-due-inbox-grid" role="table" id="processAccountingDueGrid">
@@ -152,9 +194,10 @@ export default function AccountingDueModal({
             const checked = rowKey ? accountingSelected.has(rowKey) : false;
             const delChecked = rowKey ? accountingDeleteSelected.has(rowKey) : false;
             const posted = !!r.already_posted_today;
+            const early = !posted && isPreview && String(r.posted_date || "") > todayIso;
             return (
               <div
-                className={`accounting-due-inbox-grid-row${posted ? " accounting-due-inbox-grid-row--posted" : ""}`}
+                className={`accounting-due-inbox-grid-row${posted ? " accounting-due-inbox-grid-row--posted" : ""}${early ? " accounting-due-inbox-grid-row--early" : ""}`}
                 role="row"
                 key={rowKey || `${r.id}-${idx}`}
               >
@@ -182,6 +225,7 @@ export default function AccountingDueModal({
                 </div>
                 <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--period" role="cell" title={formatAccountingDueBillingPeriod(r)}>
                   {formatAccountingDueBillingPeriod(r)}
+                  {early ? <span className="accounting-due-early-badge">{t("accountingDueEarlyBadge")}</span> : null}
                 </div>
                 <div className="accounting-due-inbox-grid-cell accounting-due-inbox-grid-cell--frequency" role="cell" title={formatAccountingDueFrequency(r, t)}>
                   {formatAccountingDueFrequency(r, t)}
@@ -255,6 +299,11 @@ export default function AccountingDueModal({
                 <h2>
                   {t("accountingDue")}
                   <span className="process-accounting-inbox-badge">{postableCount}</span>
+                  {isPreview ? (
+                    <span className="accounting-due-asof-title-suffix">
+                      {t("accountingDueAsOfSuffix", { date: formatAccountingDueDisplayDate(effectiveAsOfIso) })}
+                    </span>
+                  ) : null}
                 </h2>
                 <div className="modal-header-actions">
                   <button
@@ -274,6 +323,50 @@ export default function AccountingDueModal({
                   </span>
                 </div>
               </div>
+
+              <div className="accounting-due-asof-bar">
+                <AccountingDueDatePicker
+                  value={effectiveAsOfIso}
+                  minIso={todayIso}
+                  maxIso={maxAsOfIso}
+                  disabled={accountingLoading}
+                  label={t("accountingDueAsOfLabel")}
+                  onChange={(v) => onAccountingAsOfChange?.(v)}
+                  t={t}
+                />
+                <div className="accounting-due-asof-chips" role="group" aria-label={t("accountingDueAsOfLabel")}>
+                  {asOfChips.map((chip) => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      className={`accounting-due-asof-chip${effectiveAsOfIso === chip.iso ? " accounting-due-asof-chip--active" : ""}`}
+                      disabled={accountingLoading}
+                      onClick={() => onAccountingAsOfChange?.(chip.iso)}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+                {isPreview ? (
+                  <button
+                    type="button"
+                    className="accounting-due-asof-reset"
+                    onClick={() => onAccountingAsOfChange?.(null)}
+                  >
+                    {t("accountingDueAsOfReset")}
+                  </button>
+                ) : null}
+              </div>
+
+              {isPreview ? (
+                <div className="accounting-due-asof-banner">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4M12 8h.01" strokeLinecap="round" />
+                  </svg>
+                  <span>{t("accountingDueAsOfBanner", { date: formatAccountingDueDisplayDate(effectiveAsOfIso) })}</span>
+                </div>
+              ) : null}
 
               <div className="modal-body accounting-due-modal-body">
                 {tableContent}

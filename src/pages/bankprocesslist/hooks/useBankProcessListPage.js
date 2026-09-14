@@ -96,6 +96,7 @@ import {
   buildUpdateBankProcessRequest,
   deleteBankProcess,
   updateBankProcessRemark,
+  deleteBankBalance,
   fetchAccountingDueInbox,
   postAccountingDue,
   skipAccountingDue,
@@ -279,12 +280,16 @@ export function useBankProcessListPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_BANK_FORM });
+  const [bankBalanceDeleteConfirmOpen, setBankBalanceDeleteConfirmOpen] = useState(false);
+  const [bankBalanceDeleting, setBankBalanceDeleting] = useState(false);
 
   const [accountingOpen, setAccountingOpen] = useState(false);
   const [accountingRows, setAccountingRows] = useState([]);
   const [accountingLoading, setAccountingLoading] = useState(false);
   const [accountingSelected, setAccountingSelected] = useState(new Set());
   const [accountingDeleteSelected, setAccountingDeleteSelected] = useState(new Set());
+  /** Early-transaction preview date (ISO `YYYY-MM-DD`); null = today (server default). */
+  const [accountingAsOfDate, setAccountingAsOfDate] = useState(null);
 
   const [resendModalOpen, setResendModalOpen] = useState(false);
   const [resendTarget, setResendTarget] = useState(null);
@@ -342,6 +347,7 @@ export function useBankProcessListPage() {
   const listAbortRef = useRef(null);
   const listFetchGenRef = useRef(0);
   const accountingInboxFetchGenRef = useRef(0);
+  const accountingAsOfDateRef = useRef(null);
   const companyIdRef = useRef(null);
   const skipNextBankFetchRef = useRef(false);
   const skipCompanyFetchEffectRef = useRef(false);
@@ -379,6 +385,10 @@ export function useBankProcessListPage() {
   useEffect(() => {
     companyIdRef.current = companyId;
   }, [companyId]);
+
+  useEffect(() => {
+    accountingAsOfDateRef.current = accountingAsOfDate;
+  }, [accountingAsOfDate]);
 
   const prevRowsLenRef = useRef(0);
   useEffect(() => {
@@ -1279,12 +1289,16 @@ export function useBankProcessListPage() {
   const loadAccountingInbox = useCallback(async (opts = {}) => {
     const silent = !!opts.silent;
     const restoreDismissed = !!opts.restoreDismissed;
+    // Explicit opts.asOf (even null) wins; otherwise fall back to the current preview-date (via ref,
+    // so this callback's identity stays stable across asOf changes and doesn't re-trigger every other
+    // effect that depends on loadAccountingInbox — e.g. the cross-page company-session sync below).
+    const asOf = Object.prototype.hasOwnProperty.call(opts, "asOf") ? opts.asOf : accountingAsOfDateRef.current;
     const cid = Number(companyId);
     if (!Number.isFinite(cid) || cid <= 0) return;
     const fetchGen = ++accountingInboxFetchGenRef.current;
     if (!silent) setAccountingLoading(true);
     try {
-      const list = await fetchAccountingDueInbox(cid, undefined, { restoreSkipped: restoreDismissed });
+      const list = await fetchAccountingDueInbox(cid, undefined, { restoreSkipped: restoreDismissed, asOf: asOf || undefined });
       if (fetchGen !== accountingInboxFetchGenRef.current) return;
       if (Number(companyIdRef.current) !== cid) return;
       setAccountingRows(list);
@@ -1322,6 +1336,16 @@ export function useBankProcessListPage() {
       }
     }
   }, [companyId]);
+
+  /** Set (or clear, with `null`) the early-transaction preview date and reload the inbox for it. */
+  const setAccountingAsOf = useCallback(
+    (nextAsOf) => {
+      const normalized = nextAsOf || null;
+      setAccountingAsOfDate(normalized);
+      void loadAccountingInbox({ asOf: normalized });
+    },
+    [loadAccountingInbox],
+  );
 
   useRealtimeDomain(
     [REALTIME_DOMAINS.PROCESSES, REALTIME_DOMAINS.ACCOUNTS],
@@ -1763,6 +1787,33 @@ export function useBankProcessListPage() {
     setEditMode(true);
     setForm(nextForm);
     setModalOpen(true);
+  };
+
+  // Locked once a Contra transaction already exists for this process's Bank Balance (edit only —
+  // Add Process never has one yet). Delete it first (bankBalanceDeleteConfirmOpen flow below) to unlock.
+  const bankBalanceLocked = editMode && form.bank_balance_transaction_id != null;
+
+  const openBankBalanceDeleteConfirm = () => setBankBalanceDeleteConfirmOpen(true);
+  const cancelBankBalanceDelete = () => {
+    if (bankBalanceDeleting) return;
+    setBankBalanceDeleteConfirmOpen(false);
+  };
+
+  const confirmDeleteBankBalance = async () => {
+    if (guardWrite()) return;
+    setBankBalanceDeleting(true);
+    try {
+      await deleteBankBalance({ id: form.id, tenantId: companyId });
+      setForm((prev) => ({ ...prev, bank_balance: "", bank_balance_transaction_id: null }));
+      setBankBalanceDeleteConfirmOpen(false);
+      notify(t("bankBalanceDeleted"));
+      notifyTransactionDataChanged("bank-process-list-react");
+      void fetchRows({ silent: true, preservePage: true, preserveSelection: true });
+    } catch (err) {
+      notify(apiMsg({ message: err?.message }, "deleteBankBalanceFailed"), "danger");
+    } finally {
+      setBankBalanceDeleting(false);
+    }
   };
 
   const submitForm = async (e) => {
@@ -2381,6 +2432,12 @@ export function useBankProcessListPage() {
     setEditMode,
     form,
     setForm,
+    bankBalanceLocked,
+    bankBalanceDeleting,
+    bankBalanceDeleteConfirmOpen,
+    openBankBalanceDeleteConfirm,
+    cancelBankBalanceDelete,
+    confirmDeleteBankBalance,
     accountingOpen,
     setAccountingOpen,
     accountingRows,
@@ -2391,6 +2448,8 @@ export function useBankProcessListPage() {
     setAccountingSelected,
     accountingDeleteSelected,
     setAccountingDeleteSelected,
+    accountingAsOfDate,
+    setAccountingAsOf,
     resendModalOpen,
     setResendModalOpen,
     resendTarget,

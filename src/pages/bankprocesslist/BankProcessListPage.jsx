@@ -8,6 +8,8 @@ import "../../../public/css/accountCSS.css";
 import "../../../public/css/account-list.css";
 import "../../../public/css/userlist.css";
 import "../../../public/css/date-range-picker.css";
+import "../../../public/css/accountingDueDatePicker.css";
+import "../../../public/css/bankBalanceField.css";
 import ProcessDeleteConfirmModal from "../processlist/components/ProcessDeleteConfirmModal.jsx";
 import AddProcessIcon from "../processlist/components/AddProcessIcon.jsx";
 import BankProcessTable from "./components/BankProcessTable.jsx";
@@ -87,6 +89,12 @@ export default function BankProcessListPage() {
     setEditMode,
     form,
     setForm,
+    bankBalanceLocked,
+    bankBalanceDeleting,
+    bankBalanceDeleteConfirmOpen,
+    openBankBalanceDeleteConfirm,
+    cancelBankBalanceDelete,
+    confirmDeleteBankBalance,
     accountingOpen,
     setAccountingOpen,
     accountingRows,
@@ -97,6 +105,8 @@ export default function BankProcessListPage() {
     setAccountingSelected,
     accountingDeleteSelected,
     setAccountingDeleteSelected,
+    accountingAsOfDate,
+    setAccountingAsOf,
     resendModalOpen,
     setResendModalOpen,
     resendTarget,
@@ -353,6 +363,8 @@ export default function BankProcessListPage() {
               setAccountingSelected={setAccountingSelected}
               accountingDeleteSelected={accountingDeleteSelected}
               setAccountingDeleteSelected={setAccountingDeleteSelected}
+              accountingAsOfDate={accountingAsOfDate}
+              onAccountingAsOfChange={setAccountingAsOf}
               onPostToTransaction={postAccountingToTransaction}
               onDismissRows={dismissAccountingRows}
               loadAccountingInbox={loadAccountingInbox}
@@ -603,6 +615,9 @@ export default function BankProcessListPage() {
           countriesList={selectedCountryChips}
           banksList={selectedBanksByCountry[String(form.country || "").trim()] || []}
           calendarI18n={calendarI18n}
+          bankBalanceLocked={bankBalanceLocked}
+          bankBalanceDeleting={bankBalanceDeleting}
+          onDeleteBankBalance={openBankBalanceDeleteConfirm}
           onClose={() => setModalOpen(false)} onSubmit={submitForm}
           onOpenCountryModal={() => {
             setSelectedCountryChips((prev) => {
@@ -750,6 +765,17 @@ export default function BankProcessListPage() {
         deleting={deleteSubmitting}
         onCancel={() => setDeleteConfirmOpen(false)}
         onConfirm={confirmDeleteProcesses}
+        t={t}
+      />
+
+      <ProcessDeleteConfirmModal
+        open={bankBalanceDeleteConfirmOpen}
+        deleting={bankBalanceDeleting}
+        onCancel={cancelBankBalanceDelete}
+        onConfirm={confirmDeleteBankBalance}
+        titleKey="deleteBankBalanceTitle"
+        messageKey="deleteBankBalanceMessage"
+        messageParams={{}}
         t={t}
       />
 

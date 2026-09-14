@@ -1592,6 +1592,125 @@ body.process-page #bankSelectionModal .modal-content.bank-selection-modal,
     color: #94a3b8;
 }
 
+/* Accounting Due — early-transaction date bar */
+.accounting-due-asof-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 16px;
+    border-top: 1px solid #eef2f7;
+    border-bottom: 1px solid #eef2f7;
+    background: #f8fafc;
+}
+
+/* Date field itself: see accountingDueDatePicker.css (AccountingDueDatePicker.jsx) — kept in its
+   own file since it's a standalone component, not part of this shared page stylesheet. */
+
+.accounting-due-asof-chips {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.accounting-due-asof-chip {
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: clamp(10px, 0.72vw, 12px);
+    font-weight: 700;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.accounting-due-asof-chip:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+.accounting-due-asof-chip--active {
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+
+.accounting-due-asof-chip:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.accounting-due-asof-reset {
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    font-size: clamp(10px, 0.72vw, 12px);
+    font-weight: 700;
+    cursor: pointer;
+    padding: 4px 6px;
+    margin-left: auto;
+}
+
+.accounting-due-asof-reset:hover {
+    text-decoration: underline;
+}
+
+.accounting-due-asof-title-suffix {
+    font-size: clamp(11px, 0.78vw, 13px);
+    font-weight: 700;
+    color: #d97706;
+    margin-left: 2px;
+    white-space: nowrap;
+}
+
+.accounting-due-asof-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: clamp(11px, 0.78vw, 13px);
+    font-weight: 600;
+    border-bottom: 1px solid #fde68a;
+}
+
+.accounting-due-asof-banner svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    color: #d97706;
+}
+
+.accounting-due-inbox-grid-row--early .accounting-due-inbox-grid-cell {
+    background: #fffbeb;
+}
+
+.accounting-due-inbox-grid-row--early:not(.accounting-due-inbox-grid-row--posted):hover .accounting-due-inbox-grid-cell {
+    background: #fef3c7;
+}
+
+.accounting-due-inbox-grid-row--early .accounting-due-inbox-grid-cell--cb {
+    box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.accounting-due-early-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #92400e;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+
 /* Accounting Due — centered popup modal */
 #processAccountingDueModal .accounting-due-modal-content {
     width: min(1040px, 94vw) !important;
@@ -1651,6 +1770,11 @@ body.process-page #bankSelectionModal .modal-content.bank-selection-modal,
 #processAccountingDueModal .accounting-due-inbox-popover-footer {
     border-top: 1px solid #eef2f7;
     border-radius: 0 0 1rem 1rem;
+}
+
+#processAccountingDueModal .accounting-due-asof-bar,
+#processAccountingDueModal .accounting-due-asof-banner {
+    flex-shrink: 0;
 }
 
 /* Bank Add Process 必填未填时红框 */
