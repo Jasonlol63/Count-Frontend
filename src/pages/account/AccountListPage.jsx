@@ -76,6 +76,8 @@ import {
   shouldLoadAccountListData,
   formatAccountLastLoginDate,
   formatAccountLastLoginTimeTitle,
+  formatAccountLastLogoutDate,
+  formatAccountLastLogoutTimeTitle,
 } from "./accountLogic.js";
 import {
   fetchAccountListByTenantId,
@@ -1869,6 +1871,7 @@ export default function AccountListPage() {
           if (sortColumn === "name") return account.name;
           if (sortColumn === "status") return account.status;
           if (sortColumn === "lastLogin") return account.last_login;
+          if (sortColumn === "lastLogout") return account.last_logout;
           if (sortColumn === "remark") return account.remark;
           return account.account_id;
         };
@@ -2882,6 +2885,7 @@ export default function AccountListPage() {
               {renderSortableHeader(t("alert"), "alert")}
               {renderSortableHeader(t("status"), "status")}
               {renderSortableHeader(t("lastLogin"), "lastLogin")}
+              {renderSortableHeader(t("lastLogout"), "lastLogout")}
               {renderSortableHeader(t("remark"), "remark")}
               <div className="account-header-item account-header-item--action">{t("action")}</div>
               {showBulkDeleteColumn && (
@@ -2942,6 +2946,12 @@ export default function AccountListPage() {
                       title={formatAccountLastLoginTimeTitle(a.last_login) || undefined}
                     >
                       {formatAccountLastLoginDate(a.last_login)}
+                    </div>
+                    <div
+                      className="account-card-item"
+                      title={formatAccountLastLogoutTimeTitle(a.last_logout) || undefined}
+                    >
+                      {formatAccountLastLogoutDate(a.last_logout)}
                     </div>
                     <div className="account-card-item">{toUpper(a.remark)}</div>
                     <div className="account-card-item account-card-item--action">

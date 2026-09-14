@@ -218,7 +218,7 @@ body.account-page:not(.account-page--show-all) .account-table-header.account-lis
  */
 .account-list-table {
     width: 100%;
-    --list-table-min-width: 980px;
+    --list-table-min-width: 1090px;
     --account-list-row-min-height: 30px;
     --account-list-grid-cols:
         38px
@@ -227,6 +227,7 @@ body.account-page:not(.account-page--show-all) .account-table-header.account-lis
         minmax(84px, 0.7fr)
         minmax(52px, 0.42fr)
         minmax(72px, 0.55fr)
+        minmax(131px, 1fr)
         minmax(131px, 1fr)
         minmax(60px, 1.2fr)
         minmax(64px, 0.25fr);
@@ -237,6 +238,7 @@ body.account-page:not(.account-page--show-all) .account-table-header.account-lis
         minmax(84px, 0.7fr)
         minmax(52px, 0.42fr)
         minmax(72px, 0.55fr)
+        minmax(131px, 1fr)
         minmax(131px, 1fr)
         minmax(60px, 1.2fr)
         minmax(60px, 0.23fr)

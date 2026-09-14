@@ -28,6 +28,7 @@ export function normalizeAccountListItem(item) {
     alert_amount: item.alertAmount ?? item.alert_amount ?? "",
     remark: item.remark ?? "",
     last_login: item.lastLogin ?? item.last_login ?? null,
+    last_logout: item.lastLogout ?? item.last_logout ?? null,
     tenant_access_id: item.tenantAccessId ?? item.tenant_access_id ?? null,
     scope_tenant_id: item.scopeTenantId ?? item.scope_tenant_id ?? null,
     tenant_ids: normalizeAccountTenantIds(item.tenantIds ?? item.tenant_ids),
