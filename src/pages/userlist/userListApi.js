@@ -201,7 +201,7 @@ export function buildAdminCreateRequest({
     secondaryPassword: secondaryPassword || undefined,
     role,
     status: status || "active",
-    readOnly: readOnly != null ? !!readOnly : true,
+    readOnly: readOnly != null ? !!readOnly : false,
     permissions,
     tenantIds,
     accountPermissions,
