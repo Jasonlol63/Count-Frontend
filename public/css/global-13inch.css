@@ -383,6 +383,7 @@
             minmax(84px, 0.7fr)
             minmax(72px, 0.55fr)
             minmax(131px, 1fr)
+            minmax(131px, 1fr)
             minmax(96px, 1.2fr)
             minmax(64px, 0.25fr);
         --user-list-grid-cols-bulk:
@@ -392,6 +393,7 @@
             minmax(130px, 1.2fr)
             minmax(84px, 0.7fr)
             minmax(72px, 0.55fr)
+            minmax(131px, 1fr)
             minmax(131px, 1fr)
             minmax(96px, 1.2fr)
             minmax(60px, 0.23fr)
@@ -407,6 +409,7 @@
             minmax(84px, 0.7fr)
             minmax(72px, 0.55fr)
             minmax(131px, 1fr)
+            minmax(131px, 1fr)
             minmax(96px, 1.2fr)
             minmax(64px, 0.25fr);
         --user-list-grid-cols-bulk:
@@ -416,6 +419,7 @@
             minmax(130px, 1.2fr)
             minmax(84px, 0.7fr)
             minmax(72px, 0.55fr)
+            minmax(131px, 1fr)
             minmax(131px, 1fr)
             minmax(96px, 1.2fr)
             minmax(60px, 0.23fr)

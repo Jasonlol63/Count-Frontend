@@ -299,7 +299,7 @@ body.user-page:not(.user-page--show-all) .user-list-table .user-list-table-heade
  * 表头与数据行共用 grid 变量；完整显示 Action / Last Login / Created By 等标题
  */
 .user-list-table {
-    --list-table-min-width: 1040px;
+    --list-table-min-width: 1150px;
     --user-list-row-min-height: 30px;
     --user-list-pill-height: 20px;
     --user-list-grid-cols:
@@ -310,6 +310,7 @@ body.user-page:not(.user-page--show-all) .user-list-table .user-list-table-heade
         minmax(140px, 0.7fr)
         minmax(72px, 0.55fr)
         minmax(131px, 1fr)
+        minmax(131px, 1fr)
         minmax(96px, 1.2fr)
         minmax(64px, 0.25fr);
     --user-list-grid-cols-bulk:
@@ -320,12 +321,13 @@ body.user-page:not(.user-page--show-all) .user-list-table .user-list-table-heade
         minmax(140px, 0.7fr)
         minmax(72px, 0.55fr)
         minmax(131px, 1fr)
+        minmax(131px, 1fr)
         minmax(96px, 1.2fr)
         minmax(60px, 0.23fr)
         48px;
 }
 
-/* 中文表头（序号 / 登录 ID / 最后登录 / 创建者）略宽，减少省略 */
+/* 中文表头（序号 / 登录 ID / 最后登录 / 最后登出 / 创建者）略宽，减少省略 */
 body.lang-zh.user-page .user-list-table {
     --user-list-grid-cols:
         54px
@@ -334,6 +336,7 @@ body.lang-zh.user-page .user-list-table {
         minmax(130px, 1.2fr)
         minmax(140px, 0.7fr)
         minmax(72px, 0.55fr)
+        minmax(131px, 1fr)
         minmax(131px, 1fr)
         minmax(96px, 1.2fr)
         minmax(64px, 0.25fr);
@@ -344,6 +347,7 @@ body.lang-zh.user-page .user-list-table {
         minmax(130px, 1.2fr)
         minmax(140px, 0.7fr)
         minmax(72px, 0.55fr)
+        minmax(131px, 1fr)
         minmax(131px, 1fr)
         minmax(96px, 1.2fr)
         minmax(60px, 0.23fr)

@@ -494,6 +494,26 @@ export function formatUserLastLoginTimeTitle(raw) {
   return `${h}:${min}:${sec}`;
 }
 
+/** Last Logout 列：仅展示日期 DD-MM-YYYY */
+export function formatUserLastLogoutDate(raw) {
+  const d = parseUserLastLogin(raw);
+  if (!d) {
+    const s = String(raw || "").trim();
+    return s || "-";
+  }
+  return formatDmyDash(d);
+}
+
+/** Last Logout 悬浮提示：仅时间 HH:MM:SS */
+export function formatUserLastLogoutTimeTitle(raw) {
+  const d = parseUserLastLogin(raw);
+  if (!d) return "";
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${h}:${min}:${sec}`;
+}
+
 
 export function applyUserFilters(users, { search, showActive = false, showInactive = false, showAll: _showAll, viewerRole, viewerUserId = null }) {
   const vr = normRole(viewerRole);
@@ -597,6 +617,17 @@ export function sortUsers(rows, sortColumn, sortDirection) {
     sortWithShadow((a, b) => {
       const va = lastLoginSortMs(a.last_login);
       const vb = lastLoginSortMs(b.last_login);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (va < vb) return -1;
+      if (va > vb) return 1;
+      return 0;
+    });
+  } else if (sortColumn === "lastLogout") {
+    sortWithShadow((a, b) => {
+      const va = lastLoginSortMs(a.last_logout);
+      const vb = lastLoginSortMs(b.last_logout);
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;

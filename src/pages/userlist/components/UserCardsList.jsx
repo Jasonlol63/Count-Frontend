@@ -4,6 +4,8 @@ import {
   computeRowCapabilities,
   formatUserLastLoginDate,
   formatUserLastLoginTimeTitle,
+  formatUserLastLogoutDate,
+  formatUserLastLogoutTimeTitle,
   getDeleteCheckboxState,
   normRole,
 } from "../userListLogic.js";
@@ -74,6 +76,9 @@ function UserCardsList({
             </div>
             <div className="card-item" title={formatUserLastLoginTimeTitle(r.last_login) || undefined}>
               {formatUserLastLoginDate(r.last_login)}
+            </div>
+            <div className="card-item" title={formatUserLastLogoutTimeTitle(r.last_logout) || undefined}>
+              {formatUserLastLogoutDate(r.last_logout)}
             </div>
             <div className="card-item">{String(r.created_by || "-").toUpperCase()}</div>
             <div className="card-item card-item--action">

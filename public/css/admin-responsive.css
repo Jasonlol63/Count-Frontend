@@ -95,7 +95,7 @@
 
   body.user-page .user-list-table .user-list-table-header,
   body.user-page .user-list-table .user-cards {
-    min-width: max(100%, 980px);
+    min-width: max(100%, 1090px);
     width: 100%;
     box-sizing: border-box;
   }
@@ -118,6 +118,7 @@
       minmax(90px, 0.5fr)
       minmax(64px, 0.45fr)
       minmax(110px, 0.9fr)
+      minmax(110px, 0.9fr)
       minmax(84px, 1fr)
       minmax(64px, 0.25fr);
     --user-list-grid-cols-bulk:
@@ -127,6 +128,7 @@
       minmax(200px, 1.9fr)
       minmax(90px, 0.5fr)
       minmax(64px, 0.45fr)
+      minmax(110px, 0.9fr)
       minmax(110px, 0.9fr)
       minmax(84px, 1fr)
       minmax(60px, 0.23fr)

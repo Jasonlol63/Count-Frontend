@@ -461,7 +461,7 @@ export default function BankProcessFormModal({
                       <input id="bank_insurance" name="insurance" type="text" className="bank-input" inputMode="decimal" autoComplete="off" placeholder={t("enterAmount")} value={form.insurance} disabled={isOnce} onChange={(ev) => setForm((prev) => ({ ...prev, insurance: ev.target.value }))} />
                     </div>
                   </div>
-                  <div className="form-group bank-remark-wrap" >
+                  <div className="form-group bank-remark-wrap">
                     <div className="bank-remark-balance-row">
                       <div className="bank-remark-actions">
                         <button type="button" id="bank_sop_btn" className="btn btn-save bank-note-open-btn" onClick={() => onOpenBankFormNoteModal("sop")}>{t("sop")}</button>

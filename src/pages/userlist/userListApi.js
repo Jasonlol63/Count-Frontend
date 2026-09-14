@@ -46,6 +46,7 @@ export function normalizeAdminListItem(item) {
     createdBy: admin.createdBy ?? "",
     createdAt: admin.createdAt ?? null,
     lastLogin: admin.lastLogin ?? null,
+    lastLogout: admin.lastLogout ?? null,
     readOnly: admin.readOnly ?? false,
     isOwnerShadow: item?.isOwnerShadow === true || (isOwner && !hasAccess),
     tenantAccess: hasAccess ? {

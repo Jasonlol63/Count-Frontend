@@ -146,6 +146,7 @@ function toLegacyAdminRow(item) {
     created_by: item.createdBy ?? "",
     created_at: item.createdAt ?? null,
     last_login: item.lastLogin ?? null,
+    last_logout: item.lastLogout ?? null,
     read_only: item.readOnly ? 1 : 0,
     is_owner_shadow: item.isOwnerShadow === true,
     tenant_access_id: item.tenantAccess?.id ?? null,
@@ -3043,6 +3044,21 @@ export default function UserListPage() {
               >
                 <span className="header-item__label">{t("lastLogin")}</span>
                 {renderUserListHeaderSortIcon("lastLogin")}
+              </div>
+              <div
+                className="header-item header-item--with-sort-icon header-sortable"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleUserListSort("lastLogout")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleUserListSort("lastLogout");
+                  }
+                }}
+              >
+                <span className="header-item__label">{t("lastLogout")}</span>
+                {renderUserListHeaderSortIcon("lastLogout")}
               </div>
               <div
                 className="header-item header-item--with-sort-icon header-sortable"
