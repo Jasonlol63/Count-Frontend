@@ -11,6 +11,16 @@ export function isOwnerUser(me) {
   return normRole(me?.role) === "owner";
 }
 
+/** IT accounts come from a separate operator registry, not the admin/user tables —
+ *  role string "it" is the only signal the frontend needs to gate on. */
+export function isItOperator(me) {
+  return normRole(me?.role) === "it";
+}
+
+export function canAccessAuditLog(me) {
+  return isItOperator(me);
+}
+
 export function getUserPermissions(me) {
   return Array.isArray(me?.permissions) ? me.permissions : [];
 }

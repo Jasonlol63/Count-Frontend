@@ -2,3 +2,6 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* Registers src/pages/auditlog for Tailwind v4's content scan — no existing page used
+   bracket arbitrary-value classes before, so this path was never picked up automatically. */
+@source "./pages/auditlog";

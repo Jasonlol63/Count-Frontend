@@ -32,6 +32,7 @@ export const PAGE_PATHS = {
   "payment-maintenance": "/payment-maintenance",
   useraccess: "/useraccess",
   "auto-renew": "/auto-renew",
+  "audit-log": "/audit-log",
 };
 
 /** @typedef {keyof typeof PAGE_PATHS} PageKey */
@@ -66,6 +67,7 @@ export const PAGE_ROUTE_UUIDS = {
   "payment-maintenance": "0cc1f0cd-e901-48ce-8a30-038ccce3344a",
   useraccess: "10049c16-fb17-4889-8228-98bf465544ef",
   "auto-renew": "148b6740-9f41-47e8-b8ca-e52db63cd4b2",
+  "audit-log": "c99438d8-8f16-4f2c-8abe-41a5d94f38a8",
 };
 
 const UUID_TO_PAGE_KEY = Object.fromEntries(
