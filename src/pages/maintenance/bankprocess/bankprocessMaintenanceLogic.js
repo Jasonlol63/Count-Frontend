@@ -99,8 +99,18 @@ export async function fetchCompanyCurrencies(companyId) {
     .filter((row) => Number.isFinite(row.id) && row.id > 0 && String(row.code || "").trim());
 }
 
+/** BUY_PRICE / SELL_PRICE / PROFIT / PROFIT_SHARING -> plain-text suffix appended to Description. */
+const CHARGE_CATEGORY_SUFFIX = {
+  BUY_PRICE: " (Buy Price)",
+  SELL_PRICE: " (Sell Price)",
+  PROFIT: " (Profit)",
+  PROFIT_SHARING: " (Profit Sharing)",
+};
+
 /** Spring `MaintenanceBankProcessDTO` row → legacy grid row shape used by the table components. */
 function normalizeBankprocessRow(row) {
+  const description = row?.description ?? "";
+  const categorySuffix = CHARGE_CATEGORY_SUFFIX[row?.chargeCategory] ?? "";
   return {
     transaction_id: Number(row?.id) || 0,
     transaction_type: row?.transactionType ?? null,
@@ -109,7 +119,7 @@ function normalizeBankprocessRow(row) {
     from_account: row?.fromAccountCode ?? "",
     amount: row?.amount ?? 0,
     currency: row?.currencyCode ?? "",
-    description: row?.description ?? "",
+    description: description ? `${description}${categorySuffix}` : description,
     remark: row?.remark ?? "",
     created_by: row?.createdBy ?? "",
     is_deleted: row?.deleted === true,
