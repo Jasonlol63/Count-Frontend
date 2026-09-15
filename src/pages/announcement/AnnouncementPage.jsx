@@ -9,6 +9,7 @@ import { spaPath } from "../../utils/routing/pageRoutes.js";
 import { AnnouncementToast, AnnouncementConfirmModal } from "./components/AnnouncementCommon.jsx";
 import { EditAnnouncementModal, EditMaintenanceModal } from "./components/AnnouncementModals.jsx";
 import { AnnouncementPanel, MaintenancePanel } from "./components/AnnouncementPanels.jsx";
+import { ContactSettingsPanel } from "./components/ContactSettingsPanel.jsx";
 import PagePillTabSwitch from "../../components/PagePillTabSwitch.jsx";
 import { useAuthSession } from "../../context/AuthSessionContext.jsx";
 import { canAccessC168DomainPages } from "../../utils/company/loginScope.js";
@@ -263,6 +264,7 @@ export default function AnnouncementPage() {
               options={[
                 { value: "announcement", label: t("announcementTab") },
                 { value: "maintenance", label: t("maintenanceTab") },
+                { value: "contact", label: t("contactTab") },
               ]}
             />
           </div>
@@ -284,6 +286,13 @@ export default function AnnouncementPage() {
               onDelete={handleMaintenanceDelete}
               onPublished={() => { loadMaintenance(); showNotice(t("maintenancePublishedSuccess")); }}
               onPublishFailed={(message) => showNotice(t("publishFailed", { message }), "error")}
+            />
+          )}
+          {activeTab === "contact" && (
+            <ContactSettingsPanel
+              t={t}
+              onSaved={() => showNotice(t("telegramLinkSaved"))}
+              onSaveFailed={(message) => showNotice(t("updateFailed", { message }), "error")}
             />
           )}
         </div>

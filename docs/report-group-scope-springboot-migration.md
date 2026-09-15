@@ -145,3 +145,51 @@ Spring 那边**没有**这张 `groups` 表的对应实现——`DomainController
 - `pages/autorenew/autoRenewTenantSettings.js` 仍在用 `get_companies`/`get_groups`/
   `get_domain_fee_settings` 这几个 PHP action（跟 `domain-springboot-rewire.md` §5 记录的一样），
   不在本次 Report 页面范围内。
+
+---
+
+## 6. 无权限切 Group 静默落入伪 Group-only 状态 → `tenantIdRequired`（2026-09-15）
+
+**范围**：`src/utils/company/useDashboardStyleGcFilter.js`、`useGcFilterWithAllModes.js`、
+`src/pages/report/shared/useReportGroupCompanyFilter.js`、
+`src/pages/maintenance/shared/useMaintenanceGroupCompanyFilter.js`、
+`DomainReportPage.jsx`、`CustomerReportPage.jsx`。**纯前端改动，后端（Spring Boot）未涉及**——
+`tenantIdRequired` 这个错误本来就是 `domainReportApi.js` 里请求组装阶段的前端 guard
+（`tenantId <= 0` 直接 `throw`），从未打到 Spring 接口，所以这次不是接口/后端问题。
+
+### 6.1 起因
+
+Domain/Customer Report 切 Group 时，如果当前账号对目标 Group **完全没有权限**（既没有
+group-only 权限，该 Group 下也没有任何一家账号能看到的子公司），`useDashboardStyleGcFilter.js`
+的 `handlePickGroup` 在找不到可兜底的子公司 pick 时，会无条件执行
+`persistDashboardGroupFilter(g); setSelectedGroup(g);`——把这个无权限的 Group 直接设成当前选中
+状态，既不报错也不阻止。这个 UI 状态（`selectedGroup` 有值、`companyId` 为空）跟合法的纯
+Group-only 模式在下游完全没有区分度：`resolveTransactionScope()`（`transactionScope.js:82`）只
+看 UI 状态、不重新校验权限，直接判成 `mode: "group"`；再到 `reportScope.js:89` 的
+`resolveGroupEntityRowFromSnap` 去 `companies` 里找这个 Group 的 entity company——因为
+`companies` 本身已经是按权限过滤过的（来自 `/auth/tenant-accessible`，权威数据源没问题），无权限
+Group 的 entity 行根本不在列表里，`scopeCompanyId` 保持 0，最终在打 API 前被前端 guard 拦成
+`tenantIdRequired`。
+
+**结论**：数据源（`companies` / `/auth/tenant-accessible`）本身就是后端权威的，不需要新增 Spring
+接口做权限校验；缺的是前端状态机在"目标 Group 零可访问权限"这个分支少处理了一步（该报错阻止，却
+静默放行）。这个 hook 是 Dashboard/Transaction/Data Capture/Report/Maintenance 共用的，理论上
+所有消费它的页面都能踩到同一类问题。
+
+### 6.2 修法
+
+`handlePickGroup` 里原来的无条件 fallback，改成调用新增的 `onGroupAccessDenied?.(g)` 回调，
+**不再改动 `selectedGroup`/`companyId`、不再 persist**——保持在切换前的合法 scope 上。
+
+`onGroupAccessDenied` 作为可选参数一路透传：`useGcFilterWithAllModes` →
+`useReportGroupCompanyFilter` / `useMaintenanceGroupCompanyFilter`。不传就是 no-op（默认
+`null`），所以 UserListPage / AccountListPage / DataCapturePage 等未接入 toast 的页面，行为上只是
+"不再进入错误状态"，没有任何视觉变化，免费拿到修复。
+
+`DomainReportPage.jsx` / `CustomerReportPage.jsx` 接入了页面已有的 `notify(...)` toast，弹出新增
+翻译 key `groupAccessDenied`（`reportTranslate.js`，中英文）。
+
+已确认这个 fallback 分支只在"账号对目标 Group 确实零权限"时命中：owner / 被 admin 分配了该 Group
+的用户，`canAccessGroupLedgerForGroup()`（`loginScope.js`）判权限时走的是权限位判断
+（`companyLoginHasGroupLedgerPrivilege` / `getAssignedGroupCodes`），不依赖 `companies` 里是否
+真的有这个 Group 的公司行——所以不会误伤"合法但暂时是空 Group"的场景，只会拦住真正无权限的账号。

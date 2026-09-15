@@ -47,6 +47,10 @@ body.ownership-page .page-tabs.is-index-1 {
   --page-pill-thumb-x: 100%;
 }
 
+body.announcement-page .page-tabs.is-index-2 {
+  --page-pill-thumb-x: 200%;
+}
+
 body.auto-renew-page-body .page-tab-thumb,
 body.announcement-page .page-tab-thumb,
 body.ownership-page .page-tab-thumb {
@@ -72,6 +76,10 @@ body.auto-renew-page-body .page-tabs--count-2,
 body.announcement-page .page-tabs--count-2,
 body.ownership-page .page-tabs--count-2 {
   --page-pill-tab-count: 2;
+}
+
+body.announcement-page .page-tabs--count-3 {
+  --page-pill-tab-count: 3;
 }
 
 body.auto-renew-page-body .page-tab,

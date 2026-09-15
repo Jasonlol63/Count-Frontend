@@ -97,6 +97,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [maintenanceList, setMaintenanceList] = useState([]);
+  const [telegramSupportLink, setTelegramSupportLink] = useState("");
   const [modal, setModal] = useState({ open: false, title: "Notice", message: "" });
   const [submitting, setSubmitting] = useState(false);
   const [lang, setLang] = useState(() => safeLocal.getItem("login_lang") || "en");
@@ -266,6 +267,24 @@ export default function LoginPage() {
         }
       } catch (e) {
         if (e.name !== "AbortError") setMaintenanceList([]);
+      }
+    })();
+    return () => ac.abort();
+  }, []);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(buildApiUrl("api/settings/getTelegramLink"), {
+          signal: ac.signal,
+          credentials: "include",
+        });
+        const result = await res.json();
+        const link = result.success ? result.data?.telegramSupportLink || "" : "";
+        setTelegramSupportLink(link);
+      } catch (e) {
+        if (e.name !== "AbortError") setTelegramSupportLink("");
       }
     })();
     return () => ac.abort();
@@ -508,6 +527,23 @@ export default function LoginPage() {
         </div>
         </div>
       </div>
+
+      {telegramSupportLink && (
+        <a
+          href={telegramSupportLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="sc-login-telegram-fab"
+          aria-label="Telegram support"
+        >
+          <svg viewBox="0 0 240 240" width="27" height="27" fill="none" aria-hidden="true">
+            <path
+              fill="#fff"
+              d="M170 68 55 112c-9 3-9 9-2 11l30 9 12 37c1 4 3 5 6 5s5-1 7-3l17-16 35 26c6 4 11 2 13-6l24-113c3-9-3-14-11-11Zm-19 27-76 47-3 25-9-30 78-49c4-2 8 0 5 3l-58 52-1 0 62-48Z"
+            />
+          </svg>
+        </a>
+      )}
 
       <AlertModal
         open={modal.open}
