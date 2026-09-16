@@ -32,6 +32,8 @@ export default function CustomerReportFilters({
   toggleCurrency,
   showAllCurrencies,
   toggleAllCurrencies,
+  currencyDraggable = false,
+  onCurrencyDropOn,
   t,
   monthLabels,
   weekdaysShort,
@@ -214,6 +216,8 @@ export default function CustomerReportFilters({
         showAllCurrencies={showAllCurrencies}
         selectedCurrencies={selectedCurrencies}
         toggleCurrency={toggleCurrency}
+        currencyDraggable={currencyDraggable}
+        onCurrencyDropOn={onCurrencyDropOn}
         t={t}
       />
     </div>

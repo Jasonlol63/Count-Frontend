@@ -34,6 +34,7 @@ export const REPORT_I18N = {
     groupFilterAll: "ALL",
     company: "Company:",
     currency: "Currency:",
+    currencyDragHint: "Drag to reorder · Click to filter",
     all: "All",
 
     process: "Process",
@@ -98,6 +99,7 @@ export const REPORT_I18N = {
     groupFilterAll: "ALL",
     company: "公司:",
     currency: "货币:",
+    currencyDragHint: "拖动调整顺序 · 点击筛选",
     all: "ALL",
 
     process: "流程",

@@ -46,13 +46,22 @@ export function canAccessFullMaintenance(me) {
   return canAccessPermission(me, "maintenance");
 }
 
-export function showMaintenanceInSidebar(me) {
-  return canAccessFullMaintenance(me);
+/**
+ * Non-owner without Maintenance permission: sidebar still shows Transaction + Formula under Maintenance.
+ */
+export function canAccessLimitedMaintenance(me) {
+  if (isOwnerUser(me) || hasFullPermissions(me)) return false;
+  if (canAccessFullMaintenance(me)) return false;
+  return !!(me?.company_has_gambling || me?.company_has_bank);
 }
 
-/** Transaction / Formula maintenance pages — same gate as the rest of Maintenance. */
+export function showMaintenanceInSidebar(me) {
+  return canAccessFullMaintenance(me) || canAccessLimitedMaintenance(me);
+}
+
+/** Transaction / Formula maintenance pages — full Maintenance, or the limited non-owner path. */
 export function canAccessTransactionFormulaMaintenance(me) {
-  return canAccessFullMaintenance(me);
+  return canAccessFullMaintenance(me) || canAccessLimitedMaintenance(me);
 }
 
 /** Capture maintenance: same gate as the rest of Maintenance. */
@@ -120,6 +129,7 @@ export function resolveDefaultLandingPath(me) {
     return spaPath("customer-report");
   }
   if (canAccessFullMaintenance(me)) return spaPath("payment-maintenance");
+  if (canAccessLimitedMaintenance(me)) return spaPath("transaction-maintenance");
 
   return null;
 }

@@ -27,6 +27,12 @@ import {
   resolveReportGroupOnlyBoot,
 } from "../shared/reportGcBoot.js";
 import { useCrossPageCurrencySync } from "../../../utils/company/useCrossPageCurrencySync.js";
+import {
+  mergeCurrencyCodesWithSavedOrder,
+  persistCurrencyDisplayOrder,
+  persistUserCurrencyDisplayOrder,
+  resolveSavedCurrencyOrder,
+} from "../../../utils/company/currencyDisplayOrder.js";
 import { useReportGroupCompanyFilter } from "../shared/useReportGroupCompanyFilter.js";
 import { buildApiUrl } from "../../../utils/core/apiUrl.js";
 import "../../../../public/css/accountCSS.css";
@@ -38,6 +44,7 @@ import "../../../../public/css/maintenance_unified_filters.css";
 import "../../../../public/css/date-range-picker.css";
 import "../../../../public/css/maintenance_notifications.css";
 import { fetchAccounts, fetchCustomerReport } from "./customerReportApi.js";
+import { saveUserCurrencyOrder } from "../../transaction/lib/transactionApi.js";
 import { fetchReportScopeCurrencies } from "../shared/reportCompanyApi.js";
 import { companyMatchesBankOnlyPillScope } from "../../../utils/company/companyCategoryFlags.js";
 import { formatYmd } from "../../../utils/date/dateUtils.js";
@@ -436,6 +443,16 @@ export default function CustomerReportPage() {
     [companies, selectedGroup, scopeCompanyId, groupsAllMode, groupAllMode, me],
   );
 
+  /** Cross-page order key: numeric company id, or `g:GROUP` for a group ledger. */
+  const reportCurrencyOrderKey = useMemo(() => {
+    const cid = reportScope?.scopeCompanyId > 0 ? Number(reportScope.scopeCompanyId) : 0;
+    if (Number.isFinite(cid) && cid > 0) return cid;
+    const vg = String(reportScope?.viewGroup || reportScope?.groupId || "")
+      .trim()
+      .toUpperCase();
+    return vg ? `g:${vg}` : null;
+  }, [reportScope]);
+
   const reportCurrencyCodes = useMemo(
     () => currencyList.map((c) => c.code).filter(Boolean),
     [currencyList],
@@ -552,6 +569,62 @@ export default function CustomerReportPage() {
     return false;
   }, []);
 
+  /** Apply the shared cross-page order (user-global → scope) to fetched currency rows. */
+  const orderReportCurrencies = useCallback(
+    (curs) => {
+      if (!Array.isArray(curs) || curs.length === 0) return curs || [];
+      if (reportCurrencyOrderKey == null) return curs;
+      const savedOrder = resolveSavedCurrencyOrder(reportCurrencyOrderKey, null);
+      if (!savedOrder?.length) return curs;
+      const byCode = new Map(
+        curs.map((row) => [String(row?.code || "").toUpperCase(), row]),
+      );
+      const codes = mergeCurrencyCodesWithSavedOrder(
+        curs.map((row) => row?.code),
+        savedOrder,
+      );
+      const ordered = codes.map((code) => byCode.get(code)).filter(Boolean);
+      return ordered.length ? ordered : curs;
+    },
+    [reportCurrencyOrderKey],
+  );
+
+  /** Drag reorder — writes the shared cross-page order so every page follows. */
+  const handleCurrencyDropOn = useCallback(
+    async (e, targetCode) => {
+      e.preventDefault();
+      const dragged = e.dataTransfer?.getData("text/plain");
+      if (!dragged || !targetCode || dragged === targetCode) return;
+      const list = [...currencyList];
+      const fromI = list.findIndex((row) => row?.code === dragged);
+      const toI = list.findIndex((row) => row?.code === targetCode);
+      if (fromI < 0 || toI < 0 || fromI === toI) return;
+      const next = [...list];
+      const [moved] = next.splice(fromI, 1);
+      next.splice(toI, 0, moved);
+      setCurrencyList(next);
+      const codes = next.map((row) => row?.code).filter(Boolean);
+      persistUserCurrencyDisplayOrder(codes);
+      if (reportCurrencyOrderKey != null) {
+        persistCurrencyDisplayOrder(reportCurrencyOrderKey, codes);
+      }
+      try {
+        const cid =
+          reportScope?.scopeCompanyId > 0 ? Number(reportScope.scopeCompanyId) : 0;
+        await saveUserCurrencyOrder(codes, {
+          companyId: Number.isFinite(cid) && cid > 0 ? cid : undefined,
+          groupId:
+            !(Number.isFinite(cid) && cid > 0)
+              ? reportScope?.viewGroup || reportScope?.groupId || undefined
+              : undefined,
+        });
+      } catch {
+        /* localStorage already updated on drag */
+      }
+    },
+    [currencyList, reportCurrencyOrderKey, reportScope],
+  );
+
   const loadMetaData = useCallback(async () => {
     if (!customerReportScopeIsReady(reportScope)) return;
     const { signal, seq } = beginMetaFetch();
@@ -561,7 +634,7 @@ export default function CustomerReportPage() {
       const accs = await fetchAccounts(reportScope, { signal });
       if (!isMetaFetchCurrent(seq)) return;
       setAccounts(accs);
-      setCurrencyList(curs);
+      setCurrencyList(orderReportCurrencies(curs));
 
       if (applySavedCurrencyPrefs(reportScope, curs)) return;
 
@@ -614,6 +687,7 @@ export default function CustomerReportPage() {
     persistCurrencyPrefs,
     beginMetaFetch,
     isMetaFetchCurrent,
+    orderReportCurrencies,
   ]);
 
   useEffect(() => {
@@ -757,6 +831,8 @@ export default function CustomerReportPage() {
           toggleCurrency={toggleCurrency}
           showAllCurrencies={showAllCurrencies}
           toggleAllCurrencies={toggleAllCurrencies}
+          currencyDraggable
+          onCurrencyDropOn={handleCurrencyDropOn}
           t={t}
           monthLabels={r.monthsShort}
           weekdaysShort={r.weekdaysShort}

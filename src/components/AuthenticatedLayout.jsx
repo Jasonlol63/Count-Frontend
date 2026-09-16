@@ -1734,7 +1734,7 @@ export default function AuthenticatedLayout() {
                       </a>
                     )}
                     {(me?.company_has_gambling || me?.company_has_bank) &&
-                      showFullMaintenanceMenu &&
+                      showMaintenanceMenu &&
                       !isBankOnlyCategory && (
                       <a
                         {...sidebarSubmenuLinkProps("/transaction-maintenance", goTo)}
@@ -1754,7 +1754,7 @@ export default function AuthenticatedLayout() {
                       </a>
                     )}
                     {(me?.company_has_gambling || me?.company_has_bank) &&
-                      showFullMaintenanceMenu &&
+                      showMaintenanceMenu &&
                       !isBankOnlyCategory && (
                       <a
                         {...sidebarSubmenuLinkProps("/formula-maintenance", goTo)}

@@ -54,9 +54,12 @@ export function readCurrencyDisplayOrder(orderKey) {
 
 /**
  * Saved pill order for this company / group ledger key.
- * localStorage wins when present (last drag on this browser); otherwise use API (other devices).
+ * Priority: user-global order (any page drag) → localStorage for this scope → API (other devices).
+ * The user-global order is the cross-page sync carrier: wherever the user drags, every page follows.
  */
 export function resolveSavedCurrencyOrder(orderKey, apiOrder) {
+  const userGlobal = readUserCurrencyDisplayOrder();
+  if (userGlobal?.length) return userGlobal;
   const fromLs = readCurrencyDisplayOrder(orderKey);
   if (fromLs?.length) return fromLs;
   const fromApi = Array.isArray(apiOrder)

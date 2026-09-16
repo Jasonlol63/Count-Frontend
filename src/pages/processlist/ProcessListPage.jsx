@@ -1364,6 +1364,14 @@ export default function ProcessListPage() {
         return;
       }
       const patch = buildCopyFromFormPatch(sourceRow, { currencies });
+      if (patch.currency_warning) {
+        const code = String(sourceRow.currency || "").trim().toUpperCase();
+        if (code) {
+          notify(t("currencyWarningWithCode", { code }), "danger");
+        } else {
+          notify(t("currencyWarningNoCompany"), "danger");
+        }
+      }
       setForm((prev) => ({
         ...prev,
         copy_from: id,
@@ -1386,7 +1394,24 @@ export default function ProcessListPage() {
     }
 
     let currencyId = p.currency_id != null ? String(p.currency_id) : "";
-    if (currencyId && !currencies.some((c) => String(c.id) === currencyId)) currencyId = "";
+    if (currencyId && !currencies.some((c) => String(c.id) === currencyId)) {
+      // Stored currency_id no longer belongs to this company's currency list — try to
+      // re-match by code (e.g. after a currency re-seed) before giving up and warning.
+      const code = String(p.currency || "").trim().toUpperCase();
+      const matchingOption = code
+        ? currencies.find((c) => String(c.code || "").toUpperCase() === code)
+        : null;
+      if (matchingOption) {
+        currencyId = String(matchingOption.id);
+      } else {
+        currencyId = "";
+        if (code) {
+          notify(t("currencyWarningWithCode", { code }), "danger");
+        } else {
+          notify(t("currencyWarningNoCompany"), "danger");
+        }
+      }
+    }
 
     const dtsModified = p.dts_modified || "";
     const dtsCreated = p.dts_created || "";

@@ -386,8 +386,21 @@ export function buildCopyFromFormPatch(row, { currencies = [] } = {}) {
   const patch = emptyCopyFromSyncFields();
   if (!row || typeof row !== "object") return patch;
 
-  let currencyId = row.currency_id != null && row.currency_id !== "" ? String(row.currency_id) : "";
+  const originalCurrencyId =
+    row.currency_id != null && row.currency_id !== "" ? String(row.currency_id) : "";
+  let currencyId = originalCurrencyId;
   if (currencyId && !currencies.some((c) => String(c.id) === currencyId)) currencyId = "";
+  if (!currencyId && originalCurrencyId) {
+    // Stored currency_id no longer belongs to this company's currency list — try to
+    // re-match by code before giving up and flagging it for the caller to warn about.
+    const code = String(row.currency || "").trim().toUpperCase();
+    const match = code ? currencies.find((c) => String(c.code || "").toUpperCase() === code) : null;
+    if (match) {
+      currencyId = String(match.id);
+    } else {
+      patch.currency_warning = true;
+    }
+  }
   patch.currency_id = currencyId;
 
   if (row.remove_word) {

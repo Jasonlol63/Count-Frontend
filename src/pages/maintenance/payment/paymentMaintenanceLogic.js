@@ -106,6 +106,48 @@ function normalizePaymentRow(row, tenantId) {
   };
 }
 
+/**
+ * Merge a WIN/LOSE row with its paired PROFIT-account row (same tenant, time, amount, currency)
+ * so the list shows one readable row ("PROFIT FROM <account>") instead of the two raw ledger legs.
+ * Scoped per `_tenant_id` (unlike the old single-tenant page) so aggregate/group scope never pairs
+ * rows across two different companies that merely share the same timestamp/amount/currency.
+ */
+function mergeProfitRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return rows || [];
+  const type = (row) => String(row.transaction_type || "").toUpperCase();
+  const acc = (row) => String(row.account || "").toUpperCase();
+  const isProfitRow = (row) => (type(row) === "WIN" || type(row) === "LOSE") && acc(row).startsWith("PROFIT");
+  const isWinLoseRow = (row) => type(row) === "WIN" || type(row) === "LOSE";
+  const key = (row) =>
+    [row._tenant_id, row.dts_created, String(row.amount || ""), String(row.currency || "").toUpperCase()].join("\t");
+
+  const profitByKey = {};
+  rows.forEach((row) => {
+    if (!isProfitRow(row)) return;
+    const k = key(row);
+    if (!profitByKey[k]) profitByKey[k] = [];
+    profitByKey[k].push(row.account || "PROFIT");
+  });
+
+  return rows.filter((row) => {
+    if (isProfitRow(row)) return false;
+    if (isWinLoseRow(row)) {
+      const k = key(row);
+      const fromCandidates = profitByKey[k];
+      if (fromCandidates && fromCandidates.length > 0) {
+        row.from_account = fromCandidates[0];
+        const desc = String(row.description || "").trim();
+        if (!desc || desc === "-" || desc === "PROFIT" || desc.toUpperCase() === "WIN" || desc.toUpperCase() === "LOSE") {
+          const toAccountLabel = row.account || "";
+          row.description = toAccountLabel ? `PROFIT FROM ${toAccountLabel}` : "PROFIT";
+        }
+        fromCandidates.shift();
+      }
+    }
+    return true;
+  });
+}
+
 /** Global sort across (possibly several, aggregate-merged) tenants: createdAt desc, id desc. */
 function sortPaymentMaintenanceRows(rows) {
   return [...rows].sort((a, b) => {
@@ -167,7 +209,7 @@ export async function searchPaymentData({
     ),
   );
 
-  return sortPaymentMaintenanceRows(perTenant.flat());
+  return sortPaymentMaintenanceRows(mergeProfitRows(perTenant.flat()));
 }
 
 /**
