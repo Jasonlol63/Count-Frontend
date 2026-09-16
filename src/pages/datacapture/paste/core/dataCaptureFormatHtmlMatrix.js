@@ -6,6 +6,7 @@ import {
   expandCollapsedTableRows,
   tokenizeCollapsedReportRow,
 } from "./dataCaptureFormatClipboardNormalize.js";
+import { isKeptPasteSummaryLabel } from "./dataCapturePasteSummaryLabels.js";
 
 function cellTextIsMoneyOrNumberLike(text) {
   const cleaned = String(text ?? "")
@@ -17,17 +18,7 @@ function cellTextIsMoneyOrNumberLike(text) {
 }
 
 function isSummaryLabelToken(text) {
-  const normalized = String(text ?? "")
-    .trim()
-    .replace(/:$/, "")
-    .toUpperCase();
-  return (
-    normalized === "SUBTOTAL" ||
-    normalized === "SUB TOTAL" ||
-    normalized === "TOTAL AMOUNT" ||
-    normalized === "TOTAL" ||
-    normalized === "GRAND TOTAL"
-  );
+  return isKeptPasteSummaryLabel(text);
 }
 
 /** Agent-period style: one label + many money fields in a single collapsed cell. */

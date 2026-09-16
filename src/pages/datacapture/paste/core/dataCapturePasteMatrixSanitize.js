@@ -3,6 +3,8 @@
  * Total-row empty cells between label and first number are preserved 1:1.
  */
 
+import { isKeptPasteSummaryLabel } from "./dataCapturePasteSummaryLabels.js";
+
 function cellValue(cell) {
   if (cell != null && typeof cell === "object" && "value" in cell) {
     return String(cell.value ?? "").trim();
@@ -77,21 +79,7 @@ export function trimTrailingEmptyColumns(matrix) {
 }
 
 function isSummaryLabelToken(text) {
-  const normalized = String(text ?? "")
-    .trim()
-    .replace(/:$/, "")
-    .replace(/\s+/g, " ")
-    .toUpperCase();
-  // iview allGames footer uses Total(1) / Total(12) — keep as summary, not junk.
-  if (/^TOTAL\(\d+\)$/.test(normalized)) return true;
-  return (
-    normalized === "SUBTOTAL" ||
-    normalized === "SUB TOTAL" ||
-    normalized === "TOTAL AMOUNT" ||
-    normalized === "TOTAL" ||
-    normalized === "GRAND TOTAL" ||
-    normalized === "GRANDTOTAL"
-  );
+  return isKeptPasteSummaryLabel(text);
 }
 
 /**

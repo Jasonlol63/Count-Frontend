@@ -5,9 +5,10 @@
  */
 
 import { tryMergeAllGamesIvuTables } from "./dataCaptureAllGamesPasteHelper.js";
+import { tryBuildPs38FixedDataTable } from "./dataCapturePs38WinLossPasteHelper.js";
 
 const GRID_HINT_RE =
-  /mat-row|mat-cell|mat-header-row|mat-header-cell|mat-footer-cell|cdk-row|cdk-cell|role\s*=\s*["'](?:row|gridcell|columnheader|rowheader)["']/i;
+  /mat-row|mat-cell|mat-header-row|mat-header-cell|mat-footer-cell|cdk-row|cdk-cell|fixedDataTable|public_fixedDataTable|role\s*=\s*["'](?:row|gridcell|columnheader|rowheader)["']/i;
 
 const STYLE_RULE_RE = /([^{}@]+)\{([^{}]+)\}/g;
 
@@ -331,6 +332,7 @@ export function clipboardHtmlLooksLikeGrid(html) {
   if (!html) return false;
   if (/<table\b/i.test(html)) return true;
   if (/dataTables_scroll(?:Body|Foot|Head)?/i.test(html)) return true;
+  if (/fixedDataTable|public_fixedDataTable/i.test(html)) return true;
   return GRID_HINT_RE.test(html);
 }
 
@@ -672,6 +674,14 @@ export function normalizeClipboardHtmlToTable(html) {
     const styleHtml = Array.from(root.querySelectorAll("style"))
       .map((el) => el.outerHTML)
       .join("\n");
+
+    const fdtTable = tryBuildPs38FixedDataTable(root);
+    if (fdtTable) {
+      const fdtCols = tableColumnCount(fdtTable);
+      if (fdtCols >= 8) {
+        return `${styleHtml}\n${fdtTable.outerHTML}`;
+      }
+    }
 
     const existingTable = root.querySelector("table");
     const gridRows = collectGridRows(root);

@@ -30,6 +30,14 @@ import {
 } from "./dataCapturePasteApply.js";
 import { isGridPasteBlockedTarget } from "./dataCaptureClipboard.js";
 import { tryHandleAwcWinLossReportPaste } from "../vendors/dataCaptureAwcPaste.js";
+import { tryHandleGamingSoftInvoicePaste } from "./dataCaptureGamingSoftInvoicePasteHelper.js";
+import { tryHandleKing855WinLossPaste } from "./dataCaptureKing855WinLossPasteHelper.js";
+import { tryHandleWosWinLossDetailPaste } from "./dataCaptureWosWinLossDetailPasteHelper.js";
+import { tryHandleCitibetAgentPtReportPaste } from "./dataCaptureCitibetAgentPtReportPasteHelper.js";
+import {
+  alignFooterOnlySubGrandMatrix,
+  tryHandleFooterOnlySubGrandPaste,
+} from "./dataCaptureWinLoseFooterOnlyPasteHelper.js";
 import { showFormatEditableGrid, syncFormatPreviewFromDom } from "../../format/dataCaptureFormat.js";
 import { resolvePasteCell } from "./dataCaptureClipboard.js";
 import {
@@ -298,6 +306,7 @@ export function processFormatDualSource(
     plainMatrixToFormatCellPatches(matrix, html || "") ||
     matrix.map((row) => (row || []).map((value) => ({ value: String(value ?? "") })));
   patches = splitStackedSubtotalGrandTotalRows(patches);
+  patches = alignFooterOnlySubGrandMatrix(patches);
   patches = sanitizePasteMatrix(expandLabelColonMoneyCells(patches));
   // Plain TSV may omit the blank under the code column on TOTAL BALANCE rows.
   patches = ensureTotalRowCodeColumnGap(patches);
@@ -387,6 +396,51 @@ function tryFormatHtmlFill(html, _options, htmlFillOpts) {
 function tryProcessFormatClipboard(html, text, options = {}) {
   if (
     tryHandleAwcWinLossReportPaste(html, text, {
+      anchorCell: options?.anchorCell,
+      startRowOverride: options?.startRow,
+    })
+  ) {
+    return afterFormatPasteFilled(true, options?.area, options);
+  }
+
+  if (
+    tryHandleGamingSoftInvoicePaste(html, text, {
+      anchorCell: options?.anchorCell,
+      startRowOverride: options?.startRow,
+    })
+  ) {
+    return afterFormatPasteFilled(true, options?.area, options);
+  }
+
+  if (
+    tryHandleKing855WinLossPaste(html, text, {
+      anchorCell: options?.anchorCell,
+      startRowOverride: options?.startRow,
+    })
+  ) {
+    return afterFormatPasteFilled(true, options?.area, options);
+  }
+
+  if (
+    tryHandleWosWinLossDetailPaste(html, text, {
+      anchorCell: options?.anchorCell,
+      startRowOverride: options?.startRow,
+    })
+  ) {
+    return afterFormatPasteFilled(true, options?.area, options);
+  }
+
+  if (
+    tryHandleCitibetAgentPtReportPaste(html, text, {
+      anchorCell: options?.anchorCell,
+      startRowOverride: options?.startRow,
+    })
+  ) {
+    return afterFormatPasteFilled(true, options?.area, options);
+  }
+
+  if (
+    tryHandleFooterOnlySubGrandPaste(html, text, {
       anchorCell: options?.anchorCell,
       startRowOverride: options?.startRow,
     })

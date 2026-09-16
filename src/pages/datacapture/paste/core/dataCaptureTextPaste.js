@@ -18,12 +18,35 @@ import {
 } from "./dataCaptureVerticalDumpDetect.js";
 import { tryReshapeC8WinLossPlainMatrix } from "./dataCaptureC8WinLossPasteHelper.js";
 import { tryReshapeAllGamesPlainMatrix } from "./dataCaptureAllGamesPasteHelper.js";
+import { tryReshapePs38WinLossPlainMatrix } from "./dataCapturePs38WinLossPasteHelper.js";
 import { tryReshapePdfTablePlainMatrix } from "./dataCapturePdfTablePasteHelper.js";
+import {
+  tryBuildGamingSoftInvoiceMatrix,
+  tryHandleGamingSoftInvoicePaste,
+} from "./dataCaptureGamingSoftInvoicePasteHelper.js";
+import {
+  tryBuildKing855WinLossMatrix,
+  tryHandleKing855WinLossPaste,
+} from "./dataCaptureKing855WinLossPasteHelper.js";
+import {
+  tryBuildWosWinLossDetailMatrix,
+  tryHandleWosWinLossDetailPaste,
+} from "./dataCaptureWosWinLossDetailPasteHelper.js";
+import {
+  tryBuildCitibetAgentPtReportMatrix,
+  tryHandleCitibetAgentPtReportPaste,
+} from "./dataCaptureCitibetAgentPtReportPasteHelper.js";
+import {
+  alignFooterOnlySubGrandMatrix,
+  tryBuildFooterOnlySubGrandMatrix,
+  tryHandleFooterOnlySubGrandPaste,
+} from "./dataCaptureWinLoseFooterOnlyPasteHelper.js";
 import {
   plainTextLooksLikeAlignedTsv,
   sanitizePasteMatrix,
 } from "./dataCapturePasteMatrixSanitize.js";
 import { splitStackedSubtotalGrandTotalRows } from "./dataCaptureStackedTotalSplit.js";
+import { ensureTotalRowCodeColumnGap } from "./dataCaptureTotalRowAlign.js";
 import { tryHandleAwcWinLossReportPaste } from "../vendors/dataCaptureAwcPaste.js";
 
 /**
@@ -88,7 +111,7 @@ export function expandLabelColonMoneyCells(matrix) {
 }
 
 function finalizePlainMatrix(matrix) {
-  return sanitizePasteMatrix(expandLabelColonMoneyCells(matrix));
+  return ensureTotalRowCodeColumnGap(sanitizePasteMatrix(expandLabelColonMoneyCells(matrix)));
 }
 
 /**
@@ -101,6 +124,21 @@ export function parsePlainTextMatrix(pastedData) {
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n");
   if (!normalized.trim()) return [];
+
+  const gamingSoftInvoice = tryBuildGamingSoftInvoiceMatrix(normalized, "");
+  if (gamingSoftInvoice?.length) return finalizePlainMatrix(gamingSoftInvoice);
+
+  const king855WinLoss = tryBuildKing855WinLossMatrix(normalized, "");
+  if (king855WinLoss?.length) return finalizePlainMatrix(king855WinLoss);
+
+  const wosWinLoss = tryBuildWosWinLossDetailMatrix(normalized, "");
+  if (wosWinLoss?.length) return finalizePlainMatrix(wosWinLoss);
+
+  const citibetAgentPt = tryBuildCitibetAgentPtReportMatrix(normalized, "");
+  if (citibetAgentPt?.length) return finalizePlainMatrix(citibetAgentPt);
+
+  const footerOnlySubGrand = tryBuildFooterOnlySubGrandMatrix(normalized, "");
+  if (footerOnlySubGrand?.length) return finalizePlainMatrix(footerOnlySubGrand);
 
   // Only real spreadsheet TSV uses the tab-row path (keeps empty cells 1:1).
   // Sparse tabs mixed into a one-field-per-line dump must fall through.
@@ -120,6 +158,9 @@ export function parsePlainTextMatrix(pastedData) {
 
   // Scoped C8 Win Loss Detail helper — vertical / sparse-tab only.
   // Null for all other report pastes (agent_period, OB, etc.).
+  const ps38WinLoss = tryReshapePs38WinLossPlainMatrix(normalized);
+  if (ps38WinLoss?.length) return finalizePlainMatrix(ps38WinLoss);
+
   const c8WinLoss = tryReshapeC8WinLossPlainMatrix(normalized);
   if (c8WinLoss?.length) return finalizePlainMatrix(c8WinLoss);
 
@@ -196,7 +237,9 @@ export function parsePlainTextMatrix(pastedData) {
 /** 1.Text — Excel plain text paste, preserving the clipboard matrix as-is. */
 export function handleTextPlainPaste(e, pastedData, anchorCell) {
   // TEXT-only: unwind SUB TOTAL+GRAND TOTAL stacked in one label cell (helper not used by Format).
-  const dataMatrix = splitStackedSubtotalGrandTotalRows(parsePlainTextMatrix(pastedData));
+  const dataMatrix = alignFooterOnlySubGrandMatrix(
+    splitStackedSubtotalGrandTotalRows(parsePlainTextMatrix(pastedData)),
+  );
   if (!dataMatrix.length) return false;
 
   const { successCount, maxRows, maxCols: cols } = applyDataMatrixToGrid(dataMatrix, anchorCell, {
@@ -311,6 +354,11 @@ export function handleTextModePaste(e, pastedData, anchorCell) {
   const htmlNx1 = htmlTableLooksLikeVerticalNx1(htmlCandidate || rawHtmlCandidate);
 
   if (tryHandleAwcWinLossReportPaste(html, pastedData, { anchorCell })) return true;
+  if (tryHandleGamingSoftInvoicePaste(html, pastedData, { anchorCell })) return true;
+  if (tryHandleKing855WinLossPaste(html, pastedData, { anchorCell })) return true;
+  if (tryHandleWosWinLossDetailPaste(html, pastedData, { anchorCell })) return true;
+  if (tryHandleCitibetAgentPtReportPaste(html, pastedData, { anchorCell })) return true;
+  if (tryHandleFooterOnlySubGrandPaste(html, pastedData, { anchorCell })) return true;
 
   // Match 2.FORMAT: prefer plain vertical-dump reshape whenever it yields a real
   // multi-col matrix. HTML-first only when it has a strictly fuller wide table

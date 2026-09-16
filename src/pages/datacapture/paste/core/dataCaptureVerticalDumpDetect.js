@@ -7,6 +7,8 @@
  * instead of tab-separated rows. Without reshape, paste lands as N×1 vertical.
  */
 
+import { isKeptPasteSummaryLabel } from "./dataCapturePasteSummaryLabels.js";
+
 /** Normalize clipboard token noise before numeric / summary checks. */
 export function normalizeVerticalDumpToken(text) {
   return String(text ?? "")
@@ -29,16 +31,7 @@ export function isVerticalDumpMoneyToken(text) {
 }
 
 export function isVerticalDumpSummaryLabel(text) {
-  const normalized = normalizeVerticalDumpToken(text)
-    .replace(/:$/, "")
-    .toUpperCase();
-  return (
-    normalized === "SUBTOTAL" ||
-    normalized === "SUB TOTAL" ||
-    normalized === "TOTAL AMOUNT" ||
-    normalized === "TOTAL" ||
-    normalized === "GRAND TOTAL"
-  );
+  return isKeptPasteSummaryLabel(text);
 }
 
 function isDenseReportRow(row) {

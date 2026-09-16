@@ -18,6 +18,8 @@ import {
 } from "./dataCapturePasteMatrixSanitize.js";
 import { ensureTotalRowCodeColumnGap } from "./dataCaptureTotalRowAlign.js";
 import { expandLabelColonMoneyCells } from "./dataCaptureTextPaste.js";
+import { tryCanonicalizePs38FormatBody } from "./dataCapturePs38WinLossPasteHelper.js";
+import { alignFooterOnlySubGrandMatrix } from "./dataCaptureWinLoseFooterOnlyPasteHelper.js";
 
 function flattenFormatBodyMatrixToPlain(bodyMatrix) {
   const lines = [];
@@ -209,6 +211,18 @@ export function formatBodyMatrixLooksCollapsed(bodyMatrix, dataRows) {
   );
   if (hasStackedDumpCell && maxFilledCols <= 2) return true;
 
+  // PS38 / fixed-data-table: Format reports 2×19 while each cell still holds
+  // a vertical field dump (toast said 2 rows × 19 cols, grid shows stacked text).
+  const hasNewlineStackedCell = bodyMatrix.some((row) =>
+    (row || []).some((cell) => {
+      const text = String(cell?.value || "")
+        .replace(/\u00a0/g, " ")
+        .trim();
+      return text.split(/\r?\n/).filter((line) => line.trim()).length >= 4;
+    }),
+  );
+  if (hasNewlineStackedCell) return true;
+
   if (formatBodyMatrixLooksIdNumberSplit(bodyMatrix)) return true;
 
   return false;
@@ -268,6 +282,17 @@ export function parseAndFillHtmlTableForFormat(htmlString, options = {}) {
       }
     }
 
+    const ps38Canonical = tryCanonicalizePs38FormatBody(bodyMatrix);
+    if (ps38Canonical) {
+      bodyMatrix = ps38Canonical;
+      ensureGridFits(
+        startRow,
+        startCol,
+        bodyMatrix.length,
+        Math.max(...bodyMatrix.map((row) => row.length), 0),
+      );
+    }
+
     // Over-select: trim trailing empty cols / junk rows (same as 1.TEXT plain path).
     bodyMatrix = sanitizePasteMatrix(expandLabelColonMoneyCells(bodyMatrix));
 
@@ -279,6 +304,7 @@ export function parseAndFillHtmlTableForFormat(htmlString, options = {}) {
         `Format: Split stacked SUBTOTAL/GRANDTOTAL → ${beforeSplit} row(s) became ${bodyMatrix.length}`,
       );
     }
+    bodyMatrix = alignFooterOnlySubGrandMatrix(bodyMatrix);
     bodyMatrix = sanitizePasteMatrix(expandLabelColonMoneyCells(bodyMatrix));
     bodyMatrix = ensureTotalRowCodeColumnGap(bodyMatrix);
 
