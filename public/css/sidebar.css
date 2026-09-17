@@ -1186,6 +1186,45 @@
     letter-spacing: 0.02em;
 }
 
+/* IT-only console entry — sits above the Exp card in the footer, deliberately
+   set apart from the numbered nav list above (amber, not the blue used
+   everywhere else) since it is a separate, unrestricted-access track. */
+.informationmenu-it-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.6rem 0.8rem 0.6rem 0.65rem;
+    border-radius: 0 6px 6px 0;
+    border-left: 3px solid #f2a93b;
+    background: rgba(242, 169, 59, 0.12);
+    color: #f4c47f;
+    font-size: clamp(11px, 0.78vw, 13px);
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.informationmenu-it-entry .section-icon {
+    width: var(--sidebar-icon-size, 18px);
+    height: var(--sidebar-icon-size, 18px);
+    flex-shrink: 0;
+    filter: none;
+    color: #f2a93b;
+    opacity: 1;
+}
+
+.informationmenu-it-entry .sidebar-menu-label {
+    color: inherit;
+}
+
+.informationmenu-it-entry:hover,
+.informationmenu-it-entry.current-page {
+    background: rgba(242, 169, 59, 0.2);
+    color: #ffd8a3;
+}
+
 /* Nav scroll rail — see src/styles/sidebar-scroll.css (Vite bundle).
  * Menu pill halo/glow — canonical rules in this file (~.informationmenu-section-title); do not duplicate in sidebar-scroll.css. */
 
