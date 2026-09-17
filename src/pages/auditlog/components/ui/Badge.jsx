@@ -12,7 +12,7 @@ export function Badge({ tone = "neutral", className, ...props }) {
   return (
     <span
       className={cn(
-        "inline-flex w-fit items-center rounded-full border px-[10px] py-[2px] text-[11px] font-bold tracking-wide",
+        "inline-flex w-fit items-center rounded-full border px-[10px] py-[2px] text-[length:var(--text-small)] font-bold tracking-wide",
         TONES[tone],
         className,
       )}
