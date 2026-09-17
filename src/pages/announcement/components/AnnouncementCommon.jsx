@@ -27,7 +27,7 @@ export function AnnouncementToast({ notices }) {
   );
 }
 
-export function AnnouncementConfirmModal({ t, message, onConfirm, onClose }) {
+export function AnnouncementConfirmModal({ t, message, onConfirm, onClose, confirmLabel }) {
   return (
     <div
       className="edit-modal"
@@ -46,7 +46,7 @@ export function AnnouncementConfirmModal({ t, message, onConfirm, onClose }) {
             {t("cancel")}
           </button>
           <button type="button" className="edit-modal-btn edit-modal-btn-save confirm-delete" onClick={onConfirm}>
-            {t("delete")}
+            {confirmLabel || t("delete")}
           </button>
         </div>
       </div>

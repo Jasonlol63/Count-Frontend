@@ -472,6 +472,12 @@ function normRoleSeparator(role) {
   return String(role || "").trim().toLowerCase().replace(/[\s_]+/g, "_");
 }
 
+/** Local copy of sidebarPermissions.js isItOperator — kept inline to avoid a circular
+ *  import (sidebarPermissions.js already imports from this file). */
+function isItOperatorRole(me) {
+  return normRoleSeparator(me?.role) === "it";
+}
+
 export function userRoleAllowsC168Domain(role) {
   return C168_DOMAIN_PAGE_ROLES.has(normRoleSeparator(role));
 }
@@ -695,7 +701,10 @@ export function canAccessC168DomainPages(me) {
   if (isDashboardGroupOnlyMode()) return false;
   if (isGroupLedgerMode(me, { companyId: null })) return false;
   if (!isActiveCompanyContextC168(me)) return false;
-  return userRoleAllowsC168Domain(me.role) || Boolean(me.has_c168_domain_page_access);
+  // IT bypasses the role whitelist (separate track from the Admin/Owner role system, see
+  // sidebarPermissions.js isItOperator), but still only while actually viewing C168 above —
+  // that part reflects the company's real shape, not a permission, and stays for everyone.
+  return isItOperatorRole(me) || userRoleAllowsC168Domain(me.role) || Boolean(me.has_c168_domain_page_access);
 }
 
 /** Auto Renew — same rules as Domain / Announcement. */
@@ -704,5 +713,5 @@ export function canAccessC168AutoRenew(me) {
   if (isDashboardGroupOnlyMode()) return false;
   if (isGroupLedgerMode(me, { companyId: null })) return false;
   if (!isActiveCompanyContextC168(me)) return false;
-  return userRoleAllowsC168AutoRenew(me.role, me.user_type) || Boolean(me.has_c168_auto_renew_access);
+  return isItOperatorRole(me) || userRoleAllowsC168AutoRenew(me.role, me.user_type) || Boolean(me.has_c168_auto_renew_access);
 }

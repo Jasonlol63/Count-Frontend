@@ -36,7 +36,7 @@ export function roleSupportsOwnershipPermission(role) {
 }
 
 export function canAccessPermission(me, key) {
-  if (key === "ownership" && !roleSupportsOwnershipPermission(me?.role)) return false;
+  if (key === "ownership" && !roleSupportsOwnershipPermission(me?.role) && !isItOperator(me)) return false;
   if (hasFullPermissions(me)) return true;
   return getUserPermissions(me).includes(key);
 }

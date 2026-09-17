@@ -40,6 +40,7 @@ import {
   canAccessPermission,
   canShowDataCaptureInSidebar,
   canShowReportInSidebar,
+  isItOperator,
   resolveDefaultLandingPath,
   showMaintenanceInSidebar,
 } from "../utils/auth/sidebarPermissions.js";
@@ -331,7 +332,11 @@ export default function AuthenticatedLayout() {
     [announcements, mergeAnnouncements],
   );
   const showC168DomainPages = useMemo(
-    () => canAccessC168DomainPages(me),
+    // IT reaches the Announcement page's Maintenance tab (system maintenance-mode switch)
+    // regardless of which company it's currently viewing — canAccessC168DomainPages still
+    // requires "currently viewing C168" for the marquee/domain feature itself, which is a
+    // real company-shape fact, not a permission, so that check stays as-is for everyone else.
+    () => canAccessC168DomainPages(me) || isItOperator(me),
     [me, sidebarGcTick],
   );
   const showAutoRenewEntry = useMemo(

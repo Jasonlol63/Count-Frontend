@@ -581,7 +581,7 @@ button.sc-login-lang-seg.active {
 }
 
 .sc-login-modal-title {
-  font-size: 22px;
+  font-size: var(--text-h1);
   font-weight: 700;
   color: #1a1a1a;
   margin-bottom: 16px;
@@ -589,11 +589,35 @@ button.sc-login-lang-seg.active {
 }
 
 .sc-login-modal-message {
-  font-size: 16px;
+  font-size: var(--text-h3);
   color: #444444;
   line-height: 1.55;
   margin-bottom: 28px;
   white-space: pre-line;
+}
+
+.sc-login-modal-maintenance {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: -12px 0 24px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.sc-login-modal-maintenance-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-medium);
+  color: #475569;
+}
+
+.sc-login-modal-maintenance-item strong {
+  color: #1a1a1a;
 }
 
 .sc-login-modal-actions {

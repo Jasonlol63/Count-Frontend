@@ -80,6 +80,10 @@ const AUTH_API_MESSAGES = {
     en: "Password has been reset",
     zh: "密码已重置",
   },
+  "System is currently under maintenance. Please try again later.": {
+    en: "System is currently under maintenance. Please try again later.",
+    zh: "系统当前正在维护中，请稍后再试。",
+  },
 };
 
 const LOGIN_ERROR_PREFIX = "An error occurred during login:";
@@ -133,6 +137,7 @@ export const LOGIN_I18N = {
     confirm: "Confirm",
     maintenanceLabel: "System Maintenance:",
     unknownError: "Unknown error",
+    maintenanceModalTitle: "System Maintenance",
   },
   zh: {
     admin: "管理员",
@@ -155,6 +160,7 @@ export const LOGIN_I18N = {
     confirm: "确认",
     maintenanceLabel: "系统维护中:",
     unknownError: "未知错误",
+    maintenanceModalTitle: "系统维护中",
   },
 };
 

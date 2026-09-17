@@ -28,7 +28,7 @@ function tryLoginPageReloadOnce() {
   return true;
 }
 
-function AlertModal({ open, title, message, confirmText, onClose }) {
+function AlertModal({ open, title, message, confirmText, onClose, maintenanceItems }) {
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
@@ -61,6 +61,16 @@ function AlertModal({ open, title, message, confirmText, onClose }) {
         <p id="modalMessage" className="sc-login-modal-message">
           {message}
         </p>
+        {Array.isArray(maintenanceItems) && maintenanceItems.length > 0 && (
+          <div className="sc-login-modal-maintenance">
+            {maintenanceItems.map((item, index) => (
+              <div className="sc-login-modal-maintenance-item" key={`${item.id}-${index}`}>
+                <strong>{item.prefix}</strong>
+                <span>{extractPlainTextFromRichText(item.content)}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="sc-login-modal-actions">
           <button type="button" className="sc-login-btn sc-login-btn-primary" onClick={onClose}>
             {confirmText}
@@ -98,7 +108,7 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [maintenanceList, setMaintenanceList] = useState([]);
   const [telegramSupportLink, setTelegramSupportLink] = useState("");
-  const [modal, setModal] = useState({ open: false, title: "Notice", message: "" });
+  const [modal, setModal] = useState({ open: false, title: "Notice", message: "", maintenanceItems: [] });
   const [submitting, setSubmitting] = useState(false);
   const [lang, setLang] = useState(() => safeLocal.getItem("login_lang") || "en");
 
@@ -200,9 +210,24 @@ export default function LoginPage() {
         open: true,
         title: title || i18n.notice,
         message: message || i18n.unknownError,
+        maintenanceItems: [],
       });
     },
     [i18n.notice]
+  );
+
+  // System maintenance mode blocked this login (credentials were correct) — show the same
+  // maintenance content already loaded for the login-page marquee, blank if none is published.
+  const showMaintenanceNotice = useCallback(
+    (message) => {
+      setModal({
+        open: true,
+        title: i18n.maintenanceModalTitle,
+        message: message || i18n.maintenanceModalTitle,
+        maintenanceItems: maintenanceList,
+      });
+    },
+    [i18n.maintenanceModalTitle, maintenanceList]
   );
 
   useEffect(() => {
@@ -380,6 +405,10 @@ export default function LoginPage() {
         }
         return;
       }
+      if (data?.data?.maintenanceMode) {
+        showMaintenanceNotice(localizeAuthApiMessage(data.message, lang));
+        return;
+      }
       showNotice(localizeAuthApiMessage(data.message, lang) || i18n.loginFailed);
     } catch {
       if (tryLoginPageReloadOnce()) return;
@@ -549,6 +578,7 @@ export default function LoginPage() {
         open={modal.open}
         title={modal.title}
         message={modal.message}
+        maintenanceItems={modal.maintenanceItems}
         confirmText={i18n.confirm}
         onClose={() => setModal((m) => ({ ...m, open: false }))}
       />

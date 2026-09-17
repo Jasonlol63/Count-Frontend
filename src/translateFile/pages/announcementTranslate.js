@@ -70,6 +70,8 @@ export const ANNOUNCEMENT_I18N = {
     statusHidden: "Hidden",
     updatedBy: "UPDATED BY: {name}",
     updatedAt: "UPDATED AT: {time}",
+    maintenanceModeSwitchLabel: "Maintenance Mode",
+    loadMaintenanceModeFailed: "Failed to load maintenance mode status: {message}",
   },
   zh: {
     loadAnnouncementsFailed: "加载公告失败：{message}",
@@ -140,6 +142,8 @@ export const ANNOUNCEMENT_I18N = {
     statusHidden: "已隐藏",
     updatedBy: "更新者：{name}",
     updatedAt: "更新时间：{time}",
+    maintenanceModeSwitchLabel: "维护模式",
+    loadMaintenanceModeFailed: "加载维护模式状态失败：{message}",
   },
 };
 

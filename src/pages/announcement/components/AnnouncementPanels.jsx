@@ -131,6 +131,7 @@ export function MaintenancePanel({
   onDelete,
   onPublished,
   onPublishFailed,
+  headerExtra,
 }) {
   const [form, setForm] = useState({ prefix: "", content: "" });
   const [submitting, setSubmitting] = useState(false);
@@ -209,6 +210,7 @@ export function MaintenancePanel({
         <div className="maintenance-list-section">
           <div className="maintenance-list-header">
             <h2>{t("publishedMaintenanceContent")}</h2>
+            {headerExtra}
           </div>
           <div id="maintenanceList" style={{ flex: 1, overflowY: "auto" }}>
             {maintenanceList.length === 0 ? (

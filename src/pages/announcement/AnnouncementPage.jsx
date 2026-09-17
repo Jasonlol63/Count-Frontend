@@ -13,7 +13,9 @@ import { ContactSettingsPanel } from "./components/ContactSettingsPanel.jsx";
 import PagePillTabSwitch from "../../components/PagePillTabSwitch.jsx";
 import { useAuthSession } from "../../context/AuthSessionContext.jsx";
 import { canAccessC168DomainPages } from "../../utils/company/loginScope.js";
+import { isItOperator } from "../../utils/auth/sidebarPermissions.js";
 import { ensureC168DomainApiSession } from "../../utils/company/companySessionSync.js";
+import { SystemMaintenanceModeSwitch } from "./components/SystemMaintenanceModeSwitch.jsx";
 import {
   isRichTextEffectivelyEmpty,
   normalizeRichTextInput,
@@ -40,6 +42,7 @@ export default function AnnouncementPage() {
   const [lang, setLang] = useState(() => (localStorage.getItem("login_lang") === "zh" ? "zh" : "en"));
   const t = useCallback((key, params) => getAnnouncementText(lang, key, params), [lang]);
 
+  const isIt = isItOperator(me);
   const [activeTab, setActiveTab] = useState("announcement");
   const [notices, setNotices] = useState([]);
 
@@ -141,6 +144,16 @@ export default function AnnouncementPage() {
     let cancelled = false;
     (async () => {
       try {
+        // IT has unrestricted access and the announcement/maintenance data itself has no
+        // tenant dependency in the backend (AnnouncementController never looks at session
+        // tenant), so IT skips the legacy PHP C168-session sync entirely — that sync only
+        // exists for other C168-domain pages and requires "currently viewing C168", which
+        // would otherwise bounce IT to dashboard while it's in a different company.
+        if (isItOperator(me)) {
+          await Promise.all([loadAnnouncements(), loadMaintenance()]);
+          return;
+        }
+
         if (!canAccessC168DomainPages(me)) {
           navigate(spaPath("dashboard"), { replace: true });
           return;
@@ -286,6 +299,15 @@ export default function AnnouncementPage() {
               onDelete={handleMaintenanceDelete}
               onPublished={() => { loadMaintenance(); showNotice(t("maintenancePublishedSuccess")); }}
               onPublishFailed={(message) => showNotice(t("publishFailed", { message }), "error")}
+              headerExtra={
+                isIt ? (
+                  <SystemMaintenanceModeSwitch
+                    t={t}
+                    onToggleFailed={(message) => showNotice(t("updateFailed", { message }), "error")}
+                    onLoadFailed={(message) => showNotice(t("loadMaintenanceModeFailed", { message }), "error")}
+                  />
+                ) : null
+              }
             />
           )}
           {activeTab === "contact" && (
