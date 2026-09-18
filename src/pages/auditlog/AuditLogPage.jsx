@@ -13,25 +13,29 @@ import { AuditLogDrawer } from "./components/AuditLogDrawer.jsx";
 import { fetchAuditLogs, fetchAuditLogSummary } from "./auditLogApi.js";
 import { resolveModule } from "./lib/moduleMap.js";
 
-const TODAY = new Date();
-const WEEK_AGO = new Date(TODAY.getTime() - 6 * 24 * 60 * 60 * 1000);
 const isoDate = (d) => d.toISOString().slice(0, 10);
 const PAGE_SIZE = 20;
 
-const DEFAULT_FILTERS = {
-  dateFrom: isoDate(WEEK_AGO),
-  dateTo: isoDate(TODAY),
-  tenantCode: "",
-  module: "",
-  keyword: "",
-  action: "ALL",
-};
+// Recomputed on every mount (not a module-level constant) so the filter always opens on
+// "today" for whichever day it's actually opened, rather than freezing at the date the JS
+// bundle happened to load.
+function defaultFilters() {
+  const today = isoDate(new Date());
+  return {
+    dateFrom: today,
+    dateTo: today,
+    tenantCode: "",
+    module: "",
+    keyword: "",
+    action: "ALL",
+  };
+}
 
 const EMPTY_SUMMARY = { createCount: 0, updateCount: 0, deleteCount: 0, restorableCount: 0, restoredCount: 0 };
 
 export default function AuditLogPage() {
   const { me, sessionReady } = useAuthSession();
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState(defaultFilters);
   const [page, setPage] = useState(1);
   const [logs, setLogs] = useState([]);
   const [total, setTotal] = useState(0);
