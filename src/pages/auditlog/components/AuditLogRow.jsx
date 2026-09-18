@@ -2,13 +2,14 @@ import { Badge } from "./ui/Badge.jsx";
 import { cn } from "../lib/cn.js";
 import { resolveModule } from "../lib/moduleMap.js";
 import { TABLE_COLS } from "../lib/tableCols.js";
-import { formatTime, initials } from "../lib/auditFormat.js";
+import { coarsenAuditSummary, formatTime, initials } from "../lib/auditFormat.js";
 
 const ACTION_TONE = { CREATE: "success", UPDATE: "primary", DELETE: "destructive" };
 const ACTION_DOT = { CREATE: "bg-[var(--al-success)]", UPDATE: "bg-[var(--al-primary)]", DELETE: "bg-[var(--al-destructive)]" };
 
 export function AuditLogRow({ log, selected, onSelect }) {
   const { topModule, subLabel } = resolveModule(log.module);
+  const summary = coarsenAuditSummary(log.summary);
 
   return (
     <div
@@ -36,8 +37,8 @@ export function AuditLogRow({ log, selected, onSelect }) {
         {topModule}
       </Badge>
       <Badge tone={ACTION_TONE[log.action] || "neutral"}>{log.action}</Badge>
-      <span className="min-w-0 truncate text-[length:var(--text-base)]" title={log.summary || undefined}>
-        {log.summary || <span className="text-[var(--al-muted-foreground)]">—</span>}
+      <span className="min-w-0 truncate text-[length:var(--text-base)]" title={summary || undefined}>
+        {summary || <span className="text-[var(--al-muted-foreground)]">—</span>}
         {subLabel && subLabel !== topModule ? (
           <span className="ml-[8px] inline-flex w-fit items-center rounded-full bg-[var(--al-muted)] px-[8px] py-[1px] text-[length:var(--text-tiny)] text-[var(--al-muted-foreground)]">
             {subLabel}

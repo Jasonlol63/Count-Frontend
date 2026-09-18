@@ -4,7 +4,7 @@ import { Badge } from "./ui/Badge.jsx";
 import { DiffTable } from "./DiffTable.jsx";
 import { cn } from "../lib/cn.js";
 import { resolveModule } from "../lib/moduleMap.js";
-import { initials } from "../lib/auditFormat.js";
+import { coarsenAuditSummary, initials } from "../lib/auditFormat.js";
 
 const ACTION_TONE = { CREATE: "success", UPDATE: "primary", DELETE: "destructive" };
 
@@ -130,7 +130,7 @@ export function AuditLogDrawer({ log, onClose, onPrev, onNext, hasPrev, hasNext 
           <h4 className="mb-[6px] text-[length:var(--text-small)] font-semibold uppercase tracking-wide text-[var(--al-muted-foreground)]">
             记录信息
           </h4>
-          <KV label="摘要" value={log.summary} />
+          <KV label="摘要" value={coarsenAuditSummary(log.summary)} />
           {subLabel && subLabel !== topModule ? <KV label="子功能" value={subLabel} /> : null}
           <KV label="来源表" value={log.sourceTable} mono />
           <KV label="记录ID" value={log.entityId} mono />

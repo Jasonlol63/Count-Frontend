@@ -18,7 +18,6 @@
 html:has(body.bg) {
     height: 100%;
     overflow: hidden;
-    scrollbar-gutter: stable;
 }
 
 body.bg {

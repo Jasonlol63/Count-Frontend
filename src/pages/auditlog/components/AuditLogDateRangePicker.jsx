@@ -236,20 +236,28 @@ export function AuditLogDateRangePicker({ dateFrom, dateTo, onChange }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex h-[36px] items-center gap-[7px] rounded-[var(--al-radius-sm)] border border-[var(--al-border)] bg-[var(--al-muted)] px-[12px] text-[length:var(--text-base)] text-[var(--al-foreground)] outline-none",
-          "hover:border-[var(--al-ring)] focus:border-[var(--al-ring)]",
+          "inline-flex h-[40px] items-center gap-[9px] whitespace-nowrap rounded-full border-[1.5px] px-[14px] text-[length:var(--text-base)] text-[var(--al-foreground)] shadow-[0_1px_3px_rgba(15,36,56,0.06)] outline-none transition-colors",
+          open
+            ? "border-[var(--al-ring)] bg-[var(--al-primary-muted)]"
+            : "border-[var(--al-border)] bg-[var(--al-card)] hover:border-[var(--al-ring)]",
         )}
       >
-        <CalendarIcon size={14} className="text-[var(--al-muted-foreground)]" />
-        <span className="al-mono whitespace-nowrap">
+        <CalendarIcon size={15} className="text-[var(--al-primary)]" />
+        <span className="al-mono whitespace-nowrap font-semibold">
           {fmtDisplay(fromDate)} - {fmtDisplay(toDate)}
         </span>
-        <ChevronDown size={14} className={cn("text-[var(--al-muted-foreground)] transition-transform", open && "rotate-180")} />
+        <ChevronDown
+          size={14}
+          className={cn("text-[var(--al-primary)] transition-transform", open && "rotate-180")}
+        />
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-[42px] z-30 flex overflow-hidden rounded-[var(--al-radius)] border border-[var(--al-border)] bg-[var(--al-card)] shadow-[var(--al-shadow)]">
-          <div className="flex w-[104px] shrink-0 flex-col gap-[2px] border-r border-[var(--al-border)] bg-[var(--al-muted)] p-[6px]">
+        <div className="absolute left-0 top-[42px] z-30 flex overflow-hidden rounded-[var(--al-radius)] border border-[var(--al-border)] bg-[var(--al-card)] shadow-[0_4px_16px_-6px_rgba(15,36,56,0.18)]">
+          <div className="flex w-[104px] shrink-0 flex-col gap-[3px] border-r border-[var(--al-border)] bg-[var(--al-muted)] p-[8px]">
+            <div className="px-[8px] pb-[6px] text-[length:var(--text-tiny)] font-semibold uppercase tracking-wide text-[var(--al-muted-foreground)]">
+              快捷选择
+            </div>
             {PRESETS.map(({ key, label }) => (
               <button
                 key={key}
@@ -257,9 +265,9 @@ export function AuditLogDateRangePicker({ dateFrom, dateTo, onChange }) {
                 onClick={() => handlePreset(key)}
                 className={cn(
                   resetButton,
-                  "rounded-[6px] px-[8px] py-[6px] text-left text-[length:var(--text-small)] font-medium text-[var(--al-muted-foreground)] hover:bg-[var(--al-card)] hover:text-[var(--al-foreground)]",
+                  "rounded-[10px] px-[10px] py-[7px] text-left text-[length:var(--text-small)] font-medium text-[var(--al-muted-foreground)] transition-colors hover:bg-[var(--al-card)] hover:text-[var(--al-foreground)]",
                   activePreset === key &&
-                    "bg-[var(--al-primary)] font-semibold text-[var(--al-primary-foreground)] hover:bg-[var(--al-primary)] hover:text-[var(--al-primary-foreground)]",
+                    "bg-[var(--al-primary)] font-semibold text-[var(--al-primary-foreground)] shadow-[0_2px_6px_rgba(59,130,246,0.35)] hover:bg-[var(--al-primary)] hover:text-[var(--al-primary-foreground)]",
                 )}
               >
                 {label}
@@ -267,60 +275,60 @@ export function AuditLogDateRangePicker({ dateFrom, dateTo, onChange }) {
             ))}
           </div>
 
-          <div className="w-[212px] p-[10px]">
-            <div className="mb-[8px] flex items-center justify-between">
+          <div className="w-[212px] p-[12px]">
+            <div className="mb-[14px] flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => goMonth(-1)}
-                className={cn(resetButton, "flex h-[20px] w-[20px] items-center justify-center rounded-[6px] text-[var(--al-muted-foreground)] hover:bg-[var(--al-muted)]")}
+                className={cn(resetButton, "flex h-[24px] w-[24px] items-center justify-center rounded-[7px] text-[var(--al-muted-foreground)] hover:bg-[var(--al-muted)]")}
                 aria-label="Previous"
               >
-                <ChevronLeft size={13} />
+                <ChevronLeft size={15} />
               </button>
 
-              <div className="flex items-center gap-[3px]">
+              <div className="flex items-center gap-[4px]">
                 <button
                   type="button"
                   onClick={() => setViewMode((v) => (v === "months" ? "days" : "months"))}
                   className={cn(
                     resetButton,
-                    "flex items-center gap-[2px] rounded-[6px] px-[6px] py-[3px] text-[length:var(--text-small)] font-semibold text-[var(--al-foreground)] hover:bg-[var(--al-muted)]",
+                    "flex items-center gap-[3px] rounded-[7px] px-[8px] py-[5px] text-[length:var(--text-base)] font-semibold text-[var(--al-foreground)] hover:bg-[var(--al-muted)]",
                     viewMode === "months" && "bg-[var(--al-primary-muted)] text-[var(--al-primary)]",
                   )}
                 >
                   {MONTHS[viewMonth.getMonth()]}
-                  <ChevronDown size={11} />
+                  <ChevronDown size={12} />
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode((v) => (v === "years" ? "days" : "years"))}
                   className={cn(
                     resetButton,
-                    "flex items-center gap-[2px] rounded-[6px] px-[6px] py-[3px] text-[length:var(--text-small)] font-semibold text-[var(--al-foreground)] hover:bg-[var(--al-muted)]",
+                    "flex items-center gap-[3px] rounded-[7px] px-[8px] py-[5px] text-[length:var(--text-base)] font-semibold text-[var(--al-foreground)] hover:bg-[var(--al-muted)]",
                     viewMode === "years" && "bg-[var(--al-primary-muted)] text-[var(--al-primary)]",
                   )}
                 >
                   {viewMonth.getFullYear()}
-                  <ChevronDown size={11} />
+                  <ChevronDown size={12} />
                 </button>
               </div>
 
               <button
                 type="button"
                 onClick={() => goMonth(1)}
-                className={cn(resetButton, "flex h-[20px] w-[20px] items-center justify-center rounded-[6px] text-[var(--al-muted-foreground)] hover:bg-[var(--al-muted)]")}
+                className={cn(resetButton, "flex h-[24px] w-[24px] items-center justify-center rounded-[7px] text-[var(--al-muted-foreground)] hover:bg-[var(--al-muted)]")}
                 aria-label="Next"
               >
-                <ChevronRight size={13} />
+                <ChevronRight size={15} />
               </button>
             </div>
 
             {viewMode === "days" ? (
-              <div className="grid grid-cols-7 gap-[1px]">
+              <div className="grid grid-cols-7 gap-[3px]">
                 {WEEKDAYS.map((d) => (
                   <span
                     key={d}
-                    className="flex h-[20px] items-center justify-center text-[length:var(--text-tiny)] font-semibold uppercase tracking-wide text-[var(--al-muted-foreground)]"
+                    className="flex h-[26px] items-center justify-center text-[length:var(--text-small)] font-semibold uppercase tracking-wide text-[var(--al-muted-foreground)]"
                   >
                     {d[0]}
                   </span>
@@ -338,10 +346,11 @@ export function AuditLogDateRangePicker({ dateFrom, dateTo, onChange }) {
                       onClick={() => handleDayClick(date)}
                       className={cn(
                         resetButton,
-                        "flex h-[24px] items-center justify-center rounded-[6px] text-[length:var(--text-small)] tabular-nums text-[var(--al-foreground)] hover:bg-[var(--al-muted)]",
+                        "flex h-[32px] items-center justify-center rounded-full text-[length:var(--text-base)] tabular-nums text-[var(--al-foreground)] transition-colors hover:bg-[var(--al-muted)]",
                         otherMonth && "text-[var(--al-muted-foreground)] opacity-50",
                         inRange && "rounded-none bg-[var(--al-primary-muted)] hover:bg-[var(--al-primary-muted)]",
-                        isEdge && "bg-[var(--al-primary)] text-[var(--al-primary-foreground)] hover:bg-[var(--al-primary)]",
+                        isEdge &&
+                          "bg-gradient-to-br from-[#5aa8ff] to-[var(--al-primary)] font-semibold text-[var(--al-primary-foreground)] shadow-[0_3px_8px_rgba(59,130,246,0.4)] hover:from-[#5aa8ff] hover:to-[var(--al-primary)]",
                       )}
                     >
                       {date.getDate()}
@@ -350,7 +359,7 @@ export function AuditLogDateRangePicker({ dateFrom, dateTo, onChange }) {
                 })}
               </div>
             ) : viewMode === "months" ? (
-              <div className="grid grid-cols-3 gap-[4px]">
+              <div className="grid grid-cols-3 gap-[6px]">
                 {MONTHS.map((label, idx) => (
                   <button
                     key={label}
@@ -361,8 +370,8 @@ export function AuditLogDateRangePicker({ dateFrom, dateTo, onChange }) {
                     }}
                     className={cn(
                       resetButton,
-                      "rounded-[6px] py-[6px] text-[length:var(--text-small)] font-medium text-[var(--al-foreground)] hover:bg-[var(--al-muted)]",
-                      idx === viewMonth.getMonth() && "bg-[var(--al-primary)] text-[var(--al-primary-foreground)] hover:bg-[var(--al-primary)]",
+                      "rounded-[8px] py-[9px] text-[length:var(--text-base)] font-medium text-[var(--al-foreground)] transition-colors hover:bg-[var(--al-muted)]",
+                      idx === viewMonth.getMonth() && "bg-[var(--al-primary)] text-[var(--al-primary-foreground)] shadow-[0_2px_6px_rgba(59,130,246,0.35)] hover:bg-[var(--al-primary)]",
                     )}
                   >
                     {label}
@@ -370,7 +379,7 @@ export function AuditLogDateRangePicker({ dateFrom, dateTo, onChange }) {
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-4 gap-[4px]">
+              <div className="grid grid-cols-4 gap-[6px]">
                 {years.map((y) => (
                   <button
                     key={y}
@@ -381,8 +390,8 @@ export function AuditLogDateRangePicker({ dateFrom, dateTo, onChange }) {
                     }}
                     className={cn(
                       resetButton,
-                      "rounded-[6px] py-[6px] text-[length:var(--text-small)] font-medium text-[var(--al-foreground)] hover:bg-[var(--al-muted)]",
-                      y === viewMonth.getFullYear() && "bg-[var(--al-primary)] text-[var(--al-primary-foreground)] hover:bg-[var(--al-primary)]",
+                      "rounded-[8px] py-[9px] text-[length:var(--text-base)] font-medium text-[var(--al-foreground)] transition-colors hover:bg-[var(--al-muted)]",
+                      y === viewMonth.getFullYear() && "bg-[var(--al-primary)] text-[var(--al-primary-foreground)] shadow-[0_2px_6px_rgba(59,130,246,0.35)] hover:bg-[var(--al-primary)]",
                     )}
                   >
                     {y}

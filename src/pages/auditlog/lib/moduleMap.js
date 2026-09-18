@@ -17,6 +17,7 @@ export const TOP_LEVEL_MODULES = [
   "Admin",
   "Account",
   "Ownership",
+  "Process",
   "Data Capture",
   "Transaction Payment",
   "Report",
@@ -31,7 +32,14 @@ const RAW_MODULE_MAP = {
   ACCOUNT: { topModule: "Account", subLabel: "Account" },
   DOMAIN: { topModule: "Domain", subLabel: "Domain" },
   DOMAIN_FEE_SETTINGS: { topModule: "Domain", subLabel: "Domain Fee Settings" },
-  DOMAIN_TENANT_SETTING: { topModule: "Domain", subLabel: "Domain Tenant Setting" },
+  // Not a real separate page — it's the "Company Settings" modal on the Domain page
+  // (expiration/permissions/share %). subLabel === topModule so no pill renders, same as
+  // plain Owner create/update rows.
+  DOMAIN_TENANT_SETTING: { topModule: "Domain", subLabel: "Domain" },
+  // Process definitions (Bank/Game category) and their descriptions both live under the
+  // "Process" sidebar entry — neither is its own top-level page.
+  PROCESS: { topModule: "Process", subLabel: "Process" },
+  PROCESS_DESCRIPTION: { topModule: "Process", subLabel: "Process Description" },
   DATA_CAPTURE: { topModule: "Data Capture", subLabel: "Data Capture" },
   CAPTURE_MAINTENANCE: { topModule: "Maintenance", subLabel: "Data Capture Maintenance" },
   FORMULA_MAINTENANCE: { topModule: "Maintenance", subLabel: "Formula Maintenance" },

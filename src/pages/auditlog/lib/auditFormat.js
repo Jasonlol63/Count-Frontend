@@ -32,6 +32,16 @@ export function formatFieldValue(value) {
   return dropIsoT(String(value));
 }
 
+/**
+ * Backend summaries for short string fields look like `的 remark: old → new 在 BK`.
+ * Remark text is noise in the table (same reason insurance_price is already field-name-only),
+ * so strip the values and keep the quoted field name.
+ */
+export function coarsenAuditSummary(summary) {
+  if (summary == null || summary === "") return summary;
+  return String(summary).replace(/\s*"?remark"?\s*:\s*.+?(?=\s+在\s|$)/gi, ' "remark"');
+}
+
 export function initials(name) {
   const trimmed = String(name || "").trim();
   if (!trimmed) return "?";
