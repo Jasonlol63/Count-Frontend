@@ -32,8 +32,13 @@ const RAW_MODULE_MAP = {
   DOMAIN: { topModule: "Domain", subLabel: "Domain" },
   DOMAIN_FEE_SETTINGS: { topModule: "Domain", subLabel: "Domain Fee Settings" },
   DOMAIN_TENANT_SETTING: { topModule: "Domain", subLabel: "Domain Tenant Setting" },
+  DATA_CAPTURE: { topModule: "Data Capture", subLabel: "Data Capture" },
+  CAPTURE_MAINTENANCE: { topModule: "Maintenance", subLabel: "Data Capture Maintenance" },
+  FORMULA_MAINTENANCE: { topModule: "Maintenance", subLabel: "Formula Maintenance" },
   PAYMENT_MAINTENANCE: { topModule: "Maintenance", subLabel: "Payment Maintenance" },
   BANK_PROCESS_MAINTENANCE: { topModule: "Maintenance", subLabel: "Bank Process Maintenance" },
+  TRANSACTION: { topModule: "Transaction Payment", subLabel: "Transaction Payment" },
+  TRANSACTION_CONTRA_INBOX: { topModule: "Transaction Payment", subLabel: "Transaction Contra Inbox" },
   SYSTEM_MAINTENANCE: { topModule: "System", subLabel: "System Maintenance" },
 };
 
