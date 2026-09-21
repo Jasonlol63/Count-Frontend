@@ -10,6 +10,7 @@ import {
   subscribeMaintenanceModeEvent,
 } from "../../utils/maintenance/maintenanceRealtimeBus.js";
 import { useExpirationReminder } from "../../hooks/useExpirationReminder.js";
+import { useAnnouncementUnread } from "../../hooks/useAnnouncementUnread.js";
 import { buildSidebarExpirationFields } from "../../utils/expiration/expirationReminder.js";
 import { clearDashboardFilterSession, clearOwnerCompaniesCache } from "../../utils/company/sharedCompanyFilter.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
@@ -289,6 +290,13 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
   const roleLabel = useMemo(() => formatMemberRole(lang, me?.role), [lang, me?.role]);
 
   const expirationReminder = useExpirationReminder(me, lang);
+  // Member shell has no AppRealtimeBridge (no WebSocket push here) — poll instead so a newly
+  // published announcement's badge shows up without requiring a manual reload.
+  const { unreadCount: announcementUnreadCount, markAnnouncementsRead } = useAnnouncementUnread(
+    me,
+    0,
+    30000,
+  );
   const displayAnnouncements = useMemo(
     () => expirationReminder.mergeAnnouncements(announcements),
     [announcements, expirationReminder.mergeAnnouncements],
@@ -300,6 +308,7 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
       return;
     }
     expirationReminder.onBellOpen();
+    markAnnouncementsRead();
     setShowNotifications(true);
     setAnnouncementsLoading(true);
     try {
@@ -319,7 +328,7 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
     } finally {
       setAnnouncementsLoading(false);
     }
-  }, [showNotifications, expirationReminder.onBellOpen]);
+  }, [showNotifications, expirationReminder.onBellOpen, markAnnouncementsRead]);
 
   const performLogout = useCallback(async () => {
     if (logoutLoading) return;
@@ -369,6 +378,7 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
     toggleNotifications: toggleNotificationsWithExpiration,
     announcements: displayAnnouncements,
     announcementsLoading,
+    announcementUnreadCount,
     showLogoutConfirm,
     setShowLogoutConfirm,
     logoutLoading,

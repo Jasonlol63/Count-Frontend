@@ -37,6 +37,7 @@ import {
   syncAutoRenewPendingCount,
 } from "../utils/autoRenew/autoRenewPendingSync.js";
 import { useExpirationReminder } from "../hooks/useExpirationReminder.js";
+import { useAnnouncementUnread } from "../hooks/useAnnouncementUnread.js";
 import { buildSidebarExpirationFields } from "../utils/expiration/expirationReminder.js";
 import { applyLoginLang } from "../utils/i18n/useLoginLang.js";
 import {
@@ -341,9 +342,12 @@ export default function AuthenticatedLayout() {
     modalMessage: expirationModalMessage,
     modalI18n: expirationModalI18n,
     mergeAnnouncements,
-    hasBellBadge,
     onBellOpen,
   } = useExpirationReminder(me, lang);
+  const { unreadCount: announcementUnreadCount, markAnnouncementsRead } = useAnnouncementUnread(
+    me,
+    sidebarGcTick,
+  );
   const displayAnnouncements = useMemo(
     () => mergeAnnouncements(announcements),
     [announcements, mergeAnnouncements],
@@ -389,6 +393,10 @@ export default function AuthenticatedLayout() {
     const onUserLike = pathnameIs("userlist", location.pathname);
     const onAutoRenew = pathnameIs("auto-renew", location.pathname);
     const onAnnouncement = pathnameIs("announcement", location.pathname);
+
+    if (onAnnouncement) {
+      markAnnouncementsRead();
+    }
 
     document.body.classList.toggle("account-page", onAccountLike);
     document.body.classList.toggle("user-page", onUserLike || onAutoRenew);
@@ -1303,6 +1311,7 @@ export default function AuthenticatedLayout() {
     }
     if (!showNotifications) {
       onBellOpen();
+      markAnnouncementsRead();
       setShowNotifications(true);
       setAnnouncementsLoading(true);
       try {
@@ -1488,10 +1497,15 @@ export default function AuthenticatedLayout() {
               </SidebarMenuTooltip>
             )}
             <img src={assetUrl("images/count_whitelogo.png")} alt="EAZYCOUNT" className="header-logo" />
-            <div className={`notification-bell${hasBellBadge ? " has-unread" : ""}`} onClick={toggleNotifications}>
+            <div className="notification-bell" onClick={toggleNotifications}>
                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                     <path d="M12 2C10.34 2 9 3.34 9 5V5.29C6.72 6.15 5.12 8.39 5.01 11L5 11V16L3 18V19H21V18L19 16V11C18.88 8.39 17.28 6.15 15 5.29V5C15 3.34 13.66 2 12 2ZM12 22C10.9 22 10 21.1 10 20H14C14 21.1 13.1 22 12 22Z" />
                 </svg>
+                {announcementUnreadCount > 0 && (
+                  <span className="notification-bell-badge">
+                    {announcementUnreadCount > 99 ? "99+" : announcementUnreadCount}
+                  </span>
+                )}
             </div>
           </div>
           <div className="user-info-container">
