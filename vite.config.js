@@ -31,6 +31,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/auth": { target: springTarget, changeOrigin: true },
         "/api": { target: springTarget, changeOrigin: true },
+        "/ws": { target: springTarget, changeOrigin: true, ws: true },
       },
     },
     build: {

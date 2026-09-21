@@ -24,6 +24,7 @@ import ConfirmLogoutModal from "./ConfirmLogoutModal.jsx";
 import ExpirationReminderModal from "./ExpirationReminderModal.jsx";
 import { AuthSessionProvider } from "../context/AuthSessionContext.jsx";
 import AppRealtimeBridge from "../lib/realtime/AppRealtimeBridge.jsx";
+import { onRealtimeInvalidate, REALTIME_DOMAINS } from "../lib/realtime/realtimeEvents.js";
 import SidebarLangSwitch from "./SidebarLangSwitch.jsx";
 import SidebarFlyoutSubmenu from "./SidebarFlyoutSubmenu.jsx";
 import { dismissAllPortalTooltips } from "./PortalTooltip.jsx";
@@ -130,6 +131,17 @@ function readCookie(name) {
  * the sidebar/dashboard shell still reads the legacy PHP `company_*` names in many
  * places. Alias them here once so those call sites keep working unchanged.
  */
+/** Shared by the maintenance poll, the cross-tab bus, and the realtime kick push — all three land here. */
+function forceLogoutForMaintenanceKick(message) {
+  if (typeof message === "string" && message.trim() !== "") {
+    safeSession.setItem("ec_maintenance_notice", message.trim());
+  }
+  resetDashboardSessionCaches();
+  clearDashboardFilterSession();
+  clearOwnerCompaniesCache();
+  window.location.assign(new URL(spaPath("login"), window.location.origin).href);
+}
+
 function withLegacyCompanyAliases(u) {
   if (!u) return u;
   return {
@@ -643,18 +655,12 @@ export default function AuthenticatedLayout() {
         const { ok: tickOk, status: tickStatus, json } = await fetchCurrentUser();
         const isMaintenance = json?.maintenance_mode === true || json?.data?.maintenance_mode === true;
         if (!tickOk && !stopped && isMaintenance) {
-          if (typeof json?.message === "string" && json.message.trim() !== "") {
-            safeSession.setItem("ec_maintenance_notice", json.message.trim());
-          }
           // Tell sibling tabs in the same browser profile to logout immediately.
           publishMaintenanceModeEvent({
             enabled: true,
             message: typeof json?.message === "string" ? json.message : "",
           });
-          resetDashboardSessionCaches();
-          clearDashboardFilterSession();
-          clearOwnerCompaniesCache();
-          window.location.assign(new URL(spaPath("login"), window.location.origin).href);
+          forceLogoutForMaintenanceKick(json?.message);
         } else if (!tickOk && !stopped && tickStatus === 401) {
           // Token/session's flat 1h TTL ran out — most likely the tab sat in the
           // background or idle past it. Stop polling and send the user back to
@@ -688,19 +694,24 @@ export default function AuthenticatedLayout() {
 
   useEffect(() => {
     if (loading || !me) return undefined;
-
-    const isItAllowlisted = ["IT_JK", "IT_JS", "IT_MS"].includes(String(me?.login_id || "").trim().toUpperCase());
-    if (isItAllowlisted) return undefined;
+    if (isItOperator(me)) return undefined;
 
     return subscribeMaintenanceModeEvent((event) => {
       if (!event?.enabled) return;
-      if (typeof event.message === "string" && event.message.trim() !== "") {
-        safeSession.setItem("ec_maintenance_notice", event.message.trim());
-      }
-      resetDashboardSessionCaches();
-      clearDashboardFilterSession();
-      clearOwnerCompaniesCache();
-      window.location.assign(new URL(spaPath("login"), window.location.origin).href);
+      forceLogoutForMaintenanceKick(event.message);
+    });
+  }, [loading, me]);
+
+  // Realtime push (WebSocket) — IT flips the "kick everyone" switch and every connected
+  // non-IT session gets logged out immediately, instead of waiting up to POLL_MS for the
+  // next maintenance probe above. IT is exempt the same way JwtAuthTokenFilter exempts it
+  // per-request on the backend.
+  useEffect(() => {
+    if (loading || !me) return undefined;
+    if (isItOperator(me)) return undefined;
+
+    return onRealtimeInvalidate(REALTIME_DOMAINS.SESSION_KICK, () => {
+      forceLogoutForMaintenanceKick("");
     });
   }, [loading, me]);
 

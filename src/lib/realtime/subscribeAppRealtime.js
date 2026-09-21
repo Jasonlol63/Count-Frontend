@@ -1,168 +1,127 @@
-import { dispatchRealtimeInvalidate } from "./realtimeEvents.js";
+import { Client } from "@stomp/stompjs";
+import { dispatchRealtimeInvalidate, REALTIME_DOMAINS } from "./realtimeEvents.js";
+
+const DOMAINS = Object.values(REALTIME_DOMAINS);
 
 /**
- * Single EventSource for the authenticated shell.
- * Returns unsubscribe.
+ * The backend's JWT lives in an httpOnly cookie (see backend's AuthCookieHelper) — JS can't
+ * read it to put in a STOMP CONNECT header, so auth instead rides the WebSocket handshake's
+ * own HTTP request, which the browser attaches the cookie to automatically (same as every
+ * REST call using `credentials: "include"`). See backend's PrincipalHandshakeInterceptor.
+ * Plain WebSocket, no SockJS — the backend endpoint isn't registered with `.withSockJS()`
+ * (see WebSocketConfig's javadoc for why: SockJS's internal websocket sub-transport was
+ * bypassing our custom HandshakeHandler, so the Principal never attached and every
+ * SUBSCRIBE got rejected server-side).
+ */
+function brokerUrl() {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${window.location.host}/ws`;
+}
+
+function resolveCompanyId(scope = {}) {
+  const id = Number(scope.companyId);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function onDomainMessage(message) {
+  try {
+    dispatchRealtimeInvalidate(JSON.parse(message.body));
+  } catch {
+    /* malformed payload — ignore */
+  }
+}
+
+/**
+ * Single STOMP connection for the authenticated shell. Returns { stop, reconnect }.
+ *
+ * Subscribes every domain on both shapes the backend may publish to (see backend's
+ * RealtimeDestinations): `/topic/global/{domain}` (platform-wide, e.g. announcements — always
+ * subscribed) and `/topic/company/{companyId}/{domain}` (tenant-scoped, e.g. ledger —
+ * re-subscribed whenever the active company changes). A domain that's only ever published on
+ * one of the two shapes just never receives anything on the other; that's a harmless idle
+ * subscription, not an error.
  *
  * @param {object} opts
  * @param {() => Record<string, string|number|undefined|null>} opts.getScopeParams
  * @param {(err: Error) => void} [opts.onError]
  */
-function scopeKeyFromParams(scope = {}) {
-  return [
-    scope.companyId ?? "",
-    scope.viewGroup ?? "",
-    scope.groupId ?? "",
-    scope.groupAggregate ? "1" : "",
-    scope.subsidiaryAccountsOnly ? "1" : "",
-  ].join("|");
-}
-
 export function subscribeAppRealtime({ getScopeParams, onError } = {}) {
   let closed = false;
-  let es = null;
-  let reconnectTimer = null;
-  let attempt = 0;
-  let warnedDisabled = false;
-  let lastScopeKey = "";
-  let connectGen = 0;
+  let currentCompanyId = null;
+  const globalSubs = new Map();
+  const companySubs = new Map();
 
-  const clearTimers = () => {
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
+  const client = new Client({
+    brokerURL: brokerUrl(),
+    reconnectDelay: 4000,
+    heartbeatIncoming: 10000,
+    heartbeatOutgoing: 10000,
+  });
+
+  const subscribeGlobalTopics = () => {
+    for (const domain of DOMAINS) {
+      if (globalSubs.has(domain)) continue;
+      globalSubs.set(domain, client.subscribe(`/topic/global/${domain}`, onDomainMessage));
     }
   };
 
-  const closeEs = () => {
-    if (es) {
+  const unsubscribeCompanyTopics = () => {
+    for (const sub of companySubs.values()) {
       try {
-        es.onerror = null;
-        es.onopen = null;
-        es.close();
+        sub.unsubscribe();
       } catch {
-        /* ignore */
-      }
-      es = null;
-    }
-  };
-
-  const scheduleReconnect = (delayMs) => {
-    clearTimers();
-    if (closed) return;
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      void connect();
-    }, delayMs);
-  };
-
-  const fetchTicketOnce = async () => {
-    // Spring Boot has no PHP `api/realtime/ticket_api.php` / SSE ticket.
-    return { success: true, data: { enabled: false } };
-  };
-
-  const fetchTicket = async () => {
-    const scope = typeof getScopeParams === "function" ? getScopeParams() || {} : {};
-    lastScopeKey = scopeKeyFromParams(scope);
-    let ticketRes = await fetchTicketOnce(scope);
-    const enabled = Boolean(ticketRes?.success && ticketRes?.data?.enabled && ticketRes?.data?.ticket);
-    if (!enabled) {
-      // Partnership dual-tenant: company/group assert can 500/disable the scoped
-      // ticket. Session+user channels are enough for Acc/Process grant sync.
-      ticketRes = await fetchTicketOnce({});
-    }
-    return ticketRes;
-  };
-
-  const onPayload = (type, data) => {
-    attempt = 0;
-    let payload = data;
-    if (typeof data === "string") {
-      try {
-        payload = JSON.parse(data);
-      } catch {
-        payload = { raw: data };
+        /* connection already gone — nothing to clean up */
       }
     }
-    dispatchRealtimeInvalidate({
-      type: type || payload?.type || "domain_changed",
-      domain: payload?.domain,
-      source: payload?.source,
-      rev: payload?.rev,
-      ts: payload?.ts,
-      ...payload,
-    });
+    companySubs.clear();
   };
 
-  const connect = async () => {
-    if (closed) return;
-    const gen = ++connectGen;
-    closeEs();
-    try {
-      const ticketRes = await fetchTicket();
-      if (closed || gen !== connectGen) return;
-      const data = ticketRes?.data;
-      if (!ticketRes?.success || !data?.enabled || !data?.ticket) {
-        if (!warnedDisabled) {
-          warnedDisabled = true;
-          console.warn("[app-realtime] Spring realtime is not available; live sync disabled.");
-        }
-        return;
-      }
-      warnedDisabled = false;
-
-      const ssePath = String(data.sse_path || "/realtime/sse");
-      const path = ssePath.startsWith("/") ? ssePath : `/${ssePath}`;
-      const url = `${window.location.origin}${path}?ticket=${encodeURIComponent(data.ticket)}`;
-      es = new EventSource(url);
-
-      es.addEventListener("ledger_changed", (ev) => onPayload("ledger_changed", ev.data));
-      es.addEventListener("domain_changed", (ev) => onPayload("domain_changed", ev.data));
-      // Proxies sometimes strip named SSE events; default `message` still carries JSON.
-      es.addEventListener("message", (ev) => onPayload("domain_changed", ev.data));
-
-      // Never let the browser retry the same (possibly expired) ticket URL.
-      // Take ownership: close → mint a fresh ticket → reconnect.
-      es.onerror = () => {
-        if (closed || gen !== connectGen) return;
-        closeEs();
-        attempt += 1;
-        scheduleReconnect(Math.min(30_000, 1_000 * 2 ** Math.min(attempt, 4)));
-      };
-
-      es.onopen = () => {
-        if (gen !== connectGen) return;
-        attempt = 0;
-      };
-    } catch (e) {
-      if (closed || gen !== connectGen) return;
-      onError?.(e instanceof Error ? e : new Error(String(e)));
-      attempt += 1;
-      scheduleReconnect(Math.min(30_000, 2_000 * attempt));
+  const subscribeCompanyTopics = (companyId) => {
+    unsubscribeCompanyTopics();
+    if (!companyId) return;
+    for (const domain of DOMAINS) {
+      companySubs.set(domain, client.subscribe(`/topic/company/${companyId}/${domain}`, onDomainMessage));
     }
   };
 
-  void connect();
+  client.onConnect = () => {
+    subscribeGlobalTopics();
+    currentCompanyId = resolveCompanyId(typeof getScopeParams === "function" ? getScopeParams() : {});
+    subscribeCompanyTopics(currentCompanyId);
+  };
+
+  // The client auto-reconnects on drop, but subscriptions don't survive the dead connection —
+  // clear our bookkeeping so onConnect's `has()` checks re-subscribe from scratch next time.
+  client.onWebSocketClose = () => {
+    globalSubs.clear();
+    companySubs.clear();
+  };
+
+  client.onStompError = (frame) => {
+    onError?.(new Error(frame.headers?.message || "STOMP protocol error"));
+  };
+
+  if (!closed) {
+    client.activate();
+  }
 
   return {
     stop: () => {
       closed = true;
-      connectGen += 1;
-      clearTimers();
-      closeEs();
+      globalSubs.clear();
+      companySubs.clear();
+      void client.deactivate();
     },
-    /** Reconnect only when company/group scope actually changed. */
+    /** Reconnect only when company scope actually changed. */
     reconnect: ({ force = false } = {}) => {
       if (closed) return;
-      const scope = typeof getScopeParams === "function" ? getScopeParams() || {} : {};
-      const nextKey = scopeKeyFromParams(scope);
-      if (!force && nextKey === lastScopeKey && es && es.readyState === EventSource.OPEN) {
-        return;
+      const nextCompanyId = resolveCompanyId(typeof getScopeParams === "function" ? getScopeParams() : {});
+      if (!force && nextCompanyId === currentCompanyId) return;
+      currentCompanyId = nextCompanyId;
+      if (client.connected) {
+        subscribeCompanyTopics(currentCompanyId);
       }
-      lastScopeKey = nextKey;
-      clearTimers();
-      attempt = 0;
-      void connect();
+      // else: still connecting/reconnecting — onConnect will pick up currentCompanyId once open.
     },
   };
 }

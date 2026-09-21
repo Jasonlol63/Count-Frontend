@@ -261,11 +261,6 @@ export async function searchTransactions({
   return { success: true, message: json.message || "", data: normalizeSpringSearchToGrid(json.data) };
 }
 
-/** Spring has no SSE ticket API. */
-export async function fetchRealtimeTicket() {
-  return { success: true, data: { enabled: false } };
-}
-
 export async function submitTransaction({ companyId, groupId, payload }) {
   const springTenantId = resolveTransactionSpringTenantId({ companyId, groupId });
   const springType = String(payload?.transaction_type || "").toUpperCase().trim();

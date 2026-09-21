@@ -15,20 +15,6 @@ import { buildSidebarExpirationFields } from "../expiration/expirationReminder.j
 
 export const LOGIN_SCOPE_GROUP = "group";
 export const LOGIN_SCOPE_COMPANY = "company";
-const SYSTEM_IT_LOGIN_IDS = new Set(["IT_JK", "IT_JS", "IT_MS"]);
-const SYSTEM_IT_SCOPE_GROUP_CODES = ["AP", "IG"];
-
-export function isSystemMaintenanceItUser(me) {
-  const loginId = String(me?.login_id || "").trim().toUpperCase();
-  return SYSTEM_IT_LOGIN_IDS.has(loginId);
-}
-
-function isSystemMaintenanceItScopedCompany(company) {
-  const companyCode = String(company?.company_id || "").trim().toUpperCase();
-  if (companyCode === "C168") return true;
-  const groupCode = String(company?.group_id || "").trim().toUpperCase();
-  return SYSTEM_IT_SCOPE_GROUP_CODES.includes(groupCode);
-}
 
 export function normalizeLoginScope(scope) {
   const s = String(scope || "").trim().toLowerCase();
@@ -216,9 +202,7 @@ export function filterCompaniesForAssignedScope(companies, me) {
 
 /** Login scope + admin-assigned company/group scope (all GC filter pages). */
 export function filterCompaniesForUserScope(companies, me) {
-  const scoped = filterCompaniesForAssignedScope(filterCompaniesForLoginScope(companies, me), me);
-  if (!isSystemMaintenanceItUser(me)) return scoped;
-  return scoped.filter((c) => isSystemMaintenanceItScopedCompany(c));
+  return filterCompaniesForAssignedScope(filterCompaniesForLoginScope(companies, me), me);
 }
 
 /**
@@ -386,7 +370,6 @@ export function canAccessGroupLedgerForGroup(me, groupCode, companies = []) {
  * @param {object[]} [companies] Owner company rows — refines group access when groupCode is set.
  */
 export function canUseGroupOnlyMode(me, groupCode = null, companies = null) {
-  if (isSystemMaintenanceItUser(me)) return false;
   if (!me) return false;
   if (groupCode != null && String(groupCode).trim() !== "") {
     return canAccessGroupLedgerForGroup(me, groupCode, companies ?? []);
@@ -501,20 +484,6 @@ export function canClearCompanySelection(me, groupCode = null) {
 export function resolveVisibleGroupIds(groupIds, me, companies = []) {
   const ids = Array.isArray(groupIds) ? groupIds : [];
   if (!me) return ids;
-  if (isSystemMaintenanceItUser(me)) {
-    const allowed = new Set(SYSTEM_IT_SCOPE_GROUP_CODES);
-    const dynamic = new Set(
-      (companies || [])
-        .filter((c) => isSystemMaintenanceItScopedCompany(c))
-        .map((c) => String(c?.group_id || "").trim().toUpperCase())
-        .filter((g) => g && allowed.has(g))
-    );
-    for (const g of ids.map((x) => String(x || "").trim().toUpperCase())) {
-      if (allowed.has(g)) dynamic.add(g);
-    }
-    const ordered = SYSTEM_IT_SCOPE_GROUP_CODES.filter((g) => dynamic.has(g));
-    return ordered.length ? ordered : SYSTEM_IT_SCOPE_GROUP_CODES.slice();
-  }
 
   if (userHasExplicitAssignedScope(me)) {
     const scoped = resolveAssignedScopeGroupIds(me, companies);

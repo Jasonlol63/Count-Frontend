@@ -24,6 +24,8 @@ export const REALTIME_DOMAINS = Object.freeze({
   ANNOUNCEMENTS: "announcements",
   DOMAIN: "domain",
   APP: "app",
+  /** Not a cache-invalidation domain — a forced-logout command (see AuthenticatedLayout's kick handler). */
+  SESSION_KICK: "session_kick",
 });
 
 /**
