@@ -138,6 +138,8 @@ export const LOGIN_I18N = {
     maintenanceLabel: "System Maintenance:",
     unknownError: "Unknown error",
     maintenanceModalTitle: "System Maintenance",
+    sessionExpiredTitle: "Session Expired",
+    sessionExpiredMessage: "Your session has expired. Please log in again.",
   },
   zh: {
     admin: "管理员",
@@ -161,6 +163,8 @@ export const LOGIN_I18N = {
     maintenanceLabel: "系统维护中:",
     unknownError: "未知错误",
     maintenanceModalTitle: "系统维护中",
+    sessionExpiredTitle: "登录已过期",
+    sessionExpiredMessage: "您的登录状态已过期，请重新登录。",
   },
 };
 

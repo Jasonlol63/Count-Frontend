@@ -4,6 +4,11 @@ import { isPaymentHistoryChromelessPath } from "../pages/transaction/lib/transac
 import { assetUrl, buildApiUrl, buildSpaPath } from "../utils/core/apiUrl.js";
 import { fetchCurrentUser, logoutSession } from "../utils/auth/authApi.js";
 import {
+  clearSessionActive,
+  markSessionActive,
+  redirectToLoginForSessionExpiry,
+} from "../utils/auth/sessionExpiry.js";
+import {
   getSessionTenantId,
   getSessionTenantCode,
   sessionHasTenantGame,
@@ -528,9 +533,14 @@ export default function AuthenticatedLayout() {
         const { ok, json } = await fetchCurrentUser({ signal: controller.signal });
         if (cancelled) return;
         if (!ok || !json.success || !json.data) {
-          navigate(spaPath("login"), { replace: true });
+          if (!ok) {
+            redirectToLoginForSessionExpiry(spaPath);
+          } else {
+            navigate(spaPath("login"), { replace: true });
+          }
           return;
         }
+        markSessionActive();
         const u = withLegacyCompanyAliases(json.data);
         if (u.user_type === "member") {
           window.location.assign(new URL(spaPath("member"), window.location.origin).href);
@@ -630,8 +640,9 @@ export default function AuthenticatedLayout() {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       inFlight = true;
       try {
-        const { ok: tickOk, json } = await fetchCurrentUser();
-        if (!tickOk && !stopped && (json?.maintenance_mode === true || json?.data?.maintenance_mode === true)) {
+        const { ok: tickOk, status: tickStatus, json } = await fetchCurrentUser();
+        const isMaintenance = json?.maintenance_mode === true || json?.data?.maintenance_mode === true;
+        if (!tickOk && !stopped && isMaintenance) {
           if (typeof json?.message === "string" && json.message.trim() !== "") {
             safeSession.setItem("ec_maintenance_notice", json.message.trim());
           }
@@ -644,6 +655,15 @@ export default function AuthenticatedLayout() {
           clearDashboardFilterSession();
           clearOwnerCompaniesCache();
           window.location.assign(new URL(spaPath("login"), window.location.origin).href);
+        } else if (!tickOk && !stopped && tickStatus === 401) {
+          // Token/session's flat 1h TTL ran out — most likely the tab sat in the
+          // background or idle past it. Stop polling and send the user back to
+          // Login with a notice, instead of leaving them stuck on a dead session.
+          stopped = true;
+          resetDashboardSessionCaches();
+          clearDashboardFilterSession();
+          clearOwnerCompaniesCache();
+          redirectToLoginForSessionExpiry(spaPath);
         }
       } catch {
         // silent: next tick retries
@@ -1347,6 +1367,7 @@ export default function AuthenticatedLayout() {
     } catch {
       // Even if request fails, clear client route to login.
     } finally {
+      clearSessionActive();
       resetDashboardSessionCaches();
       clearDashboardFilterSession();
       clearOwnerCompaniesCache();

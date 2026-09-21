@@ -14,6 +14,11 @@ import { buildSidebarExpirationFields } from "../../utils/expiration/expirationR
 import { clearDashboardFilterSession, clearOwnerCompaniesCache } from "../../utils/company/sharedCompanyFilter.js";
 import { spaPath } from "../../utils/routing/pageRoutes.js";
 import { fetchCurrentUser, fetchTenantAccessible, logoutSession } from "../../utils/auth/authApi.js";
+import {
+  clearSessionActive,
+  markSessionActive,
+  redirectToLoginForSessionExpiry,
+} from "../../utils/auth/sessionExpiry.js";
 
 function readCookie(name) {
   const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
@@ -137,9 +142,14 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
       try {
         const { ok, json: meRes } = await fetchCurrentUser();
         if (!ok || !meRes.success || !meRes.data) {
-          navigate(spaPath("login"), { replace: true });
+          if (!ok) {
+            redirectToLoginForSessionExpiry(spaPath);
+          } else {
+            navigate(spaPath("login"), { replace: true });
+          }
           return;
         }
+        markSessionActive();
         const u = normalizeSessionUserToMemberMe(meRes.data);
         if (String(u.user_type || "").toLowerCase() !== "member") {
           navigate(spaPath("dashboard"), { replace: true });
@@ -188,8 +198,9 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       inFlight = true;
       try {
-        const { ok, json } = await fetchCurrentUser({ cache: "no-store" });
-        if (!ok && !stopped && (json?.maintenance_mode === true || json?.data?.maintenance_mode === true)) {
+        const { ok, status, json } = await fetchCurrentUser({ cache: "no-store" });
+        const isMaintenance = json?.maintenance_mode === true || json?.data?.maintenance_mode === true;
+        if (!ok && !stopped && isMaintenance) {
           if (typeof json?.message === "string" && json.message.trim() !== "") {
             sessionStorage.setItem("ec_maintenance_notice", json.message.trim());
           }
@@ -201,6 +212,11 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
           clearDashboardFilterSession();
           clearOwnerCompaniesCache();
           window.location.assign(new URL(spaPath("login"), window.location.origin).href);
+        } else if (!ok && !stopped && status === 401) {
+          stopped = true;
+          clearDashboardFilterSession();
+          clearOwnerCompaniesCache();
+          redirectToLoginForSessionExpiry(spaPath);
         }
       } catch {
         // silent: next tick retries
@@ -312,6 +328,7 @@ export function useMemberPageShell({ navigate, initSession, todayDmy, lang }) {
       sessionStorage.setItem("ec_skip_session_bootstrap", "1");
       await logoutSession();
     } finally {
+      clearSessionActive();
       clearDashboardFilterSession();
       clearOwnerCompaniesCache();
       setLogoutLoading(false);

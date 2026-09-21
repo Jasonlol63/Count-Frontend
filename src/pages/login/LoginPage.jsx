@@ -9,6 +9,7 @@ import {
   seedDashboardFilterFromLogin,
 } from "../../utils/company/sharedCompanyFilter.js";
 import { fetchCurrentUser, loginWithTenant } from "../../utils/auth/authApi.js";
+import { consumeSessionExpiredNotice, markSessionActive } from "../../utils/auth/sessionExpiry.js";
 import { useAuthBackground } from "./useAuthBackground.js";
 import { safeLocal, safeSession } from "../../utils/storage/safeStorage.js";
 import { extractPlainTextFromRichText } from "../../utils/content/richTextSanitizer.js";
@@ -238,6 +239,11 @@ export default function LoginPage() {
   }, [showNotice, i18n.notice]);
 
   useEffect(() => {
+    if (!consumeSessionExpiredNotice()) return;
+    showNotice(i18n.sessionExpiredMessage, i18n.sessionExpiredTitle);
+  }, [showNotice, i18n.sessionExpiredMessage, i18n.sessionExpiredTitle]);
+
+  useEffect(() => {
     document.body.classList.remove(
       "transaction-page",
       "member-winloss-page",
@@ -343,6 +349,7 @@ export default function LoginPage() {
         return;
       }
       if (data.status === "success" && data.redirect) {
+        markSessionActive();
         safeSession.removeItem(LOGIN_ASSET_RETRY_KEY);
         clearDashboardFilterSession();
 
