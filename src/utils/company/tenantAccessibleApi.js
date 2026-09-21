@@ -42,6 +42,7 @@ export function normalizeTenantAccessibleItem(row) {
     nativeParentTenantCode,
     expirationDate: row.expiration_date ?? row.expirationDate ?? null,
     tenantType,
+    grantedAt: row.granted_at ?? row.grantedAt ?? null,
   };
 }
 
@@ -64,6 +65,7 @@ export function tenantAccessibleRowToUiTenant(tenant) {
     native_group_id: isGroup ? (native || code).toUpperCase() : native ?? parent,
     expiration_date: tenant.expirationDate,
     tenant_type: tenant.tenantType,
+    granted_at: tenant.grantedAt,
   };
 }
 
