@@ -21,7 +21,7 @@
 > 适用范围：`src/pages/userlist/`（Admin User 列表）、`src/pages/account/`（Account/Member 列表）
 > 及相关 CSS（`userlist.css` / `accountCSS.css` / `admin-responsive.css` / `global-13inch.css`）。
 > 这份文档只记录前端展示/交互部分；后端字段是怎么补齐的见 `Count` 仓库的
-> [`docs/last-login-logout-tracking.md`](../../Count/docs/last-login-logout-tracking.md)。
+> [`docs/admin-permission-and-userlist.md`](../../Count/docs/admin-permission-and-userlist.md)。
 
 两个列表页面各自独立实现（组件、CSS grid 变量都不共享），但用的是同一套设计：新增一列
 "Last Logout"，紧跟在已有的 "Last Login" 列后面，格式和交互跟 Last Login 完全对称。

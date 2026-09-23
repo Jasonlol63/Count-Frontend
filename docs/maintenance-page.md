@@ -28,7 +28,7 @@
 
 Add/Edit Process 弹窗新增一个可选的 "Bank Balance" 金额输入框，填了会自动生成一笔 Customer→
 Supplier 的 Contra 交易结平双方之间的零头。这份文档只记录**前端**的设计和实现（后端见 `Count`
-仓库的 `docs/bank-process-bank-balance.md`）。
+仓库的 `docs/bank-process.md`）。
 
 ### 涉及文件
 
@@ -136,7 +136,7 @@ bank_balance_transaction_id: dto.bankBalanceTransactionId ?? null,
 
 Accounting Due 弹窗新增一个日期选择器：用户可以选今天~今年年底之间的任意一天，预览到那一天
 为止会有哪些账单到期，并直接对提前出现的账单执行入账。这份文档只记录**前端**的设计和实现
-（后端见 `Count` 仓库的 `docs/accounting-due-early-transaction-date.md`——后端本来就已经支持
+（后端见 `Count` 仓库的 `docs/bank-process.md`——后端本来就已经支持
 `asOf` 参数，这次前端只是把它从"开发者调试专用"接上成正式 UI，后端只补了一处范围校验）。
 
 ### 涉及文件

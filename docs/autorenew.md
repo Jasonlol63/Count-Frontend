@@ -132,7 +132,7 @@ POST /api/auto-renew/approve
 
 ### 5. 备份
 
-> 2026-08-24 追加：本文档提到"已复制到 `Count/docs/autorenew-springboot-rewire.md`"，但该路径
+> 2026-08-24 追加：本文档提到"已复制到 `Count/docs/autorenew.md`"，但该路径
 > 实际不存在，此前的备份步骤未真正执行，仅记录于此以免误导。`Count/docs/frontend-springboot-migration.md`
 > §7（Auto Renew 页面）保留最新状态，Delete 相关的缺口记录（原 §7.4）已随本次改动更新。
 
@@ -161,7 +161,7 @@ POST /api/auto-renew/approve
 `Pending, Approved, Rejected, Show All` 调整为 `Show All, Pending, Approved, Rejected`。
 默认 `statusFilter`（`useState("pending")`）**没变**，首屏选中的仍是 Pending——只是左右顺序变了。
 
-> 后端完整说明：`Count/docs/autorenew-daterange-counts-fix.md`
+> 后端完整说明：`Count/docs/autorenew.md`
 
 #### 变更 2：每行独立的 "Charge" 开关（全栈功能）
 
@@ -182,7 +182,7 @@ POST /api/auto-renew/approve
 
 > **对调用方的重要行为变化**：`approve` **不再接收** `from_account_id` / `to_account_id`
 > （手动选收费账户的做法已移除），改为接收 `charge_on_approve` 布尔（缺省 `true`）。
-> 后端完整说明：`Count/docs/autorenew-charge-on-approve-toggle.md`
+> 后端完整说明：`Count/docs/autorenew.md`
 
 ---
 ---
@@ -191,7 +191,7 @@ POST /api/auto-renew/approve
 ### Auto Renew — Date-range counts/list mismatch fix (chip reorder)
 
 > **最后更新**：2026-09-01
-> **范围**：mostly a backend fix (see `Count/docs/autorenew-daterange-counts-fix.md`) — this
+> **范围**：mostly a backend fix (see `Count/docs/autorenew.md`) — this
 > repo only got the filter-chip reorder below. No API call changes were needed.
 
 ### Symptom
@@ -200,7 +200,7 @@ All badge counts, and Show All could show an empty table even when the badge sai
 Root cause and fix are entirely on the backend (`AutoRenewMapper.xml` / `AutoRenewService*` /
 `AutoRenewDao` in `Count/backend`) — `fetchAutoRenewApprovals()` in `autoRenewLogic.js` was
 already sending `date_from`/`date_to` on every request, so no frontend call-site changes were
-needed. Full writeup: `Count/docs/autorenew-daterange-counts-fix.md`.
+needed. Full writeup: `Count/docs/autorenew.md`.
 
 ### Fix (this repo)
 `src/pages/autorenew/AutoRenewPage.jsx` — reordered the four `<FilterChip>` elements from
@@ -212,7 +212,7 @@ tab selected on first load — only the chips' left-to-right order changed.
 - `src/pages/autorenew/AutoRenewPage.jsx`
 
 ### Backend
-See `Count/docs/autorenew-daterange-counts-fix.md` for the actual counts/list fix
+See `Count/docs/autorenew.md` for the actual counts/list fix
 (`AutoRenewMapper.xml`, `AutoRenewDao.java`, `AutoRenewService(.java/Impl.java)`,
 `AutoRenewController.java`).
 
@@ -223,7 +223,7 @@ See `Count/docs/autorenew-daterange-counts-fix.md` for the actual counts/list fi
 ### Auto Renew — per-row "Charge" toggle on Approve
 
 > **范围**：full-stack feature (backend + frontend); the complete writeup lives in
-> `Count/docs/autorenew-charge-on-approve-toggle.md`. This file lists only the frontend
+> `Count/docs/autorenew.md`. This file lists only the frontend
 > pieces for quick lookup from this repo.
 
 Each pending row on the Auto Renew page now has its own "Charge" toggle (between the
@@ -250,7 +250,7 @@ per tenant save.
   breakpoint's horizontal-scroll `min-width` threshold bumped up to make room.
 
 ### Backend
-See `Count/docs/autorenew-charge-on-approve-toggle.md` for the actual approve-flow change
+See `Count/docs/autorenew.md` for the actual approve-flow change
 (`AutoRenewApprovalRequest.java`, `AutoRenewController.java`,
 `AutoRenewService(.java/Impl.java)`) — new `charge_on_approve` request field (defaults to
 `true` when omitted), which wraps the existing `domainFeeChargeService.chargeDomainFee(...)`

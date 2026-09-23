@@ -32,28 +32,18 @@ export default defineConfig(({ mode }) => {
       port: 5174,
       strictPort: true,
       proxy: {
-        // Mid-migration split: Spring endpoints never carry a `.php` suffix, legacy PHP
-        // endpoints always do — route by that, not by a fixed prefix, since both live
-        // under /api. Regex rules (leading `^`) are matched in the order Vite is given
-        // them, so this must come before the generic "/api" rule below.
-        "^/api/.*\\.php": { target: phpTarget, changeOrigin: true },
+        // Full API migration to Spring Boot is done (see docs/c168-mobile-springboot-api-audit.md
+        // §22 — the last live PHP call, frankfurterRates.js's fx_rates_api.php, was replaced by
+        // Spring's /api/fx/rates the same day). No `.php`-suffix routing rule is needed any more:
+        // every `/api`, `/auth`, `/ws` request goes straight to Spring.
         "/api": { target: springTarget, changeOrigin: true },
         "/auth": { target: springTarget, changeOrigin: true },
         "/ws": { target: springTarget, changeOrigin: true, ws: true },
-        // `/dashboard.php`, `/member.php` and `/reset-password` used to be proxied to PHP here.
-        // The first two were the pre-SPA pages and nothing has requested them for a long time; the
-        // third shadowed mobile's own `/reset-password` SPA route, so a hard reload of that page
-        // went to PHP instead of the React app. Reset Password now lives at that route and talks to
-        // `/auth/*` (see pages/login/ResetPasswordPage.jsx).
-        //
         // `/images` and `/js` stay on PHP: they are static assets shared from the PHP site root
-        // (`c168_mobile/.htaccess`: "shares api/, includes/, images/ at site root"), which is an
-        // asset-hosting dependency rather than an API one.
+        // (`c168_mobile/.htaccess`: "shares api/, includes/, images/ at site root"), an
+        // asset-hosting dependency unrelated to the API migration — nothing to move here.
         "/images": { target: phpTarget, changeOrigin: true },
         "/js": { target: phpTarget, changeOrigin: true },
-        // Realtime is STOMP over the backend's /ws endpoint (see the "/ws" rule above). The
-        // legacy SSE hub (`services/tx-realtime`, port 3911) and its `/realtime` proxy were
-        // removed with the Phase 3 rewrite — nothing calls the SSE ticket endpoint any more.
       },
     },
     build: {

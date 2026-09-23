@@ -43,7 +43,7 @@
 
 ## 修复
 
-不去修补"何时刷新 `companies`"这个容易被以后新的创建入口再次遗漏的点，而是让 Group-only 视图的 tenant id 解析本身**不再单纯依赖本地缓存**：本地查不到时，回退去后端按 code 直查一次（见 [Count/docs/userlist-groupview-owner-missing-fix.md](../../Count/docs/userlist-groupview-owner-missing-fix.md) 里新增的 `GET /auth/tenant-by-code`）。
+不去修补"何时刷新 `companies`"这个容易被以后新的创建入口再次遗漏的点，而是让 Group-only 视图的 tenant id 解析本身**不再单纯依赖本地缓存**：本地查不到时，回退去后端按 code 直查一次（见 [Count/docs/admin-permission-and-userlist.md](../../Count/docs/admin-permission-and-userlist.md) 里新增的 `GET /auth/tenant-by-code`）。
 
 ### 1. 新增按 code 查 tenant id 的 API 封装
 

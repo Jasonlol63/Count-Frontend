@@ -1,6 +1,6 @@
 # Admin 权限体系 — 前端对齐（2026-08-27）
 
-> 配套后端记录：`Count/docs/admin-permission-rbac-hierarchy.md`
+> 配套后端记录：`Count/docs/admin-permission-and-userlist.md`
 > 背景：后端补上了 Admin 页面的角色层级校验、Partnership/Audit 的 `read_only` 全局写操作拦截，
 > 这次是把前端跟着核对一遍，修掉了几处「按钮能点、提交却被后端拒绝」或「入口跟后端权限对不上」的
 > 不一致，而不是新做一套前端权限系统——真正的防线始终在后端，前端这些改动都是 UX 层面的提前拦截。

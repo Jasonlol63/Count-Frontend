@@ -5,7 +5,7 @@
 > （如 `domain-mobile-design.html`），两者分工见 `c168_mobile/CLAUDE.md`。
 > **范围**：`c168_mobile/frontend/`（独立的移动端 SPA，Capacitor 壳工程见 `c168_mobile/app/`）当前
 > 调用的全部后端接口，逐一核对是否已有对应的 Spring Boot 端点，以及实际接线改动记录。
-> **最后更新**：2026-09-22（§15 批次 A：session/auth，23→13；§16 Realtime SSE→STOMP，→12；§17 实机 bug：租户不匹配修复；§18 Maintenance Mode，→10；§19 批次 D：Users/Admin，→6；§20 批次 E：Dashboard，→2；§21 收尾：Reset Password 接通 Spring + 删掉遮蔽 SPA 的旧代理；§22 最后一块：Transaction Submit 全类型接通 Spring，→1。**迁移完成：23 处里只剩 FX 汇率 1 处刻意保留**）
+> **最后更新**：2026-09-22（§15 批次 A：session/auth，23→13；§16 Realtime SSE→STOMP，→12；§17 实机 bug：租户不匹配修复；§18 Maintenance Mode，→10；§19 批次 D：Users/Admin，→6；§20 批次 E：Dashboard，→2；§21 收尾：Reset Password 接通 Spring + 删掉遮蔽 SPA 的旧代理；§22 最后一块：Transaction Submit 全类型接通 Spring，→1；§23 FX 汇率接通 Spring 新端点，→0。**迁移彻底完成：23 处 PHP 调用全部清零**）
 > **参考**：`Count/docs/frontend-springboot-migration.md`（桌面版 Count-frontend 的迁移状态一览，
 > 本次审计/接线大量对照这份文档 + 桌面版实际代码）；`Count/backend/src/main/java/com/eazycount/controller/`
 > （逐个 controller 核对端点是否存在）
@@ -1419,4 +1419,35 @@ ADJUSTMENT/PROFIT/RATE）都在打 `api/transactions/submit_api.php`，是 §12.
 
 **RATE 现在必须选第二组（Transfer）账户**。legacy PHP 允许不填（只有第一币种一笔账），Spring 的
 `leg2_transaction_id` 是必填外键，做不到。桌面版同样如此（桌面文档 §1 明确记录了这次收紧）。
+
+---
+
+## 23. 收尾（2026-09-22）：FX 汇率接通 Spring 新端点 —— 残留 1 → 0，迁移彻底完成
+
+**背景**：`lib/frankfurterRates.js` 的 `fx_rates_api.php` 是 §22 记录的最后一处刻意保留的 PHP
+调用（跟桌面版对齐，当时桌面版也还没有对应的 Spring 端点）。这次先在 `Count/backend` 新增了
+`POST /api/fx/rates`（`FxRateController` + `ExchangeRateService.resolveRates`，复用已有的
+`exchange_rate` 表/cron，缺的历史日期查询、按需 Frankfurter 补拉两块补齐），桌面版和 mobile 各自
+的 `frankfurterRates.js` 再跟着切过去。
+
+### 23.1 改动清单（mobile）
+
+| 文件 | 改动 |
+|---|---|
+| `lib/frankfurterRates.js` | `SYSTEM_FX_API` 从 `api/fx/fx_rates_api.php` 改成 `api/fx/rates`；`fetchFxRowsFromUrl` 加 `method` 选项，打系统 FX 端点这一路改成 `POST`（配合 Spring `@RequestParam`-on-POST 的写法），外部 Frankfurter fallback 仍然是 `GET`。响应解析逻辑（`extractFxRateRows`/`extractFxUnsupported`）**完全没动**——新端点的 `data.rows`/`data.unsupported` 形状是照着这两个函数已经在解析的结构设计的 |
+| `vite.config.js` | 删掉 `^/api/.*\.php` 这条按后缀分流的正则代理规则——mobile 已经没有任何活代码会打 `.php` 端点了（`grep` 过 `src/` 全部 `.php` 字符串，只剩注释）。`/api`、`/auth`、`/ws` 现在直接全部指向 Spring，不用再判断后缀。`/images`、`/js` 两条**保留**——这是静态资源托管依赖（图片/JS 文件共享自 PHP 站点根目录），跟 API 迁移无关，不会因为 API 全部迁完就消失 |
+
+### 23.2 验证
+
+- `npx vite build` 通过
+- 浏览器直接 fetch 验证：`/api/fx/rates`（Spring，无 `.php`）→ 200；`/api/session/current_user_api.php`（PHP，带 `.php`）→ 200（分流生效，见本文档更早的连接验证记录）
+- 后端 `mvn compile` 通过，本地起服务后 `POST /api/fx/rates` 返回 401（未登录，不是 404/500，路由/Bean 装配正常）
+- **未做（需登录态）**：真实汇率数字核对，尤其历史日期 + 从未同步过的新币种这两条路径
+
+### 23.3 现状
+
+`c168_mobile/frontend/src/` 里不再有任何调用 `.php` 端点的活代码。23 处最初盘点的 PHP 调用全部
+迁完（详见本文档 §1 的原始清单、以及 §5-§22 各阶段的接线记录）。`vite.config.js` 里仍然保留的
+`phpTarget`/8000 端口，只服务于 `/images`、`/js` 两条静态资源代理，跟后端 API 迁移状态无关，
+不需要、也不应该因为 API 迁完就删掉。
 
