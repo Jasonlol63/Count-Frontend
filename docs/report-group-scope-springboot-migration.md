@@ -143,7 +143,7 @@ Spring 那边**没有**这张 `groups` 表的对应实现——`DomainController
   之后如果要恢复 Domain 设置里 group 级别的 expiration_date 展示，需要新建 Group entity/DAO/
   Controller，是独立一块工作。
 - `pages/autorenew/autoRenewTenantSettings.js` 仍在用 `get_companies`/`get_groups`/
-  `get_domain_fee_settings` 这几个 PHP action（跟 `domain-springboot-rewire.md` §5 记录的一样），
+  `get_domain_fee_settings` 这几个 PHP action（跟 `domain.md` 第 1 节 记录的一样），
   不在本次 Report 页面范围内。
 
 ---

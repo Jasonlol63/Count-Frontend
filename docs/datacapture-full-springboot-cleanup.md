@@ -221,7 +221,7 @@ group-ledger scope 共用同一套 PHP 调用；现在按 `ledgerCtx.groupOnlyAc
 - **真 group ledger scope**（`groupOnlyAccountMode === true`）→ **原样保留 PHP**，不属于本次范围
   （见 §3「有意保留」）。这个场景下页面拿到的只是 group code（如 `"AP"`），没有可直接用的数字
   `tenant.id` 去打 Spring 的 tenant-scoped 端点；要接 Spring 需要先解出「组的实体公司行」的数字 id
-  （参考 `docs/maintenance-bankprocess-payment-springboot.md` §2 的 `resolveGroupEntityRowFromSnap`
+  （参考 `docs/maintenance-page.md` 第 4 节 的 `resolveGroupEntityRowFromSnap`
   做法），这属于另一块工作量，本次没做。
 
 **角色下拉（`loadRoles`）—— 整个函数删除**

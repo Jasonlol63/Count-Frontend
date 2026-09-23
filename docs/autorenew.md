@@ -1,15 +1,32 @@
-# Auto Renew 页面 — 接回 Spring Boot API
+# Auto Renew 页面 — 迁移 / 改动记录
+
+> **本文档由 2 份合并而成**（2026-09-22）。内部顺序：**先迁移记录（已完成），后各项改动**。
+>
+> | 顺序 | 来源文档 | 定位 |
+> |---|---|---|
+> | 1 | `autorenew-springboot-rewire.md` | 迁移记录（2026-08-24）—— 页面接回 Spring Boot `/api/auto-renew/*`，后端零改动 |
+> | 2 | `autorenew-changes.md` | 改动记录（**原 2 份合并**）—— 日期范围计数不匹配（**根因在后端**）+ 每行独立 Charge 开关（全栈功能） |
+>
+> **对调用方最要紧的一条**（详见第 2 节结论速览）：`approve` 不再接收
+> `from_account_id` / `to_account_id`（手动选收费账户已移除），改为接收 `charge_on_approve`
+> 布尔（缺省 `true`）—— 关掉时批准只延长到期日、不产生 Domain Fee / Commission。
+
+---
+---
+
+# 1. Auto Renew 页面 — 接回 Spring Boot API（迁移记录，2026-08-24）
+## Auto Renew 页面 — 接回 Spring Boot API
 
 > **范围**：`src/pages/autorenew/`（`autoRenewLogic.js` / `autoRenewTenantSettings.js`）+
 > `src/utils/autoRenew/autoRenewPendingSync.js` + `src/pages/autorenew/AutoRenewPage.jsx`（Approve
 > 提交参数）。**没有改动任何后端代码** —— 所需的 `/api/auto-renew/*` 端点已存在
 > （`AutoRenewController`），Comm 设置弹窗复用的是 Domain 迁移（见
-> `domain-springboot-rewire.md`）时已经接好的 `domainApi.js`。
+> `domain.md` 第 1 节）时已经接好的 `domainApi.js`。
 > **最后更新**：2026-08-24
 
 ---
 
-## 1. 修复总览
+### 1. 修复总览
 
 | 能力 | 旧 PHP 端点 | 新 Spring 端点 | 改动文件 |
 |------|-------------|-----------------|----------|
@@ -23,7 +40,7 @@
 
 ---
 
-## 2. 字段校验 / tenant 解析都交给后端
+### 2. 字段校验 / tenant 解析都交给后端
 
 - **列表/审批的 tenant 归属**：`request_id`、`period` 以外不再由前端拼装校验逻辑；能否
   Approve（`canApproveRow`）仍由前端做 UI 层的按钮禁用判断（period 是否选、
@@ -38,7 +55,7 @@
 
 ---
 
-## 3. Delete / Save Draft（2026-08-24 追加更新：§3.1 的 Delete 结论已被推翻，见下）
+### 3. Delete / Save Draft（2026-08-24 追加更新：§3.1 的 Delete 结论已被推翻，见下）
 
 > **本节 §3.1 原先的结论已过时，被同日晚些时候的另一轮改动推翻。** 保留下面的历史记录是为了让人理解
 > 当时为什么会做出"两个都删掉"的判断，但实际执行只清掉了 `save_draft`；`delete` 后来被重新评估为
@@ -58,7 +75,7 @@ POST /api/auto-renew/approve
 里的 `postAutoRenewLegacy`），在当前环境本来就是不通的——`utils/core/apiUrl.js` 里遗留的 rewrite 规则
 会把它错误地转发到 `/api/auto-renew/list`，不是这轮改动引入的新问题，只是没有把它伪装成"已迁移"。
 
-### 3.1（历史记录，已被 §3.2 推翻）原定案：两者都不迁移到 Spring，直接清掉
+#### 3.1（历史记录，已被 §3.2 推翻）原定案：两者都不迁移到 Spring，直接清掉
 
 `count168test`（旧版 PHP 全码库）里追过来源后确认：
 
@@ -74,7 +91,7 @@ POST /api/auto-renew/approve
   transaction 并把到期日还原到审批前的快照，rejected 记录要能打回 pending 重新审批。已经在后端补齐
   完整实现，不再是"已经坏掉不用管"的状态。
 
-### 3.2 已执行（2026-08-24 追加）
+#### 3.2 已执行（2026-08-24 追加）
 
 - **`save_draft`**：确认删除。`autoRenewLogic.js` 里的 `saveAutoRenewDraft()`、`postAutoRenewLegacy()`
   两个函数已删除（`postAutoRenewLegacy` 唯一的调用方就是 `saveAutoRenewDraft`，一并清掉）。
@@ -96,7 +113,7 @@ POST /api/auto-renew/approve
 
 ---
 
-## 4. 验证清单
+### 4. 验证清单
 
 - 前端 `npm run build` 通过（无 import/语法错误，已确认）。
 - 待人工验证（需要本地 Spring Boot + 前端都在跑，且有 C168 运营测试账号）：
@@ -113,8 +130,128 @@ POST /api/auto-renew/approve
 
 ---
 
-## 5. 备份
+### 5. 备份
 
 > 2026-08-24 追加：本文档提到"已复制到 `Count/docs/autorenew-springboot-rewire.md`"，但该路径
 > 实际不存在，此前的备份步骤未真正执行，仅记录于此以免误导。`Count/docs/frontend-springboot-migration.md`
 > §7（Auto Renew 页面）保留最新状态，Delete 相关的缺口记录（原 §7.4）已随本次改动更新。
+
+---
+---
+
+# 2. Auto Renew 改动记录（原 2 份合并）
+## Auto Renew 页面：改动记录（日期范围计数不匹配 / per-row Charge 开关）
+
+> **本文档由两份合并而成**（2026-09-22）：`autorenew-daterange-counts-fix.md` +
+> `autorenew-charge-on-approve-toggle.md`。两份都是 Auto Renew 页的改动记录，且都各自指向
+> `Count/docs/` 里的后端配对文档（一份是后端修复、一份是全栈功能）。
+>
+> 目录在这里只列**前端侧**的部分，后端完整说明在后端仓库那份里。
+
+### 结论速览
+
+#### 变更 1（2026-09-01）：日期范围选择不影响 badge 计数 —— **根因和修复完全在后端**
+
+选日期范围后，Pending/Approved/Rejected/Show All 的 badge 计数不跟着变，而且 Show All 可能出现
+"badge 说有、表格却是空的"。根因在 `Count/backend` 的 `AutoRenewMapper.xml` / `AutoRenewService*` /
+`AutoRenewDao`；前端 `autoRenewLogic.js` 的 `fetchAutoRenewApprovals()` **本来就每次请求都带
+`date_from`/`date_to`**，所以**不需要改任何调用点**。
+
+本仓库只改了一处：`AutoRenewPage.jsx` 四个 chip 的顺序从
+`Pending, Approved, Rejected, Show All` 调整为 `Show All, Pending, Approved, Rejected`。
+默认 `statusFilter`（`useState("pending")`）**没变**，首屏选中的仍是 Pending——只是左右顺序变了。
+
+> 后端完整说明：`Count/docs/autorenew-daterange-counts-fix.md`
+
+#### 变更 2：每行独立的 "Charge" 开关（全栈功能）
+
+每个待批准行新增了自己的 "Charge" 开关（在 Period 与 Status 两列之间），样式对齐 Domain 页
+`CompanySettingsModal.jsx` 的 charge-on-save 开关。**关掉时**，批准该行只延长租户到期日、
+**不产生 Domain Fee / Commission 付款**——走的是和 Domain 页 "charge on save" 同一套
+`DomainFeeChargeService` 代码路径，只是从"按租户保存时"改成"按每条 auto-renew 请求"来控制。
+
+前端涉及 5 个文件（列/表头、行状态、帮助函数默认值、POST body 字段、翻译、CSS 网格列宽）：
+
+| 文件 | 改动 |
+|---|---|
+| `src/pages/autorenew/AutoRenewPage.jsx` | 新增 "Charge" 列/表头 + 逐行开关（仅待批准/可编辑行）；草稿态 `chargeOnApprove`；批准确认弹窗文案随开关状态切换（`confirmApprove` / `confirmApproveNoCharge`） |
+| `src/pages/autorenew/autoRenewPageHelpers.js` | `getRowDraftValues()` 增加返回 `chargeOnApprove`（默认 `true`） |
+| `src/pages/autorenew/autoRenewLogic.js` | `approveAutoRenew({ requestId, period, chargeOnApprove })` 在 POST body 里发 `charge_on_approve` 给 `api/auto-renew/approve` |
+| `src/translateFile/pages/autoRenewTranslate.js` | 新增中英文案 `colCharge`、`on`、`off`、`chargeToggleAria`、`confirmApproveNoCharge` |
+| `public/css/auto_renew.css` | 表格网格从 8/9 列扩到 9/10 列（无提交人/有提交人），覆盖所有响应式断点（desktop、≤1280px、1025–1440px 13 寸覆盖、≤1024 平板、中英变体）；`--auto-renew-table-min-width` 与各断点横向滚动 `min-width` 阈值同步上调 |
+
+> **对调用方的重要行为变化**：`approve` **不再接收** `from_account_id` / `to_account_id`
+> （手动选收费账户的做法已移除），改为接收 `charge_on_approve` 布尔（缺省 `true`）。
+> 后端完整说明：`Count/docs/autorenew-charge-on-approve-toggle.md`
+
+---
+---
+
+## 原文 A：`autorenew-daterange-counts-fix.md`（2026-09-01）
+### Auto Renew — Date-range counts/list mismatch fix (chip reorder)
+
+> **最后更新**：2026-09-01
+> **范围**：mostly a backend fix (see `Count/docs/autorenew-daterange-counts-fix.md`) — this
+> repo only got the filter-chip reorder below. No API call changes were needed.
+
+### Symptom
+Picking a date range on the Auto Renew page didn't change the Pending/Approved/Rejected/Show
+All badge counts, and Show All could show an empty table even when the badge said otherwise.
+Root cause and fix are entirely on the backend (`AutoRenewMapper.xml` / `AutoRenewService*` /
+`AutoRenewDao` in `Count/backend`) — `fetchAutoRenewApprovals()` in `autoRenewLogic.js` was
+already sending `date_from`/`date_to` on every request, so no frontend call-site changes were
+needed. Full writeup: `Count/docs/autorenew-daterange-counts-fix.md`.
+
+### Fix (this repo)
+`src/pages/autorenew/AutoRenewPage.jsx` — reordered the four `<FilterChip>` elements from
+`Pending, Approved, Rejected, Show All` to `Show All, Pending, Approved, Rejected`. The
+default `statusFilter` state (`useState("pending")`) is unchanged, so Pending is still the
+tab selected on first load — only the chips' left-to-right order changed.
+
+### Files changed
+- `src/pages/autorenew/AutoRenewPage.jsx`
+
+### Backend
+See `Count/docs/autorenew-daterange-counts-fix.md` for the actual counts/list fix
+(`AutoRenewMapper.xml`, `AutoRenewDao.java`, `AutoRenewService(.java/Impl.java)`,
+`AutoRenewController.java`).
+
+---
+---
+
+## 原文 B：`autorenew-charge-on-approve-toggle.md`
+### Auto Renew — per-row "Charge" toggle on Approve
+
+> **范围**：full-stack feature (backend + frontend); the complete writeup lives in
+> `Count/docs/autorenew-charge-on-approve-toggle.md`. This file lists only the frontend
+> pieces for quick lookup from this repo.
+
+Each pending row on the Auto Renew page now has its own "Charge" toggle (between the
+Period and Status columns), styled like Domain page's `CompanySettingsModal.jsx`
+charge-on-save switch. When off, approving that row extends the tenant's expiration date
+without creating a Domain Fee / Commission payment — same `DomainFeeChargeService` code
+path as Domain page's "charge on save", just gated per auto-renew request instead of
+per tenant save.
+
+### Frontend files touched
+- `src/pages/autorenew/AutoRenewPage.jsx` — new "Charge" column/header, per-row switch
+  (only for pending/editable rows), draft state `chargeOnApprove`, approve confirm
+  dialog message now charge-state-aware (`confirmApprove` vs `confirmApproveNoCharge`).
+- `src/pages/autorenew/autoRenewPageHelpers.js` — `getRowDraftValues()` now returns
+  `chargeOnApprove` (default `true`).
+- `src/pages/autorenew/autoRenewLogic.js` — `approveAutoRenew({ requestId, period,
+  chargeOnApprove })` sends `charge_on_approve` in the POST body to
+  `api/auto-renew/approve`.
+- `src/translateFile/pages/autoRenewTranslate.js` — new en/zh strings: `colCharge`,
+  `on`, `off`, `chargeToggleAria`, `confirmApproveNoCharge`.
+- `public/css/auto_renew.css` — table grid widened from 8/9 columns to 9/10 (no-submitter /
+  with-submitter) across every responsive breakpoint (desktop, ≤1280px, 1025–1440px
+  13-inch override, ≤1024 tablet, en/zh variants); `--auto-renew-table-min-width` and each
+  breakpoint's horizontal-scroll `min-width` threshold bumped up to make room.
+
+### Backend
+See `Count/docs/autorenew-charge-on-approve-toggle.md` for the actual approve-flow change
+(`AutoRenewApprovalRequest.java`, `AutoRenewController.java`,
+`AutoRenewService(.java/Impl.java)`) — new `charge_on_approve` request field (defaults to
+`true` when omitted), which wraps the existing `domainFeeChargeService.chargeDomainFee(...)`
+call in an `if`.
