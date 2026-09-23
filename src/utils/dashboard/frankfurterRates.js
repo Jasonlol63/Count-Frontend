@@ -1,7 +1,7 @@
 import { buildApiUrl } from "../core/apiUrl.js";
 
-/** System FX API (DB-cached). Upstream Frankfurter is server-side + client fallback. */
-const SYSTEM_FX_API = "api/fx/fx_rates_api.php";
+/** System FX API (DB-cached, Spring `/api/fx/rates`). Upstream Frankfurter is server-side + client fallback. */
+const SYSTEM_FX_API = "api/fx/rates";
 const FRANKFURTER_API = "https://api.frankfurter.dev/v2/rates";
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const SESSION_CACHE_PREFIX = "frankfurter_rates_v1:";
@@ -386,9 +386,10 @@ function extractFxUnsupported(payload) {
   return null;
 }
 
-async function fetchFxRowsFromUrl(url, { credentials } = {}) {
+async function fetchFxRowsFromUrl(url, { credentials, method } = {}) {
   const res = await fetch(url, {
     credentials: credentials || "same-origin",
+    method: method || "GET",
     cache: "no-store",
   });
   if (!res.ok) {
@@ -407,8 +408,11 @@ async function fetchFrankfurterRatesOnce(baseCode, quotes, dateYmd) {
 
   let payload = null;
   try {
+    // Spring's /api/fx/rates takes the same query params as a POST (matches the rest of the
+    // backend's `@RequestParam`-on-POST convention — see CurrencyController).
     payload = await fetchFxRowsFromUrl(`${buildApiUrl(SYSTEM_FX_API)}?${params}`, {
       credentials: "include",
+      method: "POST",
     });
   } catch {
     // Rollout / outage: fall back to public Frankfurter once.
