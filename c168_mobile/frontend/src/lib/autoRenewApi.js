@@ -4,7 +4,7 @@
  * src/utils/autoRenew/autoRenewPendingSync.js (desktop).
  *
  * Behavior change vs. the old PHP endpoint (not just a path rename — see
- * Count-frontend/docs/autorenew-charge-on-approve-toggle.md): `approve` no longer takes
+ * Count-frontend/docs/autorenew.md): `approve` no longer takes
  * `from_account_id`/`to_account_id` (manual charge-account picking is gone). It now takes
  * a `charge_on_approve` boolean (default true) — off skips the Domain Fee charge and just
  * extends the tenant's expiration date. `delete` no longer needs `transaction_id`/

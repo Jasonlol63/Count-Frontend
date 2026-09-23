@@ -1,7 +1,7 @@
 /**
  * Domain (Owner / Company / Group management) — Spring Boot `/api/domain/*`.
  * Copied from Count-frontend/src/pages/domain/domainApi.js (desktop) — see
- * docs/c168-mobile-springboot-api-audit.md §14 for the full functionality confirmation
+ * ../../../docs/c168-mobile-springboot-api-audit.md §14 for the full functionality confirmation
  * done before this port (which of the old PHP action-router calls became pure client-side
  * functions, which got removed because the data is already in memory, which got merged
  * into one endpoint, etc.)

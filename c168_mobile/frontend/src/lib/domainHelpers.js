@@ -630,7 +630,7 @@ export function sumFeeShareRolePercentages(rows) {
 
 // ===================== Spring Boot bridging (tenant / feature module / fee share) =====================
 // Ported from Count-frontend/src/pages/domain/domainHelpers.js — see
-// docs/c168-mobile-springboot-api-audit.md §14 for the backend contract.
+// ../../../docs/c168-mobile-springboot-api-audit.md §14 for the backend contract.
 
 /** feature_module seed rows (schema.sql) — fixed id ↔ Games/Bank/Loan/Rate/Money name. */
 const FEATURE_MODULE_NAME_TO_ID = { Games: 1, Bank: 2, Loan: 3, Rate: 4, Money: 5 };

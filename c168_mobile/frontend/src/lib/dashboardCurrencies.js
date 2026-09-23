@@ -89,7 +89,7 @@ export async function fetchMobileCurrencyCodes({
   if (groupOnly) {
     // Union of the member companies' Currency Setting lists. Desktop instead reads the GROUP's own
     // tenant row through the same `/api/currency/list` call; mobile keeps the union so the pills
-    // don't change in this pass (both work — see docs/c168-mobile-springboot-api-audit.md §20).
+    // don't change in this pass (both work — see ../../../docs/c168-mobile-springboot-api-audit.md §20).
     // No `get_scope_account_currencies_api.php` fallback any more: that legacy path has no Spring
     // successor and desktop short-circuits it, and the union below already covers the scope.
     try {
