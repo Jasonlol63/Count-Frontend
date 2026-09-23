@@ -1,0 +1,137 @@
+/**
+ * Account role tints — shared by Transaction list, Account cards, Users.
+ * Light pastels match desktop; dark uses the same hues at low luminance
+ * so global --m-color-text stays readable.
+ */
+:root {
+  --m-role-capital-bg: #ffe0e0;
+  --m-role-capital-fg: #a30b0b;
+  --m-role-bank-bg: #dfe3ff;
+  --m-role-bank-fg: #14228a;
+  --m-role-cash-bg: #dff4e7;
+  --m-role-cash-fg: #0f6d38;
+  --m-role-profit-bg: #fff2c7;
+  --m-role-profit-fg: #7a5b00;
+  --m-role-expenses-bg: #f0e1ff;
+  --m-role-expenses-fg: #4f148f;
+  --m-role-company-bg: #ecfccb;
+  --m-role-company-fg: #3f6212;
+  --m-role-company-line: #bef264;
+  --m-role-partner-bg: #e0f2fe;
+  --m-role-partner-fg: #0369a1;
+  --m-role-partner-line: #bae6fd;
+  --m-role-staff-bg: #ffe5cc;
+  --m-role-staff-fg: #a24700;
+  --m-role-upline-bg: #d6f9ff;
+  --m-role-upline-fg: #0a6b78;
+  --m-role-agent-bg: #ffe0f3;
+  --m-role-agent-fg: #a02578;
+  --m-role-member-bg: #f2dfd2;
+  --m-role-member-fg: #5f2e0f;
+  --m-role-debtor-line: #cbd5e1;
+  --m-role-none-bg: #eceef2;
+  --m-role-none-fg: #3e434f;
+}
+
+html[data-theme="dark"] {
+  --m-role-capital-bg: rgba(252, 165, 165, 0.18);
+  --m-role-capital-fg: #fca5a5;
+  --m-role-bank-bg: rgba(165, 180, 252, 0.18);
+  --m-role-bank-fg: #a5b4fc;
+  --m-role-cash-bg: rgba(110, 231, 183, 0.16);
+  --m-role-cash-fg: #6ee7b7;
+  --m-role-profit-bg: rgba(253, 224, 71, 0.14);
+  --m-role-profit-fg: #fde68a;
+  --m-role-expenses-bg: rgba(216, 180, 254, 0.16);
+  --m-role-expenses-fg: #e9d5ff;
+  --m-role-company-bg: rgba(190, 242, 100, 0.14);
+  --m-role-company-fg: #bef264;
+  --m-role-company-line: rgba(190, 242, 100, 0.35);
+  --m-role-partner-bg: rgba(125, 211, 252, 0.14);
+  --m-role-partner-fg: #7dd3fc;
+  --m-role-partner-line: rgba(125, 211, 252, 0.32);
+  --m-role-staff-bg: rgba(253, 186, 116, 0.16);
+  --m-role-staff-fg: #fdba74;
+  --m-role-upline-bg: rgba(103, 232, 249, 0.14);
+  --m-role-upline-fg: #67e8f9;
+  --m-role-agent-bg: rgba(244, 114, 182, 0.16);
+  --m-role-agent-fg: #f9a8d4;
+  --m-role-member-bg: rgba(253, 186, 116, 0.14);
+  --m-role-member-fg: #fdba74;
+  --m-role-debtor-line: var(--m-color-ring);
+  --m-role-none-bg: var(--m-color-surface-muted);
+  --m-role-none-fg: var(--m-color-muted);
+}
+
+.m-account-role {
+  background-color: var(--m-color-surface);
+  color: var(--m-color-text);
+}
+
+.m-account-role.transaction-role-capital {
+  background-color: var(--m-role-capital-bg);
+  color: var(--m-role-capital-fg);
+}
+
+.m-account-role.transaction-role-bank {
+  background-color: var(--m-role-bank-bg);
+  color: var(--m-role-bank-fg);
+}
+
+.m-account-role.transaction-role-cash {
+  background-color: var(--m-role-cash-bg);
+  color: var(--m-role-cash-fg);
+}
+
+.m-account-role.transaction-role-profit {
+  background-color: var(--m-role-profit-bg);
+  color: var(--m-role-profit-fg);
+}
+
+.m-account-role.transaction-role-expenses {
+  background-color: var(--m-role-expenses-bg);
+  color: var(--m-role-expenses-fg);
+}
+
+.m-account-role.transaction-role-company {
+  background-color: var(--m-role-company-bg);
+  color: var(--m-role-company-fg);
+  border-bottom: 1px solid var(--m-role-company-line);
+}
+
+.m-account-role.transaction-role-partner {
+  background-color: var(--m-role-partner-bg);
+  color: var(--m-role-partner-fg);
+  border-bottom: 1px solid var(--m-role-partner-line);
+}
+
+.m-account-role.transaction-role-staff {
+  background-color: var(--m-role-staff-bg);
+  color: var(--m-role-staff-fg);
+}
+
+.m-account-role.transaction-role-upline {
+  background-color: var(--m-role-upline-bg);
+  color: var(--m-role-upline-fg);
+}
+
+.m-account-role.transaction-role-agent {
+  background-color: var(--m-role-agent-bg);
+  color: var(--m-role-agent-fg);
+}
+
+.m-account-role.transaction-role-member {
+  background-color: var(--m-role-member-bg);
+  color: var(--m-role-member-fg);
+}
+
+.m-account-role.transaction-role-debtor {
+  background-color: var(--m-color-surface-muted);
+  color: var(--m-color-muted);
+  border-bottom: 1px solid var(--m-role-debtor-line);
+}
+
+.m-account-role.transaction-role-none {
+  background-color: var(--m-role-none-bg);
+  color: var(--m-role-none-fg);
+}

@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "workspaces": [
+    "c168_mobile/frontend"
+  ],
   "scripts": {
     "dev": "vite",
     "prebuild": "node ./scripts/warn-dist-css-edits.mjs",

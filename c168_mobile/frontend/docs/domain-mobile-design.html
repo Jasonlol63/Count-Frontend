@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Domain Mobile — Design Preview</title>
+    <style>
+      :root {
+        --bg: #f1f5f9;
+        --surface: #fff;
+        --text: #0f172a;
+        --muted: #64748b;
+        --label: #94a3b8;
+        --ring: #e2e8f0;
+        --primary: #2563eb;
+        --violet: #7c3aed;
+        --danger: #dc2626;
+        --ok: #16a34a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: #0b1220;
+        color: var(--text);
+      }
+      .page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 24px 16px 48px;
+      }
+      h1 { color: #f8fafc; font-size: 1.35rem; margin: 0 0 8px; }
+      .sub { color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px; }
+      .tabs {
+        display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px;
+      }
+      .tabs button {
+        border: 1px solid #334155;
+        background: #1e293b;
+        color: #e2e8f0;
+        border-radius: 999px;
+        padding: 8px 14px;
+        cursor: pointer;
+      }
+      .tabs button.active {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+      .stage {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 20px;
+        align-items: start;
+      }
+      @media (max-width: 800px) {
+        .stage { grid-template-columns: 1fr; }
+      }
+      .phone {
+        width: 320px;
+        height: 680px;
+        margin: 0 auto;
+        border-radius: 28px;
+        border: 8px solid #111827;
+        background: var(--bg);
+        overflow: hidden;
+        position: relative;
+        box-shadow: 0 20px 50px rgba(0,0,0,.45);
+      }
+      .screen { display: none; height: 100%; flex-direction: column; }
+      .screen.active { display: flex; }
+      .topbar {
+        display: flex; align-items: center; gap: 10px;
+        padding: 12px 14px; background: var(--surface);
+        border-bottom: 1px solid var(--ring);
+      }
+      .topbar .logo {
+        flex: 1; font-weight: 700; color: var(--primary); font-size: .95rem;
+      }
+      .sticky { padding: 10px 12px; background: var(--surface); border-bottom: 1px solid var(--ring); }
+      .title { font-size: 1.15rem; font-weight: 700; margin: 0 0 8px; }
+      .search {
+        display: flex; gap: 8px; align-items: center;
+        border: 1px solid var(--ring); border-radius: 12px;
+        padding: 8px 10px; background: #f8fafc; color: var(--label); font-size: .85rem;
+      }
+      .actions { display: flex; gap: 8px; margin-top: 8px; }
+      .btn {
+        border: 0; border-radius: 10px; padding: 8px 12px; font-size: .8rem; font-weight: 600; cursor: pointer;
+      }
+      .btn-primary { background: var(--primary); color: #fff; }
+      .btn-outline { background: #eff6ff; color: var(--primary); }
+      .btn-danger { background: #fef2f2; color: var(--danger); opacity: .5; }
+      .list { flex: 1; overflow: auto; padding: 10px 12px 72px; display: grid; gap: 10px; }
+      .card {
+        background: var(--surface); border: 1px solid var(--ring);
+        border-radius: 14px; padding: 12px; display: grid; gap: 8px;
+      }
+      .card-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+      .card strong { font-size: .95rem; }
+      .card small { color: var(--muted); display: block; margin-top: 2px; }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip {
+        font-size: .7rem; font-weight: 700; padding: 3px 8px; border-radius: 999px;
+      }
+      .chip-g { background: #ede9fe; color: var(--violet); }
+      .chip-c { background: #dbeafe; color: var(--primary); }
+      .nav {
+        position: absolute; left: 0; right: 0; bottom: 0;
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        background: var(--surface); border-top: 1px solid var(--ring);
+        padding: 8px 4px 10px; font-size: .65rem; color: var(--muted); text-align: center;
+      }
+      .nav .on { color: var(--primary); font-weight: 700; }
+      .sheet-head {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 14px 14px 8px; background: var(--surface);
+      }
+      .sheet-body { flex: 1; overflow: auto; padding: 8px 14px 80px; display: grid; gap: 12px; }
+      .field label { display: block; font-size: .72rem; color: var(--muted); margin-bottom: 4px; }
+      .field input, .field select {
+        width: 100%; border: 1px solid var(--ring); border-radius: 10px;
+        padding: 10px; font-size: .9rem; background: #f8fafc;
+      }
+      .section-title { font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; }
+      .row-item {
+        border: 1px solid var(--ring); border-radius: 12px; padding: 10px;
+        display: flex; justify-content: space-between; align-items: center; gap: 8px;
+        background: var(--surface);
+      }
+      .pill-row { display: flex; flex-wrap: wrap; gap: 6px; }
+      .pill {
+        border: 1px solid var(--ring); background: #f8fafc; border-radius: 999px;
+        padding: 6px 10px; font-size: .75rem; font-weight: 600;
+      }
+      .pill.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+      .toggle {
+        width: 44px; height: 26px; border-radius: 999px; background: #cbd5e1; position: relative;
+      }
+      .toggle.on { background: var(--ok); }
+      .toggle::after {
+        content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+        border-radius: 50%; background: #fff;
+      }
+      .toggle.on::after { left: 21px; }
+      .footer {
+        position: absolute; left: 0; right: 0; bottom: 0;
+        display: flex; gap: 8px; padding: 10px 12px;
+        background: var(--surface); border-top: 1px solid var(--ring);
+      }
+      .footer .btn { flex: 1; padding: 12px; }
+      .notes {
+        background: #111827; border: 1px solid #334155; border-radius: 16px;
+        padding: 16px; color: #e2e8f0;
+      }
+      .notes h2 { margin: 0 0 10px; font-size: 1rem; color: #fff; }
+      .notes ul { margin: 0; padding-left: 18px; line-height: 1.55; font-size: .88rem; color: #cbd5e1; }
+      .notes code { color: #93c5fd; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>C168 Domain — Mobile 设计预览</h1>
+      <p class="sub">对齐桌面 Domain List 全能力 · 视觉跟现有 Account / More 体系（蓝主色、白卡片、底栏）</p>
+
+      <div class="tabs" id="tabs">
+        <button type="button" data-screen="list" class="active">1. 列表</button>
+        <button type="button" data-screen="form">2. 编辑 Domain</button>
+        <button type="button" data-screen="settings">3. Company Settings</button>
+        <button type="button" data-screen="price">4. Price</button>
+        <button type="button" data-screen="exp">5. 到期</button>
+      </div>
+
+      <div class="stage">
+        <div class="phone">
+          <!-- LIST -->
+          <div class="screen active" id="list">
+            <div class="topbar"><span>☰</span><span class="logo">EazyCount</span><span>🔔</span></div>
+            <div class="sticky">
+              <p class="title">Domain</p>
+              <div class="search">🔍 Search owner / company / group</div>
+              <div class="actions">
+                <button class="btn btn-primary" type="button">Add</button>
+                <button class="btn btn-outline" type="button">Price</button>
+                <button class="btn btn-danger" type="button">Delete</button>
+              </div>
+            </div>
+            <div class="list">
+              <article class="card">
+                <div class="card-head">
+                  <div><strong>DEMO</strong><small>MODE · demo@…</small></div>
+                  <span style="color:var(--primary)">Edit ›</span>
+                </div>
+                <div class="chips">
+                  <span class="chip chip-g">AP</span>
+                  <span class="chip chip-g">IG</span>
+                  <span class="chip chip-c">95</span>
+                  <span class="chip chip-c">+2</span>
+                </div>
+              </article>
+              <article class="card">
+                <div class="card-head">
+                  <div><strong>WS</strong><small>WEI SONG · …</small></div>
+                  <span style="color:var(--primary)">Edit ›</span>
+                </div>
+                <div class="chips">
+                  <span class="chip chip-c">C168</span>
+                  <span class="chip chip-c">WS1</span>
+                </div>
+              </article>
+              <article class="card">
+                <div class="card-head">
+                  <div><strong>TEST001</strong><small>IT01 KUNZZ</small></div>
+                  <span style="color:var(--primary)">Edit ›</span>
+                </div>
+                <div class="chips">
+                  <span class="chip chip-g">T1</span>
+                  <span class="chip chip-c">D1</span>
+                </div>
+              </article>
+            </div>
+            <div class="nav"><div>Home</div><div>Txn</div><div>Account</div><div class="on">More</div></div>
+          </div>
+
+          <!-- FORM -->
+          <div class="screen" id="form">
+            <div class="sheet-head">
+              <strong>Edit Domain</strong>
+              <span style="color:var(--muted)">✕</span>
+            </div>
+            <div class="sheet-body">
+              <div class="field"><label>Owner Code</label><input value="DEMO" /></div>
+              <div class="field"><label>Name</label><input value="MODE" /></div>
+              <div class="field"><label>Email</label><input value="demo@example.com" /></div>
+              <div class="field"><label>Password</label><input type="password" value="********" /></div>
+              <div class="section-title">Companies & Groups</div>
+              <div class="row-item">
+                <div><strong>95</strong><small style="color:var(--muted)">Company · 1 Year · Charge On</small></div>
+                <button class="btn btn-outline" type="button">Set</button>
+              </div>
+              <div class="row-item">
+                <div><strong>IG</strong><small style="color:var(--muted)">Group · 6 Months · Off</small></div>
+                <button class="btn btn-outline" type="button">Set</button>
+              </div>
+              <button class="btn btn-outline" type="button">+ Company</button>
+              <button class="btn btn-outline" type="button">+ Group</button>
+            </div>
+            <div class="footer">
+              <button class="btn" type="button" style="background:#f1f5f9">Cancel</button>
+              <button class="btn btn-primary" type="button">Confirm</button>
+            </div>
+          </div>
+
+          <!-- SETTINGS -->
+          <div class="screen" id="settings">
+            <div class="sheet-head">
+              <strong>Company Settings · 95</strong>
+              <span style="color:var(--muted)">✕</span>
+            </div>
+            <div class="sheet-body">
+              <div class="section-title">Period</div>
+              <div class="pill-row">
+                <span class="pill">7D</span><span class="pill">1M</span><span class="pill">3M</span>
+                <span class="pill">6M</span><span class="pill on">1Y</span>
+              </div>
+              <div class="row-item">
+                <div><strong>Charge on save</strong><small style="color:var(--muted)">Domain Fee pipeline</small></div>
+                <div class="toggle on"></div>
+              </div>
+              <div class="section-title">Share %</div>
+              <div class="field"><label>Profit</label><input value="40" /></div>
+              <div class="field"><label>Sales</label><input value="30" /></div>
+              <div class="field"><label>CS</label><input value="20" /></div>
+              <div class="field"><label>IT</label><input value="10" /></div>
+              <div class="section-title">Permissions</div>
+              <div class="row-item"><div>Games</div><strong style="color:var(--ok)">✓</strong></div>
+              <button class="btn btn-outline" type="button">Add Account</button>
+            </div>
+            <div class="footer">
+              <button class="btn btn-primary" type="button">Save</button>
+            </div>
+          </div>
+
+          <!-- PRICE -->
+          <div class="screen" id="price">
+            <div class="sheet-head">
+              <strong>Price</strong>
+              <span style="color:var(--muted)">✕</span>
+            </div>
+            <div class="sheet-body">
+              <div class="chips">
+                <span class="chip chip-c">C 6M / 1Y</span>
+                <span class="chip chip-g">G 6M / 1Y</span>
+              </div>
+              <div class="section-title">Company Price (MYR)</div>
+              <div class="field"><label>7 days</label><input value="50.00" /></div>
+              <div class="field"><label>1 month</label><input value="150.00" /></div>
+              <div class="field"><label>3 months</label><input value="400.00" /></div>
+              <div class="field"><label>6 months</label><input value="700.00" /></div>
+              <div class="field"><label>1 year</label><input value="1200.00" /></div>
+              <div class="section-title">Group Price (MYR)</div>
+              <div class="field"><label>6 months</label><input value="900.00" /></div>
+              <div class="field"><label>1 year</label><input value="1500.00" /></div>
+            </div>
+            <div class="footer">
+              <button class="btn btn-primary" type="button">Save Price</button>
+            </div>
+          </div>
+
+          <!-- EXP -->
+          <div class="screen" id="exp">
+            <div class="sheet-head">
+              <strong>Expiration · Companies</strong>
+              <span style="color:var(--muted)">✕</span>
+            </div>
+            <div class="sheet-body">
+              <div class="row-item">
+                <div><strong>95</strong><small style="color:var(--muted)">Expires 2026-12-31 · 142 days</small></div>
+                <span class="chip chip-c">OK</span>
+              </div>
+              <div class="row-item">
+                <div><strong>AG</strong><small style="color:#b45309">Expires 2026-08-20 · 9 days</small></div>
+                <span class="chip" style="background:#fef3c7;color:#b45309">Soon</span>
+              </div>
+              <div class="row-item">
+                <div><strong>CX</strong><small style="color:var(--danger)">Expired 2026-07-01</small></div>
+                <span class="chip" style="background:#fee2e2;color:var(--danger)">Out</span>
+              </div>
+            </div>
+            <div class="footer">
+              <button class="btn btn-primary" type="button">Close</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="notes">
+          <h2>屏说明</h2>
+          <ul>
+            <li><strong>列表</strong>：More → Domain；搜索；Add / Price / Delete；Owner 卡 + Group（紫）/ Company（蓝）chip；点 chip 看到期。</li>
+            <li><strong>编辑 Domain</strong>：Owner 字段 + 行列表；Set 进 Settings；底部 Confirm 走 create/update + 收费流水线（同桌面）。</li>
+            <li><strong>Settings</strong>：Period、Charge、Share%、Permissions、Add Account。</li>
+            <li><strong>Price</strong>：全局 Company/Group 周期价表。</li>
+            <li><strong>入口</strong>：仅 C168 上下文 + Domain 权限；直链无权限踢回。</li>
+            <li>实现 Plan：<code>mobile_domain_full_parity</code> · API 复用 <code>domain_api.php</code></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <script>
+      const tabs = document.getElementById("tabs");
+      tabs.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-screen]");
+        if (!btn) return;
+        tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
+        document.querySelectorAll(".screen").forEach((s) => {
+          s.classList.toggle("active", s.id === btn.dataset.screen);
+        });
+      });
+    </script>
+  </body>
+</html>

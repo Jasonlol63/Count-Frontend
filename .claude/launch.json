@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "mobile-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "c168_mobile/frontend", "run", "dev"],
+      "port": 5174
     }
   ]
 }

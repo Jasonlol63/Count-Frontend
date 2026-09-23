@@ -1,0 +1,241 @@
+/* Mobile admin user management — extends account.css sheet/chrome look.
+   Sizing follows c168_mobile tokens (1rem = 16px), NOT the desktop 62.5% scale.
+   User cards use the shared .m-user-card styles from account.css. */
+
+/* Detail sheet ------------------------------------------------------- */
+
+.m-admin-detail-status {
+  margin-left: 0.4rem;
+}
+
+.m-admin-detail-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.m-admin-btn {
+  flex: 1;
+  border: 1px solid var(--m-color-ring);
+  border-radius: var(--m-radius-card);
+  background: var(--m-color-surface);
+  padding: 0.7rem 0.75rem;
+  color: var(--m-color-text);
+  font-size: var(--m-text-body);
+  font-weight: 700;
+}
+
+.m-admin-btn:disabled {
+  opacity: 0.45;
+}
+
+.m-admin-btn--primary {
+  border-color: var(--m-color-primary);
+  background: var(--m-grad-brand);
+  color: #fff;
+}
+
+.m-admin-btn--danger {
+  border-color: rgba(225, 29, 72, 0.3);
+  background: var(--m-color-danger-soft);
+  color: var(--m-color-danger-text);
+}
+
+.m-admin-delete-confirm {
+  margin-top: 0.9rem;
+  border: 1px solid rgba(225, 29, 72, 0.35);
+  border-radius: var(--m-radius-card);
+  background: var(--m-color-danger-soft);
+  padding: 0.75rem;
+}
+
+.m-admin-delete-confirm p {
+  margin: 0 0 0.65rem;
+  color: var(--m-color-danger-text);
+  font-size: var(--m-text-body);
+  font-weight: 700;
+}
+
+.m-admin-delete-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.m-admin-shadow-hint,
+.m-admin-field-hint {
+  margin: 0 0 0.65rem;
+  border-radius: var(--m-radius-card);
+  background: var(--m-color-primary-soft);
+  padding: 0.55rem 0.7rem;
+  color: var(--m-color-primary-soft-text);
+  font-size: var(--m-text-sub-ratio);
+}
+
+.m-admin-field-hint {
+  margin: 0.55rem 0 0;
+}
+
+/* Form sheet --------------------------------------------------------- */
+
+/* Permission chips wrap instead of horizontal scroll inside the form. */
+.m-admin-pill-wrap {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
+.m-admin-toggle-row {
+  margin-top: 0.7rem;
+  display: flex;
+  width: 100%;
+  min-height: 2.8rem;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: var(--m-radius-card);
+  background: var(--m-color-surface-muted);
+  padding: 0.75rem;
+  color: var(--m-color-text);
+  font-size: var(--m-text-body);
+  font-weight: 600;
+}
+
+.m-admin-belonging {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.m-admin-belonging-chip {
+  border-radius: var(--m-radius-pill);
+  background: rgba(13, 96, 255, 0.1);
+  padding: 0.35rem 0.85rem;
+  color: var(--m-color-primary);
+  font-size: var(--m-text-sub-ratio);
+  font-weight: 800;
+}
+
+.m-admin-belonging-chip.is-group {
+  background: var(--m-grad-brand);
+  color: #fff;
+}
+
+.m-admin-access-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--m-color-ring);
+  border-radius: var(--m-radius-card);
+  background: var(--m-color-surface);
+  padding: 0.75rem;
+  color: var(--m-color-text);
+  font-size: var(--m-text-body);
+  font-weight: 700;
+}
+
+.m-admin-access-row:disabled {
+  opacity: 0.45;
+}
+
+.m-admin-access-row small {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 62%;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--m-color-muted);
+  font-size: var(--m-text-sub-ratio);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Account / Process picker ------------------------------------------- */
+
+.m-admin-picker-bulk {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.7rem 0;
+}
+
+.m-admin-picker-bulk .m-admin-btn {
+  flex: 0 0 auto;
+  padding: 0.42rem 0.75rem;
+  font-size: var(--m-text-sub-ratio);
+}
+
+.m-admin-picker-count {
+  margin-left: auto;
+  color: var(--m-color-muted);
+  font-size: var(--m-text-sub-ratio);
+  font-weight: 600;
+}
+
+.m-admin-picker-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.m-admin-tenant-section {
+  margin-top: 1rem;
+}
+
+.m-admin-tenant-section + .m-admin-tenant-section {
+  border-top: 1px solid var(--m-color-ring);
+  padding-top: 1rem;
+}
+
+.m-admin-picker-empty {
+  margin: 0;
+  border-radius: var(--m-radius-card);
+  background: var(--m-color-surface-muted);
+  padding: 0.75rem;
+  color: var(--m-color-muted);
+  font-size: var(--m-text-sub-ratio);
+  text-align: center;
+}
+
+.m-admin-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid var(--m-color-ring);
+  border-radius: var(--m-radius-card);
+  background: var(--m-color-surface);
+  padding: 0.65rem 0.75rem;
+  color: var(--m-color-text);
+  font-size: var(--m-text-body);
+  font-weight: 600;
+  text-align: left;
+}
+
+.m-admin-picker-item.is-checked {
+  border-color: rgba(13, 96, 255, 0.5);
+  background: rgba(13, 96, 255, 0.06);
+}
+
+.m-admin-picker-item i {
+  color: var(--m-color-primary);
+  font-size: 1rem;
+}
+
+.m-admin-picker-item:not(.is-checked) i {
+  color: var(--m-color-label);
+}
+
+.m-admin-picker-item.is-locked {
+  opacity: 0.45;
+  background: var(--m-color-surface-muted);
+  color: var(--m-color-muted);
+}
+
+.m-admin-picker-item.is-locked i {
+  color: var(--m-color-label);
+}
+
+.m-admin-sentinel {
+  height: 1px;
+}

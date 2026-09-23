@@ -1,0 +1,14 @@
+# C168 Mobile SPA — shares api/, includes/, images/ at site root
+RewriteEngine On
+RewriteBase /c168_mobile/
+
+# Root -> mobile login
+RewriteRule ^$ /c168_mobile/login [R=302,L,NC]
+
+# Static build assets
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Mobile SPA routes -> React build
+RewriteRule ^(login|dashboard|home|member|report|transaction|more|reset-password|owner-secondary-password|user-secondary-password)(/.*)?$ /c168_mobile/frontend/dist/index.html [L,NC,QSA]

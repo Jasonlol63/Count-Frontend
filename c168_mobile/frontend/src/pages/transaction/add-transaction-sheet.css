@@ -1,0 +1,521 @@
+/* Add / search transaction bottom sheet */
+
+.m-add-tx-host {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+
+.m-add-tx-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.m-add-tx-panel {
+  position: absolute;
+  inset-inline: 0;
+  bottom: var(--m-inset-b, 0px);
+  display: flex;
+  max-height: min(90dvh, 100%);
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 1.5rem 1.5rem 0 0;
+  background: var(--m-color-surface);
+  box-shadow: 0 -12px 40px -12px rgba(15, 23, 42, 0.35);
+}
+
+.m-add-tx-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--m-color-ring-soft);
+  padding: 0.75rem 1rem;
+}
+
+.m-add-tx-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--m-color-text);
+}
+
+.m-add-tx-close {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: var(--m-color-surface-muted);
+  color: var(--m-color-muted);
+}
+
+.m-add-tx-body {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1rem;
+}
+
+.m-add-tx-body > * + * {
+  margin-top: 1rem;
+}
+
+.m-add-tx-footer {
+  display: flex;
+  flex-shrink: 0;
+  border-top: 1px solid var(--m-color-ring-soft);
+  padding: 0.75rem 1rem 0;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+.m-add-tx-footer--single .m-add-tx-submit {
+  width: 100%;
+}
+
+.m-add-tx-footer-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.m-add-tx-submit {
+  display: inline-flex;
+  flex: 1;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--m-radius-card-lg);
+  padding: 0.875rem 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  background: var(--m-grad-brand);
+  color: #fff;
+}
+
+.m-add-tx-submit:disabled {
+  opacity: 0.5;
+}
+
+/* Shared form controls */
+.m-tx-form-label {
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--m-color-muted);
+}
+
+.m-tx-form-label--optional span {
+  font-weight: 500;
+  text-transform: none;
+  color: var(--m-color-label);
+}
+
+.m-tx-form-field > .m-tx-form-label {
+  display: block;
+}
+
+.m-tx-form-field > .m-tx-form-label + * {
+  margin-top: 0.375rem;
+}
+
+.m-tx-form-select,
+.m-tx-form-input,
+.m-tx-form-textarea {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--m-color-ring);
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  outline: none;
+}
+
+.m-tx-form-select,
+.m-tx-form-input--muted {
+  background: var(--m-color-surface-muted);
+}
+
+.m-tx-form-input {
+  font-variant-numeric: tabular-nums;
+}
+
+.m-tx-form-input--readonly {
+  background: var(--m-color-surface-muted);
+  color: var(--m-color-text-secondary);
+}
+
+.m-tx-form-select:focus,
+.m-tx-form-input:focus,
+.m-tx-form-textarea:focus {
+  border-color: var(--m-color-primary);
+}
+
+.m-tx-form-select--bold {
+  font-weight: 700;
+}
+
+.m-tx-form-textarea {
+  text-transform: uppercase;
+}
+
+.m-tx-form-section > * + * {
+  margin-top: 0.375rem;
+}
+
+.m-tx-form-section > .m-tx-form-btn {
+  width: 100%;
+}
+
+/* RATE: allow `/3.15` style rates; keep computed amounts readable */
+.m-tx-rate-rate-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.01em;
+}
+
+.m-tx-rate-amount-display {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--m-color-text);
+}
+
+.m-tx-form-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.m-tx-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.m-tx-form-actions .m-tx-form-btn {
+  flex: 1;
+}
+
+.m-tx-form-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  padding: 0.625rem 0;
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+}
+
+.m-tx-form-btn--outline {
+  border: 1px solid var(--m-color-ring);
+  background: var(--m-color-surface);
+  color: var(--m-color-text-secondary);
+}
+
+.m-tx-form-btn--outline:disabled {
+  opacity: 0.4;
+}
+
+.m-tx-form-btn--warn {
+  background: var(--m-color-warning-soft);
+  color: var(--m-color-warning-text);
+}
+
+.m-tx-form-hint {
+  margin-top: 0.5rem;
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  line-height: 1.375;
+  color: var(--m-color-muted);
+}
+
+.m-tx-form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--m-color-ring);
+  background: var(--m-color-surface-muted);
+  padding: 0.75rem;
+}
+
+.m-tx-form-checkbox input {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.25rem;
+  border-color: var(--m-color-ring);
+  accent-color: var(--m-color-primary);
+}
+
+.m-tx-form-checkbox span {
+  font-size: var(--m-text-body);
+  font-weight: 600;
+  color: var(--m-color-text);
+}
+
+.m-tx-date-row {
+  position: relative;
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  overflow: hidden;
+  border-radius: var(--m-radius-card-lg);
+  border: 1px solid var(--m-color-ring);
+  background: var(--m-color-surface-muted);
+  padding: 0.75rem 0.875rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.m-tx-date-row:focus-within {
+  border-color: var(--m-color-primary);
+  background: var(--m-color-surface);
+  box-shadow: 0 0 0 2px rgba(13, 96, 255, 0.2);
+}
+
+.m-tx-date-row--disabled {
+  opacity: 0.5;
+}
+
+.m-tx-date-row:not(.m-tx-date-row--disabled) {
+  cursor: pointer;
+}
+
+.m-tx-date-row:not(.m-tx-date-row--disabled):active {
+  background: var(--m-color-surface-muted);
+}
+
+.m-tx-date-icon {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: var(--m-color-surface);
+  color: var(--m-color-primary);
+  box-shadow: var(--m-shadow-card);
+  outline: 1px solid var(--m-color-ring-soft);
+}
+
+.m-tx-date-icon i {
+  font-size: 0.9375rem;
+}
+
+.m-tx-date-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.m-tx-date-label {
+  display: block;
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--m-color-label);
+}
+
+.m-tx-date-value-row {
+  margin-top: 0.125rem;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.m-tx-date-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--m-color-text);
+}
+
+.m-tx-date-badge {
+  flex-shrink: 0;
+  border-radius: 0.375rem;
+  background: var(--m-color-info-soft);
+  padding: 0.125rem 0.375rem;
+  font-size: var(--m-text-caption);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--m-color-info-text);
+}
+
+.m-tx-date-chevron {
+  font-size: var(--m-text-secondary);
+  color: var(--m-color-label);
+}
+
+.m-tx-date-input {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.m-tx-date-input:disabled {
+  cursor: not-allowed;
+}
+
+.m-tx-account-field > * + * {
+  margin-top: 0.375rem;
+}
+
+/* Account field trigger: a <select>-styled button so the sheet keeps its old look
+   while the options open in a searchable panel instead of the native OS popup. */
+.m-tx-account-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--m-color-text);
+  text-align: left;
+}
+
+.m-tx-account-trigger:disabled {
+  opacity: 0.5;
+}
+
+.m-tx-account-trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.m-tx-account-trigger-caret {
+  flex-shrink: 0;
+  font-size: var(--m-text-caption);
+  color: var(--m-color-label);
+}
+
+/* Search panel: covers the sheet body (positioned against .m-add-tx-panel). */
+.m-tx-account-picker {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  /* beats `.m-tx-account-field > * + *` so the panel really covers the sheet */
+  margin: 0;
+  background: var(--m-color-surface);
+}
+
+.m-tx-account-picker-head {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--m-color-ring-soft);
+  padding: 0.75rem 1rem;
+}
+
+.m-tx-account-picker-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--m-color-text);
+}
+
+.m-tx-account-picker-close {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: var(--m-color-surface-muted);
+  color: var(--m-color-muted);
+}
+
+.m-tx-account-picker-search {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--m-color-ring-soft);
+  padding: 0.75rem 1rem;
+  color: var(--m-color-label);
+}
+
+.m-tx-account-picker-search input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--m-color-ring);
+  border-radius: 0.75rem;
+  background: var(--m-color-surface-muted);
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--m-color-text);
+  outline: none;
+}
+
+.m-tx-account-picker-search input:focus {
+  border-color: var(--m-color-primary);
+}
+
+.m-tx-account-picker-list {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem 0.75rem calc(env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+.m-tx-account-picker-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--m-color-text);
+  text-align: left;
+}
+
+.m-tx-account-picker-item + .m-tx-account-picker-item {
+  margin-top: 0.25rem;
+}
+
+.m-tx-account-picker-item.is-selected {
+  background: var(--m-color-surface-muted);
+  color: var(--m-color-primary);
+}
+
+.m-tx-account-picker-tick {
+  flex-shrink: 0;
+  font-size: var(--m-text-caption);
+}
+
+.m-tx-account-picker-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.m-tx-account-picker-empty {
+  padding: 1rem 0.75rem;
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  color: var(--m-color-muted);
+  text-align: center;
+}

@@ -1,0 +1,16 @@
+/** Tabular money display — shared across Transaction, Dashboard, etc. */
+.m-money {
+  font-variant-numeric: tabular-nums;
+}
+
+.m-money--neutral {
+  color: var(--m-color-text);
+}
+
+.m-money--pos {
+  color: var(--m-color-primary);
+}
+
+.m-money--neg {
+  color: var(--m-color-danger);
+}

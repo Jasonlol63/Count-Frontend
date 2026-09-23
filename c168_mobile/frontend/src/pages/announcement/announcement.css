@@ -1,0 +1,296 @@
+.m-ann-sticky {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.m-ann-sticky .m-dash-segment {
+  margin: 0;
+}
+
+.m-ann-admin-page {
+  padding: 0.75rem var(--m-page-gutter) 6.5rem;
+}
+
+.m-ann-admin-section {
+  margin: 0 0 0.75rem;
+  font-size: var(--m-text-title);
+  font-weight: 800;
+  color: var(--m-color-text);
+}
+
+.m-ann-admin-section-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.m-ann-admin-section-row .m-ann-admin-section {
+  margin: 0;
+}
+
+.m-ann-mode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 0.9rem;
+  background: var(--m-color-surface-muted);
+  outline: 1px solid var(--m-color-ring);
+  padding: 0.65rem 0.8rem;
+}
+
+.m-ann-mode-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.m-ann-mode-copy strong {
+  font-size: var(--m-text-secondary);
+  font-weight: 800;
+  color: var(--m-color-text);
+}
+
+.m-ann-mode-copy small {
+  font-size: var(--m-text-caption);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--m-color-label);
+}
+
+.m-ann-mode-toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 3.1rem;
+  height: 1.85rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--m-color-ring);
+  padding: 0;
+  transition: background-color 0.18s ease;
+}
+
+.m-ann-mode-toggle.is-on {
+  background: #2563eb;
+}
+
+.m-ann-mode-toggle:disabled {
+  opacity: 0.45;
+}
+
+.m-ann-mode-thumb {
+  position: absolute;
+  top: 0.2rem;
+  left: 0.2rem;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  background: var(--m-color-surface);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
+  transition: transform 0.18s ease;
+}
+
+.m-ann-mode-toggle.is-on .m-ann-mode-thumb {
+  transform: translateX(1.25rem);
+}
+
+.m-ann-singleton-hint {
+  margin: 0 0 0.75rem;
+  border-radius: 0.85rem;
+  background: var(--m-color-warning-soft);
+  outline: 1px solid #fde68a;
+  padding: 0.65rem 0.8rem;
+  font-size: var(--m-text-secondary);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--m-color-warning-text);
+}
+
+.m-ann-maint-prefix {
+  color: var(--m-color-text);
+}
+
+.m-ann-admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.m-ann-admin-card {
+  border-radius: 1.25rem;
+  background: var(--m-color-surface);
+  box-shadow: 0 8px 28px -12px #0f172a1f;
+  outline: 1px solid var(--m-color-ring);
+  padding: 1rem 1.05rem 0.9rem;
+}
+
+.m-ann-admin-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.m-ann-admin-title {
+  margin: 0;
+  min-width: 0;
+  flex: 1;
+  font-size: var(--m-text-title);
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--m-color-text);
+  word-break: break-word;
+}
+
+.m-ann-admin-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.4rem;
+}
+
+.m-ann-admin-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-size: var(--m-text-caption);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.m-ann-admin-btn--edit {
+  background: var(--m-color-primary-soft);
+  color: var(--m-color-primary-soft-text);
+}
+
+.m-ann-admin-btn--delete {
+  background: var(--m-color-danger-soft);
+  color: var(--m-color-danger);
+}
+
+.m-ann-admin-body {
+  margin-top: 0.7rem;
+  color: var(--m-color-text-secondary);
+  font-size: var(--m-text-body);
+  font-weight: 500;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.m-ann-admin-body h2,
+.m-ann-admin-body h3,
+.m-ann-admin-body h4 {
+  margin: 0.35rem 0 0.45rem;
+  font-size: 1em;
+  font-weight: 800;
+  color: var(--m-color-text);
+}
+
+.m-ann-admin-body p {
+  margin: 0.25rem 0;
+}
+
+.m-ann-admin-body ol,
+.m-ann-admin-body ul {
+  margin: 0.35rem 0 0.35rem 1.1rem;
+  padding: 0;
+}
+
+.m-ann-admin-body li {
+  margin: 0.2rem 0;
+}
+
+.m-ann-admin-meta {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  font-size: var(--m-text-caption);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--m-color-label);
+}
+
+.m-ann-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.m-ann-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.m-ann-field > span {
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+  color: var(--m-color-text-secondary);
+}
+
+.m-ann-field > small {
+  font-size: var(--m-text-caption);
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--m-color-label);
+}
+
+.m-ann-field input {
+  width: 100%;
+  border: 1px solid var(--m-color-ring);
+  border-radius: 0.85rem;
+  background: var(--m-color-surface);
+  padding: 0.75rem 0.85rem;
+  font-size: var(--m-text-body);
+  font-weight: 600;
+  color: var(--m-color-text);
+}
+
+.m-ann-field input:focus {
+  outline: 2px solid rgba(13, 96, 255, 0.35);
+  outline-offset: 1px;
+  border-color: #93c5fd;
+}
+
+.m-ann-confirm-msg {
+  margin: 0;
+  font-size: var(--m-text-body);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--m-color-text-secondary);
+  white-space: pre-wrap;
+}
+
+.m-ann-editor .ql-toolbar.ql-snow {
+  border: 1px solid var(--m-color-ring);
+  border-radius: 0.85rem 0.85rem 0 0;
+  background: var(--m-color-surface-muted);
+}
+
+.m-ann-editor .ql-container.ql-snow {
+  border: 1px solid var(--m-color-ring);
+  border-top: 0;
+  border-radius: 0 0 0.85rem 0.85rem;
+  background: var(--m-color-surface);
+  min-height: 10rem;
+  font-size: var(--m-text-body);
+}
+
+.m-ann-editor .ql-editor {
+  min-height: 10rem;
+}
+
+.m-ann-editor.is-disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.m-ann-editor .ql-editor.ql-blank::before {
+  color: #94a3b8;
+  font-style: normal;
+}

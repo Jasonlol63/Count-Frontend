@@ -1,0 +1,264 @@
+.m-ann-card {
+  /* wrapper from parent */
+}
+
+.m-ann-card--structured {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.m-ann-fallback-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--m-color-text);
+}
+
+.m-ann-fallback-preview {
+  margin-top: 0.25rem;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  color: var(--m-color-muted);
+}
+
+.m-ann-fallback-time {
+  margin-top: 0.5rem;
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  color: var(--m-color-label);
+}
+
+.m-ann-rich-text {
+  font-size: var(--m-text-body);
+  font-weight: 500;
+  line-height: 1.625;
+  color: var(--m-color-text-secondary);
+}
+
+.m-ann-rich-text h3 {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--m-color-text);
+}
+
+.m-ann-rich-text a {
+  color: var(--m-color-primary);
+}
+
+.m-ann-rich-text p + p {
+  margin-top: 0.375rem;
+}
+
+.m-ann-rich-text strong {
+  font-weight: 700;
+}
+
+.m-ann-rich-text ul,
+.m-ann-rich-text ol {
+  padding-left: 1rem;
+}
+
+.m-ann-rich-text li {
+  margin-left: 1rem;
+  list-style: disc;
+}
+
+.m-ann-rich-text ol li {
+  list-style: decimal;
+}
+
+.m-ann-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.m-ann-icon {
+  margin-top: 0.125rem;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--m-radius-pill);
+  background: var(--m-color-primary-soft);
+  color: var(--m-color-primary);
+}
+
+.m-ann-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.m-ann-header-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.m-ann-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.m-ann-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--m-color-text);
+}
+
+.m-ann-title--truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.m-ann-version {
+  flex-shrink: 0;
+  border-radius: var(--m-radius-pill);
+  background: var(--m-color-info-soft);
+  padding: 0.125rem 0.5rem;
+  font-size: var(--m-text-caption);
+  font-weight: 700;
+  color: var(--m-color-primary);
+}
+
+.m-ann-subtitle {
+  margin-top: 0.25rem;
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  color: var(--m-color-muted);
+}
+
+.m-ann-time {
+  margin-top: 0.125rem;
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  color: var(--m-color-label);
+}
+
+.m-ann-preview {
+  margin-top: 0.25rem;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  color: var(--m-color-muted);
+}
+
+.m-ann-section-label {
+  border-radius: 0.75rem;
+  background: var(--m-color-surface-muted);
+  padding: 0.5rem 0.75rem;
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--m-color-muted);
+}
+
+.m-ann-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.m-ann-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.m-ann-item-index {
+  margin-top: 0.125rem;
+  flex-shrink: 0;
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+  color: var(--m-color-label);
+}
+
+.m-ann-item-text {
+  font-size: var(--m-text-body);
+  font-weight: 500;
+  line-height: 1.625;
+  color: var(--m-color-text-secondary);
+}
+
+.m-ann-intro {
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  color: var(--m-color-muted);
+}
+
+.m-ann-thanks {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  background: var(--m-color-success-soft);
+  padding: 0.5rem 0.75rem;
+  color: var(--m-color-success-text);
+}
+
+.m-ann-thanks svg {
+  margin-top: 0.125rem;
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+}
+
+.m-ann-thanks p {
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  line-height: 1.625;
+}
+
+.m-ann-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--m-color-ring-soft);
+  padding-top: 0.5rem;
+}
+
+.m-ann-team {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--m-text-secondary);
+  font-weight: 600;
+  color: var(--m-color-muted);
+}
+
+.m-ann-team img {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 0.125rem;
+}
+
+.m-ann-posted {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  color: var(--m-color-label);
+}
+
+.m-ann-posted svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}

@@ -1,0 +1,253 @@
+.m-ar-sticky {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.m-ar-page {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem var(--m-page-gutter, 1rem) 6.5rem;
+}
+
+.m-ar-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.m-ar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.75rem;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--m-color-ring);
+  border-radius: 999px;
+  background: var(--m-color-surface);
+  color: #475569;
+  font-size: var(--m-text-secondary);
+  font-weight: 600;
+}
+
+.m-ar-chip em {
+  font-style: normal;
+  min-width: 1rem;
+  padding: 0.05rem 0.28rem;
+  border-radius: 999px;
+  background: var(--m-color-primary-soft);
+  color: var(--m-color-primary, #2563eb);
+  font-size: var(--m-text-caption);
+  font-weight: 800;
+  text-align: center;
+}
+
+.m-ar-chip.is-active {
+  border-color: #bfd0ff;
+  background: var(--m-color-primary-soft);
+  color: var(--m-color-primary-soft-text);
+}
+
+.m-ar-chip.is-active em {
+  background: var(--m-color-surface);
+}
+
+.m-ar-seg-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.m-ar-seg-badge {
+  min-width: 1rem;
+  height: 1rem;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: #e11d48;
+  color: #fff;
+  font-size: var(--m-text-micro);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.m-ar-readonly {
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.75rem;
+  background: var(--m-color-warning-soft);
+  color: var(--m-color-warning-text);
+  font-size: var(--m-text-secondary);
+}
+
+.m-ar-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.m-ar-card {
+  display: grid;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--m-color-ring);
+  border-radius: 0.9rem;
+  background: var(--m-color-surface);
+  text-align: left;
+  color: inherit;
+}
+
+.m-ar-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.m-ar-card-titles {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.m-ar-card-titles strong {
+  font-size: var(--m-text-title);
+  font-weight: 800;
+  color: var(--m-color-text, #0f172a);
+}
+
+.m-ar-card-titles small {
+  color: var(--m-color-label, #64748b);
+  font-size: var(--m-text-caption);
+}
+
+.m-ar-card-meta {
+  display: grid;
+  gap: 0.15rem;
+  color: #475569;
+  font-size: var(--m-text-secondary);
+}
+
+.m-ar-card-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--m-color-primary, #2563eb);
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+}
+
+.m-ar-status {
+  flex-shrink: 0;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: var(--m-text-caption);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.m-ar-status--pending {
+  background: var(--m-color-warning-soft);
+  color: #c2410c;
+}
+
+.m-ar-status--approved {
+  background: var(--m-color-success-soft);
+  color: #047857;
+}
+
+.m-ar-status--rejected {
+  background: var(--m-color-danger-soft);
+  color: #be123c;
+}
+
+.m-ar-detail {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.m-ar-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.m-ar-detail-head strong {
+  font-size: var(--m-text-title);
+  font-weight: 800;
+}
+
+.m-ar-detail-sub {
+  margin: -0.35rem 0 0;
+  color: var(--m-color-label, #64748b);
+  font-size: var(--m-text-secondary);
+}
+
+.m-ar-meta {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.m-ar-meta > div {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.7rem;
+  background: var(--m-color-surface-muted);
+}
+
+.m-ar-meta dt {
+  color: #64748b;
+  font-size: var(--m-text-caption);
+  font-weight: 600;
+}
+
+.m-ar-meta dd {
+  margin: 0;
+  color: #0f172a;
+  font-size: var(--m-text-body);
+  font-weight: 700;
+}
+
+.m-ar-form {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.m-ar-field {
+  display: grid;
+  gap: 0.3rem;
+  font-size: var(--m-text-secondary);
+  font-weight: 600;
+  color: #334155;
+}
+
+.m-ar-hint {
+  margin: 0;
+  color: var(--m-color-warning-text);
+  font-size: var(--m-text-caption);
+}
+
+.m-ar-confirm-msg,
+.m-ar-muted {
+  margin: 0;
+  color: #334155;
+  font-size: var(--m-text-body);
+  line-height: 1.45;
+}
+
+/* Sheet footer CTAs — match mobile tokens (not desktop 0.875rem CTA scale). */
+.m-account-sheet-footer .m-account-footer-actions .m-account-primary-btn,
+.m-account-sheet-footer .m-account-footer-actions .m-account-danger-btn,
+.m-account-sheet-footer .m-account-footer-actions .m-account-secondary-btn,
+.m-account-sheet-footer > .m-account-primary-btn,
+.m-account-sheet-footer > .m-account-danger-btn {
+  margin-top: 0;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.75rem;
+  font-size: var(--m-text-body);
+  font-weight: 700;
+  line-height: 1.2;
+}

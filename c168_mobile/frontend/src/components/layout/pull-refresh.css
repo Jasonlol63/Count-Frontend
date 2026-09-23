@@ -1,0 +1,57 @@
+.m-pull-refresh {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+
+.m-pull-refresh-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.m-pull-refresh-icon-wrap {
+  position: relative;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+}
+
+.m-pull-refresh-icon-wrap svg--spinning {
+  animation: mPullSpin 0.75s linear infinite;
+}
+
+.m-pull-refresh-arrow {
+  position: absolute;
+  font-size: var(--m-text-micro);
+}
+
+.m-pull-refresh-arrow--armed {
+  color: var(--m-color-primary);
+  transform: rotate(180deg);
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.m-pull-refresh-arrow--idle {
+  color: var(--m-color-label);
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.m-pull-refresh-label {
+  font-size: var(--m-text-caption);
+  font-weight: 700;
+  letter-spacing: 0.025em;
+}
+
+.m-pull-refresh-label--active {
+  color: var(--m-color-primary);
+}
+
+.m-pull-refresh-label--idle {
+  color: var(--m-color-label);
+}

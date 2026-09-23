@@ -1,0 +1,71 @@
+/** Shared sticky filter bar (Dashboard + Transaction). */
+
+.m-filter-bar {
+  width: 100%;
+  border-radius: var(--m-radius-card-lg);
+  background: var(--m-color-surface);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  box-shadow: 0 8px 20px -12px rgba(15, 23, 42, 0.2);
+  outline: 1px solid var(--m-color-ring-soft);
+}
+
+.m-filter-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.m-filter-bar-icon {
+  flex-shrink: 0;
+  color: var(--m-color-primary);
+}
+
+.m-filter-bar-dates {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--m-text-body);
+  font-weight: 700;
+  color: var(--m-color-text-secondary);
+}
+
+.m-filter-bar-currency {
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  background: var(--m-color-surface-muted);
+  padding: 0.25rem 0.375rem;
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  color: var(--m-color-text-secondary);
+}
+
+.m-filter-bar-scope {
+  margin-top: 0.375rem;
+  border-top: 1px solid var(--m-color-ring);
+  padding-top: 0.375rem;
+}
+
+.m-filter-bar-scope-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.m-filter-bar-scope-main {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.m-filter-bar-switch {
+  flex-shrink: 0;
+  font-size: var(--m-text-caption);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--m-color-label);
+}

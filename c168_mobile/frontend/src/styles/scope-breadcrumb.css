@@ -1,0 +1,82 @@
+/** Scope breadcrumb (Group › Company) — shared filter bar row. */
+
+.m-scope {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.m-scope--gap-md {
+  gap: 0.375rem;
+}
+
+.m-scope-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+}
+
+.m-scope-text--violet {
+  color: var(--m-color-primary);
+}
+
+.m-scope-text--blue {
+  color: var(--m-color-primary);
+}
+
+.m-scope-text--muted {
+  font-weight: 600;
+  color: var(--m-color-label);
+}
+
+.m-scope-text--group-narrow {
+  max-width: 3.25rem;
+}
+
+.m-scope-text--company-narrow {
+  max-width: 4.5rem;
+}
+
+.m-scope-badge {
+  flex-shrink: 0;
+  border-radius: 0.375rem;
+  background: var(--m-grad-brand);
+  padding: 0.125rem 0.375rem;
+  font-size: var(--m-text-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fff;
+}
+
+.m-scope-chevron {
+  flex-shrink: 0;
+  font-size: var(--m-text-micro);
+  color: #cbd5e1;
+}
+
+.m-scope-glyph {
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 0.375rem;
+}
+
+.m-scope-glyph--violet {
+  background: var(--m-grad-brand);
+  color: #fff;
+}
+
+.m-scope-glyph--blue {
+  background: var(--m-grad-brand);
+  color: #fff;
+}
+
+.m-scope-glyph i {
+  font-size: var(--m-text-micro);
+}

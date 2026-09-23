@@ -1,0 +1,943 @@
+.m-account-sticky {
+  display: grid;
+  gap: 0.55rem;
+  font-size: var(--m-text-compact);
+}
+
+.m-account-scope-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.m-account-scope-btn,
+.m-account-settings-btn {
+  border: 1px solid var(--m-color-ring);
+  border-radius: var(--m-radius-card-lg);
+  background: var(--m-color-surface);
+  box-shadow: var(--m-shadow-float);
+}
+
+.m-account-scope-btn {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.7rem;
+}
+
+.m-account-scope-btn > i {
+  color: var(--m-color-primary);
+}
+
+.m-account-settings-btn {
+  width: 3.25rem;
+  flex: 0 0 3.25rem;
+  color: var(--m-color-text-secondary);
+}
+
+.m-account-settings-btn:disabled {
+  opacity: 0.4;
+}
+
+.m-account-search,
+.m-account-sheet-search {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid var(--m-color-ring);
+  border-radius: var(--m-radius-card);
+  background: var(--m-color-surface);
+  padding: 0.55rem 0.75rem;
+  color: var(--m-color-label);
+}
+
+.m-account-search input,
+.m-account-sheet-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--m-color-text);
+}
+
+.m-account-chips,
+.m-account-pill-row {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.m-account-chips::-webkit-scrollbar,
+.m-account-pill-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* Filter chips: same design language as the Transaction page (m-tx-chip) —
+   white pill with ring border plus an on/off check dot */
+.m-account-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: var(--m-radius-pill);
+  border: 1px solid var(--m-color-ring);
+  background: var(--m-color-surface);
+  padding: 0.32rem 0.75rem 0.32rem 0.375rem;
+  font-size: var(--m-text-compact);
+  font-weight: 600;
+  color: var(--m-color-text-secondary);
+  box-shadow: var(--m-shadow-card);
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.m-account-chip-dot {
+  display: grid;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--m-radius-pill);
+  background: var(--m-color-surface-muted);
+  color: transparent;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.m-account-chip-dot i {
+  font-size: 0.5625rem;
+  line-height: 1;
+}
+
+.m-account-chip.is-active {
+  border-color: transparent;
+  background: var(--m-grad-brand);
+  color: #fff;
+  box-shadow: 0 6px 16px -6px rgba(13, 96, 255, 0.5);
+}
+
+.m-account-chip.is-active .m-account-chip-dot {
+  background: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+.m-account-pill {
+  flex: 0 0 auto;
+  border-radius: var(--m-radius-pill);
+  background: var(--m-color-surface-muted);
+  padding: 0.42rem 0.75rem;
+  color: var(--m-color-text-secondary);
+  font-size: var(--m-text-sub-ratio);
+  font-weight: 700;
+}
+
+.m-account-pill.is-active,
+.m-account-pill.is-violet.is-active {
+  background: var(--m-grad-brand);
+  color: #fff;
+}
+
+.m-account-page {
+  width: min(100%, var(--m-page-max-width));
+  margin: 0 auto;
+  padding: 0.85rem var(--m-page-gutter) 1rem;
+}
+
+.m-account-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+/* Account rows are single-line (code + chevron) — two tiles per row keeps the
+   list dense. Scoped to the Account page; Admin/Domain lists stay single-column. */
+.m-account-page .m-account-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.22rem;
+}
+
+/* Compact single-line tile: code left, optional alert bell right. The whole
+   tile taps into the edit form, so no trailing chevron. Uniform min-height
+   keeps the two-column grid rows even. */
+.m-account-list .m-user-card {
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+}
+
+/* Account page only — tighter tile height/padding so more accounts fit on screen. */
+.m-account-page .m-account-list .m-user-card {
+  min-height: 1.85rem;
+  padding: 0.18rem 0.55rem;
+}
+
+.m-account-list .m-account-tile--inactive strong {
+  color: var(--m-color-muted);
+}
+
+/* Needs to out-rank `.m-user-card-copy strong > span` so the tag keeps its
+   own size/weight instead of inheriting the inline-name styles */
+.m-user-card-copy strong > span.m-account-inactive-tag {
+  flex-shrink: 0;
+  overflow: visible;
+  border-radius: var(--m-radius-pill);
+  background: var(--m-color-surface-muted);
+  padding: 0.125rem 0.45rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--m-color-muted);
+}
+
+.m-account-tile-bell {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  color: #d97706;
+}
+
+/* Simplified account card — whole card is one tappable row */
+.m-account-card {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.7rem;
+  border: 1px solid var(--m-color-ring);
+  border-radius: var(--m-radius-card-lg);
+  box-shadow: var(--m-shadow-card);
+  padding: 0.45rem 0.75rem;
+  font: inherit;
+  font-size: var(--m-text-compact);
+  text-align: left;
+}
+
+.m-account-card > i {
+  flex-shrink: 0;
+  color: var(--m-color-label);
+  font-size: var(--m-text-sub-ratio);
+}
+
+.m-account-card-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 0;
+}
+
+.m-account-card-copy strong {
+  overflow: hidden;
+  color: var(--m-color-text);
+  font-size: 1em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.m-account-card-copy > span {
+  overflow: hidden;
+  color: var(--m-color-text-secondary);
+  font-size: var(--m-text-sub-ratio);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.m-account-card-copy small {
+  overflow: hidden;
+  color: var(--m-color-muted);
+  font-size: var(--m-text-label-ratio);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Shared card — quiet two-line row: monogram + ID (name inline) + role · last login.
+   Neutral monogram, uniform height across all cards. Used by Account + Admin Users. */
+.m-user-card {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.7rem;
+  border-radius: var(--m-radius-card-lg);
+  background: var(--m-color-surface);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 6px 20px -16px rgba(15, 23, 42, 0.2);
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: var(--m-text-compact);
+  text-align: left;
+}
+
+.m-user-card-avatar {
+  display: grid;
+  width: 2.375rem;
+  height: 2.375rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--m-color-surface-muted);
+  color: var(--m-color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.m-user-card-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 0.05rem;
+}
+
+.m-user-card-copy strong {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.4rem;
+  overflow: hidden;
+  color: var(--m-color-text);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.m-user-card-copy strong > span {
+  overflow: hidden;
+  color: var(--m-color-text-secondary);
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+.m-user-card-copy small {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.3rem;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--m-color-muted);
+  font-size: var(--m-text-caption);
+}
+
+.m-user-card-copy small b {
+  flex-shrink: 0;
+  color: var(--m-color-text-secondary);
+  font-weight: 600;
+}
+
+.m-user-card-copy small > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m-user-card-copy small .m-user-card-sep {
+  flex-shrink: 0;
+}
+
+.m-user-card > i {
+  flex-shrink: 0;
+  color: var(--m-color-label);
+  font-size: 0.8125rem;
+  opacity: 0.65;
+}
+
+/* Base layout still borrowed by Admin users + Domain cards */
+.m-account-card-main {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.8rem;
+  text-align: left;
+}
+
+.m-account-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--m-color-ring);
+  padding: 0.45rem 0.75rem;
+  background: var(--m-color-overlay);
+}
+
+/* Avatar still used inside detail/form sheets */
+.m-account-avatar {
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: 0 0 2.4rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--m-color-primary-soft);
+  color: var(--m-color-primary-soft-text);
+  font-size: var(--m-text-sub-ratio);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.m-account-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--m-color-text-secondary);
+  font-size: var(--m-text-sub-ratio);
+  font-weight: 700;
+}
+
+.m-account-status,
+.m-account-role-badge {
+  border-radius: var(--m-radius-pill);
+  padding: 0.24rem 0.55rem;
+  font-size: var(--m-text-badge-ratio);
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.m-account-status.active {
+  background: var(--m-color-success-soft);
+  color: var(--m-color-success-text);
+}
+
+.m-account-status.inactive {
+  background: var(--m-color-ring);
+  color: var(--m-color-muted);
+}
+
+.m-account-switch {
+  display: inline-flex;
+  width: 2rem;
+  height: 1.1rem;
+  align-items: center;
+  border-radius: var(--m-radius-pill);
+  background: var(--m-color-ring);
+  padding: 0.12rem;
+  transition: background 0.15s;
+}
+
+.m-account-switch span {
+  width: 0.86rem;
+  height: 0.86rem;
+  border-radius: 50%;
+  background: var(--m-color-surface);
+  transition: transform 0.15s;
+}
+
+.m-account-switch.is-on {
+  background: var(--m-grad-brand);
+}
+
+.m-account-switch.is-on span {
+  transform: translateX(0.9rem);
+}
+
+.m-account-fab {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--m-grad-brand);
+  color: #fff;
+  box-shadow: var(--m-shadow-fab);
+}
+
+.m-account-fab:disabled {
+  opacity: 0.4;
+}
+
+.m-account-toast,
+.m-account-error {
+  margin-bottom: 0.7rem;
+  border-radius: var(--m-radius-card);
+  padding: 0.65rem 0.8rem;
+  font-size: var(--m-text-body);
+  font-weight: 700;
+}
+
+.m-account-toast {
+  background: var(--m-color-success-soft);
+  color: var(--m-color-success-text);
+}
+
+.m-account-toast.error,
+.m-account-error {
+  background: var(--m-color-danger-soft);
+  color: var(--m-color-danger-text);
+}
+
+.m-account-loading,
+.m-account-empty {
+  display: grid;
+  min-height: 14rem;
+  place-items: center;
+  align-content: center;
+  gap: 0.6rem;
+  color: var(--m-color-muted);
+  text-align: center;
+}
+
+.m-account-empty i {
+  font-size: 2rem;
+  color: var(--m-color-label);
+}
+
+.m-account-sheet-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem;
+  font-size: var(--m-text-compact);
+}
+
+.m-account-sheet-footer {
+  border-top: 1px solid var(--m-color-ring);
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  background: var(--m-color-surface);
+  font-size: var(--m-text-compact);
+}
+
+.m-account-primary-btn,
+.m-account-secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: var(--m-radius-card-lg);
+  padding: 0.875rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.m-account-primary-btn {
+  width: 100%;
+  background: var(--m-grad-brand);
+  color: #fff;
+}
+
+.m-account-secondary-btn {
+  border: 1px solid var(--m-color-primary);
+  background: var(--m-color-surface);
+  color: var(--m-color-primary);
+}
+
+.m-account-secondary-btn:disabled {
+  opacity: 0.45;
+}
+
+.m-account-primary-btn:disabled {
+  opacity: 0.45;
+}
+
+.m-account-danger-btn {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+  border-radius: var(--m-radius-card-lg);
+  padding: 0.75rem 1rem;
+  background: var(--m-color-danger-soft);
+  color: var(--m-color-danger-text);
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+}
+
+.m-account-danger-btn:disabled {
+  opacity: 0.45;
+}
+
+.m-account-footer-actions,
+.m-account-link-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.m-account-footer-actions > *,
+.m-account-link-footer .m-account-primary-btn {
+  flex: 1;
+}
+
+.m-account-link-footer > span {
+  min-width: 7rem;
+  color: var(--m-color-primary);
+  font-size: var(--m-text-sub-ratio);
+  font-weight: 700;
+}
+
+.m-account-sheet-section {
+  margin-bottom: 1rem;
+}
+
+.m-account-section-title {
+  margin-bottom: 0.45rem;
+  color: var(--m-color-muted);
+  font-size: var(--m-text-label-ratio);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.m-account-sheet-hint {
+  border-radius: var(--m-radius-card);
+  background: var(--m-color-primary-soft);
+  padding: 0.7rem;
+  color: var(--m-color-primary-soft-text);
+  font-size: var(--m-text-sub-ratio);
+}
+
+.m-account-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 0.9rem;
+}
+
+.m-account-detail-head > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.m-account-detail-head strong {
+  color: var(--m-color-text);
+}
+
+.m-account-detail-head p {
+  overflow: hidden;
+  color: var(--m-color-muted);
+  font-size: var(--m-text-sub-ratio);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.m-account-role-badge {
+  background: var(--m-color-primary-soft);
+  color: var(--m-color-primary-soft-text);
+}
+
+.m-account-detail-list {
+  overflow: hidden;
+  border: 1px solid var(--m-color-ring);
+  border-radius: var(--m-radius-card);
+}
+
+.m-account-detail-list > div {
+  display: grid;
+  grid-template-columns: 42% minmax(0, 1fr);
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--m-color-ring-soft);
+  padding: 0.62rem 0.7rem;
+  font-size: 1em;
+}
+
+.m-account-detail-list > div:last-child {
+  border-bottom: 0;
+}
+
+.m-account-detail-list dt {
+  color: var(--m-color-muted);
+}
+
+.m-account-detail-list dd {
+  overflow-wrap: anywhere;
+  color: var(--m-color-text);
+  text-align: right;
+  font-weight: 700;
+}
+
+.m-account-detail-toggles {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.m-account-toggle-row {
+  width: 100%;
+  min-height: 2.8rem;
+  justify-content: space-between;
+  border-radius: var(--m-radius-card);
+  background: var(--m-color-surface-muted);
+  padding: 0.75rem;
+  font-size: var(--m-text-body);
+  font-weight: 600;
+}
+
+.m-account-toggle-row > input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Status switch card — the badge is the label, so no row text is needed.
+   White bordered card to match the form fields; label wraps the whole row so
+   a tap anywhere flips the hidden checkbox. */
+.m-account-status-card {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 3rem;
+  margin: 0 0 1rem;
+  border: 1px solid var(--m-color-ring);
+  border-radius: 0.75rem;
+  background: var(--m-color-surface);
+  padding: 0.7rem 0.85rem;
+  font-size: var(--m-text-body);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.m-account-status-card.is-active {
+  border-color: var(--m-color-success-soft);
+  background: var(--m-color-success-soft);
+}
+
+.m-account-status-card.is-active .m-account-status.active {
+  background: var(--m-color-surface);
+}
+
+.m-account-status-card.is-active .m-account-switch.is-on {
+  background: var(--m-color-success-text);
+}
+
+.m-account-status-card > input:disabled ~ .m-account-switch {
+  opacity: 0.45;
+}
+
+.m-account-status-card > input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.m-account-form-grid,
+.m-account-alert-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+/* Match Add Transaction form metrics (m-tx-form-*) */
+.m-account-form-field {
+  display: grid;
+  gap: 0.375rem;
+  color: var(--m-color-muted);
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.m-account-form-field input,
+.m-account-form-field select,
+.m-account-form-field textarea {
+  width: 100%;
+  border: 1px solid var(--m-color-ring);
+  border-radius: 0.75rem;
+  outline: 0;
+  background: var(--m-color-surface);
+  padding: 0.75rem;
+  color: var(--m-color-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.m-account-form-field select {
+  background: var(--m-color-surface-muted);
+}
+
+.m-account-form-field input:focus,
+.m-account-form-field select:focus,
+.m-account-form-field textarea:focus {
+  border-color: var(--m-color-primary);
+}
+
+.m-account-form-field textarea {
+  min-height: 4.2rem;
+  resize: vertical;
+}
+
+.m-account-form-field small {
+  color: var(--m-color-muted);
+  font-size: var(--m-text-secondary);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.m-account-currency-create {
+  display: flex;
+  gap: 0.45rem;
+  margin: 0.75rem 0;
+}
+
+.m-account-currency-hint {
+  margin: 0 0 0.15rem;
+  color: var(--m-color-muted);
+  font-size: var(--m-text-sub-ratio);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.m-account-currency-create input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--m-color-ring);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  outline: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.m-account-currency-create button {
+  border-radius: 0.75rem;
+  background: var(--m-color-primary-soft);
+  padding: 0.625rem 0.875rem;
+  color: var(--m-color-primary);
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+}
+
+.m-account-currency-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.m-account-currency-tags > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  border-radius: var(--m-radius-pill);
+  background: var(--m-color-surface-muted);
+  padding: 0.15rem 0.2rem 0.15rem 0.15rem;
+  color: var(--m-color-text-secondary);
+  font-size: var(--m-text-sub-ratio);
+  font-weight: 800;
+}
+
+.m-account-currency-tags > span.is-active {
+  background: rgba(13, 96, 255, 0.12);
+}
+
+.m-account-currency-pill {
+  border-radius: var(--m-radius-pill);
+  padding: 0.25rem 0.55rem;
+  color: var(--m-color-text-secondary);
+  font-size: inherit;
+  font-weight: 800;
+}
+
+.m-account-currency-pill.is-active {
+  color: var(--m-color-primary);
+}
+
+.m-account-currency-tags button {
+  color: var(--m-color-danger);
+  font-size: 1em;
+}
+
+.m-account-currency-tags button:disabled {
+  color: var(--m-color-label);
+}
+
+.m-account-form-card {
+  margin: 1rem 0;
+  border: 1px solid var(--m-color-ring);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+}
+
+.m-account-alert-grid {
+  margin-top: 0.75rem;
+}
+
+.m-account-segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 0.7rem;
+  border-radius: var(--m-radius-card);
+  background: var(--m-color-surface-muted);
+  padding: 0.2rem;
+}
+
+.m-account-segment button {
+  border-radius: 0.55rem;
+  padding: 0.625rem;
+  color: var(--m-color-muted);
+  font-size: var(--m-text-secondary);
+  font-weight: 700;
+}
+
+.m-account-segment button.is-active {
+  background: var(--m-color-surface);
+  color: var(--m-color-primary);
+  box-shadow: var(--m-shadow-card);
+}
+
+.m-account-check-list {
+  display: grid;
+  margin-top: 0.7rem;
+}
+
+.m-account-check-list label.is-disabled {
+  opacity: 0.45;
+}
+
+.m-account-check-list label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+  border-bottom: 1px solid var(--m-color-ring-soft);
+  padding: 0.65rem 0.1rem;
+}
+
+.m-account-check-list input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--m-color-primary);
+}
+
+.m-account-check-list label > span:not(.m-account-avatar) {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.m-account-check-list strong {
+  color: var(--m-color-text);
+  font-size: 1em;
+}
+
+.m-account-check-list small,
+.m-account-check-list em {
+  color: var(--m-color-muted);
+  font-size: var(--m-text-label-ratio);
+  font-style: normal;
+}
+
+.m-account-sort-list {
+  display: grid;
+  padding: 0.5rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+.m-account-sort-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--m-color-ring-soft);
+  padding: 0.8rem 0.2rem;
+  color: var(--m-color-text-secondary);
+  font-size: var(--m-text-body);
+}
+
+.m-account-sort-list button.is-active {
+  color: var(--m-color-primary);
+  font-weight: 800;
+}

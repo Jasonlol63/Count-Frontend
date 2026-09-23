@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="EazyCount" />
+    <meta name="theme-color" content="#004ff9" />
+    <link rel="manifest" href="/c168_mobile/frontend/dist/manifest.json" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/c168_mobile/frontend/dist/icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/c168_mobile/frontend/dist/icons/icon-192.png" />
+    <title>C168 Mobile</title>
+    <script>
+      try {
+        if (localStorage.getItem("login_theme") === "dark") {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      } catch (e) {}
+    </script>
+    <script>
+      /* Android shell (Capacitor) is edge-to-edge: the WebView viewport spans the
+         whole screen, so bottom-fixed UI ends up behind the system nav bar and
+         env(safe-area-inset-bottom) stays 0 in the WebView. Detect that case and
+         lift bottom chrome by one nav-bar height (48px) via --m-inset-b.
+         iOS home-screen (standalone) PWAs letterbox the bottom instead: the
+         layout viewport stops above the home indicator while env(bottom) still
+         reports ~34px, double-padding bottom chrome. Measure that gap
+         (screen.height - innerHeight, standalone only) and cancel it via
+         --m-letterbox. Both vars are 0 in a normal browser tab. */
+      (function () {
+        var probeEl = null;
+        var envBottom = function () {
+          try {
+            if (!probeEl) {
+              probeEl = document.createElement("div");
+              probeEl.style.cssText =
+                "position:fixed;visibility:hidden;pointer-events:none;height:env(safe-area-inset-bottom,0px);";
+              document.documentElement.appendChild(probeEl);
+            }
+            return probeEl.getBoundingClientRect().height || 0;
+          } catch (e) {
+            return 0;
+          }
+        };
+        var update = function () {
+          try {
+            var cap = window.Capacitor;
+            var native = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
+            var portrait = window.matchMedia("(orientation: portrait)").matches;
+            var standalone =
+              window.matchMedia("(display-mode: standalone)").matches ||
+              window.navigator.standalone === true;
+            var fullBleed =
+              native && window.screen && window.screen.height - window.innerHeight < 8 && portrait;
+            document.documentElement.style.setProperty(
+              "--m-inset-b",
+              fullBleed ? "48px" : "0px"
+            );
+            /* 顶部同款：老版本壳（v1.1 及更早）没给 WebView 垫系统栏，页面顶栏会滑进
+               状态栏、和时钟/电量挤在一起 → 兜一个状态栏高度（32px，带刘海/挖孔也够）。
+               v1.2+ 的壳已把 WebView 垫开，这时 fullBleed=false，不会重复垫。 */
+            document.documentElement.style.setProperty(
+              "--m-inset-t",
+              fullBleed ? "32px" : "0px"
+            );
+            var letterbox = 0;
+            var floor = 0;
+            if (standalone && window.screen && window.innerHeight) {
+              var gap = window.screen.height - window.innerHeight;
+              letterbox = Math.min(120, Math.max(0, gap - envBottom()));
+              /* With status-bar-style default iOS may report env(bottom)=0 even
+                 though the home indicator overlays the full-bleed viewport — keep
+                 bottom chrome 34px clear of it, less whatever iOS already carved */
+              floor = Math.max(0, 34 - Math.max(0, gap));
+            }
+            document.documentElement.style.setProperty("--m-letterbox", letterbox + "px");
+            document.documentElement.style.setProperty("--m-safe-floor", floor + "px");
+          } catch (e) {}
+        };
+        update();
+        window.addEventListener("resize", update);
+        window.addEventListener("orientationchange", update);
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

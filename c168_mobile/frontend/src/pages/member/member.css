@@ -1,0 +1,292 @@
+.m-member-sticky {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.m-member-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.m-member-heading h1 {
+  margin: 0;
+  font-size: var(--m-text-title);
+  font-weight: 800;
+  color: var(--m-color-text, #0f172a);
+}
+
+.m-member-heading p {
+  margin: 0.2rem 0 0;
+  color: var(--m-color-label, #64748b);
+  font-size: var(--m-text-caption);
+}
+
+.m-member-heading-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.m-member-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.75rem;
+  background: var(--m-color-primary-soft);
+  color: var(--m-color-primary, #2563eb);
+  font-size: 0.9rem;
+}
+
+.m-member-filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  min-height: 2.35rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--m-color-ring);
+  border-radius: 0.85rem;
+  background: var(--m-color-surface);
+  color: var(--m-color-text-secondary);
+  font-size: var(--m-text-secondary);
+  font-weight: 600;
+  text-align: left;
+}
+
+.m-member-page {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.75rem var(--m-page-gutter, 1rem) 2rem;
+}
+
+.m-member-ccy {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.m-member-ccy-title {
+  margin: 0;
+  font-size: var(--m-text-body);
+  font-weight: 800;
+  color: var(--m-color-text, #0f172a);
+}
+
+/* Total row inside dense history table (above B/F), mirrors account Balance TOTAL. */
+.m-member-ccy .m-tx-hist-row--total {
+  cursor: default;
+}
+
+.m-member-ccy .m-tx-hist-row--total:active {
+  filter: none;
+}
+
+.m-member-ccy .m-tx-hist-row--total > .m-tx-hist-dense-td {
+  background: var(--m-color-primary-soft);
+  font-weight: 800;
+  border-top: 1px solid var(--m-color-ring);
+}
+
+.m-member-ccy .m-tx-hist-dense-td--total-label {
+  text-align: left;
+  padding: 0.3rem 0.35rem;
+  /* Match dense table size — caption token overflows the DATE+PRODUCT span. */
+  font-size: inherit;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  color: var(--m-color-primary-soft-text);
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m-member-ccy .m-tx-hist-dense-td--total {
+  font-size: inherit;
+}
+
+/* Concept A — expandable Balances strip */
+.m-member-balances {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--m-color-ring);
+  border-radius: 0.9rem;
+  background: var(--m-color-primary-soft);
+  /* Do not clip the matrix scrollport / last currency column. */
+  overflow: visible;
+}
+
+.m-member-balances-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  text-align: left;
+  color: var(--m-color-primary-soft-text);
+  border-radius: 0.9rem 0.9rem 0 0;
+}
+
+.m-member-balances-toggle:not(.is-open) {
+  border-radius: 0.9rem;
+}
+
+.m-member-balances-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.m-member-balances-toggle-left > i {
+  font-size: 0.7rem;
+  color: var(--m-color-muted);
+}
+
+.m-member-balances-title {
+  font-size: var(--m-text-body);
+  font-weight: 800;
+}
+
+.m-member-balances-count {
+  font-size: var(--m-text-caption);
+  font-weight: 600;
+  color: var(--m-color-muted);
+  white-space: nowrap;
+}
+
+.m-member-balances-summary {
+  flex-shrink: 0;
+  font-size: var(--m-text-caption);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.m-member-balances-panel {
+  border-top: 1px solid var(--m-color-ring);
+  background: var(--m-color-surface);
+  padding: 0.55rem 0.55rem 0.65rem;
+  border-radius: 0 0 0.9rem 0.9rem;
+  overflow: hidden;
+}
+
+.m-member-balances-empty {
+  margin: 0;
+  padding: 0.55rem 0.35rem;
+  color: var(--m-color-muted);
+  font-size: var(--m-text-caption);
+  font-weight: 600;
+}
+
+.m-member-balances-table-wrap {
+  overflow: hidden;
+  border-radius: 0.65rem;
+  border: 1px solid var(--m-color-ring);
+}
+
+.m-member-balances-table-wrap--scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  max-width: 100%;
+}
+
+.m-member-balances-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--m-text-caption);
+}
+
+.m-member-balances-table--matrix {
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.m-member-balances-table th,
+.m-member-balances-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--m-color-ring);
+  vertical-align: middle;
+}
+
+.m-member-balances-table--matrix th,
+.m-member-balances-table--matrix td {
+  padding: 0.45rem 0.55rem;
+}
+
+.m-member-balances-table--matrix .m-member-balances-num {
+  min-width: 5.5rem;
+  box-sizing: border-box;
+}
+
+.m-member-balances-table--matrix th:last-child,
+.m-member-balances-table--matrix td:last-child {
+  padding-right: 0.85rem;
+}
+
+.m-member-balances-table--matrix thead th:first-child,
+.m-member-balances-table--matrix tbody th[scope="row"] {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 4.75rem;
+  max-width: 5.5rem;
+  box-shadow: 1px 0 0 var(--m-color-ring);
+}
+
+.m-member-balances-table thead th {
+  background: var(--m-color-primary-soft);
+  color: var(--m-color-primary-soft-text);
+  font-weight: 800;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+}
+
+.m-member-balances-table--matrix thead th:first-child {
+  z-index: 3;
+  background: var(--m-color-primary-soft);
+}
+
+.m-member-balances-table tbody th {
+  text-align: left;
+  font-weight: 700;
+  color: var(--m-color-text-secondary);
+  background: var(--m-color-surface);
+}
+
+.m-member-balances-table tbody tr.is-alt th[scope="row"] {
+  background: var(--m-color-surface-muted);
+}
+
+.m-member-balances-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.m-member-balances-table tbody tr.is-alt th,
+.m-member-balances-table tbody tr.is-alt td {
+  background: var(--m-color-surface-muted);
+}
+
+.m-member-balances-total th,
+.m-member-balances-total td {
+  background: var(--m-color-primary-soft) !important;
+  border-bottom: none;
+  font-weight: 800;
+  color: var(--m-color-primary-soft-text);
+}
+
+.m-member-balances-table--matrix .m-member-balances-total th[scope="row"] {
+  background: var(--m-color-primary-soft) !important;
+  z-index: 2;
+}
